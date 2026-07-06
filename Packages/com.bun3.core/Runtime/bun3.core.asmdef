@@ -2,7 +2,8 @@
     "name": "bun3.core",
     "rootNamespace": "Bun3.Core",
     "references": [
-        "MackySoft.SerializeReferenceExtensions"
+        "MackySoft.SerializeReferenceExtensions",
+        "UniTask"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],
