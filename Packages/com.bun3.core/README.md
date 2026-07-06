@@ -6,6 +6,7 @@ Bun3 shared toolkit for Unity. General-purpose utilities used across Bun3 packag
 
 - **`Bun3.Core.Attributes.ReadOnlyAttribute`** — make a serialized field non-editable in the inspector.
 - **`UnifiedToggleGroup`** — preset-based unified toggle that produces identical results in editor and runtime, with custom-extensible options and cascading control of nested groups. Built-in implementations cover `CanvasGroup`, `Image`, `LayoutElement`, `GameObject` activation, and another `UnifiedToggleGroup` (for cascading).
+- **`Bun3.Core.Threading.CancellationScope`** — a structured cancellation-lifetime scope (a linked `CancellationTokenSource` in disposable form) for presentation/cutscene/staged-UI sequences. Cancelling a parent scope cancels every child; the core type is BCL-only, with `MonoBehaviour.CreateCancellationScope()` and a UniTask `Run(...)` provided as extensions. UniTask cancellation runs `try/finally` cleanup, so interrupted sequences leave consistent state.
 
 ## Requirements
 
@@ -46,6 +47,47 @@ group.SetOn(true);
 When a preset is applied, every registered toggle runs its options for that preset. The same code path is invoked when the group's preset buttons are clicked in the inspector, so edit-time and runtime yield identical results.
 
 A complete example is included as the `Unified Toggle Group` sample.
+
+## Quick Start — CancellationScope
+
+```csharp
+using Bun3.Core.Threading;
+using Cysharp.Threading.Tasks;
+
+private CancellationScope _sequenceScope;
+
+private void PlaySequence()
+{
+    // Re-trigger safely: cancel the previous run. Its try/finally cleanup still executes.
+    _sequenceScope?.Dispose();
+    _sequenceScope = this.CreateCancellationScope();   // extension: cancels when this component is destroyed
+    RunAsync(_sequenceScope).Forget();
+}
+
+private async UniTask RunAsync(CancellationScope scope)
+{
+    var ct = scope.Token;
+    try
+    {
+        // Fire-and-forget background beats bound to the scope (Run is a UniTask extension):
+        scope.Run(t => PlayVfxAsync(t));
+
+        // Run beats to completion, in order:
+        await StepAAsync(ct);
+        await StepBAsync(ct);
+
+        // Or in parallel, waiting for all before continuing:
+        await UniTask.WhenAll(StepCAsync(ct), StepDAsync(ct));
+    }
+    finally
+    {
+        // Runs on normal completion, cancellation (re-trigger), and owner destruction.
+        RestoreToBaseline();
+    }
+}
+```
+
+The `CancellationScope` type is BCL-only; `CreateCancellationScope()` (Unity) and `Run(...)` (UniTask) come from `CancellationScopeExtensions`. Cancellation is cooperative — forward `scope.Token` to every inner `await` so it propagates promptly. Use `scope.CreateChild()` to nest a sub-sequence that the parent can cancel as a unit. Outside a `MonoBehaviour`, root a scope with `CancellationScope.Create(parentToken)`.
 
 ## Links
 
