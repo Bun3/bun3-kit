@@ -61,8 +61,6 @@ If neither is set, an internal null handler is used so calls never throw.
 
 ## Requirements
 
-- Unity 6000.3 (6.0) or later
-
 ## Package contents
 
 | Location | Description |

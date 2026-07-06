@@ -8,7 +8,6 @@ Dev kits for Unity UI. A small collection of utilities that simplify common patt
 
 ## Requirements
 
-- Unity 6000.3 (6.0) or later
 - `UnityEngine.UI` (built-in)
 
 ## Installation
@@ -16,16 +15,7 @@ Dev kits for Unity UI. A small collection of utilities that simplify common patt
 Install via the Unity Package Manager:
 
 - *Window → Package Manager → Add package from git URL...*
-
-Or add it to `Packages/manifest.json`:
-
-```json
-{
-  "dependencies": {
-    "com.bun3.ui": "0.1.0"
-  }
-}
-```
+- *URL:* https://github.com/Bun3/unity.git?path=Packages/com.bun3.ui
 
 ## Quick Start
 
