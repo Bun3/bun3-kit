@@ -22,6 +22,15 @@ namespace Bun3.UI.Tests
         }
 
         /// <summary>
+        /// <see cref="NewButton"/> 밖에서 직접 만든 GameObject(부모 CanvasGroup, Canvas,
+        /// EventSystem 등)를 테스트 종료 시 함께 정리하도록 등록한다.
+        /// </summary>
+        protected void Track(GameObject go)
+        {
+            _spawned.Add(go);
+        }
+
+        /// <summary>
         /// EventSystem의 실제 디스패치 경로를 그대로 탄다.
         /// 버튼 GameObject의 모든 IPointerClickHandler 구현체에 전달되므로,
         /// Button과 Receiver가 같은 이벤트를 어떻게 처리하는지 함께 검증할 수 있다.
