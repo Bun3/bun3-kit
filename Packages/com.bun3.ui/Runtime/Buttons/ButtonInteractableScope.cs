@@ -1,4 +1,5 @@
 using System;
+using UnityEngine;
 using UnityEngine.UI;
 
 namespace Bun3.UI.Buttons
@@ -88,6 +89,23 @@ namespace Bun3.UI.Buttons
                 return;
 
             _button.interactable = _interactable;
+
+            // 에디터에서 컴포넌트가 씬/프리팹에 저장되는 것을 막는다.
+            if (!Application.isPlaying)
+                return;
+
+            if (_reason.IsEmpty)
+            {
+                if (_button.TryGetComponent(out ButtonDisabledClickReceiver existing))
+                    existing.Clear();
+
+                return;
+            }
+
+            if (!_button.TryGetComponent(out ButtonDisabledClickReceiver receiver))
+                receiver = _button.gameObject.AddComponent<ButtonDisabledClickReceiver>();
+
+            receiver.Set(_button, _reason, _handler);
         }
     }
 }
