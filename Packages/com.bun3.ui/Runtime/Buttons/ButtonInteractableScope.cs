@@ -52,11 +52,16 @@ namespace Bun3.UI.Buttons
         /// <param name="disabledMessage">
         /// 실패 사유 메시지. null이면 사유 없이 조용히 비활성화된다.
         /// </param>
+        /// <remarks>
+        /// 여러 조건이 함께 실패하면 <b>사유를 동반한 첫 실패</b>가 이긴다.
+        /// 선언 순서가 곧 우선순위다. 사유 없이 <c>Require(false)</c>만 호출하면
+        /// 버튼은 비활성화되지만 사유 슬롯은 비어 있어, 뒤따르는 조건의 사유가 채택된다.
+        /// </remarks>
         public void Require(bool condition, string disabledMessage = null)
         {
             _interactable &= condition;
 
-            if (!condition && disabledMessage != null)
+            if (!condition && _reason.IsEmpty && disabledMessage != null)
                 _reason = new DisabledReason(disabledMessage);
         }
 
@@ -67,6 +72,8 @@ namespace Bun3.UI.Buttons
         /// 비활성 버튼이 클릭됐을 때 실행할 동작.
         /// </param>
         /// <remarks>
+        /// 여러 조건이 함께 실패하면 사유를 동반한 첫 실패가 이긴다.
+        /// <br/>
         /// 매 프레임 호출되는 곳에서 메서드 그룹(<c>Require(cond, OpenPopup)</c>)을 넘기면
         /// 프레임마다 델리게이트가 할당된다. <see cref="Action"/> 필드에 한 번 캐싱해 넘길 것.
         /// </remarks>
@@ -74,7 +81,7 @@ namespace Bun3.UI.Buttons
         {
             _interactable &= condition;
 
-            if (!condition && disabledAction != null)
+            if (!condition && _reason.IsEmpty && disabledAction != null)
                 _reason = new DisabledReason(disabledAction);
         }
 
