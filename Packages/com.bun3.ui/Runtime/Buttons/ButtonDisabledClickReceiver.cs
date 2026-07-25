@@ -1,3 +1,4 @@
+using Bun3.Core.Utils;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
@@ -51,13 +52,10 @@ namespace Bun3.UI.Buttons
             if (!_button || _button.IsInteractable())
                 return;
 
-            if (_reason.IsEmpty || _handler == null)
+            if (_reason.IsEmpty)
                 return;
 
-            // _handler는 인터페이스 타입이라 위의 null 검사가 UnityEngine.Object의
-            // 오버로드된 == 연산자를 타지 않는다. MonoBehaviour 핸들러가 파괴돼도
-            // 참조는 살아 있어 그 검사를 통과하므로, 여기서 별도로 걸러낸다.
-            if (_handler is UnityEngine.Object handlerObject && !handlerObject)
+            if (_handler.IsNull())
                 return;
 
             _handler.Handle(_reason);
