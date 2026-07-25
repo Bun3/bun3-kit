@@ -105,6 +105,26 @@ namespace Bun3.UI.Tests
         }
 
         [Test]
+        public void EmptyMessageFailure_DoesNotOccupyReasonSlot()
+        {
+            var button = NewButton();
+            var handler = new SpyHandler();
+
+            using (var scope = new ButtonInteractableScope(button, handler))
+            {
+                scope.Require(false, string.Empty);
+                scope.Require(false, "not enough gold");
+            }
+
+            Click(button);
+
+            Assert.IsFalse(button.interactable);
+            Assert.AreEqual(1, handler.CallCount);
+            Assert.AreEqual("not enough gold", handler.Last.DisabledMessage,
+                "빈 문자열은 사유가 아니다. 사유 슬롯을 점유해 뒤 조건을 삼키면 안 된다.");
+        }
+
+        [Test]
         public void MessageReasonBeforeActionReason_MessageWins()
         {
             var button = NewButton();

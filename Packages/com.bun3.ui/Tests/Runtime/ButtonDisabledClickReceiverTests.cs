@@ -175,14 +175,15 @@ namespace Bun3.UI.Tests
         }
 
         [UnityTest]
-        public IEnumerator DisabledButtonGameObject_IsStillHitByGraphicRaycast()
+        public IEnumerator GraphicRaycastOnDisabledButton_DispatchesToReceiver_AndReplaysReason()
         {
             // 이 기능 전체의 전제: Selectable.interactable = false여도 레이캐스트는
             // 막히지 않아, 같은 GameObject의 다른 IPointerClickHandler(리시버)가
-            // 클릭을 받을 수 있다. 기존 테스트들은 ExecuteEvents.Execute로 이미 알고
+            // 클릭을 받을 수 있다. 다른 테스트들은 ExecuteEvents.Execute로 이미 알고
             // 있는 GameObject에 직접 디스패치했을 뿐, 실제 레이캐스트 경로는 검증하지
             // 않았다. 여기서는 진짜 Canvas + GraphicRaycaster + EventSystem을 구성해
-            // RaycastAll이 비활성 버튼을 실제로 히트하는지 검증한다.
+            // RaycastAll이 비활성 버튼을 히트하는지, 그리고 그 히트 결과로 디스패치한
+            // 클릭이 실제로 리시버까지 도달해 사유를 재생하는지를 한 흐름으로 검증한다.
             var canvasGo = new GameObject(
                 "RaycastCanvas", typeof(RectTransform), typeof(Canvas), typeof(GraphicRaycaster));
             Track(canvasGo);
@@ -217,12 +218,29 @@ namespace Bun3.UI.Tests
             var center = (corners[0] + corners[2]) / 2f;
             var screenPoint = RectTransformUtility.WorldToScreenPoint(null, center);
 
-            var pointerData = new PointerEventData(EventSystem.current) { position = screenPoint };
+            var pointerData = new PointerEventData(EventSystem.current)
+            {
+                position = screenPoint,
+                button = PointerEventData.InputButton.Left,
+            };
             var results = new List<RaycastResult>();
             EventSystem.current.RaycastAll(pointerData, results);
 
-            Assert.IsTrue(results.Exists(r => r.gameObject == buttonGo),
+            var hitIndex = results.FindIndex(r => r.gameObject == buttonGo);
+            Assert.GreaterOrEqual(hitIndex, 0,
                 "Selectable.interactable = false여도 GraphicRaycaster는 레이캐스트를 막지 않아야 한다.");
+
+            // 레이캐스트가 돌려준 GameObject를 그대로 디스패치 대상으로 쓴다.
+            // 미리 들고 있던 참조를 쓰면 두 반쪽(히트 → 디스패치)이 만나지 않는다.
+            var hit = results[hitIndex];
+            pointerData.pointerCurrentRaycast = hit;
+            pointerData.pointerPressRaycast = hit;
+
+            ExecuteEvents.Execute(hit.gameObject, pointerData, ExecuteEvents.pointerClickHandler);
+
+            Assert.AreEqual(1, handler.CallCount,
+                "실제 레이캐스트 히트로 디스패치한 클릭이 리시버까지 도달해야 한다.");
+            Assert.AreEqual("raycast reason", handler.Last.DisabledMessage);
         }
 
         [Test]
@@ -275,6 +293,49 @@ namespace Bun3.UI.Tests
             Click(button);
 
             Assert.AreEqual(0, handler.CallCount, "이전 프레임의 사유가 남아 있으면 안 된다.");
+        }
+
+        [Test]
+        public void ClickAfterHandlerObjectDestroyed_DoesNotReplay_AndDoesNotThrow()
+        {
+            // 리시버는 버튼과 함께 살지만 핸들러는 더 짧게 살 수 있다. _handler는
+            // 인터페이스 타입이라 `_handler == null`은 UnityEngine.Object의 오버로드된
+            // == 연산자를 타지 않는다. 파괴된 MonoBehaviour 핸들러는 그 검사를 그냥
+            // 통과하므로, 별도 가드가 없으면 Handle()이 죽은 오브젝트 위에서 실행된다.
+            var handlerGo = new GameObject("MonoHandler", typeof(MonoSpyHandler));
+            Track(handlerGo);
+            var handler = handlerGo.GetComponent<MonoSpyHandler>();
+
+            var button = NewButton();
+            using (var scope = new ButtonInteractableScope(button, handler))
+            {
+                scope.Require(false, "not enough gold");
+            }
+
+            UnityEngine.Object.DestroyImmediate(handlerGo);
+
+            Assert.DoesNotThrow(() => Click(button));
+            Assert.AreEqual(0, handler.CallCount,
+                "파괴된 UnityEngine.Object 핸들러에는 사유를 전달하면 안 된다.");
+        }
+    }
+
+    /// <summary>
+    /// <see cref="MonoBehaviour"/>로 구현한 핸들러(전형적인 토스트 매니저 형태).
+    /// 파괴된 뒤 <see cref="Handle"/>이 호출되면 첫 Unity API 접근에서
+    /// MissingReferenceException이 나도록 일부러 <c>gameObject</c>를 만진다.
+    /// </summary>
+    internal sealed class MonoSpyHandler : MonoBehaviour, IButtonDisabledHandler
+    {
+        public int CallCount { get; private set; }
+        public DisabledReason Last { get; private set; }
+
+        public void Handle(DisabledReason reason)
+        {
+            CallCount++;
+            Last = reason;
+
+            _ = gameObject.name;
         }
     }
 }
