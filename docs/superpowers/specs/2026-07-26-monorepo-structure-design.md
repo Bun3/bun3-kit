@@ -33,7 +33,7 @@
 ## 3. 최종 레포 구조
 
 ```
-bun3-workspace/                        ← git 루트 (이름은 GitHub 리네임 시 확정)
+bun3-kit/                        ← git 루트 (이름은 GitHub 리네임 시 확정)
 ├── README.md                          ← 워크스페이스 개요
 ├── Bun3.sln                           ← dotnet/ + server/ 프로젝트를 묶는 솔루션 (unity 제외)
 ├── dotnet/

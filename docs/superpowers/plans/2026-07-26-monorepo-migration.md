@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 기존 `Bun3/unity` 레포를 단일 git 모노레포(`bun3-workspace`)로 승격하고, 공용 라이브러리 `com.bun3.common`(UPM+NuGet 이중 포장)과 서버 라이브러리 뼈대 `Bun3.Server.Core`를 신설하며, Unity 패키지를 새 네이밍 규약으로 풀 리네임한다.
+**Goal:** 기존 `Bun3/unity` 레포를 단일 git 모노레포(`bun3-kit`)로 승격하고, 공용 라이브러리 `com.bun3.common`(UPM+NuGet 이중 포장)과 서버 라이브러리 뼈대 `Bun3.Server.Core`를 신설하며, Unity 패키지를 새 네이밍 규약으로 풀 리네임한다.
 
 **Architecture:** 스펙 `docs/superpowers/specs/2026-07-26-monorepo-structure-design.md` 참조. 레포 루트에 `Bun3.sln`(dotnet+server, unity 제외), `dotnet/src/com.bun3.common`은 한 폴더가 UPM 패키지(package.json+asmdef)이자 NuGet 소스(csproj)이며 unity가 `file:` 상대경로로 참조한다. 서버 재사용은 fork가 아닌 모듈 라이브러리.
 
@@ -113,7 +113,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 
 **Interfaces:**
 - Consumes: Task 1의 폴더 구조
-- Produces: 루트 `.gitignore` (dotnet 산출물 무시 — Task 3, 6이 의존), 리네임된 GitHub 레포 `Bun3/bun3-workspace`
+- Produces: 루트 `.gitignore` (dotnet 산출물 무시 — Task 3, 6이 의존), 리네임된 GitHub 레포 `Bun3/bun3-kit`
 
 - [ ] **Step 1: 루트 .gitignore 작성**
 
@@ -132,7 +132,7 @@ obj/
 - [ ] **Step 2: 루트 README.md 작성**
 
 ```markdown
-# bun3-workspace
+# bun3-kit
 
 Bun3의 개인 프레임워크 모노레포.
 
@@ -160,12 +160,12 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 
 - [ ] **Step 4: GitHub 레포 리네임 (사용자 확인 필수)**
 
-외부에 영향 있는 작업이므로 **사용자에게 레포명 `bun3-workspace` 확정을 확인받은 후** 실행:
+외부에 영향 있는 작업이므로 **사용자에게 레포명 `bun3-kit` 확정을 확인받은 후** 실행:
 
 ```bash
 cd "E:/Projects/unity"
-gh repo rename bun3-workspace --yes   # gh가 origin remote URL도 자동 갱신
-git remote -v                         # https://github.com/Bun3/bun3-workspace.git 확인
+gh repo rename bun3-kit --yes   # gh가 origin remote URL도 자동 갱신
+git remote -v                         # https://github.com/Bun3/bun3-kit.git 확인
 ```
 
 - [ ] **Step 5: push 및 확인**
@@ -252,7 +252,7 @@ Expected: 성공. (구 URL은 GitHub이 리다이렉트하지만, UPM `?path=` �
     <PackageId>Bun3.Common</PackageId>
     <Version>0.1.0</Version>
     <Authors>Bun3</Authors>
-    <RepositoryUrl>https://github.com/Bun3/bun3-workspace</RepositoryUrl>
+    <RepositoryUrl>https://github.com/Bun3/bun3-kit</RepositoryUrl>
   </PropertyGroup>
 
 </Project>
@@ -507,7 +507,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
     <PackageId>Bun3.Server.Core</PackageId>
     <Version>0.1.0</Version>
     <Authors>Bun3</Authors>
-    <RepositoryUrl>https://github.com/Bun3/bun3-workspace</RepositoryUrl>
+    <RepositoryUrl>https://github.com/Bun3/bun3-kit</RepositoryUrl>
   </PropertyGroup>
 
   <ItemGroup>
