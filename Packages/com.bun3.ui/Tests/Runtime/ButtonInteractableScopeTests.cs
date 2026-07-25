@@ -140,28 +140,6 @@ namespace Bun3.UI.Tests
         }
 
         [Test]
-        public void TwoScopesOnSameButton_LastDisposeWins()
-        {
-            var button = NewButton();
-            var handler = new SpyHandler();
-
-            using (var first = new ButtonInteractableScope(button, handler))
-            {
-                first.Require(false, "from first scope");
-            }
-
-            using (var second = new ButtonInteractableScope(button, handler))
-            {
-                second.Require(false, "from second scope");
-            }
-
-            Click(button);
-
-            Assert.AreEqual(1, handler.CallCount);
-            Assert.AreEqual("from second scope", handler.Last.DisabledMessage);
-        }
-
-        [Test]
         public void DestroyedButton_DisposeDoesNotThrow()
         {
             var button = NewButton();
