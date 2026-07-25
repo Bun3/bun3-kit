@@ -4,11 +4,12 @@ Dev kits for Unity UI. A small collection of utilities that simplify common patt
 
 ## Features
 
-- **`ButtonInteractableScope`** — aggregate multiple conditions into a single `Button.interactable` state, and route disabled reasons (messages or actions) through `IButtonDisabledHandler`.
+- **`ButtonInteractableScope`** — aggregate multiple conditions into a single `Button.interactable` state, and replay the disabled reason (a message or an action) through `IButtonDisabledHandler` when the user clicks the disabled button.
 
 ## Requirements
 
 - `UnityEngine.UI` (built-in)
+- [`com.bun3.core`](../com.bun3.core) 0.3.0
 
 ## Installation
 
@@ -22,13 +23,27 @@ Install via the Unity Package Manager:
 ```csharp
 using Bun3.UI.Buttons;
 
-using var scope = new ButtonInteractableScope(myButton);
-scope.Require(player.HasItem(itemId), "You don't have the required item.");
-scope.Require(player.Gold >= price,    "Not enough gold.");
-scope.Require(IsShopOpen(),            () => OpenShopHoursPopup());
+// Once, at startup.
+ButtonInteractableScope.DefaultHandler = new MyDisabledHandler();
+
+// Cached once — never allocate a closure per frame.
+private Action _openShopHoursPopup;
+private void Awake() => _openShopHoursPopup = OpenShopHoursPopup;
+
+private void Update()
+{
+    using var scope = new ButtonInteractableScope(_purchaseButton);
+    scope.Require(player.HasItem(itemId), "You don't have the required item.");
+    scope.Require(player.Gold >= price,   "Not enough gold.");
+    scope.Require(IsShopOpen(),           _openShopHoursPopup);
+}
 ```
 
-When the `using` block exits, `myButton.interactable` is updated to the AND of all `Require` results. If any check failed, the registered `IButtonDisabledHandler` is invoked so you can present the disabled reason.
+When the `using` block exits, `_purchaseButton.interactable` is updated to the AND of all `Require` results. Nothing is shown at that moment. If a check failed with a reason, the reason is stored on the button and replayed through the registered `IButtonDisabledHandler` **when the user clicks the disabled button** — so a scope re-evaluated every frame does not spam the handler.
+
+If several conditions fail together, the **first failure that carries a reason** wins; declaration order is priority. A reasonless `Require(false)` disables the button without occupying the reason slot, so a later reasoned failure is still adopted.
+
+> A `ButtonDisabledClickReceiver` component is attached to the button's GameObject automatically at runtime to store the reason and catch the click. Seeing it in the Inspector is expected — do not add or edit it by hand.
 
 A complete example is included as a Package Manager sample (`Button Interactable Scope`). See `Samples/ButtonInteractableScope/` after import.
 
