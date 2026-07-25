@@ -1,0 +1,12 @@
+{
+  "name": "com.bun3.common",
+  "displayName": "Bun3 Common",
+  "version": "0.1.0",
+  "unity": "6000.3",
+  "description": "Platform-agnostic shared library for Bun3 packages. netstandard2.1; no UnityEngine dependency.",
+  "author": {
+    "name": "Bun3",
+    "url": "https://github.com/Bun3",
+    "email": "bun3.dev@gmail.com"
+  }
+}

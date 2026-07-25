@@ -1,5 +1,11 @@
 {
   "dependencies": {
+    "com.bun3.common": {
+      "version": "file:../../dotnet/src/com.bun3.common",
+      "depth": 0,
+      "source": "local",
+      "dependencies": {}
+    },
     "com.bun3.core": {
       "version": "file:com.bun3.core",
       "depth": 0,
