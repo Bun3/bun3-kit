@@ -33,8 +33,8 @@
 ```
 bun3-workspace/                        ← git 루트 (이름은 GitHub 리네임 시 확정)
 ├── README.md                          ← 워크스페이스 개요
+├── Bun3.sln                           ← dotnet/ + server/ 프로젝트를 묶는 솔루션 (unity 제외)
 ├── dotnet/
-│   ├── Bun3.sln                       ← common + server 프로젝트 솔루션
 │   └── src/
 │       └── com.bun3.common/           ← 공용 코드 원본 (단일 진실원본)
 │           ├── package.json           ← UPM 패키지 정의
@@ -50,8 +50,14 @@ bun3-workspace/                        ← git 루트 (이름은 GitHub 리네�
     │   ├── com.bun3.unity.core/       ← 구 com.bun3.core
     │   └── com.bun3.unity.ui/         ← 구 com.bun3.ui
     ├── ProjectSettings/
+    ├── unity.sln                      ← Unity가 자동 생성/재생성 (수동 솔루션에 편입하지 않음)
     └── .gitignore                     ← 기존 파일 그대로 (rooted 패턴은 이 폴더 기준으로 동작)
 ```
+
+솔루션은 두 개다: Unity가 생성·관리하는 `unity/unity.sln`과, 우리가 관리하는
+루트 `Bun3.sln`(dotnet + server). Unity 생성 csproj는 재생성 대상이므로 루트
+솔루션에 포함하지 않는다. 루트 `Bun3.sln`은 자신이 묶는 두 폴더(dotnet/, server/)의
+공통 조상에 위치한다.
 
 미래 확장(비범위, 예약만): `web/`(TS 등 타 언어), `schema/`(proto/OpenAPI 등
 언어 중립 계약 + 코드젠). 타 언어는 형제 폴더로 추가하며 레포를 분리하지 않는다.
@@ -88,6 +94,9 @@ bun3-workspace/                        ← git 루트 (이름은 GitHub 리네�
    역방향 참조 금지.
 5. csproj는 `Directory.Build.props` 등으로 `.meta`, `package.json` 등 비-C# 파일이
    NuGet 패키지에 포함되지 않도록 관리한다.
+6. 공통 MSBuild 설정(`Directory.Build.props`)은 **레포 루트에 두지 않는다.**
+   MSBuild가 상위 폴더로 탐색하므로 루트에 두면 Unity 생성 csproj까지 영향을 받는다.
+   `dotnet/`, `server/` 폴더 단위로 배치한다.
 
 ## 6. 네임스페이스 / 네이밍 규약
 
@@ -144,7 +153,7 @@ bun3-workspace/                        ← git 루트 (이름은 GitHub 리네�
 
 1. **레포 승격**: 루트에서 전체를 `unity/`로 `git mv` → 커밋 → GitHub 레포 리네임 →
    루트 `README.md` 추가. Unity 프로젝트는 새 경로에서 열어 정상 동작 확인.
-2. **dotnet/ 신설**: `com.bun3.common` 뼈대(package.json, asmdef, csproj) + `Bun3.sln`.
+2. **dotnet/ 신설**: `com.bun3.common` 뼈대(package.json, asmdef, csproj) + 루트 `Bun3.sln`.
    unity `manifest.json`에 `file:` 참조 추가, Unity에서 패키지 인식 확인.
 3. **풀 리네임**: 패키지 폴더/package.json/asmdef/네임스페이스 일괄 변경,
    `MovedFrom` 부여, 쓰레기 네임스페이스 제거. 컴파일 및 기존 씬/에셋 참조 확인.
