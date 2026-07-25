@@ -1,7 +1,7 @@
 using UnityEngine;
 using UnityEngine.Events;
 
-namespace Bun3.Core
+namespace Bun3.Core.Utils
 {
     public static partial class Util
     {
