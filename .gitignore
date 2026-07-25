@@ -1,0 +1,7 @@
+# .NET build outputs (dotnet/, server/ — artifacts layout)
+artifacts/
+bin/
+obj/
+*.user
+.vs/
+/.idea/
