@@ -1,7 +1,7 @@
 using System;
 using System.Threading;
 
-namespace Bun3.Unity.Core.Threading
+namespace Bun3.Common.Threading
 {
     /// <summary>
     /// A structured cancellation-lifetime scope: a linked <see cref="CancellationTokenSource"/> in
