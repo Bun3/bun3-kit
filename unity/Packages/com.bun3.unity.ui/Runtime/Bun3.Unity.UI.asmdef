@@ -1,0 +1,16 @@
+{
+    "name": "Bun3.Unity.UI",
+    "rootNamespace": "Bun3.Unity.UI",
+    "references": [
+        "GUID:81b292a52cda21947979315e38fe5ae8"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

@@ -1,0 +1,17 @@
+{
+    "name": "Bun3.Unity.Core.Samples.UnifiedToggleGroup",
+    "rootNamespace": "Bun3.Unity.Core.Samples.UnifiedToggleGroup",
+    "references": [
+        "Bun3.Unity.Core",
+        "MackySoft.SerializeReferenceExtensions.Runtime"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

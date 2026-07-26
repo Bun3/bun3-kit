@@ -6,8 +6,8 @@
       "source": "local",
       "dependencies": {}
     },
-    "com.bun3.core": {
-      "version": "file:com.bun3.core",
+    "com.bun3.unity.core": {
+      "version": "file:com.bun3.unity.core",
       "depth": 0,
       "source": "embedded",
       "dependencies": {
@@ -15,12 +15,12 @@
         "com.cysharp.unitask": "https://github.com/Cysharp/UniTask.git?path=src/UniTask/Assets/Plugins/UniTask"
       }
     },
-    "com.bun3.ui": {
-      "version": "file:com.bun3.ui",
+    "com.bun3.unity.ui": {
+      "version": "file:com.bun3.unity.ui",
       "depth": 0,
       "source": "embedded",
       "dependencies": {
-        "com.bun3.core": "0.3.0"
+        "com.bun3.unity.core": "0.3.0"
       }
     },
     "com.cysharp.unitask": {

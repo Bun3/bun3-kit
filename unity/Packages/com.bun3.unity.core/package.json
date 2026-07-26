@@ -1,0 +1,24 @@
+{
+  "name": "com.bun3.unity.core",
+  "displayName": "Bun3 Unity Core",
+  "version": "0.3.0",
+  "unity": "6000.3",
+  "unityRelease": "14f1",
+  "description": "Bun3 shared toolkit for Unity. Includes ReadOnlyAttribute, UnifiedToggleGroup (N-preset toggle with extensible options and cascading groups), and CancellationScope (structured cancellation-lifetime scope with UniTask helpers).",
+  "author": {
+    "name": "Bun3",
+    "url": "https://github.com/Bun3",
+    "email": "bun3.dev@gmail.com"
+  },
+  "dependencies": {
+    "com.mackysoft.serializereference-extensions": "https://github.com/mackysoft/Unity-SerializeReferenceExtensions.git?path=Assets/MackySoft/MackySoft.SerializeReferenceExtensions",
+    "com.cysharp.unitask": "https://github.com/Cysharp/UniTask.git?path=src/UniTask/Assets/Plugins/UniTask"
+  },
+  "samples": [
+    {
+      "displayName": "Unified Toggle Group",
+      "description": "N preset states, custom-extensible options, and cascading control of nested groups.",
+      "path": "Samples~/UnifiedToggleGroup"
+    }
+  ]
+}

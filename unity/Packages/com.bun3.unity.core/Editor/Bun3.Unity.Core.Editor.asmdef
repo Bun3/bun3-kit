@@ -1,0 +1,19 @@
+{
+    "name": "Bun3.Unity.Core.Editor",
+    "rootNamespace": "Bun3.Unity.Core.Editor",
+    "references": [
+        "GUID:81b292a52cda21947979315e38fe5ae8",
+        "MackySoft.SerializeReferenceExtensions.Editor"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
