@@ -1,4 +1,4 @@
-namespace Bun3.Common.UnifiedToggle
+namespace Bun3.Unity.Core.UnifiedToggle
 {
     public interface IUnifiedOption
     {

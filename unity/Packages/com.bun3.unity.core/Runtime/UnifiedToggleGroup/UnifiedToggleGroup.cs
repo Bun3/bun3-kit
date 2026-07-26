@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Bun3.Common.UnifiedToggle;
 using UnityEngine;
 
 namespace Bun3.Unity.Core.UnifiedToggle
