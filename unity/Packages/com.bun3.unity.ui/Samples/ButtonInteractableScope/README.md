@@ -23,7 +23,7 @@ Storing and catching the click is the job of `ButtonDisabledClickReceiver`, whic
 ## Files
 
 - `ButtonInteractableScopeSample.cs` — example MonoBehaviour and a toast-style `IButtonDisabledHandler` implementation.
-- `Bun3.UI.Samples.ButtonInteractableScope.asmdef` — assembly definition for this sample.
+- `Bun3.Unity.UI.Samples.ButtonInteractableScope.asmdef` — assembly definition for this sample.
 
 ## Try it
 

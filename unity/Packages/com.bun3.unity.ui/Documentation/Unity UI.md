@@ -1,12 +1,12 @@
 # About Unity UI
 
-The Unity UI package (`com.bun3.ui`) provides lightweight utilities that simplify common patterns in Unity uGUI. The current focus is making `Button.interactable` state easy to manage when multiple independent conditions affect whether the button can be pressed.
+The Unity UI package (`com.bun3.unity.ui`) provides lightweight utilities that simplify common patterns in Unity uGUI. The current focus is making `Button.interactable` state easy to manage when multiple independent conditions affect whether the button can be pressed.
 
 # Installing Unity UI
 
 To install this package, follow the instructions in the [Package Manager documentation](https://docs.unity3d.com/Manual/upm-ui.html).
 
-This package has no additional setup steps. It uses the built-in `UnityEngine.UI` and `UnityEngine.EventSystems` modules, and its assembly definition references `com.bun3.core` (declared as a package dependency, so the Package Manager resolves it for you).
+This package has no additional setup steps. It uses the built-in `UnityEngine.UI` and `UnityEngine.EventSystems` modules, and its assembly definition references `com.bun3.unity.core` (declared as a package dependency, so the Package Manager resolves it for you).
 
 # Using Unity UI
 
@@ -15,7 +15,7 @@ This package has no additional setup steps. It uses the built-in `UnityEngine.UI
 `ButtonInteractableScope` is a `ref struct` used inside a `using` block. It collects the results of one or more `Require(condition, ...)` calls and applies the AND-combined result to a `Button.interactable` value when the scope is disposed.
 
 ```csharp
-using Bun3.UI.Buttons;
+using Bun3.Unity.UI.Buttons;
 
 using var scope = new ButtonInteractableScope(myButton);
 scope.Require(condition1, "Reason 1");
@@ -95,7 +95,7 @@ Arguments are evaluated before `Require` is entered, so the scope cannot prevent
 
 - Unity 6000.3
 - `UnityEngine.UI` and `UnityEngine.EventSystems` (built-in)
-- `com.bun3.core` 0.3.0
+- `com.bun3.unity.core` 0.3.0
 
 ## Package contents
 
@@ -103,7 +103,7 @@ Arguments are evaluated before `Require` is entered, so the scope cannot prevent
 |---|---|
 | `Runtime/Buttons/` | `ButtonInteractableScope`, `DisabledReason`, `IButtonDisabledHandler`, and `ButtonDisabledClickReceiver` source. |
 | `Samples/ButtonInteractableScope/` | Sample MonoBehaviour and handler demonstrating typical usage. |
-| `Tests/Runtime/` | PlayMode tests (`Bun3.UI.Tests`). |
+| `Tests/Runtime/` | PlayMode tests (`Bun3.Unity.UI.Tests`). |
 
 ## Document revision history
 

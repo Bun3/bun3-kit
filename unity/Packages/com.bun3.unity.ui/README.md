@@ -9,19 +9,19 @@ Dev kits for Unity UI. A small collection of utilities that simplify common patt
 ## Requirements
 
 - `UnityEngine.UI` (built-in)
-- [`com.bun3.core`](../com.bun3.core) 0.3.0
+- [`com.bun3.unity.core`](../com.bun3.unity.core) 0.3.0
 
 ## Installation
 
 Install via the Unity Package Manager:
 
 - *Window → Package Manager → Add package from git URL...*
-- *URL:* https://github.com/Bun3/unity.git?path=Packages/com.bun3.ui
+- *URL:* https://github.com/Bun3/bun3-kit.git?path=unity/Packages/com.bun3.unity.ui
 
 ## Quick Start
 
 ```csharp
-using Bun3.UI.Buttons;
+using Bun3.Unity.UI.Buttons;
 
 // Once, at startup.
 ButtonInteractableScope.DefaultHandler = new MyDisabledHandler();

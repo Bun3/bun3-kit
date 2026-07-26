@@ -28,7 +28,7 @@ A `UnifiedToggleToggleGroup` lets one group drive another. Example:
 ## Files
 
 - `UnifiedToggleGroupSample.cs` — example MonoBehaviour that drives a configured `UnifiedToggleGroup` from code (`SetValue`, `SetOn`, `Toggle`).
-- `Bun3.Core.Samples.UnifiedToggleGroup.asmdef` — assembly definition for this sample.
+- `Bun3.Unity.Core.Samples.UnifiedToggleGroup.asmdef` — assembly definition for this sample.
 
 ## Try it
 

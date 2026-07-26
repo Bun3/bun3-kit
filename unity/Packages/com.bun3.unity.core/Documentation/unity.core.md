@@ -1,6 +1,6 @@
 # About Unity Core
 
-The Unity Core package (`com.bun3.core`) bundles general-purpose utilities used across Bun3 packages. The current release ships a `[ReadOnly]` attribute and a complete `UnifiedToggleGroup` system.
+The Unity Core package (`com.bun3.unity.core`) bundles general-purpose utilities used across Bun3 packages. The current release ships a `[ReadOnly]` attribute and a complete `UnifiedToggleGroup` system.
 
 # Installing Unity Core
 
@@ -13,7 +13,7 @@ Install via the [Package Manager](https://docs.unity3d.com/Manual/upm-ui.html). 
 Apply `[ReadOnly]` to a serialized field to make it visible in the inspector but not editable.
 
 ```csharp
-using Bun3.Core.Attributes;
+using Bun3.Unity.Core.Attributes;
 using UnityEngine;
 
 public class Example : MonoBehaviour
@@ -66,7 +66,7 @@ A `UnifiedToggleToggleGroup` lets a parent group drive a child group, so you can
 ### Adding a new option type
 
 ```csharp
-using Bun3.Core.UnifiedToggle;
+using Bun3.Unity.Core.UnifiedToggle;
 using UnityEngine;
 using UnityEngine.UI;
 
