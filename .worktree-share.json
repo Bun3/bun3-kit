@@ -1,0 +1,23 @@
+{
+  "$doc": "worktree-share (https://github.com/Bun3/worktree-share) 설정. 워크트리 생성 시 여기 선언된 경로를 junction 공유/복사한다. Unity 폴더는 'unity/'. 자세한 규칙은 엔진 레포 README 참고.",
+  "shares": [
+    {
+      "_comment": "Library 공유 = 에디터 즉시 진입 핵심. 무거운 캐시 dir 는 junction 공유, 배타 Lock DB·워크트리별 산출물은 copy 독립. PackageManager 도 copy 로 두어 UPM 해석 상태를 워크트리별 독립화(다운로드 캐시 PackageCache 는 계속 공유).",
+      "path": "unity/Library",
+      "mode": "cache",
+      "copy": [
+        "ArtifactDB", "ArtifactDB-lock",
+        "SourceAssetDB", "SourceAssetDB-lock",
+        "Artifacts", "TempArtifacts",
+        "ScriptAssemblies",
+        "StateCache",
+        "ShaderCache.db",
+        "BuildPlayer.prefs",
+        "ilpp.pid",
+        "PackageManager"
+      ]
+    }
+  ],
+  "$note_Packages": "unity/Packages(UPM manifest)는 일부러 공유하지 않는다. manifest 에 'file:../../common/src/...' 같은 상대경로 로컬 패키지 참조가 있어, junction 하면 상대경로 해석이 원본 위치로 고정돼 워크트리 격리가 깨진다. 워크트리별로 독립(격리)이 정답. 받은 패키지 실체는 Library/PackageCache(공유)로 재사용되므로 재다운로드 부담도 없다.",
+  "$note_ProjectSettings": "ProjectSettings 도 공유하지 않는다. 패키지/설정 변경이 워크트리별로 독립이어야 안전."
+}
