@@ -40,7 +40,11 @@ namespace Bun3.Common.Tests
 
             var again = pool.Get();
             Assert.That(again, Is.SameAs(item));
-            Assert.That(again.SetPoolCalls, Is.EqualTo(2));
+            // Three SetPool calls: Get() arms it, Release() disarms it (sets null),
+            // and the second Get() re-arms it. This still fails if re-arm on pool-hit
+            // is ever removed, since the count would stay at 2.
+            Assert.That(again.SetPoolCalls, Is.EqualTo(3));
+            Assert.That(again.Pool, Is.SameAs(pool));
         }
 
         [Test]
@@ -58,6 +62,25 @@ namespace Bun3.Common.Tests
             Assert.That(fromPool, Is.SameAs(first).Or.SameAs(second));
             Assert.That(created, Is.Not.SameAs(first));
             Assert.That(created, Is.Not.SameAs(second));
+        }
+
+        [Test]
+        public void Release_AfterOverCapacityDrop_StillRetainsUpToCapacity()
+        {
+            // Pins the rollback decrement in Release: without it, the over-capacity drop
+            // would leave the counter permanently saturated, and this later release would
+            // also be dropped instead of being retained.
+            var pool = new ConcurrentObjectPool<TestItem>(maxCapacity: 1);
+            var a = pool.Get();
+            var b = pool.Get();
+            pool.Release(a);
+            pool.Release(b); // over capacity — dropped, counter must roll back
+
+            var drained = pool.Get(); // drains the pool (the one retained item)
+            pool.Release(drained);
+
+            var next = pool.Get();
+            Assert.That(next, Is.SameAs(drained));
         }
 
         [Test]

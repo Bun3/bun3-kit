@@ -43,6 +43,11 @@ namespace Bun3.Common.Pooling
 
         public void Release(T item)
         {
+            // Disarm immediately: once released, the item no longer references this pool,
+            // so a caller who releases directly (instead of via Dispose) can't double-insert
+            // the same instance by later calling Dispose() too.
+            item.SetPool(null);
+
             if (Interlocked.Increment(ref _count) > MaxCapacity)
             {
                 Interlocked.Decrement(ref _count);

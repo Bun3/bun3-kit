@@ -7,7 +7,9 @@ namespace Bun3.Common.Pooling
     /// A <see cref="List{T}"/> rented from a shared pool. Dispose returns it to its pool,
     /// so <c>using var list = PooledList&lt;T&gt;.Get();</c> is allocation free after warm-up.
     /// Returning one from a method transfers ownership to the caller, who must dispose it.
-    /// Dispose is idempotent; disposing a directly-constructed instance is a no-op.
+    /// Dispose is idempotent while the caller owns the instance; using or disposing it after
+    /// ownership was given up (returned to the pool) is undefined. Disposing a
+    /// directly-constructed instance is a no-op.
     /// </summary>
     public class PooledList<T> : List<T>, IPooledObject<PooledList<T>>
     {
