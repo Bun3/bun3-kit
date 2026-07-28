@@ -32,7 +32,7 @@ Or add to `Packages/manifest.json`:
 }
 ```
 
-> `com.bun3.common` is not published to any UPM registry, so external consumers must also add its git URL manually (e.g. `https://github.com/Bun3/bun3-kit.git?path=dotnet/src/com.bun3.common`) — the `"com.bun3.common": "0.1.0"` dependency entry above cannot be resolved otherwise.
+> `com.bun3.common` is not published to any UPM registry, so external consumers must also add its git URL manually (e.g. `https://github.com/Bun3/bun3-kit.git?path=common/src/com.bun3.common`) — the `"com.bun3.common": "0.1.0"` dependency entry above cannot be resolved otherwise.
 
 ## Quick Start — UnifiedToggleGroup
 

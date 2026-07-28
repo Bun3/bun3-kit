@@ -12,7 +12,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\..\dotnet\src\com.bun3.common\Bun3.Common.csproj" />
+    <ProjectReference Include="..\..\..\common\src\com.bun3.common\Bun3.Common.csproj" />
   </ItemGroup>
 
 </Project>
