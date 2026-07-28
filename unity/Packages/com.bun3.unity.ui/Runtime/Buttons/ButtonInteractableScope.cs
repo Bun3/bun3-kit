@@ -1,4 +1,5 @@
 using System;
+using Bun3.Unity.Core.Utils;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -22,7 +23,7 @@ namespace Bun3.Unity.UI.Buttons
     {
         private sealed class NullHandler : IButtonDisabledHandler
         {
-            public static readonly NullHandler Instance = new NullHandler();
+            public static readonly NullHandler Instance = new();
 
             public void Handle(DisabledReason reason) { }
         }
@@ -64,6 +65,7 @@ namespace Bun3.Unity.UI.Buttons
         /// <summary>
         /// 조건을 누적한다. 하나라도 실패하면 버튼은 비활성화된다.
         /// </summary>
+        /// <param name="condition">interactable condition</param>
         /// <param name="disabledMessage">
         /// 실패 사유 메시지. null이거나 빈 문자열이면 사유 없이 조용히 비활성화된다.
         /// </param>
@@ -88,6 +90,7 @@ namespace Bun3.Unity.UI.Buttons
         /// <summary>
         /// 조건을 누적한다. 하나라도 실패하면 버튼은 비활성화된다.
         /// </summary>
+        /// <param name="condition">interactable condition</param>
         /// <param name="disabledAction">
         /// 비활성 버튼이 클릭됐을 때 실행할 동작.
         /// </param>
@@ -129,9 +132,7 @@ namespace Bun3.Unity.UI.Buttons
                 return;
             }
 
-            if (!_button.TryGetComponent(out ButtonDisabledClickReceiver receiver))
-                receiver = _button.gameObject.AddComponent<ButtonDisabledClickReceiver>();
-
+            var receiver = _button.gameObject.GetOrAdd<ButtonDisabledClickReceiver>();
             receiver.Set(_button, _reason, _handler);
         }
     }
