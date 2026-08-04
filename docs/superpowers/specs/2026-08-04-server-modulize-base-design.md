@@ -61,7 +61,7 @@ server/
 │   │     수명주기(Start/Stop, graceful shutdown)
 │   ├── Bun3.Server.Transport.Tcp/ netstandard2.1 · → Abstractions
 │   │   └ Socket 리스너 + accept/수신 루프 + 길이 프리픽스 프레이밍
-│   └── Bun3.Server.Hosting/       net10.0 · → Core + Microsoft.Extensions.Hosting
+│   └── Bun3.Server.Hosting/       net10.0 · → Core, Transport.Tcp + Microsoft.Extensions.Hosting
 │       └ AddBun3Server(), BackgroundService 통합, ILogger 브리지, IOptions 바인딩
 ├── samples/
 │   └── EchoServer/                net10.0 콘솔 · IsPackable=false · 조립 예제 겸 수동 확인
@@ -73,6 +73,7 @@ server/
 Transport와 Core는 서로를 모르며 Abstractions로만 만난다. 새 전송(Steam,
 인프로세스)은 `IConnection`/`ITransportListener` 구현 추가로 끝나고 Core는
 무변경이다. Unity 호스팅 시에는 Hosting을 제외한 세 패키지만 가져간다.
+Hosting은 기본 TCP 전송을 조립하는 계층이므로 Transport.Tcp도 참조한다.
 
 ## 4. 핵심 계약 (Abstractions)
 
