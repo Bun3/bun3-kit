@@ -79,7 +79,8 @@ Transport와 Core는 서로를 모르며 Abstractions로만 만난다. 새 전�
 ```csharp
 public interface IConnection
 {
-    long Id { get; }
+    long Id { get; }                 // 프로세스 내 유일 연결 식별자(단조 증가). 로그 상관·레지스트리 키 용도.
+                                     // 계정/플레이어 ID 아님 — 재접속 시 새 값
     string? RemoteAddress { get; }   // TCP는 IP, Steam은 SteamID — 전송별 세부는 문자열로
     bool IsOpen { get; }
     ValueTask SendAsync(ReadOnlyMemory<byte> frame, CancellationToken ct = default);
@@ -106,6 +107,12 @@ public interface ITransportListener
   정식 클라이언트 계약은 v1 메시징과 함께 도입.
 
 ## 5. 세션 모델 (Core)
+
+**Session은 "연결 1개"의 서버측 대응물이며 연결과 수명을 같이한다** (끊기면
+소멸, 재접속 = 새 Session). 인증을 거쳐 얻는 "플레이어"(재접속에도 살아남는
+단위)는 별개 개념으로, v0에는 존재하지 않는다 — 로그인 모듈(로드맵의
+`Bun3.Server.Sessions`)이 이 위에 Player 계층과 세션 재바인딩(idlez의
+`player.SetSession` 패턴)을 도입한다. 에코 수준의 서버는 Session만으로 충분하다.
 
 ```csharp
 public abstract class Session
