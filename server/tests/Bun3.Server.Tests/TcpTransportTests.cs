@@ -230,4 +230,43 @@ public class TcpTransportTests
         public void OnFrame(IConnection connection, ReadOnlyMemory<byte> frame) { }
         public void OnClosed(IConnection connection, Exception? error) { }
     }
+
+    [Test]
+    public async Task Throwing_OnConnected_does_not_kill_the_accept_loop()
+    {
+        var handler = new ThrowOnFirstConnectHandler();
+        var listener = new TcpTransportListener(new TcpTransportOptions { Port = 0 });
+        await listener.StartAsync(handler);
+        try
+        {
+            using var first = new TcpClient();
+            await first.ConnectAsync(IPAddress.Loopback, listener.BoundPort!.Value);
+
+            using var second = new TcpClient();
+            await second.ConnectAsync(IPAddress.Loopback, listener.BoundPort!.Value);
+
+            var connection = await handler.SecondConnected.Task.WaitAsync(Timeout);
+            Assert.That(connection.IsOpen, Is.True);
+        }
+        finally
+        {
+            await listener.StopAsync();
+        }
+    }
+
+    private sealed class ThrowOnFirstConnectHandler : IConnectionHandler
+    {
+        private int _count;
+        public readonly TaskCompletionSource<IConnection> SecondConnected =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public void OnConnected(IConnection connection)
+        {
+            if (Interlocked.Increment(ref _count) == 1) throw new InvalidOperationException("reject");
+            SecondConnected.TrySetResult(connection);
+        }
+
+        public void OnFrame(IConnection connection, ReadOnlyMemory<byte> frame) { }
+        public void OnClosed(IConnection connection, Exception? error) { }
+    }
 }

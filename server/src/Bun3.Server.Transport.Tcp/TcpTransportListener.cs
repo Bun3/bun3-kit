@@ -74,17 +74,29 @@ namespace Bun3.Server.Transport.Tcp
                 catch (Exception ex)
                 {
                     _logger.Log(Bun3LogLevel.Error, "Accept failed.", ex);
+                    await Task.Delay(100).ConfigureAwait(false); // 지속 실패 시 핫스핀 방지
                     continue;
                 }
 
-                client.NoDelay = true;
-                var connection = new TcpConnection(
-                    Interlocked.Increment(ref _nextConnectionId), client, _options, handler, _logger);
+                try
+                {
+                    client.NoDelay = true;
+                    var connection = new TcpConnection(
+                        Interlocked.Increment(ref _nextConnectionId), client, _options, handler, _logger);
 
-                // 계약: OnConnected 반환 전에는 OnFrame/OnClosed가 발생하지 않도록
-                // 수신 루프는 OnConnected 이후에 시작한다.
-                handler.OnConnected(connection);
-                _ = Task.Run(connection.RunReceiveLoopAsync);
+                    // 계약: OnConnected 반환 전에는 OnFrame/OnClosed가 발생하지 않도록
+                    // 수신 루프는 OnConnected 이후에 시작한다.
+                    handler.OnConnected(connection);
+                    _ = Task.Run(connection.RunReceiveLoopAsync);
+                }
+                catch (Exception ex)
+                {
+                    // OnConnected가 던지면 핸들러가 이 연결을 등록하지 못한 것이므로
+                    // OnClosed를 통지하지 않고 소켓만 정리한다 (exactly-once는 OnConnected가
+                    // 정상 반환한 연결에 대한 계약).
+                    _logger.Log(Bun3LogLevel.Error, "Connection setup failed; closing client.", ex);
+                    try { client.Close(); } catch { }
+                }
             }
         }
     }

@@ -15,6 +15,7 @@ namespace Bun3.Server.Transport.Tcp
         private readonly IBun3Logger _logger;
         private readonly SemaphoreSlim _sendLock = new SemaphoreSlim(1, 1);
         private int _closed; // 0 = open, 1 = closed
+        private Exception? _closeError;
 
         internal TcpConnection(
             long id,
@@ -61,6 +62,7 @@ namespace Bun3.Server.Transport.Tcp
             }
             catch (Exception ex)
             {
+                Interlocked.CompareExchange(ref _closeError, ex, null);
                 _logger.Log(Bun3LogLevel.Debug, $"Connection {Id}: send failed; closing.", ex);
                 Close();
             }
@@ -118,7 +120,7 @@ namespace Bun3.Server.Transport.Tcp
             finally
             {
                 Close();
-                _handler.OnClosed(this, error);
+                _handler.OnClosed(this, error ?? Volatile.Read(ref _closeError));
             }
         }
     }
