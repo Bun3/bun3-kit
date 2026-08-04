@@ -30,7 +30,7 @@ namespace Bun3.Server.Core
             SessionOptions? sessionOptions = null)
         {
             _transport = transport ?? throw new ArgumentNullException(nameof(transport));
-            _logger = logger ?? NullBun3Logger.Instance;
+            _logger = new SafeBun3Logger(logger ?? NullBun3Logger.Instance);
             _sessionOptions = sessionOptions ?? new SessionOptions();
             _handler = new Handler(this);
         }
@@ -42,6 +42,7 @@ namespace Bun3.Server.Core
 
         protected abstract TSession CreateSession(IConnection connection);
 
+        /// <remarks>단일 사용: StopAsync 이후 재시작할 수 없다. 새 인스턴스를 생성할 것.</remarks>
         public async Task StartAsync(CancellationToken ct = default)
         {
             await _transport.StartAsync(_handler, ct).ConfigureAwait(false);

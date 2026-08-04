@@ -48,8 +48,9 @@ public class SessionActorTests
         public TestServer(
             ITransportListener transport,
             Func<IConnection, ScriptedSession> factory,
-            SessionOptions? sessionOptions = null)
-            : base(transport, logger: null, sessionOptions)
+            SessionOptions? sessionOptions = null,
+            IBun3Logger? logger = null)
+            : base(transport, logger, sessionOptions)
         {
             _factory = factory;
         }
@@ -146,6 +147,29 @@ public class SessionActorTests
 
         await session.Disconnected.Task.WaitAsync(Timeout);
         Assert.That(conn.IsOpen, Is.False);
+    }
+
+    [Test]
+    public async Task Throwing_logger_does_not_zombify_session_on_handler_error()
+    {
+        var transport = new FakeTransport();
+        var server = new TestServer(transport, conn => new ScriptedSession(conn,
+            (_, _) => throw new InvalidOperationException("boom")), logger: new ThrowingLogger());
+        await server.StartAsync();
+
+        var conn = transport.Connect(1);
+        var session = server.Sessions.Single();
+        conn.ReceiveFrame(new byte[] { 1 });
+
+        await session.Disconnected.Task.WaitAsync(Timeout);
+        Assert.That(conn.IsOpen, Is.False);
+        Assert.That(server.Sessions, Is.Empty);
+    }
+
+    private sealed class ThrowingLogger : IBun3Logger
+    {
+        public void Log(Bun3LogLevel level, string message, Exception? exception = null) =>
+            throw new InvalidOperationException("logger failure");
     }
 
     [Test]

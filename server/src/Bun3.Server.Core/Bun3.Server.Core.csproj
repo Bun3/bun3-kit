@@ -13,6 +13,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Bun3.Server.Abstractions\Bun3.Server.Abstractions.csproj" />
+    <!-- v1 예약: 풀링/컬렉션 활용 예정 (스펙 §3의 의존 결정) — 현재 코드 미사용 -->
     <ProjectReference Include="..\..\..\common\src\com.bun3.common\Bun3.Common.csproj" />
   </ItemGroup>
 

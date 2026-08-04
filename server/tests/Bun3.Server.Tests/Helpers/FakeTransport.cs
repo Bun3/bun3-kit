@@ -65,6 +65,7 @@ public sealed class FakeConnection : IConnection
         return default;
     }
 
+    // 주의: 실제 TcpConnection과 달리 OnClosed를 호출 스레드에서 동기로 올린다 — 이 동기성에 의존하는 테스트를 작성하지 말 것.
     public void Close()
     {
         if (Interlocked.Exchange(ref _closed, 1) == 0)

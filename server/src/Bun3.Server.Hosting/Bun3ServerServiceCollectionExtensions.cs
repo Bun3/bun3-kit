@@ -49,7 +49,7 @@ public static class Bun3ServerServiceCollectionExtensions
         {
             var options = sp.GetRequiredService<IOptions<Bun3ServerOptions>>().Value;
             return new TcpTransportListener(
-                new TcpTransportOptions { Port = options.Port, MaxFrameSize = options.MaxFrameSize },
+                new TcpTransportOptions { Port = options.Port, MaxFrameSize = options.MaxFrameSize, Backlog = options.Backlog },
                 sp.GetRequiredService<IBun3Logger>());
         });
 
@@ -66,7 +66,9 @@ public static class Bun3ServerServiceCollectionExtensions
         });
 
         services.AddHostedService<Bun3ServerHostedService<TSession>>(sp =>
-            new Bun3ServerHostedService<TSession>(sp.GetRequiredService<HostedServer<TSession>>()));
+            new Bun3ServerHostedService<TSession>(
+                sp.GetRequiredService<HostedServer<TSession>>(),
+                sp.GetRequiredService<IOptions<Bun3ServerOptions>>()));
 
         return services;
     }

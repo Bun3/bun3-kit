@@ -21,12 +21,13 @@ namespace Bun3.Server.Transport.Tcp
         public TcpTransportListener(TcpTransportOptions options, IBun3Logger? logger = null)
         {
             _options = options ?? throw new ArgumentNullException(nameof(options));
-            _logger = logger ?? NullBun3Logger.Instance;
+            _logger = new SafeBun3Logger(logger ?? NullBun3Logger.Instance);
         }
 
         /// <summary>실제 바인딩된 포트. Options.Port가 0이면 시작 후 여기서 확인한다. Stop 이후에도 유효.</summary>
         public int? BoundPort => _boundPort;
 
+        /// <remarks>단일 사용: StopAsync 이후 재시작할 수 없다. 새 인스턴스를 생성할 것.</remarks>
         public Task StartAsync(IConnectionHandler handler, CancellationToken ct = default)
         {
             if (handler == null)

@@ -11,4 +11,10 @@ public sealed class Bun3ServerOptions
     public int MaxFrameSize { get; set; } = 1024 * 1024;
 
     public int MaxQueuedFramesPerSession { get; set; } = 256;
+
+    /// <summary>TCP accept 백로그.</summary>
+    public int Backlog { get; set; } = 512;
+
+    /// <summary>종료 시 세션 소비 루프 종료를 기다리는 시간.</summary>
+    public TimeSpan DrainTimeout { get; set; } = TimeSpan.FromSeconds(5);
 }

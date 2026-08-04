@@ -53,6 +53,43 @@ public class HostingTests
     }
 
     [Test]
+    public async Task MaxFrameSize_reaches_the_transport()
+    {
+        var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings { DisableDefaults = true });
+        builder.Services.AddBun3Server<EchoSession>(options =>
+        {
+            options.Port = 0;
+            options.MaxFrameSize = 64;
+        });
+        using var host = builder.Build();
+
+        await host.StartAsync();
+        try
+        {
+            var port = host.Services.GetRequiredService<TcpTransportListener>().BoundPort!.Value;
+            using var client = new TcpClient();
+            await client.ConnectAsync(IPAddress.Loopback, port);
+            var stream = client.GetStream();
+
+            await FrameFormat.WriteFrameAsync(stream, new byte[65]); // 초과 프레임
+
+            // 서버가 프로토콜 위반으로 연결을 닫는다 — EOF(null) 또는 IO 예외
+            try
+            {
+                var frame = await FrameFormat.ReadFrameAsync(stream, 1024).AsTask().WaitAsync(Timeout);
+                Assert.That(frame, Is.Null);
+            }
+            catch (IOException)
+            {
+            }
+        }
+        finally
+        {
+            await host.StopAsync().WaitAsync(Timeout);
+        }
+    }
+
+    [Test]
     public void Options_bind_from_Bun3_Server_configuration_section()
     {
         var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings { DisableDefaults = true });
