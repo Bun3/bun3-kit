@@ -1,0 +1,233 @@
+using System.Collections.Concurrent;
+using System.Net;
+using System.Net.Sockets;
+using System.Text;
+using Bun3.Server.Abstractions;
+using Bun3.Server.Transport.Tcp;
+using NUnit.Framework;
+
+namespace Bun3.Server.Tests;
+
+[TestFixture]
+public class TcpTransportTests
+{
+    private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(5);
+
+    private sealed class RecordingHandler : IConnectionHandler
+    {
+        public readonly TaskCompletionSource<IConnection> Connected =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public readonly TaskCompletionSource<Exception?> Closed =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public readonly ConcurrentQueue<byte[]> Frames = new();
+        public readonly SemaphoreSlim FrameSignal = new(0);
+
+        public void OnConnected(IConnection connection) => Connected.TrySetResult(connection);
+
+        public void OnFrame(IConnection connection, ReadOnlyMemory<byte> frame)
+        {
+            Frames.Enqueue(frame.ToArray());
+            FrameSignal.Release();
+        }
+
+        public void OnClosed(IConnection connection, Exception? error) => Closed.TrySetResult(error);
+    }
+
+    private static async Task<(TcpTransportListener listener, RecordingHandler handler)> StartListenerAsync(
+        int maxFrameSize = 1024 * 1024)
+    {
+        var handler = new RecordingHandler();
+        var listener = new TcpTransportListener(new TcpTransportOptions { Port = 0, MaxFrameSize = maxFrameSize });
+        await listener.StartAsync(handler);
+        return (listener, handler);
+    }
+
+    private static async Task<TcpClient> ConnectAsync(TcpTransportListener listener)
+    {
+        var client = new TcpClient();
+        await client.ConnectAsync(IPAddress.Loopback, listener.BoundPort!.Value);
+        return client;
+    }
+
+    [Test]
+    public async Task Start_on_port_zero_reports_bound_port()
+    {
+        var (listener, _) = await StartListenerAsync();
+        try
+        {
+            Assert.That(listener.BoundPort, Is.Not.Null);
+            Assert.That(listener.BoundPort, Is.GreaterThan(0));
+        }
+        finally
+        {
+            await listener.StopAsync();
+        }
+    }
+
+    [Test]
+    public async Task Client_connect_raises_OnConnected_with_remote_address()
+    {
+        var (listener, handler) = await StartListenerAsync();
+        try
+        {
+            using var client = await ConnectAsync(listener);
+            var connection = await handler.Connected.Task.WaitAsync(Timeout);
+
+            Assert.That(connection.IsOpen, Is.True);
+            Assert.That(connection.Id, Is.GreaterThan(0));
+            Assert.That(connection.RemoteAddress, Does.Contain("127.0.0.1"));
+        }
+        finally
+        {
+            await listener.StopAsync();
+        }
+    }
+
+    [Test]
+    public async Task Client_frame_reaches_handler_intact()
+    {
+        var (listener, handler) = await StartListenerAsync();
+        try
+        {
+            using var client = await ConnectAsync(listener);
+            await handler.Connected.Task.WaitAsync(Timeout);
+            var payload = Encoding.UTF8.GetBytes("ping from client");
+
+            await FrameFormat.WriteFrameAsync(client.GetStream(), payload);
+
+            await handler.FrameSignal.WaitAsync(Timeout);
+            Assert.That(handler.Frames.TryDequeue(out var received), Is.True);
+            Assert.That(received, Is.EqualTo(payload));
+        }
+        finally
+        {
+            await listener.StopAsync();
+        }
+    }
+
+    [Test]
+    public async Task Server_send_reaches_client_intact()
+    {
+        var (listener, handler) = await StartListenerAsync();
+        try
+        {
+            using var client = await ConnectAsync(listener);
+            var connection = await handler.Connected.Task.WaitAsync(Timeout);
+            var payload = Encoding.UTF8.GetBytes("pong from server");
+
+            await connection.SendAsync(payload);
+
+            var received = await FrameFormat.ReadFrameAsync(client.GetStream(), 1024 * 1024)
+                .AsTask().WaitAsync(Timeout);
+            Assert.That(received, Is.EqualTo(payload));
+        }
+        finally
+        {
+            await listener.StopAsync();
+        }
+    }
+
+    [Test]
+    public async Task Client_disconnect_raises_OnClosed_with_null_error()
+    {
+        var (listener, handler) = await StartListenerAsync();
+        try
+        {
+            var client = await ConnectAsync(listener);
+            var connection = await handler.Connected.Task.WaitAsync(Timeout);
+
+            client.Close();
+
+            var error = await handler.Closed.Task.WaitAsync(Timeout);
+            Assert.That(error, Is.Null);
+            Assert.That(connection.IsOpen, Is.False);
+        }
+        finally
+        {
+            await listener.StopAsync();
+        }
+    }
+
+    [Test]
+    public async Task Oversize_frame_closes_connection_with_InvalidDataException()
+    {
+        var (listener, handler) = await StartListenerAsync(maxFrameSize: 16);
+        try
+        {
+            using var client = await ConnectAsync(listener);
+            await handler.Connected.Task.WaitAsync(Timeout);
+
+            await FrameFormat.WriteFrameAsync(client.GetStream(), new byte[17]);
+
+            var error = await handler.Closed.Task.WaitAsync(Timeout);
+            Assert.That(error, Is.InstanceOf<InvalidDataException>());
+        }
+        finally
+        {
+            await listener.StopAsync();
+        }
+    }
+
+    [Test]
+    public async Task Send_after_close_is_noop()
+    {
+        var (listener, handler) = await StartListenerAsync();
+        try
+        {
+            using var client = await ConnectAsync(listener);
+            var connection = await handler.Connected.Task.WaitAsync(Timeout);
+
+            connection.Close();
+            await handler.Closed.Task.WaitAsync(Timeout);
+
+            Assert.DoesNotThrowAsync(async () => await connection.SendAsync(new byte[] { 1 }));
+        }
+        finally
+        {
+            await listener.StopAsync();
+        }
+    }
+
+    [Test]
+    public async Task Two_connections_get_distinct_ids()
+    {
+        var handler1Seen = new ConcurrentQueue<long>();
+        var handler = new MultiConnectionHandler(handler1Seen);
+        var listener = new TcpTransportListener(new TcpTransportOptions { Port = 0 });
+        await listener.StartAsync(handler);
+        try
+        {
+            using var c1 = new TcpClient();
+            using var c2 = new TcpClient();
+            await c1.ConnectAsync(IPAddress.Loopback, listener.BoundPort!.Value);
+            await c2.ConnectAsync(IPAddress.Loopback, listener.BoundPort!.Value);
+
+            await handler.TwoConnected.Task.WaitAsync(Timeout);
+            var ids = handler1Seen.ToArray();
+            Assert.That(ids, Has.Length.EqualTo(2));
+            Assert.That(ids[0], Is.Not.EqualTo(ids[1]));
+        }
+        finally
+        {
+            await listener.StopAsync();
+        }
+    }
+
+    private sealed class MultiConnectionHandler : IConnectionHandler
+    {
+        private readonly ConcurrentQueue<long> _ids;
+        public readonly TaskCompletionSource TwoConnected =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public MultiConnectionHandler(ConcurrentQueue<long> ids) => _ids = ids;
+
+        public void OnConnected(IConnection connection)
+        {
+            _ids.Enqueue(connection.Id);
+            if (_ids.Count >= 2) TwoConnected.TrySetResult();
+        }
+
+        public void OnFrame(IConnection connection, ReadOnlyMemory<byte> frame) { }
+        public void OnClosed(IConnection connection, Exception? error) { }
+    }
+}

@@ -1,0 +1,91 @@
+using System;
+using System.Net;
+using System.Net.Sockets;
+using System.Threading;
+using System.Threading.Tasks;
+using Bun3.Server.Abstractions;
+
+namespace Bun3.Server.Transport.Tcp
+{
+    /// <summary>순수 Socket 기반 TCP 리스너. 프레이밍은 FrameFormat(4바이트 길이 프리픽스).</summary>
+    public sealed class TcpTransportListener : ITransportListener
+    {
+        private readonly TcpTransportOptions _options;
+        private readonly IBun3Logger _logger;
+        private TcpListener? _listener;
+        private Task? _acceptLoop;
+        private long _nextConnectionId;
+        private int? _boundPort;
+        private volatile bool _stopping;
+
+        public TcpTransportListener(TcpTransportOptions options, IBun3Logger? logger = null)
+        {
+            _options = options ?? throw new ArgumentNullException(nameof(options));
+            _logger = logger ?? NullBun3Logger.Instance;
+        }
+
+        /// <summary>실제 바인딩된 포트. Options.Port가 0이면 시작 후 여기서 확인한다. Stop 이후에도 유효.</summary>
+        public int? BoundPort => _boundPort;
+
+        public Task StartAsync(IConnectionHandler handler, CancellationToken ct = default)
+        {
+            if (handler == null)
+            {
+                throw new ArgumentNullException(nameof(handler));
+            }
+
+            if (_listener != null)
+            {
+                throw new InvalidOperationException("Listener is already started.");
+            }
+
+            _listener = new TcpListener(IPAddress.Any, _options.Port);
+            _listener.Start(_options.Backlog);
+            _boundPort = ((IPEndPoint)_listener.LocalEndpoint).Port;
+            _logger.Log(Bun3LogLevel.Info, $"TCP listening on port {BoundPort}.");
+            _acceptLoop = Task.Run(() => AcceptLoopAsync(handler));
+            return Task.CompletedTask;
+        }
+
+        public async Task StopAsync(CancellationToken ct = default)
+        {
+            _stopping = true;
+            _listener?.Stop(); // AcceptTcpClientAsync를 깨운다
+            if (_acceptLoop != null)
+            {
+                await _acceptLoop.ConfigureAwait(false);
+            }
+        }
+
+        private async Task AcceptLoopAsync(IConnectionHandler handler)
+        {
+            var listener = _listener!;
+            while (true)
+            {
+                TcpClient client;
+                try
+                {
+                    client = await listener.AcceptTcpClientAsync().ConfigureAwait(false);
+                }
+                catch (Exception) when (_stopping)
+                {
+                    break; // Stop()에 의한 정상 종료
+                }
+                catch (Exception ex)
+                {
+                    _logger.Log(Bun3LogLevel.Error, "Accept failed.", ex);
+                    continue;
+                }
+
+                client.NoDelay = true;
+                var connection = new TcpConnection(
+                    Interlocked.Increment(ref _nextConnectionId), client, _options, handler, _logger);
+
+                // 계약: OnConnected 반환 전에는 OnFrame/OnClosed가 발생하지 않도록
+                // 수신 루프는 OnConnected 이후에 시작한다.
+                handler.OnConnected(connection);
+                _ = Task.Run(connection.RunReceiveLoopAsync);
+            }
+        }
+    }
+}
