@@ -63,7 +63,7 @@ namespace Bun3.Server.Core
                 entry.Session.Kick();
             }
 
-            var drain = Task.WhenAll(entries.Select(e => e.RunTask));
+            var drain = Task.WhenAll(entries.Select(e => e.Completion));
             var timeout = drainTimeout ?? DefaultDrainTimeout;
             var finished = await Task.WhenAny(drain, Task.Delay(timeout, ct)).ConfigureAwait(false);
             if (finished != drain)
@@ -91,7 +91,7 @@ namespace Bun3.Server.Core
             session.Initialize(_logger, _sessionOptions);
             var entry = new SessionEntry(session);
             _sessions[connection.Id] = entry;
-            entry.RunTask = session.RunAsync();
+            entry.BindRunTask(session.RunAsync());
         }
 
         private void HandleFrame(IConnection connection, ReadOnlyMemory<byte> frame)
@@ -113,11 +113,25 @@ namespace Bun3.Server.Core
         private sealed class SessionEntry
         {
             public readonly TSession Session;
-            public Task RunTask = Task.CompletedTask;
+            private readonly TaskCompletionSource<bool> _completion =
+                new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
 
             public SessionEntry(TSession session)
             {
                 Session = session;
+            }
+
+            /// <summary>실제 RunAsync 태스크가 끝날 때 완료된다. 바인딩 전에는 완료되지 않으므로
+            /// StopAsync가 등록~바인딩 사이의 엔트리를 관찰해도 드레인을 건너뛰지 않는다.</summary>
+            public Task Completion => _completion.Task;
+
+            public void BindRunTask(Task runTask)
+            {
+                runTask.ContinueWith(
+                    _ => _completion.TrySetResult(true),
+                    CancellationToken.None,
+                    TaskContinuationOptions.ExecuteSynchronously,
+                    TaskScheduler.Default);
             }
         }
 
