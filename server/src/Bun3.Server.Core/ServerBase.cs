@@ -89,8 +89,9 @@ namespace Bun3.Server.Core
             }
 
             session.Initialize(_logger, _sessionOptions);
-            var entry = new SessionEntry(session, session.RunAsync());
+            var entry = new SessionEntry(session);
             _sessions[connection.Id] = entry;
+            entry.RunTask = session.RunAsync();
         }
 
         private void HandleFrame(IConnection connection, ReadOnlyMemory<byte> frame)
@@ -112,12 +113,11 @@ namespace Bun3.Server.Core
         private sealed class SessionEntry
         {
             public readonly TSession Session;
-            public readonly Task RunTask;
+            public Task RunTask = Task.CompletedTask;
 
-            public SessionEntry(TSession session, Task runTask)
+            public SessionEntry(TSession session)
             {
                 Session = session;
-                RunTask = runTask;
             }
         }
 

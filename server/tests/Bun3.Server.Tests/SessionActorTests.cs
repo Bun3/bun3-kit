@@ -214,6 +214,56 @@ public class SessionActorTests
         Assert.That(server.IsRunning, Is.False);
     }
 
+    [Test]
+    public async Task Kick_during_OnConnected_still_disconnects_cleanly()
+    {
+        var transport = new FakeTransport();
+        RejectingSession? created = null;
+        var server = new RejectingServer(transport, conn => created = new RejectingSession(conn));
+        await server.StartAsync();
+
+        var conn = transport.Connect(1);
+
+        await created!.Disconnected.Task.WaitAsync(Timeout);
+        Assert.That(conn.IsOpen, Is.False);
+        Assert.That(server.Sessions, Is.Empty);
+    }
+
+    private sealed class RejectingSession : Session
+    {
+        public readonly TaskCompletionSource<Exception?> Disconnected =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public RejectingSession(IConnection connection) : base(connection) { }
+
+        protected override ValueTask OnConnectedAsync()
+        {
+            Kick();
+            return default;
+        }
+
+        protected override ValueTask OnFrameAsync(ReadOnlyMemory<byte> frame) => default;
+
+        protected override ValueTask OnDisconnectedAsync(Exception? error)
+        {
+            Disconnected.TrySetResult(error);
+            return default;
+        }
+    }
+
+    private sealed class RejectingServer : ServerBase<RejectingSession>
+    {
+        private readonly Func<IConnection, RejectingSession> _factory;
+
+        public RejectingServer(ITransportListener transport, Func<IConnection, RejectingSession> factory)
+            : base(transport)
+        {
+            _factory = factory;
+        }
+
+        protected override RejectingSession CreateSession(IConnection connection) => _factory(connection);
+    }
+
     private static class InterlockedExtensions
     {
         public static void Max(ref int location, int value)
