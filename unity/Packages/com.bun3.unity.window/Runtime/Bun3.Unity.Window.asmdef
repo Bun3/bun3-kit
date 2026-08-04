@@ -1,0 +1,19 @@
+{
+    "name": "Bun3.Unity.Window",
+    "rootNamespace": "Bun3.Unity.Window",
+    "references": [
+        "Bun3.Unity.Core",
+        "UnityEngine.UI",
+        "Unity.InputSystem",
+        "MackySoft.SerializeReferenceExtensions"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

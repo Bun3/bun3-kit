@@ -1,0 +1,17 @@
+{
+    "name": "Bun3.Unity.Window.Samples.DesktopOverlay",
+    "rootNamespace": "Bun3.Unity.Window.Samples.DesktopOverlay",
+    "references": [
+        "Bun3.Unity.Window",
+        "Unity.InputSystem"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
