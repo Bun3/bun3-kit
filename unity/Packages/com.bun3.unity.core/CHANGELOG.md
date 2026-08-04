@@ -5,6 +5,17 @@ All notable changes to this package will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-08-04
+
+### Added
+
+- `Bun3.Unity.Core.PlayerLoop.PlayerLoopSystemHelper` — inserts static per-frame callbacks into Unity's player loop under a marker type (`InsertSystemBefore`/`InsertSystemAfter`/`TryRemoveSystem`/`IsInserted`), enabling scene-object-free static systems. Inserted systems are cleaned up automatically on `Application.quitting` (raised by the editor on play-mode exit, so nothing leaks into edit mode). Adapted from PlayerLoopInterface; first consumer is `com.bun3.unity.window`'s overlay tick.
+- Runtime tests (`Tests/Runtime`) covering insert/tick/remove round-trips.
+
+### Changed
+
+- Assembly-definition reference cleanup: `Bun3.Unity.Core.asmdef` now references `UniTask` and `MackySoft.SerializeReferenceExtensions` by name instead of GUID (matching the rest of the toolkit), and the Unified Toggle Group sample drops its stale `MackySoft.SerializeReferenceExtensions.Runtime` reference (wrong assembly name, and the sample never used the package).
+
 ## [0.3.0] - 2026-07-07
 
 ### Added

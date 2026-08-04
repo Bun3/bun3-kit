@@ -2,8 +2,7 @@
     "name": "Bun3.Unity.Core.Samples.UnifiedToggleGroup",
     "rootNamespace": "Bun3.Unity.Core.Samples.UnifiedToggleGroup",
     "references": [
-        "Bun3.Unity.Core",
-        "MackySoft.SerializeReferenceExtensions.Runtime"
+        "Bun3.Unity.Core"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],
