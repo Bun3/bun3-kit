@@ -13,6 +13,17 @@ public static class Bun3ServerServiceCollectionExtensions
     /// TCP 전송 기반 Bun3 서버를 Generic Host에 등록한다.
     /// TSession은 IConnection을 받는 public 생성자가 필요하며, 나머지 인자는 DI로 주입된다.
     /// </summary>
+    /// <remarks>
+    /// 제약(v0):
+    /// <list type="bullet">
+    /// <item>세션 생성 시 추가 생성자 의존성은 항상 루트 컨테이너에서 해석된다 —
+    /// scoped 서비스를 세션에 주입하면 세션별 인스턴스가 아니라 예외(ValidateScopes 시)
+    /// 또는 루트에 고정된 사실상의 싱글턴이 된다. 세션 의존성은 싱글턴/트랜지언트만 사용할 것.</item>
+    /// <item>호스트당 1회만 호출할 것. 두 번 등록하면(예: 세션 타입 2개) 마지막
+    /// TcpTransportListener 싱글턴을 공유하게 되어 두 번째 서버의 StartAsync가
+    /// "Listener is already started."로 기동 시점에 실패한다. 다중 세션 타입/포트는 v1 범위.</item>
+    /// </list>
+    /// </remarks>
     public static IServiceCollection AddBun3Server<TSession>(
         this IServiceCollection services,
         Action<Bun3ServerOptions>? configure = null)
