@@ -4,8 +4,8 @@
     <TargetFramework>netstandard2.1</TargetFramework>
     <LangVersion>9.0</LangVersion>
     <Nullable>enable</Nullable>
-    <RootNamespace>Bun3.Server.Core</RootNamespace>
-    <PackageId>Bun3.Server.Core</PackageId>
+    <RootNamespace>Bun3.Server.Transport.Tcp</RootNamespace>
+    <PackageId>Bun3.Server.Transport.Tcp</PackageId>
     <Version>0.1.0</Version>
     <Authors>Bun3</Authors>
     <RepositoryUrl>https://github.com/Bun3/bun3-kit</RepositoryUrl>
@@ -13,7 +13,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Bun3.Server.Abstractions\Bun3.Server.Abstractions.csproj" />
-    <ProjectReference Include="..\..\..\common\src\com.bun3.common\Bun3.Common.csproj" />
   </ItemGroup>
 
 </Project>

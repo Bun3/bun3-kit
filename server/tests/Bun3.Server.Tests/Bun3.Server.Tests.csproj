@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>Bun3.Server.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.0" />
+    <PackageReference Include="NUnit" Version="4.1.0" />
+    <PackageReference Include="NUnit3TestAdapter" Version="4.5.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Bun3.Server.Abstractions\Bun3.Server.Abstractions.csproj" />
+    <ProjectReference Include="..\..\src\Bun3.Server.Core\Bun3.Server.Core.csproj" />
+    <ProjectReference Include="..\..\src\Bun3.Server.Transport.Tcp\Bun3.Server.Transport.Tcp.csproj" />
+    <ProjectReference Include="..\..\src\Bun3.Server.Hosting\Bun3.Server.Hosting.csproj" />
+  </ItemGroup>
+
+</Project>
