@@ -82,4 +82,19 @@ public class MessagingValidationTests
             MessagingSchema<Update, Response, Update>.Create())!;
         Assert.That(ex.Message, Does.Contain("request_id"));
     }
+
+    [Test]
+    public void Duplicate_payload_types_in_request_root_fail_creation()
+    {
+        var ex = Assert.Throws<MessagingValidationException>(() =>
+            MessagingSchema<DuplicatePayloadRequest, Response, Update>.Create())!;
+        Assert.That(ex.Errors, Has.Some.Contains("first"));
+        Assert.That(ex.Errors, Has.Some.Contains("second"));
+    }
+
+    [Test]
+    public void Duplicate_payload_types_in_response_root_are_tolerated()
+    {
+        Assert.DoesNotThrow(() => MessagingSchema<Request, SharedResponse, Update>.Create());
+    }
 }

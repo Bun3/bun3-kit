@@ -51,3 +51,21 @@ message MismatchResponse {
     GetServerTimeResponse get_server_time = 12;
   }
 }
+
+// 타입 중복 검증용 — Request/Update 루트에선 오류, Response 루트에선 허용
+message DuplicatePayloadRequest {
+  int64 request_id = 1;
+  oneof body {
+    GetServerTimeRequest first = 10;
+    GetServerTimeRequest second = 11;
+  }
+}
+
+message SharedResponse {
+  int64 request_id = 1;
+  int32 status = 2;
+  oneof body {
+    GetServerTimeResponse get_server_time = 10;
+    GetServerTimeResponse buy_item = 11;
+  }
+}

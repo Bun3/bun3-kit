@@ -12,7 +12,10 @@ namespace Bun3.Server.Messaging
         public int FieldNumber { get; }
         public string Name { get; }
         public Type PayloadType { get; }
-        public Func<IMessage, IMessage> Get { get; }
+
+        /// <summary>envelope에서 payload를 꺼낸다. 이 케이스가 활성(GetActiveCase 결과)일 때만 non-null.</summary>
+        public Func<IMessage, IMessage?> Get { get; }
+
         public Action<IMessage, IMessage> Set { get; }
 
         public OneofCase(FieldDescriptor field)
@@ -21,7 +24,7 @@ namespace Bun3.Server.Messaging
             Name = field.Name;
             PayloadType = field.MessageType.ClrType;
             var accessor = field.Accessor;
-            Get = message => (IMessage)accessor.GetValue(message);
+            Get = message => (IMessage?)accessor.GetValue(message);
             Set = (message, payload) => accessor.SetValue(message, payload);
         }
     }
@@ -40,11 +43,18 @@ namespace Bun3.Server.Messaging
             {
                 var oneofCase = new OneofCase(field);
                 _byNumber.Add(oneofCase.FieldNumber, oneofCase);
-                _byType.Add(oneofCase.PayloadType, oneofCase);
+                if (!_byType.ContainsKey(oneofCase.PayloadType))
+                {
+                    _byType.Add(oneofCase.PayloadType, oneofCase);
+                }
             }
         }
 
         public IReadOnlyCollection<OneofCase> Cases => _byNumber.Values;
+
+        /// <summary>같은 payload 타입을 공유하는 케이스 그룹(타입 기반 디스패치가 불가능한 모양).</summary>
+        public IEnumerable<IGrouping<Type, OneofCase>> DuplicatePayloadTypeGroups() =>
+            _byNumber.Values.GroupBy(c => c.PayloadType).Where(g => g.Count() > 1);
 
         /// <summary>oneof "body"가 없거나 메시지 아닌 케이스가 있으면 errors에 추가하고 null.</summary>
         public static OneofMap? TryBuild(MessageDescriptor message, string rootLabel, List<string> errors)

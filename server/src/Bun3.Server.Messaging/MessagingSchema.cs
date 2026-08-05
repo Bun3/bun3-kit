@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using Bun3.Server.Core;
 using Google.Protobuf;
 using Google.Protobuf.Reflection;
@@ -55,6 +56,9 @@ namespace Bun3.Server.Messaging
             var responseRequestId = RequireField(responseDescriptor, "Response", "request_id", FieldType.Int64, errors);
             var status = RequireField(responseDescriptor, "Response", "status", FieldType.Int32, errors);
 
+            AddDuplicatePayloadErrors(requestMap, "Request", requestDescriptor.Name, errors);
+            AddDuplicatePayloadErrors(updateMap, "Update", updateDescriptor.Name, errors);
+
             if (errors.Count > 0)
             {
                 throw new MessagingValidationException(errors);
@@ -75,6 +79,20 @@ namespace Bun3.Server.Messaging
             }
 
             return field;
+        }
+
+        private static void AddDuplicatePayloadErrors(OneofMap? map, string rootLabel, string messageName, List<string> errors)
+        {
+            if (map == null)
+            {
+                return;
+            }
+
+            foreach (var group in map.DuplicatePayloadTypeGroups())
+            {
+                var caseNames = string.Join(", ", group.Select(c => c.Name));
+                errors.Add($"{rootLabel}({messageName}): 케이스 {caseNames}가 같은 payload 타입 {group.Key.Name} — 타입 기반 디스패치 불가");
+            }
         }
 
         /// <summary>등록표를 스키마에 대해 전수 검증한다. 위반 전체 목록과 함께 throw.</summary>
