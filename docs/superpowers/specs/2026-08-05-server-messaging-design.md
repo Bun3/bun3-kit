@@ -104,8 +104,41 @@ builder.Services.AddMessagingServer<MySession, Request, Response, Update>(messag
 });
 ```
 
-- **핸들러 등록은 서버 수준** — 세션 수준이면 기동 검증이 불가능하다. 인스턴스
-  메서드는 `(s, req) => s.Handle(req)`로 위임.
+- **핸들러 등록은 서버 수준이다.** 세션은 접속마다 생성되므로 부팅 순간에는
+  0개다 — 등록이 세션 안에 있으면 "전 요청에 핸들러 존재"를 검사할 표 자체가
+  부팅 시점에 없고, 검증이 첫 접속으로 밀리며 세션마다 등록이 달라질 수도 있다.
+  등록표를 부팅 시 1회 구성되는 서버 소유물로 두어야 기동 검증이 성립한다.
+  핸들러 시그니처가 `(세션, 요청) => 응답`이라 요청을 보낸 세션 인스턴스가 첫
+  인자로 들어오므로, 세션 상태 접근·인스턴스 메서드 실행은 idlez와 동일하다.
+
+### 핸들러 코드 배치 (권장 관례)
+
+등록(라우팅 표, 요청당 1줄)과 구현(핸들러 본문)을 분리한다. 구현은 idlez처럼
+세션 partial 파일 하나에 하나씩:
+
+```
+Handlers/ItemHandlers.cs     ← 기능별 Register(m) 묶음 = 그 기능의 목차
+Session/MySession.BuyItem.cs ← partial class, 요청 하나의 구현 (idlez WorldPlayer.BuyItem.cs 대응)
+```
+
+```csharp
+public static class ItemHandlers
+{
+    public static void Register(MessagingConfig<MySession> m)
+    {
+        m.OnRequest<BuyItemRequest, BuyItemResponse>((s, req) => s.HandleBuyItem(req));
+        m.OnRequest<UseItemRequest, UseItemResponse>((s, req) => s.HandleUseItem(req));
+    }
+}
+
+public sealed partial class MySession
+{
+    private async ValueTask<Reply<BuyItemResponse>> HandleBuyItem(BuyItemRequest req) { ... }
+}
+```
+
+`Program.cs`의 `AddMessagingServer` 본문은 `ItemHandlers.Register(m);` 나열만
+남는다 — 파일 비대화는 구조적으로 발생하지 않는다.
 - **기동 검증**: `Request.body` 전 케이스에 핸들러 존재, 응답 타입이 매칭 규약
   충족, 중복 등록 없음 — 위반 시 전체 목록을 출력하며 기동 실패(fail-fast).
 - **푸시 발신**: `session.SendUpdateAsync(update)` — 디스크립터 맵으로 `Update`
@@ -153,9 +186,13 @@ client.OnUpdate<BroadcastedUpdate>(u => ...);
   스레드, 컨텍스트 없는 환경(서버/테스트)에선 스레드풀.
 - 클라는 기동 검증을 하지 않는다 — 관심 없는 푸시 무시는 정당한 선택(미등록
   Update는 경고 로그만).
-- **IL2CPP 노트**: 디스크립터 접근자의 컴파일드 델리게이트가 IL2CPP에선
-  인터프리트될 수 있다. 맵 구축은 기동 1회이고 클라 메시지 빈도(초당 수십)에선
-  무시 가능하나, 구현 시 케이스별 정적 접근 경로를 우선한다.
+- **IL2CPP 노트**: Unity 배포 빌드는 AOT(IL2CPP)라 실행 중 코드 생성이 불가능
+  하다. Google.Protobuf 디스크립터 API의 필드 접근자는 JIT 환경에선 런타임
+  컴파일로 빠르지만 IL2CPP에선 인터프리트되어 호출당 크게 느려질 수 있다.
+  따라서 디스크립터는 **기동 1회의 맵 구축에만** 쓰고, 메시지마다 도는 hot
+  path의 payload 접근은 protobuf가 생성한 일반 C# 프로퍼티(AOT 정상 컴파일)를
+  타는 델리게이트를 기동 시 준비해 두는 방식으로 구현한다. 클라 메시지 빈도
+  (초당 수십)에선 어느 쪽이든 체감 차 없지만 기본값을 안전한 쪽에 둔다.
 
 ## 6. 성능 판단
 
