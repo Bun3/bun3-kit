@@ -48,9 +48,9 @@ public class SessionActorTests
         public TestServer(
             ITransportListener transport,
             Func<IConnection, ScriptedSession> factory,
-            SessionOptions? sessionOptions = null,
+            int maxQueuedFrames = 256,
             IServerLogger? logger = null)
-            : base(transport, logger, sessionOptions)
+            : base(transport, logger, maxQueuedFrames)
         {
             _factory = factory;
         }
@@ -119,7 +119,7 @@ public class SessionActorTests
                 firstFrameEntered.TrySetResult();
                 await release.Task; // 첫 프레임에서 블록 → 큐 적체 유도
             }),
-            new SessionOptions { MaxQueuedFrames = 8 });
+            maxQueuedFrames: 8);
         await server.StartAsync();
 
         var conn = transport.Connect(1);

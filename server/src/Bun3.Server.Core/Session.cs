@@ -15,7 +15,7 @@ namespace Bun3.Server.Core
         private readonly ConcurrentQueue<byte[]> _inbox = new ConcurrentQueue<byte[]>();
         private readonly SemaphoreSlim _signal = new SemaphoreSlim(0);
         private IServerLogger _logger = NullServerLogger.Instance;
-        private SessionOptions _options = new SessionOptions();
+        private int _maxQueuedFrames = 256;
         private volatile bool _closed;
         private Exception? _closeError;
         private int _queuedCount;
@@ -50,10 +50,10 @@ namespace Bun3.Server.Core
         /// <summary>서버 주도로 연결을 끊는다. 전송의 OnClosed 통지를 거쳐 세션이 정리된다.</summary>
         public void Kick() => Connection.Close();
 
-        internal void Initialize(IServerLogger logger, SessionOptions options)
+        internal void Initialize(IServerLogger logger, int maxQueuedFrames)
         {
             _logger = logger;
-            _options = options;
+            _maxQueuedFrames = maxQueuedFrames;
         }
 
         internal void EnqueueFrame(ReadOnlyMemory<byte> frame)
@@ -63,11 +63,11 @@ namespace Bun3.Server.Core
                 return;
             }
 
-            if (Interlocked.Increment(ref _queuedCount) > _options.MaxQueuedFrames)
+            if (Interlocked.Increment(ref _queuedCount) > _maxQueuedFrames)
             {
                 Interlocked.Decrement(ref _queuedCount);
                 _logger.Log(ServerLogLevel.Warning,
-                    $"Session {Id}: inbox overflow (>{_options.MaxQueuedFrames}); kicking.");
+                    $"Session {Id}: inbox overflow (>{_maxQueuedFrames}); kicking.");
                 Kick();
                 return;
             }

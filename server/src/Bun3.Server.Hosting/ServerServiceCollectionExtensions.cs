@@ -62,7 +62,7 @@ public static class ServerServiceCollectionExtensions
                 sp.GetRequiredService<TcpTransportListener>(),
                 Factory,
                 sp.GetRequiredService<IServerLogger>(),
-                new SessionOptions { MaxQueuedFrames = options.MaxQueuedFramesPerSession });
+                options.MaxQueuedFramesPerSession);
         });
 
         services.AddHostedService<ServerHostedService<TSession>>(sp =>

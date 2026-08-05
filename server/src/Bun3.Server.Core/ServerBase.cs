@@ -18,7 +18,7 @@ namespace Bun3.Server.Core
 
         private readonly ITransportListener _transport;
         private readonly IServerLogger _logger;
-        private readonly SessionOptions _sessionOptions;
+        private readonly int _maxQueuedFrames;
         private readonly ConcurrentDictionary<long, SessionEntry> _sessions =
             new ConcurrentDictionary<long, SessionEntry>();
         private readonly Handler _handler;
@@ -27,11 +27,11 @@ namespace Bun3.Server.Core
         protected ServerBase(
             ITransportListener transport,
             IServerLogger? logger = null,
-            SessionOptions? sessionOptions = null)
+            int maxQueuedFrames = 256)
         {
             _transport = transport ?? throw new ArgumentNullException(nameof(transport));
             _logger = new SafeServerLogger(logger ?? NullServerLogger.Instance);
-            _sessionOptions = sessionOptions ?? new SessionOptions();
+            _maxQueuedFrames = maxQueuedFrames;
             _handler = new Handler(this);
         }
 
@@ -89,7 +89,7 @@ namespace Bun3.Server.Core
                 return;
             }
 
-            session.Initialize(_logger, _sessionOptions);
+            session.Initialize(_logger, _maxQueuedFrames);
             var entry = new SessionEntry(session);
             _sessions[connection.Id] = entry;
             entry.BindRunTask(session.RunAsync());
