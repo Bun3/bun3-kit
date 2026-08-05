@@ -104,10 +104,7 @@ namespace Bun3.Server.Core
                         break; // 종료 후 잔여 프레임은 처리하지 않는다
                     }
 
-                    if (!_inbox.TryDequeue(out var frame))
-                    {
-                        continue;
-                    }
+                    _inbox.TryDequeue(out var frame);
 
                     Interlocked.Decrement(ref _queuedCount);
                     try
