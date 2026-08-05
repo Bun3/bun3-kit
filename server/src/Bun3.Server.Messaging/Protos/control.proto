@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+option csharp_namespace = "Bun3.Server.Messaging.ControlMessages";
+
+package bun3.control;
+
+// 채널 0x01의 프레임워크 소유 메시지.
+message Control {
+  oneof body {
+    Ping ping = 1;
+    Pong pong = 2;
+  }
+}
+
+message Ping {
+  int64 client_time_unix_ms = 1;
+}
+
+// 서버는 client_time_unix_ms를 그대로 에코한다 — 클라가 RTT를 계산한다.
+message Pong {
+  int64 client_time_unix_ms = 1;
+}

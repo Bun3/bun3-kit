@@ -35,6 +35,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "samples", "samples", "{8F08
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EchoServer", "server\samples\EchoServer\EchoServer.csproj", "{5F2F3651-ECC3-4122-8794-99B17E22CF44}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Bun3.Server.Messaging", "server\src\Bun3.Server.Messaging\Bun3.Server.Messaging.csproj", "{C7EE685C-5F53-4252-A88B-A2BCE10255FB}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -141,6 +143,18 @@ Global
 		{5F2F3651-ECC3-4122-8794-99B17E22CF44}.Release|x64.Build.0 = Release|Any CPU
 		{5F2F3651-ECC3-4122-8794-99B17E22CF44}.Release|x86.ActiveCfg = Release|Any CPU
 		{5F2F3651-ECC3-4122-8794-99B17E22CF44}.Release|x86.Build.0 = Release|Any CPU
+		{C7EE685C-5F53-4252-A88B-A2BCE10255FB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C7EE685C-5F53-4252-A88B-A2BCE10255FB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C7EE685C-5F53-4252-A88B-A2BCE10255FB}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{C7EE685C-5F53-4252-A88B-A2BCE10255FB}.Debug|x64.Build.0 = Debug|Any CPU
+		{C7EE685C-5F53-4252-A88B-A2BCE10255FB}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{C7EE685C-5F53-4252-A88B-A2BCE10255FB}.Debug|x86.Build.0 = Debug|Any CPU
+		{C7EE685C-5F53-4252-A88B-A2BCE10255FB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C7EE685C-5F53-4252-A88B-A2BCE10255FB}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C7EE685C-5F53-4252-A88B-A2BCE10255FB}.Release|x64.ActiveCfg = Release|Any CPU
+		{C7EE685C-5F53-4252-A88B-A2BCE10255FB}.Release|x64.Build.0 = Release|Any CPU
+		{C7EE685C-5F53-4252-A88B-A2BCE10255FB}.Release|x86.ActiveCfg = Release|Any CPU
+		{C7EE685C-5F53-4252-A88B-A2BCE10255FB}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -160,5 +174,6 @@ Global
 		{457887C7-DA77-419A-87FD-90221399A486} = {F6418E52-5FE5-8182-075E-77FED2B86FC9}
 		{8F085438-6170-A342-1892-DEAC1BFFC582} = {DAD03CFC-D5FA-AC94-41C7-9ABAB326F09E}
 		{5F2F3651-ECC3-4122-8794-99B17E22CF44} = {8F085438-6170-A342-1892-DEAC1BFFC582}
+		{C7EE685C-5F53-4252-A88B-A2BCE10255FB} = {2132E9AA-A8A6-6DB3-1CCB-FE240A8CB002}
 	EndGlobalSection
 EndGlobal

@@ -15,10 +15,19 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Grpc.Tools" Version="2.68.1" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Protobuf Include="Protos\game.proto" GrpcServices="None" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\src\Bun3.Server.Abstractions\Bun3.Server.Abstractions.csproj" />
     <ProjectReference Include="..\..\src\Bun3.Server.Core\Bun3.Server.Core.csproj" />
     <ProjectReference Include="..\..\src\Bun3.Server.Transport.Tcp\Bun3.Server.Transport.Tcp.csproj" />
     <ProjectReference Include="..\..\src\Bun3.Server.Hosting\Bun3.Server.Hosting.csproj" />
+    <ProjectReference Include="..\..\src\Bun3.Server.Messaging\Bun3.Server.Messaging.csproj" />
   </ItemGroup>
 
 </Project>

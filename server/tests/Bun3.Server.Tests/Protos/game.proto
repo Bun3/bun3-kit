@@ -1,0 +1,53 @@
+syntax = "proto3";
+
+option csharp_namespace = "Bun3.Server.Tests.GameProtocol";
+
+package game;
+
+// ---- 정상 프로토콜 (규약 준수) ----
+message Request {
+  int64 request_id = 1;
+  oneof body {
+    GetServerTimeRequest get_server_time = 10;
+    BuyItemRequest buy_item = 11;
+  }
+}
+
+message Response {
+  int64 request_id = 1;
+  int32 status = 2;
+  oneof body {
+    GetServerTimeResponse get_server_time = 10;
+    BuyItemResponse buy_item = 11;
+  }
+}
+
+message Update {
+  oneof body {
+    BroadcastedUpdate broadcasted = 10;
+  }
+}
+
+message GetServerTimeRequest {}
+message GetServerTimeResponse { int64 unix_ms = 1; }
+message BuyItemRequest { int32 item_id = 1; }
+message BuyItemResponse { int32 remaining_gold = 1; }
+message BroadcastedUpdate { string text = 1; }
+
+// ---- 검증 실패 테스트용 (의도적 규약 위반 루트) ----
+message MismatchRequest {
+  int64 request_id = 1;
+  oneof body {
+    GetServerTimeRequest get_server_time = 10;
+    BuyItemRequest buy_item = 11;
+  }
+}
+
+// buy_item 케이스 없음 + get_server_time 번호 불일치(10이 아닌 12)
+message MismatchResponse {
+  int64 request_id = 1;
+  int32 status = 2;
+  oneof body {
+    GetServerTimeResponse get_server_time = 12;
+  }
+}
