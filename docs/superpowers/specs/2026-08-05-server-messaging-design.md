@@ -228,7 +228,16 @@ E2E 5종 통과 = v1 완료.
 - `IConnector` 계약 추가 (Abstractions), `TcpConnector` 구현 추가 (Transport.Tcp)
 - **v0 Core(Session/ServerBase)는 무변경** — MessagingSession이 상속으로 얹힌다
 
-## 9. 비범위 (예약)
+## 9. 비동기 타입 원칙
+
+공개 API의 비동기 타입은 BCL로 고정한다: hot path(메시지·요청 단위)는
+`ValueTask`, 수명주기(시작/정지)는 `Task`. UniTask 등 플랫폼 최적화
+라이브러리는 프레임워크 계약에 넣지 않는다 — UniTask↔ValueTask 변환이
+내장이라 Unity 게임 코드는 마찰 없이 소비 가능하며, UniTask 당의정
+(Destroy 연동 취소 등)은 추후 Unity 어댑터 패키지(`com.bun3.unity.net`류)의
+몫이다.
+
+## 10. 비범위 (예약)
 
 - 소스 제너레이터(핸들러 등록 자동화 — A안의 무파괴 업그레이드 경로)
 - 실패 응답 본문, 압축/암호화, 고빈도 hot 채널(FlatBuffers류)
