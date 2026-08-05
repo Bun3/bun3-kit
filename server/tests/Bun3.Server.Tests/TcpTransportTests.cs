@@ -19,8 +19,8 @@ public class TcpTransportTests
             new(TaskCreationOptions.RunContinuationsAsynchronously);
         public readonly TaskCompletionSource<Exception?> Closed =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
-        public readonly ConcurrentQueue<byte[]> Frames = new();
-        public readonly SemaphoreSlim FrameSignal = new(0);
+        public readonly ConcurrentQueue<byte[]> Packets = new();
+        public readonly SemaphoreSlim PacketSignal = new(0);
         public readonly ConcurrentQueue<long> ConnectionIds = new();
         public readonly SemaphoreSlim ConnectedSignal = new(0);
 
@@ -31,20 +31,20 @@ public class TcpTransportTests
             Connected.TrySetResult(connection);
         }
 
-        public void OnFrame(IConnection connection, ReadOnlyMemory<byte> frame)
+        public void OnPacket(IConnection connection, ReadOnlyMemory<byte> packet)
         {
-            Frames.Enqueue(frame.ToArray());
-            FrameSignal.Release();
+            Packets.Enqueue(packet.ToArray());
+            PacketSignal.Release();
         }
 
         public void OnClosed(IConnection connection, Exception? error) => Closed.TrySetResult(error);
     }
 
     private static async Task<(TcpTransportListener listener, RecordingHandler handler)> StartListenerAsync(
-        int maxFrameSize = 1024 * 1024)
+        int maxPacketSize = 1024 * 1024)
     {
         var handler = new RecordingHandler();
-        var listener = new TcpTransportListener(new TcpTransportOptions { Port = 0, MaxFrameSize = maxFrameSize });
+        var listener = new TcpTransportListener(new TcpTransportOptions { Port = 0, MaxPacketSize = maxPacketSize });
         await listener.StartAsync(handler);
         return (listener, handler);
     }
@@ -91,7 +91,7 @@ public class TcpTransportTests
     }
 
     [Test]
-    public async Task Client_frame_reaches_handler_intact()
+    public async Task Client_packet_reaches_handler_intact()
     {
         var (listener, handler) = await StartListenerAsync();
         try
@@ -100,10 +100,10 @@ public class TcpTransportTests
             await handler.Connected.Task.WaitAsync(Timeout);
             var payload = Encoding.UTF8.GetBytes("ping from client");
 
-            await FrameFormat.WriteFrameAsync(client.GetStream(), payload);
+            await PacketFormat.WritePacketAsync(client.GetStream(), payload);
 
-            await handler.FrameSignal.WaitAsync(Timeout);
-            Assert.That(handler.Frames.TryDequeue(out var received), Is.True);
+            await handler.PacketSignal.WaitAsync(Timeout);
+            Assert.That(handler.Packets.TryDequeue(out var received), Is.True);
             Assert.That(received, Is.EqualTo(payload));
         }
         finally
@@ -124,7 +124,7 @@ public class TcpTransportTests
 
             await connection.SendAsync(payload);
 
-            var received = await FrameFormat.ReadFrameAsync(client.GetStream(), 1024 * 1024)
+            var received = await PacketFormat.ReadPacketAsync(client.GetStream(), 1024 * 1024)
                 .AsTask().WaitAsync(Timeout);
             Assert.That(received, Is.EqualTo(payload));
         }
@@ -156,15 +156,15 @@ public class TcpTransportTests
     }
 
     [Test]
-    public async Task Oversize_frame_closes_connection_with_InvalidDataException()
+    public async Task Oversize_packet_closes_connection_with_InvalidDataException()
     {
-        var (listener, handler) = await StartListenerAsync(maxFrameSize: 16);
+        var (listener, handler) = await StartListenerAsync(maxPacketSize: 16);
         try
         {
             using var client = await ConnectAsync(listener);
             await handler.Connected.Task.WaitAsync(Timeout);
 
-            await FrameFormat.WriteFrameAsync(client.GetStream(), new byte[17]);
+            await PacketFormat.WritePacketAsync(client.GetStream(), new byte[17]);
 
             var error = await handler.Closed.Task.WaitAsync(Timeout);
             Assert.That(error, Is.InstanceOf<InvalidDataException>());
@@ -255,7 +255,7 @@ public class TcpTransportTests
             SecondConnected.TrySetResult(connection);
         }
 
-        public void OnFrame(IConnection connection, ReadOnlyMemory<byte> frame) { }
+        public void OnPacket(IConnection connection, ReadOnlyMemory<byte> packet) { }
         public void OnClosed(IConnection connection, Exception? error) { }
     }
 }

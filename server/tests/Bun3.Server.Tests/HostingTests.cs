@@ -35,8 +35,8 @@ public class HostingTests
             var stream = client.GetStream();
 
             var payload = Encoding.UTF8.GetBytes("ping over host");
-            await FrameFormat.WriteFrameAsync(stream, payload);
-            var echoed = await FrameFormat.ReadFrameAsync(stream, 1024 * 1024).AsTask().WaitAsync(Timeout);
+            await PacketFormat.WritePacketAsync(stream, payload);
+            var echoed = await PacketFormat.ReadPacketAsync(stream, 1024 * 1024).AsTask().WaitAsync(Timeout);
 
             Assert.That(echoed, Is.EqualTo(payload));
         }
@@ -47,13 +47,13 @@ public class HostingTests
     }
 
     [Test]
-    public async Task MaxFrameSize_reaches_the_transport()
+    public async Task MaxPacketSize_reaches_the_transport()
     {
         var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings { DisableDefaults = true });
         builder.Services.AddServer<EchoSession>(options =>
         {
             options.Port = 0;
-            options.MaxFrameSize = 64;
+            options.MaxPacketSize = 64;
         });
         using var host = builder.Build();
 
@@ -65,13 +65,13 @@ public class HostingTests
             await client.ConnectAsync(IPAddress.Loopback, port);
             var stream = client.GetStream();
 
-            await FrameFormat.WriteFrameAsync(stream, new byte[65]); // 초과 프레임
+            await PacketFormat.WritePacketAsync(stream, new byte[65]); // 초과 패킷
 
             // 서버가 프로토콜 위반으로 연결을 닫는다 — EOF(null) 또는 IO 예외
             try
             {
-                var frame = await FrameFormat.ReadFrameAsync(stream, 1024).AsTask().WaitAsync(Timeout);
-                Assert.That(frame, Is.Null);
+                var packet = await PacketFormat.ReadPacketAsync(stream, 1024).AsTask().WaitAsync(Timeout);
+                Assert.That(packet, Is.Null);
             }
             catch (IOException)
             {
@@ -90,8 +90,8 @@ public class HostingTests
         builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
         {
             ["Bun3:Server:Port"] = "0",
-            ["Bun3:Server:MaxFrameSize"] = "2048",
-            ["Bun3:Server:MaxQueuedFramesPerSession"] = "32",
+            ["Bun3:Server:MaxPacketSize"] = "2048",
+            ["Bun3:Server:MaxQueuedPacketsPerSession"] = "32",
         });
         builder.Services.AddServer<EchoSession>();
         using var host = builder.Build();
@@ -99,8 +99,8 @@ public class HostingTests
         var options = host.Services.GetRequiredService<IOptions<ServerOptions>>().Value;
 
         Assert.That(options.Port, Is.EqualTo(0));
-        Assert.That(options.MaxFrameSize, Is.EqualTo(2048));
-        Assert.That(options.MaxQueuedFramesPerSession, Is.EqualTo(32));
+        Assert.That(options.MaxPacketSize, Is.EqualTo(2048));
+        Assert.That(options.MaxQueuedPacketsPerSession, Is.EqualTo(32));
     }
 
     [Test]

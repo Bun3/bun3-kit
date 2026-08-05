@@ -30,7 +30,7 @@ public sealed class FakeTransport : ITransportListener
         return connection;
     }
 
-    internal void RaiseFrame(FakeConnection connection, byte[] frame) => _handler!.OnFrame(connection, frame);
+    internal void RaisePacket(FakeConnection connection, byte[] packet) => _handler!.OnPacket(connection, packet);
 
     internal void RaiseClosed(FakeConnection connection, Exception? error) => _handler!.OnClosed(connection, error);
 }
@@ -50,7 +50,7 @@ public sealed class FakeConnection : IConnection
     public string? RemoteAddress => "fake";
     public bool IsOpen => Volatile.Read(ref _closed) == 0;
 
-    public ValueTask SendAsync(ReadOnlyMemory<byte> frame, CancellationToken ct = default) => default;
+    public ValueTask SendAsync(ReadOnlyMemory<byte> packet, CancellationToken ct = default) => default;
 
     // 주의: 실제 TcpConnection과 달리 OnClosed를 호출 스레드에서 동기로 올린다 — 이 동기성에 의존하는 테스트를 작성하지 말 것.
     public void Close()
@@ -61,8 +61,8 @@ public sealed class FakeConnection : IConnection
         }
     }
 
-    /// <summary>원격에서 프레임이 도착한 것을 시뮬레이션한다.</summary>
-    public void ReceiveFrame(byte[] frame) => _transport.RaiseFrame(this, frame);
+    /// <summary>원격에서 패킷이 도착한 것을 시뮬레이션한다.</summary>
+    public void ReceivePacket(byte[] packet) => _transport.RaisePacket(this, packet);
 
     /// <summary>원격이 오류로 끊긴 것을 시뮬레이션한다.</summary>
     public void FailWith(Exception error)

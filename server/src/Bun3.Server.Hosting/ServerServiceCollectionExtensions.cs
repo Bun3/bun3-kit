@@ -49,7 +49,7 @@ public static class ServerServiceCollectionExtensions
         {
             var options = sp.GetRequiredService<IOptions<ServerOptions>>().Value;
             return new TcpTransportListener(
-                new TcpTransportOptions { Port = options.Port, MaxFrameSize = options.MaxFrameSize, Backlog = options.Backlog },
+                new TcpTransportOptions { Port = options.Port, MaxPacketSize = options.MaxPacketSize, Backlog = options.Backlog },
                 sp.GetRequiredService<IServerLogger>());
         });
 
@@ -62,7 +62,7 @@ public static class ServerServiceCollectionExtensions
                 sp.GetRequiredService<TcpTransportListener>(),
                 Factory,
                 sp.GetRequiredService<IServerLogger>(),
-                options.MaxQueuedFramesPerSession);
+                options.MaxQueuedPacketsPerSession);
         });
 
         services.AddHostedService<ServerHostedService<TSession>>(sp =>

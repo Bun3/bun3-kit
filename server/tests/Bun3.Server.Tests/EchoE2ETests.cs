@@ -39,13 +39,13 @@ public class EchoE2ETests
     private static async Task AssertEchoAsync(NetworkStream stream, string message)
     {
         var payload = Encoding.UTF8.GetBytes(message);
-        await FrameFormat.WriteFrameAsync(stream, payload);
-        var echoed = await FrameFormat.ReadFrameAsync(stream, 1024 * 1024).AsTask().WaitAsync(Timeout);
+        await PacketFormat.WritePacketAsync(stream, payload);
+        var echoed = await PacketFormat.ReadPacketAsync(stream, 1024 * 1024).AsTask().WaitAsync(Timeout);
         Assert.That(echoed, Is.EqualTo(payload));
     }
 
     [Test]
-    public async Task Client_receives_echo_of_each_frame()
+    public async Task Client_receives_echo_of_each_packet()
     {
         var (server, listener) = await StartEchoServerAsync();
         try
@@ -97,8 +97,8 @@ public class EchoE2ETests
         // 서버가 연결을 닫았으므로 클라이언트 읽기는 깨끗한 EOF(null) 또는 IO 예외로 끝난다
         try
         {
-            var frame = await FrameFormat.ReadFrameAsync(stream, 1024 * 1024).AsTask().WaitAsync(Timeout);
-            Assert.That(frame, Is.Null);
+            var packet = await PacketFormat.ReadPacketAsync(stream, 1024 * 1024).AsTask().WaitAsync(Timeout);
+            Assert.That(packet, Is.Null);
         }
         catch (IOException)
         {

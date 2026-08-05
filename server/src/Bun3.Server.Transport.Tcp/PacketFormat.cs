@@ -9,14 +9,14 @@ namespace Bun3.Server.Transport.Tcp
     /// 4바이트 리틀엔디언 길이 프리픽스 프레이밍.
     /// 와이어 형식: [length:4(LE)][body:length]
     /// </summary>
-    public static class FrameFormat
+    public static class PacketFormat
     {
         public const int HeaderSize = 4;
 
-        public static async ValueTask WriteFrameAsync(
-            Stream stream, ReadOnlyMemory<byte> frame, CancellationToken ct = default)
+        public static async ValueTask WritePacketAsync(
+            Stream stream, ReadOnlyMemory<byte> packet, CancellationToken ct = default)
         {
-            var length = frame.Length;
+            var length = packet.Length;
             var header = new byte[HeaderSize];
             header[0] = (byte)length;
             header[1] = (byte)(length >> 8);
@@ -25,17 +25,17 @@ namespace Bun3.Server.Transport.Tcp
             await stream.WriteAsync(header.AsMemory(), ct).ConfigureAwait(false);
             if (length > 0)
             {
-                await stream.WriteAsync(frame, ct).ConfigureAwait(false);
+                await stream.WriteAsync(packet, ct).ConfigureAwait(false);
             }
         }
 
         /// <summary>
-        /// 프레임 하나를 읽는다. 프레임 경계에서의 깨끗한 EOF는 null을 반환한다.
-        /// 프레임 도중 EOF는 <see cref="EndOfStreamException"/>,
-        /// 길이가 음수이거나 maxFrameSize 초과면 <see cref="InvalidDataException"/>.
+        /// 패킷 하나를 읽는다. 패킷 경계에서의 깨끗한 EOF는 null을 반환한다.
+        /// 패킷 도중 EOF는 <see cref="EndOfStreamException"/>,
+        /// 길이가 음수이거나 maxPacketSize 초과면 <see cref="InvalidDataException"/>.
         /// </summary>
-        public static async ValueTask<byte[]?> ReadFrameAsync(
-            Stream stream, int maxFrameSize, CancellationToken ct = default)
+        public static async ValueTask<byte[]?> ReadPacketAsync(
+            Stream stream, int maxPacketSize, CancellationToken ct = default)
         {
             var header = new byte[HeaderSize];
             var got = await ReadExactAsync(stream, header, HeaderSize, allowCleanEof: true, ct).ConfigureAwait(false);
@@ -45,9 +45,9 @@ namespace Bun3.Server.Transport.Tcp
             }
 
             var length = header[0] | (header[1] << 8) | (header[2] << 16) | (header[3] << 24);
-            if (length < 0 || length > maxFrameSize)
+            if (length < 0 || length > maxPacketSize)
             {
-                throw new InvalidDataException($"Frame length {length} is out of range (max {maxFrameSize}).");
+                throw new InvalidDataException($"Packet length {length} is out of range (max {maxPacketSize}).");
             }
 
             var body = new byte[length];
@@ -73,7 +73,7 @@ namespace Bun3.Server.Transport.Tcp
                         return 0;
                     }
 
-                    throw new EndOfStreamException("Stream ended mid-frame.");
+                    throw new EndOfStreamException("Stream ended mid-packet.");
                 }
 
                 total += n;

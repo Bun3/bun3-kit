@@ -7,7 +7,7 @@ using Bun3.Server.Abstractions;
 
 namespace Bun3.Server.Transport.Tcp
 {
-    /// <summary>순수 Socket 기반 TCP 리스너. 프레이밍은 FrameFormat(4바이트 길이 프리픽스).</summary>
+    /// <summary>순수 Socket 기반 TCP 리스너. 프레이밍은 PacketFormat(4바이트 길이 프리픽스).</summary>
     public sealed class TcpTransportListener : ITransportListener
     {
         private readonly TcpTransportOptions _options;
@@ -85,7 +85,7 @@ namespace Bun3.Server.Transport.Tcp
                     var connection = new TcpConnection(
                         Interlocked.Increment(ref _nextConnectionId), client, _options, handler, _logger);
 
-                    // 계약: OnConnected 반환 전에는 OnFrame/OnClosed가 발생하지 않도록
+                    // 계약: OnConnected 반환 전에는 OnPacket/OnClosed가 발생하지 않도록
                     // 수신 루프는 OnConnected 이후에 시작한다.
                     handler.OnConnected(connection);
                     _ = Task.Run(connection.RunReceiveLoopAsync);

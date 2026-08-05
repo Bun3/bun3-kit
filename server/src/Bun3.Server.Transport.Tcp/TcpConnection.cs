@@ -39,7 +39,7 @@ namespace Bun3.Server.Transport.Tcp
 
         public bool IsOpen => Volatile.Read(ref _closed) == 0;
 
-        public async ValueTask SendAsync(ReadOnlyMemory<byte> frame, CancellationToken ct = default)
+        public async ValueTask SendAsync(ReadOnlyMemory<byte> packet, CancellationToken ct = default)
         {
             if (!IsOpen)
             {
@@ -54,7 +54,7 @@ namespace Bun3.Server.Transport.Tcp
                     return;
                 }
 
-                await FrameFormat.WriteFrameAsync(_stream, frame, ct).ConfigureAwait(false);
+                await PacketFormat.WritePacketAsync(_stream, packet, ct).ConfigureAwait(false);
             }
             catch (Exception) when (!IsOpen)
             {
@@ -99,14 +99,14 @@ namespace Bun3.Server.Transport.Tcp
             {
                 while (true)
                 {
-                    var frame = await FrameFormat.ReadFrameAsync(_stream, _options.MaxFrameSize)
+                    var packet = await PacketFormat.ReadPacketAsync(_stream, _options.MaxPacketSize)
                         .ConfigureAwait(false);
-                    if (frame == null)
+                    if (packet == null)
                     {
                         break; // 원격의 깨끗한 종료
                     }
 
-                    _handler.OnFrame(this, frame);
+                    _handler.OnPacket(this, packet);
                 }
             }
             catch (Exception) when (!IsOpen)
@@ -115,7 +115,7 @@ namespace Bun3.Server.Transport.Tcp
             }
             catch (Exception ex)
             {
-                error = ex; // InvalidDataException(프레임 초과), IOException(리셋) 등
+                error = ex; // InvalidDataException(패킷 초과), IOException(리셋) 등
             }
             finally
             {

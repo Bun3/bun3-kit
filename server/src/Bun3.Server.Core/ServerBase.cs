@@ -18,7 +18,7 @@ namespace Bun3.Server.Core
 
         private readonly ITransportListener _transport;
         private readonly IServerLogger _logger;
-        private readonly int _maxQueuedFrames;
+        private readonly int _maxQueuedPackets;
         private readonly ConcurrentDictionary<long, SessionEntry> _sessions =
             new ConcurrentDictionary<long, SessionEntry>();
         private readonly Handler _handler;
@@ -27,11 +27,11 @@ namespace Bun3.Server.Core
         protected ServerBase(
             ITransportListener transport,
             IServerLogger? logger = null,
-            int maxQueuedFrames = 256)
+            int maxQueuedPackets = 256)
         {
             _transport = transport ?? throw new ArgumentNullException(nameof(transport));
             _logger = new SafeServerLogger(logger ?? NullServerLogger.Instance);
-            _maxQueuedFrames = maxQueuedFrames;
+            _maxQueuedPackets = maxQueuedPackets;
             _handler = new Handler(this);
         }
 
@@ -89,17 +89,17 @@ namespace Bun3.Server.Core
                 return;
             }
 
-            session.Initialize(_logger, _maxQueuedFrames);
+            session.Initialize(_logger, _maxQueuedPackets);
             var entry = new SessionEntry(session);
             _sessions[connection.Id] = entry;
             entry.BindRunTask(session.RunAsync());
         }
 
-        private void HandleFrame(IConnection connection, ReadOnlyMemory<byte> frame)
+        private void HandlePacket(IConnection connection, ReadOnlyMemory<byte> packet)
         {
             if (_sessions.TryGetValue(connection.Id, out var entry))
             {
-                entry.Session.EnqueueFrame(frame);
+                entry.Session.EnqueuePacket(packet);
             }
         }
 
@@ -144,8 +144,8 @@ namespace Bun3.Server.Core
 
             public void OnConnected(IConnection connection) => _server.HandleConnected(connection);
 
-            public void OnFrame(IConnection connection, ReadOnlyMemory<byte> frame) =>
-                _server.HandleFrame(connection, frame);
+            public void OnPacket(IConnection connection, ReadOnlyMemory<byte> packet) =>
+                _server.HandlePacket(connection, packet);
 
             public void OnClosed(IConnection connection, Exception? error) =>
                 _server.HandleClosed(connection, error);

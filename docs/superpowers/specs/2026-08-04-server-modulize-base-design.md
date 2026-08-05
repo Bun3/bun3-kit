@@ -27,8 +27,8 @@ template 레포**다. 이번 작업은 그 결정의 첫 실체화로, 참고 �
 1. **Steam 네트워킹 / Unity 내부 호스팅이 가까운 미래** → 핵심 로직은
    netstandard2.1 + 외부 의존 0으로 Unity 안에서도 실행 가능해야 한다.
 2. **실시간 세션 + HTTP API가 한 호스트에 공존**하는 형태가 기본.
-3. v0 성공 기준은 **부팅 + 에코 E2E**: 클라이언트가 접속해 프레임을 보내고
-   같은 프레임을 돌려받는 수직 슬라이스가 실제로 동작.
+3. v0 성공 기준은 **부팅 + 에코 E2E**: 클라이언트가 접속해 패킷을 보내고
+   같은 패킷을 돌려받는 수직 슬라이스가 실제로 동작.
 
 ## 2. 결정 사항 요약
 
@@ -43,8 +43,8 @@ template 레포**다. 이번 작업은 그 결정의 첫 실체화로, 참고 �
 | 소비 루프 구동 | 이벤트 구동 (`ConcurrentQueue` + `SemaphoreSlim` 신호). 고정 주기 tick은 추후 `Bun3.Server.Ticking` 모듈 |
 | 에러 정책 | 기본 세션 종료(fail-fast) + `OnHandlerError` 가상 훅으로 게임별 재정의. 상태코드 응답(대안 B)은 v1 메시징에서 |
 | 로깅 | 자체 최소 계약 `IServerLogger`(Abstractions). Hosting에서 `ILogger`로 브리지 |
-| 버퍼 소유권 | `OnFrame`의 메모리는 호출 동안만 유효. v0은 복사 우선, 풀링 최적화는 측정 후 |
-| 직렬화/디스패치 | v0 비범위. 프레임 = 불투명 byte 덩어리. v1 `Bun3.Server.Messaging`에서 결정 |
+| 버퍼 소유권 | `OnPacket`의 메모리는 호출 동안만 유효. v0은 복사 우선, 풀링 최적화는 측정 후 |
+| 직렬화/디스패치 | v0 비범위. 패킷 = 불투명 byte 덩어리. v1 `Bun3.Server.Messaging`에서 결정 |
 | 테스트 | NUnit 4 (common/tests 관례), 단위 + 실 TCP E2E |
 
 ## 3. 패키지 구조
@@ -84,14 +84,14 @@ public interface IConnection
                                      // 계정/플레이어 ID 아님 — 재접속 시 새 값
     string? RemoteAddress { get; }   // TCP는 IP, Steam은 SteamID — 전송별 세부는 문자열로
     bool IsOpen { get; }
-    ValueTask SendAsync(ReadOnlyMemory<byte> frame, CancellationToken ct = default);
+    ValueTask SendAsync(ReadOnlyMemory<byte> packet, CancellationToken ct = default);
     void Close();
 }
 
 public interface IConnectionHandler      // Core가 구현, Transport가 호출
 {
     void OnConnected(IConnection connection);
-    void OnFrame(IConnection connection, ReadOnlyMemory<byte> frame);
+    void OnPacket(IConnection connection, ReadOnlyMemory<byte> packet);
     void OnClosed(IConnection connection, Exception? error);   // 정상 종료면 null
 }
 
@@ -102,7 +102,7 @@ public interface ITransportListener
 }
 ```
 
-- `OnFrame`의 버퍼는 호출 반환 후 재사용될 수 있다(호출 동안만 유효).
+- `OnPacket`의 버퍼는 호출 반환 후 재사용될 수 있다(호출 동안만 유효).
 - 닫힌 연결에 대한 `SendAsync`는 no-op (종료 경합은 정상 상황이므로 예외 금지).
 - 나가는 연결 계약(`IConnector`)은 v0 비범위 — E2E 테스트는 raw `TcpClient` 사용,
   정식 클라이언트 계약은 v1 메시징과 함께 도입.
@@ -122,11 +122,11 @@ public abstract class Session
     public IConnection Connection { get; }
 
     protected virtual ValueTask OnConnectedAsync() => default;
-    protected abstract ValueTask OnFrameAsync(ReadOnlyMemory<byte> frame);
+    protected abstract ValueTask OnPacketAsync(ReadOnlyMemory<byte> packet);
     protected virtual ValueTask OnDisconnectedAsync(Exception? error) => default;
     protected virtual ErrorDecision OnHandlerError(Exception ex) => ErrorDecision.CloseSession;
 
-    public ValueTask SendAsync(ReadOnlyMemory<byte> frame);
+    public ValueTask SendAsync(ReadOnlyMemory<byte> packet);
     public void Kick();
 }
 
@@ -139,8 +139,8 @@ public abstract class ServerBase<TSession> where TSession : Session
 }
 ```
 
-- **액터 루프**: IO 스레드는 도착 프레임을 세션 큐에 복사·투입하고 신호만 올린 뒤
-  즉시 반환. 세션별 소비 루프(스레드풀)가 깨어나 순서대로 `OnFrameAsync` 호출.
+- **액터 루프**: IO 스레드는 도착 패킷을 세션 큐에 복사·투입하고 신호만 올린 뒤
+  즉시 반환. 세션별 소비 루프(스레드풀)가 깨어나 순서대로 `OnPacketAsync` 호출.
   결과적으로 한 세션의 게임 로직은 절대 동시 실행되지 않아 lock이 불필요하다.
 - **게임 코드 결합점은 `CreateSession` 팩토리 하나.** DI 없이도 (Unity에서도)
   `new MyServer(new TcpTransportListener(...))`로 조립 가능.
@@ -151,11 +151,11 @@ public abstract class ServerBase<TSession> where TSession : Session
 
 | 상황 | 정책 |
 |---|---|
-| `OnFrameAsync` 예외 | 기본: 로그 + 해당 세션만 종료. `OnHandlerError` 재정의로 게임이 유지 선택 가능 |
+| `OnPacketAsync` 예외 | 기본: 로그 + 해당 세션만 종료. `OnHandlerError` 재정의로 게임이 유지 선택 가능 |
 | 수신 중 소켓 오류/원격 종료 | `OnClosed(error)` → `OnDisconnectedAsync(error)` → 세션 정리 |
 | 닫힌 연결에 `SendAsync` | no-op |
-| 프레임 크기 초과 (기본 1MB, 옵션) | 프로토콜 위반 — 즉시 연결 종료 |
-| 세션 큐 적체 (기본 256프레임, 옵션) | 연결 종료 — 메모리 보호 |
+| 패킷 크기 초과 (기본 1MB, 옵션) | 프로토콜 위반 — 즉시 연결 종료 |
+| 세션 큐 적체 (기본 256패킷, 옵션) | 연결 종료 — 메모리 보호 |
 | `StopAsync` | accept 중단 → 전 세션 종료 통지 → 소비 루프 종료 대기(타임아웃) |
 
 기본값을 세션 종료로 두는 근거: 핸들러가 도중에 죽으면 반쯤 적용된 상태일 수
@@ -170,7 +170,7 @@ var builder = Host.CreateApplicationBuilder(args);
 builder.Services.AddServer<MySession>(options =>
 {
     options.Port = 20000;            // appsettings "Bun3:Server" 섹션 바인딩 지원
-    options.MaxFrameSize = 1024 * 1024;
+    options.MaxPacketSize = 1024 * 1024;
 });
 await builder.Build().RunAsync();    // SIGTERM/Ctrl+C → graceful shutdown
 ```
@@ -182,7 +182,7 @@ await builder.Build().RunAsync();    // SIGTERM/Ctrl+C → graceful shutdown
 
 ## 8. 검증 (v0 완료 조건)
 
-- `samples/EchoServer`: Hosting API로 조립, `OnFrameAsync`에서 받은 프레임을
+- `samples/EchoServer`: Hosting API로 조립, `OnPacketAsync`에서 받은 패킷을
   그대로 반환.
 - `tests/Bun3.Server.Tests`:
 

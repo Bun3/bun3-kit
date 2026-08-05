@@ -8,9 +8,9 @@ public sealed class ServerOptions
     /// <summary>리슨 포트. 0이면 임의 포트(테스트용).</summary>
     public int Port { get; set; } = 20000;
 
-    public int MaxFrameSize { get; set; } = 1024 * 1024;
+    public int MaxPacketSize { get; set; } = 1024 * 1024;
 
-    public int MaxQueuedFramesPerSession { get; set; } = 256;
+    public int MaxQueuedPacketsPerSession { get; set; } = 256;
 
     /// <summary>TCP accept 백로그.</summary>
     public int Backlog { get; set; } = 512;

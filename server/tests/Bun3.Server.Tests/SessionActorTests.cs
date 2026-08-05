@@ -14,22 +14,22 @@ public class SessionActorTests
 
     private sealed class ScriptedSession : Session
     {
-        private readonly Func<ScriptedSession, ReadOnlyMemory<byte>, ValueTask> _onFrame;
+        private readonly Func<ScriptedSession, ReadOnlyMemory<byte>, ValueTask> _onPacket;
         private readonly Func<Exception, ErrorDecision>? _onError;
         public readonly TaskCompletionSource<Exception?> Disconnected =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public ScriptedSession(
             IConnection connection,
-            Func<ScriptedSession, ReadOnlyMemory<byte>, ValueTask> onFrame,
+            Func<ScriptedSession, ReadOnlyMemory<byte>, ValueTask> onPacket,
             Func<Exception, ErrorDecision>? onError = null)
             : base(connection)
         {
-            _onFrame = onFrame;
+            _onPacket = onPacket;
             _onError = onError;
         }
 
-        protected override ValueTask OnFrameAsync(ReadOnlyMemory<byte> frame) => _onFrame(this, frame);
+        protected override ValueTask OnPacketAsync(ReadOnlyMemory<byte> packet) => _onPacket(this, packet);
 
         protected override ErrorDecision OnHandlerError(Exception ex) =>
             _onError?.Invoke(ex) ?? base.OnHandlerError(ex);
@@ -48,9 +48,9 @@ public class SessionActorTests
         public TestServer(
             ITransportListener transport,
             Func<IConnection, ScriptedSession> factory,
-            int maxQueuedFrames = 256,
+            int maxQueuedPackets = 256,
             IServerLogger? logger = null)
-            : base(transport, logger, maxQueuedFrames)
+            : base(transport, logger, maxQueuedPackets)
         {
             _factory = factory;
         }
@@ -61,21 +61,21 @@ public class SessionActorTests
     // ---- 테스트 ----
 
     [Test]
-    public async Task Frames_are_processed_in_order()
+    public async Task Packets_are_processed_in_order()
     {
         var transport = new FakeTransport();
         var processed = new List<int>();
         var done = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var server = new TestServer(transport, conn => new ScriptedSession(conn, (_, frame) =>
+        var server = new TestServer(transport, conn => new ScriptedSession(conn, (_, packet) =>
         {
-            processed.Add(BitConverter.ToInt32(frame.Span));
+            processed.Add(BitConverter.ToInt32(packet.Span));
             if (processed.Count == 100) done.TrySetResult();
             return default;
         }));
         await server.StartAsync();
 
         var conn = transport.Connect(1);
-        for (var i = 0; i < 100; i++) conn.ReceiveFrame(BitConverter.GetBytes(i));
+        for (var i = 0; i < 100; i++) conn.ReceivePacket(BitConverter.GetBytes(i));
 
         await done.Task.WaitAsync(Timeout);
         Assert.That(processed, Is.EqualTo(Enumerable.Range(0, 100)));
@@ -100,7 +100,7 @@ public class SessionActorTests
         await server.StartAsync();
 
         var conn = transport.Connect(1);
-        for (var i = 0; i < 50; i++) conn.ReceiveFrame(new byte[] { 1 });
+        for (var i = 0; i < 50; i++) conn.ReceivePacket(new byte[] { 1 });
 
         await done.Task.WaitAsync(Timeout);
         Assert.That(Volatile.Read(ref overlapped), Is.False);
@@ -110,23 +110,23 @@ public class SessionActorTests
     public async Task Inbox_overflow_kicks_the_connection()
     {
         var transport = new FakeTransport();
-        var firstFrameEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var firstPacketEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var server = new TestServer(
             transport,
             conn => new ScriptedSession(conn, async (_, _) =>
             {
-                firstFrameEntered.TrySetResult();
-                await release.Task; // 첫 프레임에서 블록 → 큐 적체 유도
+                firstPacketEntered.TrySetResult();
+                await release.Task; // 첫 패킷에서 블록 → 큐 적체 유도
             }),
-            maxQueuedFrames: 8);
+            maxQueuedPackets: 8);
         await server.StartAsync();
 
         var conn = transport.Connect(1);
-        conn.ReceiveFrame(new byte[] { 0 });
-        await firstFrameEntered.Task.WaitAsync(Timeout);
+        conn.ReceivePacket(new byte[] { 0 });
+        await firstPacketEntered.Task.WaitAsync(Timeout);
         var session = server.Sessions.Single(); // 종료 전에 세션 캡처
-        for (var i = 0; i < 20; i++) conn.ReceiveFrame(new byte[] { 1 }); // 8개 초과
+        for (var i = 0; i < 20; i++) conn.ReceivePacket(new byte[] { 1 }); // 8개 초과
 
         release.TrySetResult(); // 블록 해제 → 루프가 종료 신호를 소비
         await session.Disconnected.Task.WaitAsync(Timeout);
@@ -143,7 +143,7 @@ public class SessionActorTests
 
         var conn = transport.Connect(1);
         var session = server.Sessions.Single();
-        conn.ReceiveFrame(new byte[] { 1 });
+        conn.ReceivePacket(new byte[] { 1 });
 
         await session.Disconnected.Task.WaitAsync(Timeout);
         Assert.That(conn.IsOpen, Is.False);
@@ -159,7 +159,7 @@ public class SessionActorTests
 
         var conn = transport.Connect(1);
         var session = server.Sessions.Single();
-        conn.ReceiveFrame(new byte[] { 1 });
+        conn.ReceivePacket(new byte[] { 1 });
 
         await session.Disconnected.Task.WaitAsync(Timeout);
         Assert.That(conn.IsOpen, Is.False);
@@ -180,10 +180,10 @@ public class SessionActorTests
         var done = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var server = new TestServer(transport, conn => new ScriptedSession(
             conn,
-            (_, frame) =>
+            (_, packet) =>
             {
-                if (frame.Span[0] == 1) throw new InvalidOperationException("boom");
-                processed.Add(frame.Span[0]);
+                if (packet.Span[0] == 1) throw new InvalidOperationException("boom");
+                processed.Add(packet.Span[0]);
                 done.TrySetResult();
                 return default;
             },
@@ -191,8 +191,8 @@ public class SessionActorTests
         await server.StartAsync();
 
         var conn = transport.Connect(1);
-        conn.ReceiveFrame(new byte[] { 1 }); // 예외 — 무시됨
-        conn.ReceiveFrame(new byte[] { 2 }); // 계속 처리되어야 함
+        conn.ReceivePacket(new byte[] { 1 }); // 예외 — 무시됨
+        conn.ReceivePacket(new byte[] { 2 }); // 계속 처리되어야 함
 
         await done.Task.WaitAsync(Timeout);
         Assert.That(processed, Is.EqualTo(new byte[] { 2 }));
@@ -266,7 +266,7 @@ public class SessionActorTests
             return default;
         }
 
-        protected override ValueTask OnFrameAsync(ReadOnlyMemory<byte> frame) => default;
+        protected override ValueTask OnPacketAsync(ReadOnlyMemory<byte> packet) => default;
 
         protected override ValueTask OnDisconnectedAsync(Exception? error)
         {
