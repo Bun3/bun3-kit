@@ -20,6 +20,7 @@ namespace Bun3.Server.Transport.Tcp
         private int? _boundPort;
         private volatile bool _stopping;
 
+        /// <summary>TCP 리스너를 구성한다. StartAsync 전까지는 바인딩하지 않는다.</summary>
         public TcpTransportListener(TcpTransportOptions options, ILogger? logger = null)
         {
             _options = options ?? throw new ArgumentNullException(nameof(options));
@@ -50,6 +51,7 @@ namespace Bun3.Server.Transport.Tcp
             return Task.CompletedTask;
         }
 
+        /// <summary>신규 연결 수락을 중단하고 accept 루프가 끝나기를 기다린다.</summary>
         public async Task StopAsync(CancellationToken ct = default)
         {
             _stopping = true;

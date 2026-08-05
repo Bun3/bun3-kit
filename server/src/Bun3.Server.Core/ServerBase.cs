@@ -26,6 +26,7 @@ namespace Bun3.Server.Core
         private readonly Handler _handler;
         private volatile bool _running;
 
+        /// <summary>서버 베이스를 구성한다. transport는 시작 시 handler를 바인딩받는다.</summary>
         protected ServerBase(
             ITransportListener transport,
             ILogger? logger = null,
@@ -37,11 +38,14 @@ namespace Bun3.Server.Core
             _handler = new Handler(this);
         }
 
+        /// <summary>StartAsync 이후 StopAsync 전까지 true.</summary>
         public bool IsRunning => _running;
 
+        /// <summary>현재 연결되어 있는 세션들의 스냅샷.</summary>
         public IReadOnlyCollection<TSession> Sessions =>
             _sessions.Values.Select(e => e.Session).ToArray();
 
+        /// <summary>새 연결에 대응하는 세션 인스턴스를 생성한다. 게임 코드와의 유일한 결합점.</summary>
         protected abstract TSession CreateSession(IConnection connection);
 
         /// <remarks>단일 사용: StopAsync 이후 재시작할 수 없다. 새 인스턴스를 생성할 것.</remarks>

@@ -18,6 +18,7 @@ namespace Bun3.Server.Abstractions
         /// <summary>전송별 원격 주소 표현. TCP는 "IP:포트", Steam은 SteamID 문자열.</summary>
         string? RemoteAddress { get; }
 
+        /// <summary>연결이 아직 열려 있는지 여부.</summary>
         bool IsOpen { get; }
 
         /// <summary>

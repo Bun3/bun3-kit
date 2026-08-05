@@ -7,6 +7,7 @@ using Microsoft.Extensions.Options;
 
 namespace Bun3.Server.Hosting;
 
+/// <summary>Bun3 서버를 Generic Host DI 컨테이너에 등록하는 확장 메서드 모음.</summary>
 public static class ServerServiceCollectionExtensions
 {
     /// <summary>

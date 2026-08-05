@@ -11,8 +11,10 @@ namespace Bun3.Server.Transport.Tcp
     /// </summary>
     public static class PacketFormat
     {
+        /// <summary>길이 프리픽스의 바이트 크기(4).</summary>
         public const int HeaderSize = 4;
 
+        /// <summary>패킷 하나를 길이 프리픽스와 함께 스트림에 쓴다.</summary>
         public static async ValueTask WritePacketAsync(
             Stream stream, ReadOnlyMemory<byte> packet, CancellationToken ct = default)
         {

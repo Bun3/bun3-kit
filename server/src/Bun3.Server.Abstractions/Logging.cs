@@ -8,11 +8,13 @@ namespace Bun3.Server.Abstractions
     {
         private readonly ILogger _inner;
 
+        /// <summary>내부 로거를 감싸는 SafeLogger를 생성한다.</summary>
         public SafeLogger(ILogger inner)
         {
             _inner = inner ?? throw new ArgumentNullException(nameof(inner));
         }
 
+        /// <summary>내부 로거의 BeginScope를 호출한다. 예외 발생 시 null을 반환한다.</summary>
         public IDisposable? BeginScope<TState>(TState state) where TState : notnull
         {
             try
@@ -25,6 +27,7 @@ namespace Bun3.Server.Abstractions
             }
         }
 
+        /// <summary>내부 로거의 IsEnabled를 호출한다. 예외 발생 시 false를 반환한다.</summary>
         public bool IsEnabled(LogLevel logLevel)
         {
             try
@@ -37,6 +40,7 @@ namespace Bun3.Server.Abstractions
             }
         }
 
+        /// <summary>내부 로거에 로그를 기록한다. 예외가 발생해도 상위로 전파하지 않는다.</summary>
         public void Log<TState>(
             LogLevel logLevel,
             EventId eventId,

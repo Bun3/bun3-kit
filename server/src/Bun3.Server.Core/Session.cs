@@ -22,13 +22,16 @@ namespace Bun3.Server.Core
         private Exception? _closeError;
         private int _queuedCount;
 
+        /// <summary>주어진 연결에 바인딩된 세션을 생성한다.</summary>
         protected Session(IConnection connection)
         {
             Connection = connection ?? throw new ArgumentNullException(nameof(connection));
         }
 
+        /// <summary>연결 식별자와 동일한 세션 식별자.</summary>
         public long Id => Connection.Id;
 
+        /// <summary>이 세션이 바인딩된 연결.</summary>
         public IConnection Connection { get; }
 
         /// <summary>연결이 수립되어 소비 루프가 시작될 때 1회 호출된다.</summary>
@@ -46,6 +49,7 @@ namespace Bun3.Server.Core
         /// </summary>
         protected virtual ErrorDecision OnHandlerError(Exception ex) => ErrorDecision.CloseSession;
 
+        /// <summary>패킷 하나를 이 세션의 연결로 송신한다.</summary>
         public ValueTask SendAsync(ReadOnlyMemory<byte> packet, CancellationToken ct = default) =>
             Connection.SendAsync(packet, ct);
 

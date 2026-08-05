@@ -10,7 +10,9 @@ namespace Bun3.Server.Abstractions
     /// </summary>
     public interface IConnectionHandler
     {
+        /// <summary>새 연결이 수립되었을 때 전송 구현이 호출한다.</summary>
         void OnConnected(IConnection connection);
+        /// <summary>패킷 한 건이 수신되었을 때 전송 구현이 호출한다.</summary>
         void OnPacket(IConnection connection, ReadOnlyMemory<byte> packet);
         /// <summary>정상 종료면 error는 null.</summary>
         void OnClosed(IConnection connection, Exception? error);
