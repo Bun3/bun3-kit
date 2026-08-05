@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Bun3.Server.Abstractions;
 
 namespace Bun3.Server.Tests.Helpers;
@@ -50,7 +51,18 @@ public sealed class FakeConnection : IConnection
     public string? RemoteAddress => "fake";
     public bool IsOpen => Volatile.Read(ref _closed) == 0;
 
-    public ValueTask SendAsync(ReadOnlyMemory<byte> packet, CancellationToken ct = default) => default;
+    public readonly ConcurrentQueue<byte[]> SentPackets = new();
+    public readonly SemaphoreSlim SentSignal = new(0);
+
+    public ValueTask SendAsync(ReadOnlyMemory<byte> packet, CancellationToken ct = default)
+    {
+        if (IsOpen)
+        {
+            SentPackets.Enqueue(packet.ToArray());
+            SentSignal.Release();
+        }
+        return default;
+    }
 
     // 주의: 실제 TcpConnection과 달리 OnClosed를 호출 스레드에서 동기로 올린다 — 이 동기성에 의존하는 테스트를 작성하지 말 것.
     public void Close()
