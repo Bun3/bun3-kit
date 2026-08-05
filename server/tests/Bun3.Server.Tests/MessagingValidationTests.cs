@@ -97,4 +97,12 @@ public class MessagingValidationTests
     {
         Assert.DoesNotThrow(() => MessagingSchema<Request, SharedResponse, Update>.Create());
     }
+
+    [Test]
+    public void Repeated_request_id_fails_schema_creation()
+    {
+        var ex = Assert.Throws<MessagingValidationException>(() =>
+            MessagingSchema<RepeatedIdRequest, Response, Update>.Create())!;
+        Assert.That(ex.Message, Does.Contain("request_id"));
+    }
 }

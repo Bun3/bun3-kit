@@ -24,6 +24,7 @@ namespace Bun3.Server.Messaging
             Name = field.Name;
             PayloadType = field.MessageType.ClrType;
             var accessor = field.Accessor;
+            // IL2CPP에선 이 accessor 델리게이트가 인터프리트될 수 있음 — 생성 프로퍼티 직결 델리게이트 빌드는 v2 (스펙 §5)
             Get = message => (IMessage?)accessor.GetValue(message);
             Set = (message, payload) => accessor.SetValue(message, payload);
         }

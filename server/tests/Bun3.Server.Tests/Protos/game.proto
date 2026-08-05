@@ -69,3 +69,11 @@ message SharedResponse {
     GetServerTimeResponse buy_item = 11;
   }
 }
+
+// request_id가 repeated인 규약 위반 루트 (검증 테스트용)
+message RepeatedIdRequest {
+  repeated int64 request_id = 1;
+  oneof body {
+    GetServerTimeRequest get_server_time = 10;
+  }
+}

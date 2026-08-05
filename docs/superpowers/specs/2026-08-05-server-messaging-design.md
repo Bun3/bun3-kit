@@ -38,6 +38,9 @@ common/src/com.bun3.common/
 - **Google.Protobuf 의존은 Messaging에만 격리**된다. v0 패키지들은 protobuf를
   모른다. Unity에서 Messaging을 쓸 때만 NuGetForUnity로 Google.Protobuf 설치가
   필요하다 (NuGet-in-Unity 완화 방침의 두 번째 적용, M.E.L.A에 이어).
+  (Hosting은 AddMessagingServer 확장으로 인해 Google.Protobuf를 전이 참조하지만,
+  Unity 소비 대상이 아니므로 격리 목표(클라 = Messaging/Transport.Tcp/Abstractions/Common만)는
+  유지된다.)
 - **proto 스키마는 게임이 소유하고 프레임워크는 스키마를 모른다.** 프레임워크가
   요구하는 규약은 루트 3형뿐:
 

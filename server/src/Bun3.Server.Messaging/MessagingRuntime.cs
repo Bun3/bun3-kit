@@ -95,6 +95,7 @@ namespace Bun3.Server.Messaging
 
             if (control.BodyCase != Control.BodyOneofCase.Ping)
             {
+                // 서버는 엄격(미지 Control = 위반), 클라는 관대(경고 무시) — 서버가 새 Control을 먼저 배포하는 롤링 업그레이드를 위한 의도적 비대칭
                 Violation(session, $"클라이언트가 보낼 수 없는 Control: {control.BodyCase}");
                 return;
             }
@@ -167,14 +168,8 @@ namespace Bun3.Server.Messaging
             await SendAsync(session, Channels.Response, response).ConfigureAwait(false);
         }
 
-        private static ValueTask SendAsync(Session session, byte channel, IMessage message)
-        {
-            var body = message.ToByteArray();
-            var packet = new byte[1 + body.Length];
-            packet[0] = channel;
-            body.CopyTo(packet, 1);
-            return session.SendAsync(packet);
-        }
+        private static ValueTask SendAsync(Session session, byte channel, IMessage message) =>
+            session.SendAsync(PacketWriter.Wrap(channel, message));
 
         private void Violation(MessagingSession session, string reason)
         {

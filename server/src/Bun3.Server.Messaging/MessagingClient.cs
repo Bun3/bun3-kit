@@ -19,17 +19,11 @@ namespace Bun3.Server.Messaging
         where TResponse : class, IMessage<TResponse>, new()
         where TUpdate : class, IMessage<TUpdate>, new()
     {
-        private sealed class Pending
-        {
-            public readonly TaskCompletionSource<(int Status, IMessage? Payload)> Tcs =
-                new TaskCompletionSource<(int, IMessage?)>(TaskCreationOptions.RunContinuationsAsynchronously);
-        }
-
         private readonly MessagingSchema<TRequest, TResponse, TUpdate> _schema;
         private readonly MessagingClientOptions _options;
         private readonly ILogger _logger;
-        private readonly ConcurrentDictionary<long, Pending> _pending =
-            new ConcurrentDictionary<long, Pending>();
+        private readonly ConcurrentDictionary<long, TaskCompletionSource<(int Status, IMessage? Payload)>> _pending =
+            new ConcurrentDictionary<long, TaskCompletionSource<(int Status, IMessage? Payload)>>();
         private readonly ConcurrentDictionary<Type, Action<IMessage>> _updateHandlers =
             new ConcurrentDictionary<Type, Action<IMessage>>();
         private readonly CancellationTokenSource _lifetimeCts = new CancellationTokenSource();
@@ -57,10 +51,16 @@ namespace Bun3.Server.Messaging
         public event Action<Exception?>? Closed;
 
         /// <summary>커넥터로 연결을 수립하고 클라이언트를 생성한다. 접속 시점의 SynchronizationContext를 캡처한다.</summary>
+        /// <param name="connector">실제 소켓 연결을 수립하는 커넥터.</param>
+        /// <param name="options">클라이언트 옵션. null이면 기본값.</param>
+        /// <param name="logger">로거. null이면 무동작 로거.</param>
+        /// <param name="configure">소켓이 열리기 전에 클라이언트에 적용할 설정(주로 OnUpdate 구독) — 접속 직후 서버 푸시의 유실을 막는다.</param>
+        /// <param name="ct">연결 수립을 취소할 토큰.</param>
         public static async ValueTask<MessagingClient<TRequest, TResponse, TUpdate>> ConnectAsync(
             IConnector connector,
             MessagingClientOptions? options = null,
             ILogger? logger = null,
+            Action<MessagingClient<TRequest, TResponse, TUpdate>>? configure = null,
             CancellationToken ct = default)
         {
             if (connector == null)
@@ -76,7 +76,10 @@ namespace Bun3.Server.Messaging
                 client._syncContext = SynchronizationContext.Current;
             }
 
-            client._connection = await connector.ConnectAsync(new Handler(client), ct).ConfigureAwait(false);
+            configure?.Invoke(client);
+
+            // Handler.OnConnected가 이미 client._connection을 할당하므로, 여기선 완료를 기다리기만 하면 된다.
+            _ = await connector.ConnectAsync(new Handler(client), ct).ConfigureAwait(false);
             client.StartPingLoop();
             return client;
         }
@@ -104,13 +107,17 @@ namespace Bun3.Server.Messaging
             _schema.RequestIdOfRequest.Accessor.SetValue(envelope, requestId);
             requestCase.Set(envelope, request);
 
-            var pending = new Pending();
+            var pending = new TaskCompletionSource<(int Status, IMessage? Payload)>(
+                TaskCreationOptions.RunContinuationsAsynchronously);
             _pending[requestId] = pending;
             try
             {
                 if (_closed)
                 {
-                    throw new ConnectionClosedException("이미 종료된 연결");   // 재확인: insert 후엔 HandleClosed가 보게 됨
+                    // 재확인: insert 후엔 HandleClosed가 보게 됨 — 경합하는 HandleClosed의 TrySetException이
+                    // 아무도 관전하지 않는 TCS에 UnobservedTaskException을 남기지 않도록 먼저 취소로 관전 처리한다.
+                    pending.TrySetCanceled();
+                    throw new ConnectionClosedException("이미 종료된 연결");
                 }
 
                 using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -121,18 +128,18 @@ namespace Bun3.Server.Messaging
                     {
                         if (ct.IsCancellationRequested)
                         {
-                            removed.Tcs.TrySetCanceled(ct);
+                            removed.TrySetCanceled(ct);
                         }
                         else
                         {
-                            removed.Tcs.TrySetException(
+                            removed.TrySetException(
                                 new TimeoutException($"요청 {requestId} 응답 없음 ({_options.RequestTimeout})"));
                         }
                     }
                 });
 
                 await SendAsync(Channels.Request, envelope).ConfigureAwait(false);
-                var (status, payload) = await pending.Tcs.Task.ConfigureAwait(false);
+                var (status, payload) = await pending.Task.ConfigureAwait(false);
 
                 if (status != 0)
                 {
@@ -213,7 +220,7 @@ namespace Bun3.Server.Messaging
 
             var status = (int)_schema.StatusOfResponse.Accessor.GetValue(envelope);
             var payload = status == 0 ? _schema.ResponseMap.GetActiveCase(envelope)?.Get(envelope) : null;
-            pending.Tcs.TrySetResult((status, payload));
+            pending.TrySetResult((status, payload));
         }
 
         private void HandleUpdate(byte[] body)
@@ -266,6 +273,7 @@ namespace Bun3.Server.Messaging
             }
             else
             {
+                // 의도적 관대함: 미래 서버의 새 Control 메시지와의 전방 호환 (서버 쪽은 엄격)
                 _logger.LogWarning("예상 밖 Control {Case} — 무시", control.BodyCase);
             }
         }
@@ -278,7 +286,7 @@ namespace Bun3.Server.Messaging
             {
                 if (_pending.TryRemove(pair.Key, out var pending))
                 {
-                    pending.Tcs.TrySetException(new ConnectionClosedException("응답 대기 중 연결 종료"));
+                    pending.TrySetException(new ConnectionClosedException("응답 대기 중 연결 종료"));
                 }
             }
 
@@ -328,11 +336,7 @@ namespace Bun3.Server.Messaging
                 return default;
             }
 
-            var body = message.ToByteArray();
-            var packet = new byte[1 + body.Length];
-            packet[0] = channel;
-            body.CopyTo(packet, 1);
-            return connection.SendAsync(packet);
+            return connection.SendAsync(PacketWriter.Wrap(channel, message));
         }
 
         private void Dispatch(Action action)

@@ -1,4 +1,3 @@
-using System.Linq;
 using Bun3.Server.Abstractions;
 using Bun3.Server.Messaging;
 using Bun3.Server.Tests.GameProtocol;
@@ -98,15 +97,14 @@ public class MessagingE2ETests
         try
         {
             var received = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
-            var client = await ConnectClientAsync(listener);
-            client.OnUpdate<BroadcastedUpdate>(u => received.TrySetResult(u.Text));
-
-            // OnSessionOpenedAsync의 welcome 푸시 — 구독 등록과 경합할 수 있으므로
-            // 수신 실패 시 서버 세션에서 한 번 더 밀어 재검증한다.
-            var sessionPush = server.Sessions.Count > 0
-                ? server.Sessions.First().SendUpdateAsync(new BroadcastedUpdate { Text = "welcome" })
-                : default;
-            await sessionPush;
+            var connector = new TcpConnector(new TcpConnectorOptions
+            {
+                Host = "127.0.0.1",
+                Port = listener.BoundPort!.Value,
+            });
+            var client = await MessagingClient<Request, Response, Update>.ConnectAsync(
+                connector,
+                configure: c => c.OnUpdate<BroadcastedUpdate>(u => received.TrySetResult(u.Text)));
 
             Assert.That(await received.Task.WaitAsync(Timeout), Is.EqualTo("welcome"));
             client.Close();

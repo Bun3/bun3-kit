@@ -72,9 +72,9 @@ namespace Bun3.Server.Messaging
             MessageDescriptor message, string rootLabel, string fieldName, FieldType fieldType, List<string> errors)
         {
             var field = message.FindFieldByName(fieldName);
-            if (field == null || field.FieldType != fieldType)
+            if (field == null || field.FieldType != fieldType || field.IsRepeated || field.ContainingOneof != null)
             {
-                errors.Add($"{rootLabel}({message.Name}): {fieldType} {fieldName} 필드 필요");
+                errors.Add($"{rootLabel}({message.Name}): 단일(non-repeated, oneof 밖) {fieldType} {fieldName} 필드 필요");
                 return null;
             }
 
