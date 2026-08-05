@@ -16,13 +16,15 @@ namespace Bun3.Unity.Window.Editor.Tests
             bool resizableWindow = false,
             GraphicsDeviceType firstGraphicsApi = GraphicsDeviceType.Direct3D11)
         {
-            return new OverlaySettingsValidator.Snapshot(
-                fullScreenMode,
-                runInBackground,
-                useFlipModelSwapchain,
-                allowHdrDisplaySupport,
-                resizableWindow,
-                firstGraphicsApi);
+            return new OverlaySettingsValidator.Snapshot
+            {
+                FullScreenMode = fullScreenMode,
+                RunInBackground = runInBackground,
+                UseFlipModelSwapchain = useFlipModelSwapchain,
+                AllowHdrDisplaySupport = allowHdrDisplaySupport,
+                ResizableWindow = resizableWindow,
+                FirstGraphicsApi = firstGraphicsApi,
+            };
         }
 
         [Test]

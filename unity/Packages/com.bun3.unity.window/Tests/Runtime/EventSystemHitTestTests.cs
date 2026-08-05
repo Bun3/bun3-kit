@@ -70,9 +70,8 @@ namespace Bun3.Unity.Window.Tests
         [Test]
         public void IsHit_WithoutEventSystem_ReturnsFalse()
         {
-            Object.DestroyImmediate(_eventSystemGo);
+            Object.DestroyImmediate(_eventSystemGo); // TearDown's DestroyImmediate(null) is a no-op
             _eventSystemGo = null;
-            _eventSystemGo = new GameObject("EventSystemPlaceholder"); // keep TearDown simple
 
             var hitTest = new EventSystemHitTest();
             Assert.That(hitTest.IsHit(ScreenCenter), Is.False);

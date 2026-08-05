@@ -22,7 +22,7 @@ namespace Bun3.Unity.Window
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void Initialize()
         {
-            ApplySettings(WindowOverlaySettings.LoadFromResources());
+            ApplySettings(Resources.Load<WindowOverlaySettings>(WindowOverlaySettings.ResourceName));
 
             if (!AlwaysOnTop.IsSupported && !ClickThrough.IsSupported)
             {

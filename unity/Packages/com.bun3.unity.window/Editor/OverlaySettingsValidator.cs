@@ -15,30 +15,14 @@ namespace Bun3.Unity.Window.Editor
     /// </summary>
     public static class OverlaySettingsValidator
     {
-        internal readonly struct Snapshot
+        internal struct Snapshot
         {
-            public readonly FullScreenMode FullScreenMode;
-            public readonly bool RunInBackground;
-            public readonly bool UseFlipModelSwapchain;
-            public readonly bool AllowHdrDisplaySupport;
-            public readonly bool ResizableWindow;
-            public readonly GraphicsDeviceType FirstGraphicsApi;
-
-            public Snapshot(
-                FullScreenMode fullScreenMode,
-                bool runInBackground,
-                bool useFlipModelSwapchain,
-                bool allowHdrDisplaySupport,
-                bool resizableWindow,
-                GraphicsDeviceType firstGraphicsApi)
-            {
-                FullScreenMode = fullScreenMode;
-                RunInBackground = runInBackground;
-                UseFlipModelSwapchain = useFlipModelSwapchain;
-                AllowHdrDisplaySupport = allowHdrDisplaySupport;
-                ResizableWindow = resizableWindow;
-                FirstGraphicsApi = firstGraphicsApi;
-            }
+            public FullScreenMode FullScreenMode;
+            public bool RunInBackground;
+            public bool UseFlipModelSwapchain;
+            public bool AllowHdrDisplaySupport;
+            public bool ResizableWindow;
+            public GraphicsDeviceType FirstGraphicsApi;
         }
 
         internal static List<string> CollectWarnings(in Snapshot s)
@@ -95,13 +79,15 @@ namespace Bun3.Unity.Window.Editor
         private static Snapshot Capture()
         {
             var apis = PlayerSettings.GetGraphicsAPIs(BuildTarget.StandaloneWindows64);
-            return new Snapshot(
-                PlayerSettings.fullScreenMode,
-                PlayerSettings.runInBackground,
-                PlayerSettings.useFlipModelSwapchain,
-                PlayerSettings.allowHDRDisplaySupport,
-                PlayerSettings.resizableWindow,
-                apis.Length > 0 ? apis[0] : GraphicsDeviceType.Null);
+            return new Snapshot
+            {
+                FullScreenMode = PlayerSettings.fullScreenMode,
+                RunInBackground = PlayerSettings.runInBackground,
+                UseFlipModelSwapchain = PlayerSettings.useFlipModelSwapchain,
+                AllowHdrDisplaySupport = PlayerSettings.allowHDRDisplaySupport,
+                ResizableWindow = PlayerSettings.resizableWindow,
+                FirstGraphicsApi = apis.Length > 0 ? apis[0] : GraphicsDeviceType.Null,
+            };
         }
 
         private sealed class BuildCheck : IPreprocessBuildWithReport

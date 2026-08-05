@@ -23,7 +23,6 @@ namespace Bun3.Unity.Window
 
         public const long WS_EX_TOPMOST = 0x0008;
         public const long WS_EX_TRANSPARENT = 0x0020;
-        public const long WS_EX_TOOLWINDOW = 0x0080;
         public const long WS_EX_LAYERED = 0x00080000;
 
         public const uint SWP_NOSIZE = 0x0001;

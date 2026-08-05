@@ -30,7 +30,7 @@ namespace Bun3.Unity.Window
         private bool _transparency = true;
 
         [SerializeField]
-        [Tooltip("Auto/Dwm: per-pixel alpha with color-key fallback. ColorKey: force the fallback.")]
+        [Tooltip("Auto: DWM per-pixel alpha with color-key fallback. ColorKey: force the fallback.")]
         private TransparencyPreference _preferredMethod = TransparencyPreference.Auto;
 
         [SerializeField]
@@ -54,10 +54,5 @@ namespace Bun3.Unity.Window
         public Color ColorKey => _colorKey;
         public bool AutoClickThrough => _autoClickThrough;
         public IPointerHitTest HitTest => _hitTest;
-
-        public static WindowOverlaySettings LoadFromResources()
-        {
-            return Resources.Load<WindowOverlaySettings>(ResourceName);
-        }
     }
 }

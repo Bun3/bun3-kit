@@ -27,7 +27,6 @@ namespace Bun3.Unity.Core.Tests
                 typeof(UnityEngine.PlayerLoop.Update.ScriptRunBehaviourUpdate));
 
             Assert.That(PlayerLoopSystemHelper.IsInserted(typeof(TestTickMarker)), Is.True);
-            StringAssert.Contains(nameof(TestTickMarker), PlayerLoopSystemHelper.CurrentLoopToString());
 
             yield return null;
             yield return null;

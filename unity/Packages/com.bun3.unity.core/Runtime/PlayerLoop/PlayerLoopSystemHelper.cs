@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Text;
 using UnityEngine;
 using UnityEngine.LowLevel;
 
@@ -223,27 +222,5 @@ namespace Bun3.Unity.Core.PlayerLoop
             }
         }
 
-        /// <summary>String dump of the current player loop, for debugging.</summary>
-        public static string CurrentLoopToString()
-        {
-            var sb = new StringBuilder();
-            AppendRecursively(UnityEngine.LowLevel.PlayerLoop.GetCurrentPlayerLoop(), 0);
-            return sb.ToString();
-
-            void AppendRecursively(PlayerLoopSystem system, int depth)
-            {
-                sb.Append(' ', depth * 2);
-                // The root system has a null type; all others have a marker type.
-                sb.AppendLine(system.type?.Name ?? "ROOT");
-                if (system.subSystemList == null)
-                {
-                    return;
-                }
-                foreach (var subSystem in system.subSystemList)
-                {
-                    AppendRecursively(subSystem, depth + 1);
-                }
-            }
-        }
     }
 }

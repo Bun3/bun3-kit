@@ -26,9 +26,6 @@ namespace Bun3.Unity.Window
         /// <summary>Try DWM first, fall back to color key on failure.</summary>
         Auto = 0,
 
-        /// <summary>Same as <see cref="Auto"/>: DWM with color-key fallback.</summary>
-        Dwm = 1,
-
         /// <summary>Skip DWM and use the color key directly.</summary>
         ColorKey = 2,
     }
