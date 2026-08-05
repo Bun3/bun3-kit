@@ -3,6 +3,7 @@ using System.Net.Sockets;
 using System.Text;
 using Bun3.Server.Abstractions;
 using Bun3.Server.Core;
+using Bun3.Server.Tests.Helpers;
 using Bun3.Server.Transport.Tcp;
 using NUnit.Framework;
 
@@ -12,13 +13,6 @@ namespace Bun3.Server.Tests;
 public class EchoE2ETests
 {
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(5);
-
-    private sealed class EchoSession : Session
-    {
-        public EchoSession(IConnection connection) : base(connection) { }
-
-        protected override ValueTask OnFrameAsync(ReadOnlyMemory<byte> frame) => SendAsync(frame);
-    }
 
     private sealed class EchoServer : ServerBase<EchoSession>
     {

@@ -4,6 +4,7 @@ using System.Text;
 using Bun3.Server.Abstractions;
 using Bun3.Server.Core;
 using Bun3.Server.Hosting;
+using Bun3.Server.Tests.Helpers;
 using Bun3.Server.Transport.Tcp;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -17,13 +18,6 @@ namespace Bun3.Server.Tests;
 public class HostingTests
 {
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(10);
-
-    public sealed class EchoSession : Session
-    {
-        public EchoSession(IConnection connection) : base(connection) { }
-
-        protected override ValueTask OnFrameAsync(ReadOnlyMemory<byte> frame) => SendAsync(frame);
-    }
 
     [Test]
     public async Task Host_boots_serves_echo_and_stops_gracefully()
