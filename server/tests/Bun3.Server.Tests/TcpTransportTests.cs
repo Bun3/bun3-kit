@@ -21,8 +21,15 @@ public class TcpTransportTests
             new(TaskCreationOptions.RunContinuationsAsynchronously);
         public readonly ConcurrentQueue<byte[]> Frames = new();
         public readonly SemaphoreSlim FrameSignal = new(0);
+        public readonly ConcurrentQueue<long> ConnectionIds = new();
+        public readonly SemaphoreSlim ConnectedSignal = new(0);
 
-        public void OnConnected(IConnection connection) => Connected.TrySetResult(connection);
+        public void OnConnected(IConnection connection)
+        {
+            ConnectionIds.Enqueue(connection.Id);
+            ConnectedSignal.Release();
+            Connected.TrySetResult(connection);
+        }
 
         public void OnFrame(IConnection connection, ReadOnlyMemory<byte> frame)
         {
@@ -191,8 +198,7 @@ public class TcpTransportTests
     [Test]
     public async Task Two_connections_get_distinct_ids()
     {
-        var handler1Seen = new ConcurrentQueue<long>();
-        var handler = new MultiConnectionHandler(handler1Seen);
+        var handler = new RecordingHandler();
         var listener = new TcpTransportListener(new TcpTransportOptions { Port = 0 });
         await listener.StartAsync(handler);
         try
@@ -202,8 +208,9 @@ public class TcpTransportTests
             await c1.ConnectAsync(IPAddress.Loopback, listener.BoundPort!.Value);
             await c2.ConnectAsync(IPAddress.Loopback, listener.BoundPort!.Value);
 
-            await handler.TwoConnected.Task.WaitAsync(Timeout);
-            var ids = handler1Seen.ToArray();
+            await handler.ConnectedSignal.WaitAsync(Timeout);
+            await handler.ConnectedSignal.WaitAsync(Timeout);
+            var ids = handler.ConnectionIds.ToArray();
             Assert.That(ids, Has.Length.EqualTo(2));
             Assert.That(ids[0], Is.Not.EqualTo(ids[1]));
         }
@@ -211,24 +218,6 @@ public class TcpTransportTests
         {
             await listener.StopAsync();
         }
-    }
-
-    private sealed class MultiConnectionHandler : IConnectionHandler
-    {
-        private readonly ConcurrentQueue<long> _ids;
-        public readonly TaskCompletionSource TwoConnected =
-            new(TaskCreationOptions.RunContinuationsAsynchronously);
-
-        public MultiConnectionHandler(ConcurrentQueue<long> ids) => _ids = ids;
-
-        public void OnConnected(IConnection connection)
-        {
-            _ids.Enqueue(connection.Id);
-            if (_ids.Count >= 2) TwoConnected.TrySetResult();
-        }
-
-        public void OnFrame(IConnection connection, ReadOnlyMemory<byte> frame) { }
-        public void OnClosed(IConnection connection, Exception? error) { }
     }
 
     [Test]
