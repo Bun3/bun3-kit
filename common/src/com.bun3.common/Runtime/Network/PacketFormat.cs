@@ -1,9 +1,10 @@
+#nullable enable
 using System;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace Bun3.Server.Transport.Tcp
+namespace Bun3.Common.Network
 {
     /// <summary>
     /// 4바이트 리틀엔디언 길이 프리픽스 프레이밍.

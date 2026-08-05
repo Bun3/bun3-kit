@@ -1,6 +1,6 @@
 using System.Text;
+using Bun3.Common.Network;
 using Bun3.Server.Tests.Helpers;
-using Bun3.Server.Transport.Tcp;
 using NUnit.Framework;
 
 namespace Bun3.Server.Tests;

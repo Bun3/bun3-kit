@@ -2,6 +2,7 @@ using System;
 using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
+using Bun3.Common.Network;
 using Bun3.Server.Abstractions;
 using Microsoft.Extensions.Logging;
 

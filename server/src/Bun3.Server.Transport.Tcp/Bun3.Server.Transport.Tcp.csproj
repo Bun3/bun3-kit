@@ -14,6 +14,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\..\common\src\com.bun3.common\Bun3.Common.csproj" />
     <ProjectReference Include="..\Bun3.Server.Abstractions\Bun3.Server.Abstractions.csproj" />
   </ItemGroup>
 

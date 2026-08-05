@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using Bun3.Common.Network;
 using Bun3.Server.Abstractions;
 using Bun3.Server.Transport.Tcp;
 using NUnit.Framework;
