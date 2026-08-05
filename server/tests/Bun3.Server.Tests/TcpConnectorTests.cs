@@ -140,4 +140,37 @@ public class TcpConnectorTests
         Assert.ThrowsAsync<SocketException>(async () =>
             await connector.ConnectAsync(new RecordingHandler()).AsTask().WaitAsync(Timeout));
     }
+
+    [Test]
+    public async Task Throwing_OnConnected_propagates_and_closes_the_socket()
+    {
+        var (listener, serverHandler) = await StartListenerAsync();
+        try
+        {
+            var connector = new TcpConnector(new TcpConnectorOptions
+            {
+                Host = "127.0.0.1",
+                Port = listener.BoundPort!.Value,
+            });
+
+            Assert.ThrowsAsync<InvalidOperationException>(async () =>
+                await connector.ConnectAsync(new ThrowingHandler()).AsTask().WaitAsync(Timeout));
+
+            // 소켓이 정리되었음을 서버 측 종료 통지로 증명한다
+            await serverHandler.Connected.Task.WaitAsync(Timeout);
+            var serverError = await serverHandler.Closed.Task.WaitAsync(Timeout);
+            Assert.That(serverError, Is.Null);
+        }
+        finally
+        {
+            await listener.StopAsync();
+        }
+    }
+
+    private sealed class ThrowingHandler : IConnectionHandler
+    {
+        public void OnConnected(IConnection connection) => throw new InvalidOperationException("reject");
+        public void OnPacket(IConnection connection, ReadOnlyMemory<byte> packet) { }
+        public void OnClosed(IConnection connection, Exception? error) { }
+    }
 }

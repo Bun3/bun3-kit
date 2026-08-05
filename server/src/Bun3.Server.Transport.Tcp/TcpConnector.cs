@@ -59,10 +59,21 @@ namespace Bun3.Server.Transport.Tcp
                 handler,
                 _logger);
 
-            // 계약: OnConnected 반환 전에는 OnPacket/OnClosed가 발생하지 않도록
-            // 수신 루프는 OnConnected 이후에 시작한다.
-            handler.OnConnected(connection);
-            _ = Task.Run(connection.RunReceiveLoopAsync);
+            try
+            {
+                // 계약: OnConnected 반환 전에는 OnPacket/OnClosed가 발생하지 않도록
+                // 수신 루프는 OnConnected 이후에 시작한다.
+                handler.OnConnected(connection);
+                _ = Task.Run(connection.RunReceiveLoopAsync);
+            }
+            catch
+            {
+                // OnConnected가 던지면 핸들러가 이 연결을 등록하지 못한 것 —
+                // OnClosed 없이 소켓만 정리하고 호출자에게 원본 예외를 전파한다.
+                connection.Close();
+                throw;
+            }
+
             return connection;
         }
     }
