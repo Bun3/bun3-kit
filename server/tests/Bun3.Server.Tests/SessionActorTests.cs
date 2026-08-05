@@ -86,13 +86,13 @@ public class SessionActorTests
     {
         var transport = new FakeTransport();
         var concurrent = 0;
-        var maxConcurrent = 0;
+        var overlapped = false;
         var done = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var count = 0;
         var server = new TestServer(transport, conn => new ScriptedSession(conn, async (_, _) =>
         {
             var now = Interlocked.Increment(ref concurrent);
-            InterlockedExtensions.Max(ref maxConcurrent, now);
+            if (now > 1) Volatile.Write(ref overlapped, true);
             await Task.Delay(1);
             Interlocked.Decrement(ref concurrent);
             if (Interlocked.Increment(ref count) == 50) done.TrySetResult();
@@ -103,7 +103,7 @@ public class SessionActorTests
         for (var i = 0; i < 50; i++) conn.ReceiveFrame(new byte[] { 1 });
 
         await done.Task.WaitAsync(Timeout);
-        Assert.That(maxConcurrent, Is.EqualTo(1));
+        Assert.That(Volatile.Read(ref overlapped), Is.False);
     }
 
     [Test]
@@ -286,17 +286,5 @@ public class SessionActorTests
         }
 
         protected override RejectingSession CreateSession(IConnection connection) => _factory(connection);
-    }
-
-    private static class InterlockedExtensions
-    {
-        public static void Max(ref int location, int value)
-        {
-            int current;
-            while (value > (current = Volatile.Read(ref location)))
-            {
-                if (Interlocked.CompareExchange(ref location, value, current) == current) break;
-            }
-        }
     }
 }
