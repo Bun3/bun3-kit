@@ -5,6 +5,8 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Bun3.Server.Abstractions;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Bun3.Server.Core
 {
@@ -17,7 +19,7 @@ namespace Bun3.Server.Core
         private static readonly TimeSpan DefaultDrainTimeout = TimeSpan.FromSeconds(5);
 
         private readonly ITransportListener _transport;
-        private readonly IServerLogger _logger;
+        private readonly ILogger _logger;
         private readonly int _maxQueuedPackets;
         private readonly ConcurrentDictionary<long, SessionEntry> _sessions =
             new ConcurrentDictionary<long, SessionEntry>();
@@ -26,11 +28,11 @@ namespace Bun3.Server.Core
 
         protected ServerBase(
             ITransportListener transport,
-            IServerLogger? logger = null,
+            ILogger? logger = null,
             int maxQueuedPackets = 256)
         {
             _transport = transport ?? throw new ArgumentNullException(nameof(transport));
-            _logger = new SafeServerLogger(logger ?? NullServerLogger.Instance);
+            _logger = new SafeLogger(logger ?? NullLogger.Instance);
             _maxQueuedPackets = maxQueuedPackets;
             _handler = new Handler(this);
         }
@@ -47,7 +49,7 @@ namespace Bun3.Server.Core
         {
             await _transport.StartAsync(_handler, ct).ConfigureAwait(false);
             _running = true;
-            _logger.Log(ServerLogLevel.Info, "Server started.");
+            _logger.LogInformation("Server started.");
         }
 
         /// <summary>
@@ -69,10 +71,11 @@ namespace Bun3.Server.Core
             var finished = await Task.WhenAny(drain, Task.Delay(timeout, ct)).ConfigureAwait(false);
             if (finished != drain)
             {
-                _logger.Log(ServerLogLevel.Warning, $"Server stop: {entries.Length} session(s) did not drain within {timeout}.");
+                _logger.LogWarning(
+                    "Server stop: {SessionCount} session(s) did not drain within {Timeout}.", entries.Length, timeout);
             }
 
-            _logger.Log(ServerLogLevel.Info, "Server stopped.");
+            _logger.LogInformation("Server stopped.");
         }
 
         private void HandleConnected(IConnection connection)
@@ -84,7 +87,7 @@ namespace Bun3.Server.Core
             }
             catch (Exception ex)
             {
-                _logger.Log(ServerLogLevel.Error, $"CreateSession failed for connection {connection.Id}; closing.", ex);
+                _logger.LogError(ex, "CreateSession failed for connection {ConnectionId}; closing.", connection.Id);
                 connection.Close();
                 return;
             }

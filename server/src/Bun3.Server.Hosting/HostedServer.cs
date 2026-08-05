@@ -1,5 +1,6 @@
 using Bun3.Server.Abstractions;
 using Bun3.Server.Core;
+using Microsoft.Extensions.Logging;
 
 namespace Bun3.Server.Hosting;
 
@@ -11,7 +12,7 @@ internal sealed class HostedServer<TSession> : ServerBase<TSession> where TSessi
     public HostedServer(
         ITransportListener transport,
         Func<IConnection, TSession> sessionFactory,
-        IServerLogger logger,
+        ILogger logger,
         int maxQueuedPackets)
         : base(transport, logger, maxQueuedPackets)
     {

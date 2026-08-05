@@ -42,7 +42,7 @@ template 레포**다. 이번 작업은 그 결정의 첫 실체화로, 참고 �
 | 동시성 모델 | 세션 액터 — 세션별 수신 큐 + 단일 소비 루프. 한 세션의 로직은 동시 실행되지 않음 |
 | 소비 루프 구동 | 이벤트 구동 (`ConcurrentQueue` + `SemaphoreSlim` 신호). 고정 주기 tick은 추후 `Bun3.Server.Ticking` 모듈 |
 | 에러 정책 | 기본 세션 종료(fail-fast) + `OnHandlerError` 가상 훅으로 게임별 재정의. 상태코드 응답(대안 B)은 v1 메시징에서 |
-| 로깅 | 자체 최소 계약 `IServerLogger`(Abstractions). Hosting에서 `ILogger`로 브리지 |
+| 로깅 | Microsoft.Extensions.Logging.Abstractions 직접 사용 (자체 계약 폐기 — Unity는 NuGetForUnity로 공급). SafeLogger 데코레이터로 로거 예외 격리 |
 | 버퍼 소유권 | `OnPacket`의 메모리는 호출 동안만 유효. v0은 복사 우선, 풀링 최적화는 측정 후 |
 | 직렬화/디스패치 | v0 비범위. 패킷 = 불투명 byte 덩어리. v1 `Bun3.Server.Messaging`에서 결정 |
 | 테스트 | NUnit 4 (common/tests 관례), 단위 + 실 TCP E2E |
@@ -53,16 +53,16 @@ template 레포**다. 이번 작업은 그 결정의 첫 실체화로, 참고 �
 server/
 ├── Directory.Build.props          (기존 + 공통 패키징 설정 추가)
 ├── src/
-│   ├── Bun3.Server.Abstractions/  netstandard2.1 · 의존성 0
+│   ├── Bun3.Server.Abstractions/  netstandard2.1 · M.E.L.Abstractions만 의존
 │   │   └ IConnection, IConnectionHandler, ITransportListener,
-│   │     IServerLogger, 옵션 타입
+│   │     SafeLogger(ILogger 데코레이터), 옵션 타입
 │   ├── Bun3.Server.Core/          netstandard2.1 · → Abstractions, Bun3.Common
 │   │   └ ServerBase<TSession>, Session, 세션 레지스트리,
 │   │     수명주기(Start/Stop, graceful shutdown)
 │   ├── Bun3.Server.Transport.Tcp/ netstandard2.1 · → Abstractions
 │   │   └ Socket 리스너 + accept/수신 루프 + 길이 프리픽스 프레이밍
 │   └── Bun3.Server.Hosting/       net10.0 · → Core, Transport.Tcp + Microsoft.Extensions.Hosting
-│       └ AddServer(), BackgroundService 통합, ILogger 브리지, IOptions 바인딩
+│       └ AddServer(), BackgroundService 통합, ILogger 직접 사용, IOptions 바인딩
 ├── samples/
 │   └── EchoServer/                net10.0 콘솔 · IsPackable=false · 조립 예제 겸 수동 확인
 └── tests/
@@ -175,7 +175,7 @@ builder.Services.AddServer<MySession>(options =>
 await builder.Build().RunAsync();    // SIGTERM/Ctrl+C → graceful shutdown
 ```
 
-- 내용물: `ServerBase`의 `BackgroundService` 래핑, `IServerLogger`→`ILogger` 브리지,
+- 내용물: `ServerBase`의 `BackgroundService` 래핑, `ILogger` 직접 사용,
   `IOptions` 바인딩. **그 이상의 로직이 쌓이면 Core로 내려야 한다는 신호.**
 - 같은 Generic Host에 ASP.NET Core 엔드포인트를 추가하면 실시간 + HTTP 공존.
 - Unity 호스팅 시나리오에서는 이 패키지를 사용하지 않는다.

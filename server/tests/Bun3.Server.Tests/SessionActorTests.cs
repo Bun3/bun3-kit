@@ -1,6 +1,7 @@
 using Bun3.Server.Abstractions;
 using Bun3.Server.Core;
 using Bun3.Server.Tests.Helpers;
+using Microsoft.Extensions.Logging;
 using NUnit.Framework;
 
 namespace Bun3.Server.Tests;
@@ -49,7 +50,7 @@ public class SessionActorTests
             ITransportListener transport,
             Func<IConnection, ScriptedSession> factory,
             int maxQueuedPackets = 256,
-            IServerLogger? logger = null)
+            ILogger? logger = null)
             : base(transport, logger, maxQueuedPackets)
         {
             _factory = factory;
@@ -166,9 +167,18 @@ public class SessionActorTests
         Assert.That(server.Sessions, Is.Empty);
     }
 
-    private sealed class ThrowingLogger : IServerLogger
+    private sealed class ThrowingLogger : ILogger
     {
-        public void Log(ServerLogLevel level, string message, Exception? exception = null) =>
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter) =>
             throw new InvalidOperationException("logger failure");
     }
 

@@ -36,21 +36,12 @@ public static class ServerServiceCollectionExtensions
             optionsBuilder.Configure(configure);
         }
 
-        services.AddSingleton<IServerLogger>(sp =>
-        {
-            // 최소 구성 호스트(DisableDefaults 등)에서 로깅이 없어도 동작하도록 방어
-            var factory = sp.GetService<ILoggerFactory>();
-            return factory != null
-                ? new LoggerBridge(factory.CreateLogger("Bun3.Server"))
-                : NullServerLogger.Instance;
-        });
-
         services.AddSingleton(sp =>
         {
             var options = sp.GetRequiredService<IOptions<ServerOptions>>().Value;
             return new TcpTransportListener(
                 new TcpTransportOptions { Port = options.Port, MaxPacketSize = options.MaxPacketSize, Backlog = options.Backlog },
-                sp.GetRequiredService<IServerLogger>());
+                ResolveLogger(sp));
         });
 
         services.AddSingleton(sp =>
@@ -61,7 +52,7 @@ public static class ServerServiceCollectionExtensions
             return new HostedServer<TSession>(
                 sp.GetRequiredService<TcpTransportListener>(),
                 Factory,
-                sp.GetRequiredService<IServerLogger>(),
+                ResolveLogger(sp),
                 options.MaxQueuedPacketsPerSession);
         });
 
@@ -72,4 +63,9 @@ public static class ServerServiceCollectionExtensions
 
         return services;
     }
+
+    // 최소 구성 호스트(DisableDefaults 등)에서 로깅이 없어도 동작하도록 방어
+    private static ILogger ResolveLogger(IServiceProvider sp) =>
+        sp.GetService<ILoggerFactory>()?.CreateLogger("Bun3.Server")
+        ?? (ILogger)Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance;
 }
