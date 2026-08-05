@@ -20,6 +20,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Bun3.Server.Core\Bun3.Server.Core.csproj" />
     <ProjectReference Include="..\Bun3.Server.Transport.Tcp\Bun3.Server.Transport.Tcp.csproj" />
+    <ProjectReference Include="..\Bun3.Server.Messaging\Bun3.Server.Messaging.csproj" />
   </ItemGroup>
 
 </Project>
