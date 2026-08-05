@@ -24,7 +24,7 @@ namespace Bun3.Server.Messaging
         /// <summary>메시징 기본값: 핸들러 예외는 status=2 응답 + 세션 유지. 게임이 재정의 가능.</summary>
         protected override ErrorDecision OnHandlerError(Exception ex) => ErrorDecision.Continue;
 
-        /// <summary>연결 수립 훅 (v0 OnConnectedAsync 대체).</summary>
+        /// <summary>연결 수립 훅 (v0 OnConnectedAsync 대체). 여기서 예외가 나가면 세션은 무조건 킥된다(OnHandlerError 무관).</summary>
         protected virtual ValueTask OnSessionOpenedAsync() => default;
 
         /// <summary>세션 종료 훅 (v0 OnDisconnectedAsync 대체). 정상 종료면 error는 null.</summary>
@@ -35,11 +35,20 @@ namespace Bun3.Server.Messaging
             RequireRuntime().SendUpdateAsync(this, update);
 
         /// <summary>v0 연결 훅. 메시징 계층이 소유하므로 봉인되어 있다 — 게임은 OnSessionOpenedAsync를 재정의한다.</summary>
-        protected sealed override ValueTask OnConnectedAsync()
+        protected sealed override async ValueTask OnConnectedAsync()
         {
             Volatile.Write(ref _lastReceivedTicksUtc, DateTime.UtcNow.Ticks);
             StartIdleWatchdog();
-            return OnSessionOpenedAsync();
+            try
+            {
+                await OnSessionOpenedAsync().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                // open 훅 실패 = 반초기화 상태 — 에러 정책 역전(요청 핸들러 한정)과 무관하게 항상 킥
+                RequireRuntime().Logger.LogError(ex, "Session {SessionId}: OnSessionOpenedAsync threw; kicking.", Id);
+                Kick();
+            }
         }
 
         /// <summary>v0 패킷 훅. 메시징 계층이 소유하므로 봉인되어 있다 — 원시 패킷은 항상 런타임이 처리한다.</summary>

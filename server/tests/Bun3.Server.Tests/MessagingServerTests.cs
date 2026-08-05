@@ -268,4 +268,46 @@ public class MessagingServerTests
         Assert.That(conn.IsOpen, Is.False);
         await server.StopAsync();
     }
+
+    private sealed class OpenThrowsSession : MessagingSession
+    {
+        public readonly TaskCompletionSource<Exception?> Closed =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public OpenThrowsSession(IConnection connection) : base(connection) { }
+
+        protected override ValueTask OnSessionOpenedAsync() => throw new InvalidOperationException("load failed");
+
+        protected override ValueTask OnSessionClosedAsync(Exception? error)
+        {
+            Closed.TrySetResult(error);
+            return default;
+        }
+    }
+
+    [Test]
+    public async Task Throwing_OnSessionOpened_kicks_the_session()
+    {
+        var transport = new FakeTransport();
+        var config = new MessagingConfig<OpenThrowsSession>();
+        config.OnRequest<GetServerTimeRequest, GetServerTimeResponse>(
+            (s, req) => new ValueTask<Reply<GetServerTimeResponse>>(new GetServerTimeResponse()));
+        config.OnRequest<BuyItemRequest, BuyItemResponse>(
+            (s, req) => new ValueTask<Reply<BuyItemResponse>>(new BuyItemResponse()));
+        // 세션을 팩토리 클로저로 캡처한다: OnSessionOpenedAsync가 동기적으로 던지므로
+        // FakeTransport의 동기 콜백 체인상 Connect()가 반환하기 전에 이미 킥·제거가 끝나
+        // server.Sessions.Single()은 빈 컬렉션을 볼 수 있다(SessionActorTests의
+        // Kick_during_OnConnected_still_disconnects_cleanly와 동일한 패턴).
+        OpenThrowsSession? session = null;
+        var server = new MessagingServer<OpenThrowsSession, Request, Response, Update>(
+            transport, conn => session = new OpenThrowsSession(conn), config);
+        await server.StartAsync();
+
+        var conn = transport.Connect(1);
+
+        await session!.Closed.Task.WaitAsync(Timeout);
+        Assert.That(conn.IsOpen, Is.False);
+        Assert.That(server.Sessions, Is.Empty);
+        await server.StopAsync();
+    }
 }

@@ -35,7 +35,10 @@ namespace Bun3.Server.Messaging
         {
             schema.Validate(config);   // 기동 fail-fast — 위반 전체 목록과 함께 throw
             _schema = schema;
-            _registrations = config.Registrations;
+            // 스냅샷 복사 — config는 기동 후에도 살아있는 호출자 소유 객체이므로,
+            // 원본 Dictionary를 그대로 들고 있으면 이후 config.OnRequest(...) 호출이
+            // 세션 스레드가 동시에 읽는 딕셔너리를 변경해 미정의 동작을 유발하고 Validate도 우회한다.
+            _registrations = new Dictionary<Type, MessagingConfig<TSession>.Registration>(config.Registrations);
             IdleKickTimeout = options.IdleKickTimeout;
             Logger = logger;
         }
