@@ -4,12 +4,12 @@ using Microsoft.Extensions.Options;
 
 namespace Bun3.Server.Hosting;
 
-internal sealed class Bun3ServerHostedService<TSession> : IHostedService where TSession : Session
+internal sealed class ServerHostedService<TSession> : IHostedService where TSession : Session
 {
     private readonly HostedServer<TSession> _server;
-    private readonly IOptions<Bun3ServerOptions> _options;
+    private readonly IOptions<ServerOptions> _options;
 
-    public Bun3ServerHostedService(HostedServer<TSession> server, IOptions<Bun3ServerOptions> options)
+    public ServerHostedService(HostedServer<TSession> server, IOptions<ServerOptions> options)
     {
         _server = server;
         _options = options;

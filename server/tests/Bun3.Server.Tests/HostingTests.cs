@@ -29,7 +29,7 @@ public class HostingTests
     public async Task Host_boots_serves_echo_and_stops_gracefully()
     {
         var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings { DisableDefaults = true });
-        builder.Services.AddBun3Server<EchoSession>(options => options.Port = 0);
+        builder.Services.AddServer<EchoSession>(options => options.Port = 0);
         using var host = builder.Build();
 
         await host.StartAsync();
@@ -56,7 +56,7 @@ public class HostingTests
     public async Task MaxFrameSize_reaches_the_transport()
     {
         var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings { DisableDefaults = true });
-        builder.Services.AddBun3Server<EchoSession>(options =>
+        builder.Services.AddServer<EchoSession>(options =>
         {
             options.Port = 0;
             options.MaxFrameSize = 64;
@@ -99,10 +99,10 @@ public class HostingTests
             ["Bun3:Server:MaxFrameSize"] = "2048",
             ["Bun3:Server:MaxQueuedFramesPerSession"] = "32",
         });
-        builder.Services.AddBun3Server<EchoSession>();
+        builder.Services.AddServer<EchoSession>();
         using var host = builder.Build();
 
-        var options = host.Services.GetRequiredService<IOptions<Bun3ServerOptions>>().Value;
+        var options = host.Services.GetRequiredService<IOptions<ServerOptions>>().Value;
 
         Assert.That(options.Port, Is.EqualTo(0));
         Assert.That(options.MaxFrameSize, Is.EqualTo(2048));
@@ -117,10 +117,10 @@ public class HostingTests
         {
             ["Bun3:Server:Port"] = "12345",
         });
-        builder.Services.AddBun3Server<EchoSession>(options => options.Port = 0);
+        builder.Services.AddServer<EchoSession>(options => options.Port = 0);
         using var host = builder.Build();
 
-        var options = host.Services.GetRequiredService<IOptions<Bun3ServerOptions>>().Value;
+        var options = host.Services.GetRequiredService<IOptions<ServerOptions>>().Value;
 
         Assert.That(options.Port, Is.EqualTo(0)); // 람다가 나중에 적용되어 우선한다
     }

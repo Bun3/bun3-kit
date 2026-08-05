@@ -1,7 +1,7 @@
 namespace Bun3.Server.Hosting;
 
 /// <summary>구성 섹션 "Bun3:Server"에서 바인딩되는 서버 호스팅 옵션.</summary>
-public sealed class Bun3ServerOptions
+public sealed class ServerOptions
 {
     public const string SectionName = "Bun3:Server";
 

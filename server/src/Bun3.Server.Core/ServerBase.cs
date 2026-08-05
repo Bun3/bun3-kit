@@ -17,7 +17,7 @@ namespace Bun3.Server.Core
         private static readonly TimeSpan DefaultDrainTimeout = TimeSpan.FromSeconds(5);
 
         private readonly ITransportListener _transport;
-        private readonly IBun3Logger _logger;
+        private readonly IServerLogger _logger;
         private readonly SessionOptions _sessionOptions;
         private readonly ConcurrentDictionary<long, SessionEntry> _sessions =
             new ConcurrentDictionary<long, SessionEntry>();
@@ -26,11 +26,11 @@ namespace Bun3.Server.Core
 
         protected ServerBase(
             ITransportListener transport,
-            IBun3Logger? logger = null,
+            IServerLogger? logger = null,
             SessionOptions? sessionOptions = null)
         {
             _transport = transport ?? throw new ArgumentNullException(nameof(transport));
-            _logger = new SafeBun3Logger(logger ?? NullBun3Logger.Instance);
+            _logger = new SafeServerLogger(logger ?? NullServerLogger.Instance);
             _sessionOptions = sessionOptions ?? new SessionOptions();
             _handler = new Handler(this);
         }
@@ -47,7 +47,7 @@ namespace Bun3.Server.Core
         {
             await _transport.StartAsync(_handler, ct).ConfigureAwait(false);
             _running = true;
-            _logger.Log(Bun3LogLevel.Info, "Server started.");
+            _logger.Log(ServerLogLevel.Info, "Server started.");
         }
 
         /// <summary>
@@ -69,10 +69,10 @@ namespace Bun3.Server.Core
             var finished = await Task.WhenAny(drain, Task.Delay(timeout, ct)).ConfigureAwait(false);
             if (finished != drain)
             {
-                _logger.Log(Bun3LogLevel.Warning, $"Server stop: {entries.Length} session(s) did not drain within {timeout}.");
+                _logger.Log(ServerLogLevel.Warning, $"Server stop: {entries.Length} session(s) did not drain within {timeout}.");
             }
 
-            _logger.Log(Bun3LogLevel.Info, "Server stopped.");
+            _logger.Log(ServerLogLevel.Info, "Server stopped.");
         }
 
         private void HandleConnected(IConnection connection)
@@ -84,7 +84,7 @@ namespace Bun3.Server.Core
             }
             catch (Exception ex)
             {
-                _logger.Log(Bun3LogLevel.Error, $"CreateSession failed for connection {connection.Id}; closing.", ex);
+                _logger.Log(ServerLogLevel.Error, $"CreateSession failed for connection {connection.Id}; closing.", ex);
                 connection.Close();
                 return;
             }

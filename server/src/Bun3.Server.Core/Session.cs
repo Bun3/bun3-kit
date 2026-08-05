@@ -14,7 +14,7 @@ namespace Bun3.Server.Core
     {
         private readonly ConcurrentQueue<byte[]> _inbox = new ConcurrentQueue<byte[]>();
         private readonly SemaphoreSlim _signal = new SemaphoreSlim(0);
-        private IBun3Logger _logger = NullBun3Logger.Instance;
+        private IServerLogger _logger = NullServerLogger.Instance;
         private SessionOptions _options = new SessionOptions();
         private volatile bool _closed;
         private Exception? _closeError;
@@ -50,7 +50,7 @@ namespace Bun3.Server.Core
         /// <summary>서버 주도로 연결을 끊는다. 전송의 OnClosed 통지를 거쳐 세션이 정리된다.</summary>
         public void Kick() => Connection.Close();
 
-        internal void Initialize(IBun3Logger logger, SessionOptions options)
+        internal void Initialize(IServerLogger logger, SessionOptions options)
         {
             _logger = logger;
             _options = options;
@@ -66,7 +66,7 @@ namespace Bun3.Server.Core
             if (Interlocked.Increment(ref _queuedCount) > _options.MaxQueuedFrames)
             {
                 Interlocked.Decrement(ref _queuedCount);
-                _logger.Log(Bun3LogLevel.Warning,
+                _logger.Log(ServerLogLevel.Warning,
                     $"Session {Id}: inbox overflow (>{_options.MaxQueuedFrames}); kicking.");
                 Kick();
                 return;
@@ -128,7 +128,7 @@ namespace Bun3.Server.Core
                 }
                 catch (Exception ex)
                 {
-                    _logger.Log(Bun3LogLevel.Error, $"Session {Id}: OnDisconnectedAsync threw.", ex);
+                    _logger.Log(ServerLogLevel.Error, $"Session {Id}: OnDisconnectedAsync threw.", ex);
                 }
             }
         }
@@ -142,18 +142,18 @@ namespace Bun3.Server.Core
             }
             catch (Exception hookEx)
             {
-                _logger.Log(Bun3LogLevel.Error, $"Session {Id}: OnHandlerError threw.", hookEx);
+                _logger.Log(ServerLogLevel.Error, $"Session {Id}: OnHandlerError threw.", hookEx);
                 decision = ErrorDecision.CloseSession;
             }
 
             if (decision == ErrorDecision.CloseSession)
             {
-                _logger.Log(Bun3LogLevel.Error, $"Session {Id}: handler exception; closing session.", ex);
+                _logger.Log(ServerLogLevel.Error, $"Session {Id}: handler exception; closing session.", ex);
                 Kick();
             }
             else
             {
-                _logger.Log(Bun3LogLevel.Warning, $"Session {Id}: handler exception ignored by OnHandlerError.", ex);
+                _logger.Log(ServerLogLevel.Warning, $"Session {Id}: handler exception ignored by OnHandlerError.", ex);
             }
         }
     }

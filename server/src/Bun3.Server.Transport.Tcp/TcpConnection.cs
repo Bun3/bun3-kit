@@ -12,7 +12,7 @@ namespace Bun3.Server.Transport.Tcp
         private readonly NetworkStream _stream;
         private readonly TcpTransportOptions _options;
         private readonly IConnectionHandler _handler;
-        private readonly IBun3Logger _logger;
+        private readonly IServerLogger _logger;
         private readonly SemaphoreSlim _sendLock = new SemaphoreSlim(1, 1);
         private int _closed; // 0 = open, 1 = closed
         private Exception? _closeError;
@@ -22,7 +22,7 @@ namespace Bun3.Server.Transport.Tcp
             TcpClient client,
             TcpTransportOptions options,
             IConnectionHandler handler,
-            IBun3Logger logger)
+            IServerLogger logger)
         {
             Id = id;
             _client = client;
@@ -63,7 +63,7 @@ namespace Bun3.Server.Transport.Tcp
             catch (Exception ex)
             {
                 Interlocked.CompareExchange(ref _closeError, ex, null);
-                _logger.Log(Bun3LogLevel.Debug, $"Connection {Id}: send failed; closing.", ex);
+                _logger.Log(ServerLogLevel.Debug, $"Connection {Id}: send failed; closing.", ex);
                 Close();
             }
             finally

@@ -49,7 +49,7 @@ public class SessionActorTests
             ITransportListener transport,
             Func<IConnection, ScriptedSession> factory,
             SessionOptions? sessionOptions = null,
-            IBun3Logger? logger = null)
+            IServerLogger? logger = null)
             : base(transport, logger, sessionOptions)
         {
             _factory = factory;
@@ -166,9 +166,9 @@ public class SessionActorTests
         Assert.That(server.Sessions, Is.Empty);
     }
 
-    private sealed class ThrowingLogger : IBun3Logger
+    private sealed class ThrowingLogger : IServerLogger
     {
-        public void Log(Bun3LogLevel level, string message, Exception? exception = null) =>
+        public void Log(ServerLogLevel level, string message, Exception? exception = null) =>
             throw new InvalidOperationException("logger failure");
     }
 

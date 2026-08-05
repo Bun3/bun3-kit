@@ -7,7 +7,7 @@ using Microsoft.Extensions.Options;
 
 namespace Bun3.Server.Hosting;
 
-public static class Bun3ServerServiceCollectionExtensions
+public static class ServerServiceCollectionExtensions
 {
     /// <summary>
     /// TCP 전송 기반 Bun3 서버를 Generic Host에 등록한다.
@@ -24,51 +24,51 @@ public static class Bun3ServerServiceCollectionExtensions
     /// "Listener is already started."로 기동 시점에 실패한다. 다중 세션 타입/포트는 v1 범위.</item>
     /// </list>
     /// </remarks>
-    public static IServiceCollection AddBun3Server<TSession>(
+    public static IServiceCollection AddServer<TSession>(
         this IServiceCollection services,
-        Action<Bun3ServerOptions>? configure = null)
+        Action<ServerOptions>? configure = null)
         where TSession : Session
     {
-        var optionsBuilder = services.AddOptions<Bun3ServerOptions>()
-            .BindConfiguration(Bun3ServerOptions.SectionName);
+        var optionsBuilder = services.AddOptions<ServerOptions>()
+            .BindConfiguration(ServerOptions.SectionName);
         if (configure != null)
         {
             optionsBuilder.Configure(configure);
         }
 
-        services.AddSingleton<IBun3Logger>(sp =>
+        services.AddSingleton<IServerLogger>(sp =>
         {
             // 최소 구성 호스트(DisableDefaults 등)에서 로깅이 없어도 동작하도록 방어
             var factory = sp.GetService<ILoggerFactory>();
             return factory != null
-                ? new Bun3LoggerBridge(factory.CreateLogger("Bun3.Server"))
-                : NullBun3Logger.Instance;
+                ? new LoggerBridge(factory.CreateLogger("Bun3.Server"))
+                : NullServerLogger.Instance;
         });
 
         services.AddSingleton(sp =>
         {
-            var options = sp.GetRequiredService<IOptions<Bun3ServerOptions>>().Value;
+            var options = sp.GetRequiredService<IOptions<ServerOptions>>().Value;
             return new TcpTransportListener(
                 new TcpTransportOptions { Port = options.Port, MaxFrameSize = options.MaxFrameSize, Backlog = options.Backlog },
-                sp.GetRequiredService<IBun3Logger>());
+                sp.GetRequiredService<IServerLogger>());
         });
 
         services.AddSingleton(sp =>
         {
-            var options = sp.GetRequiredService<IOptions<Bun3ServerOptions>>().Value;
+            var options = sp.GetRequiredService<IOptions<ServerOptions>>().Value;
             TSession Factory(IConnection connection) =>
                 ActivatorUtilities.CreateInstance<TSession>(sp, connection);
             return new HostedServer<TSession>(
                 sp.GetRequiredService<TcpTransportListener>(),
                 Factory,
-                sp.GetRequiredService<IBun3Logger>(),
+                sp.GetRequiredService<IServerLogger>(),
                 new SessionOptions { MaxQueuedFrames = options.MaxQueuedFramesPerSession });
         });
 
-        services.AddHostedService<Bun3ServerHostedService<TSession>>(sp =>
-            new Bun3ServerHostedService<TSession>(
+        services.AddHostedService<ServerHostedService<TSession>>(sp =>
+            new ServerHostedService<TSession>(
                 sp.GetRequiredService<HostedServer<TSession>>(),
-                sp.GetRequiredService<IOptions<Bun3ServerOptions>>()));
+                sp.GetRequiredService<IOptions<ServerOptions>>()));
 
         return services;
     }

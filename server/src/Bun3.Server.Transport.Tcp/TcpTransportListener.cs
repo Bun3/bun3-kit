@@ -11,17 +11,17 @@ namespace Bun3.Server.Transport.Tcp
     public sealed class TcpTransportListener : ITransportListener
     {
         private readonly TcpTransportOptions _options;
-        private readonly IBun3Logger _logger;
+        private readonly IServerLogger _logger;
         private TcpListener? _listener;
         private Task? _acceptLoop;
         private long _nextConnectionId;
         private int? _boundPort;
         private volatile bool _stopping;
 
-        public TcpTransportListener(TcpTransportOptions options, IBun3Logger? logger = null)
+        public TcpTransportListener(TcpTransportOptions options, IServerLogger? logger = null)
         {
             _options = options ?? throw new ArgumentNullException(nameof(options));
-            _logger = new SafeBun3Logger(logger ?? NullBun3Logger.Instance);
+            _logger = new SafeServerLogger(logger ?? NullServerLogger.Instance);
         }
 
         /// <summary>실제 바인딩된 포트. Options.Port가 0이면 시작 후 여기서 확인한다. Stop 이후에도 유효.</summary>
@@ -43,7 +43,7 @@ namespace Bun3.Server.Transport.Tcp
             _listener = new TcpListener(IPAddress.Any, _options.Port);
             _listener.Start(_options.Backlog);
             _boundPort = ((IPEndPoint)_listener.LocalEndpoint).Port;
-            _logger.Log(Bun3LogLevel.Info, $"TCP listening on port {BoundPort}.");
+            _logger.Log(ServerLogLevel.Info, $"TCP listening on port {BoundPort}.");
             _acceptLoop = Task.Run(() => AcceptLoopAsync(handler));
             return Task.CompletedTask;
         }
@@ -74,7 +74,7 @@ namespace Bun3.Server.Transport.Tcp
                 }
                 catch (Exception ex)
                 {
-                    _logger.Log(Bun3LogLevel.Error, "Accept failed.", ex);
+                    _logger.Log(ServerLogLevel.Error, "Accept failed.", ex);
                     await Task.Delay(100).ConfigureAwait(false); // 지속 실패 시 핫스핀 방지
                     continue;
                 }
@@ -95,7 +95,7 @@ namespace Bun3.Server.Transport.Tcp
                     // OnConnected가 던지면 핸들러가 이 연결을 등록하지 못한 것이므로
                     // OnClosed를 통지하지 않고 소켓만 정리한다 (exactly-once는 OnConnected가
                     // 정상 반환한 연결에 대한 계약).
-                    _logger.Log(Bun3LogLevel.Error, "Connection setup failed; closing client.", ex);
+                    _logger.Log(ServerLogLevel.Error, "Connection setup failed; closing client.", ex);
                     try { client.Close(); } catch { }
                 }
             }

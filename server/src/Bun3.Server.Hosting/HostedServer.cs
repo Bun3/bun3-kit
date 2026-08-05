@@ -11,7 +11,7 @@ internal sealed class HostedServer<TSession> : ServerBase<TSession> where TSessi
     public HostedServer(
         ITransportListener transport,
         Func<IConnection, TSession> sessionFactory,
-        IBun3Logger logger,
+        IServerLogger logger,
         SessionOptions sessionOptions)
         : base(transport, logger, sessionOptions)
     {
