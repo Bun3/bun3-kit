@@ -104,7 +104,8 @@ namespace Bun3.Server.Core
                         break; // 종료 후 잔여 패킷은 처리하지 않는다
                     }
 
-                    _inbox.TryDequeue(out var packet);
+                    var dequeued = _inbox.TryDequeue(out var packet);
+                    System.Diagnostics.Debug.Assert(dequeued, "signal/inbox invariant broken");
 
                     Interlocked.Decrement(ref _queuedCount);
                     try
