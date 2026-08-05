@@ -38,7 +38,6 @@ public sealed class FakeTransport : ITransportListener
 public sealed class FakeConnection : IConnection
 {
     private readonly FakeTransport _transport;
-    private readonly List<byte[]> _sentFrames = new();
     private int _closed;
 
     public FakeConnection(long id, FakeTransport transport)
@@ -51,19 +50,7 @@ public sealed class FakeConnection : IConnection
     public string? RemoteAddress => "fake";
     public bool IsOpen => Volatile.Read(ref _closed) == 0;
 
-    public IReadOnlyList<byte[]> SentFrames
-    {
-        get { lock (_sentFrames) return _sentFrames.ToArray(); }
-    }
-
-    public ValueTask SendAsync(ReadOnlyMemory<byte> frame, CancellationToken ct = default)
-    {
-        if (IsOpen)
-        {
-            lock (_sentFrames) _sentFrames.Add(frame.ToArray());
-        }
-        return default;
-    }
+    public ValueTask SendAsync(ReadOnlyMemory<byte> frame, CancellationToken ct = default) => default;
 
     // 주의: 실제 TcpConnection과 달리 OnClosed를 호출 스레드에서 동기로 올린다 — 이 동기성에 의존하는 테스트를 작성하지 말 것.
     public void Close()
