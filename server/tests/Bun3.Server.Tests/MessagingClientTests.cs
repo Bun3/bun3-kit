@@ -117,6 +117,22 @@ public class MessagingClientTests
     }
 
     [Test]
+    public async Task Request_after_close_throws_immediately_not_after_timeout()
+    {
+        var responder = new ScriptedResponder();
+        var client = await ConnectAsync(responder, new MessagingClientOptions
+        {
+            RequestTimeout = TimeSpan.FromSeconds(30),   // 타임아웃 경로로 새면 테스트가 초과로 실패
+        });
+        client.Close();
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        Assert.ThrowsAsync<ConnectionClosedException>(async () =>
+            await client.RequestAsync<GetServerTimeResponse>(new GetServerTimeRequest()).AsTask().WaitAsync(Timeout));
+        Assert.That(sw.Elapsed, Is.LessThan(TimeSpan.FromSeconds(2)));
+    }
+
+    [Test]
     public async Task Registered_update_handler_receives_push()
     {
         var responder = new ScriptedResponder();

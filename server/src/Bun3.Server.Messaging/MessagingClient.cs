@@ -90,11 +90,6 @@ namespace Bun3.Server.Messaging
                 throw new ArgumentNullException(nameof(request));
             }
 
-            if (_closed)
-            {
-                throw new ConnectionClosedException("이미 종료된 연결");
-            }
-
             var requestCase = _schema.RequestMap.ByPayloadType(request.GetType())
                 ?? throw new ArgumentException($"Request oneof에 없는 타입: {request.GetType().Name}", nameof(request));
             var responseCase = _schema.ResponseMap.ByFieldNumber(requestCase.FieldNumber);
@@ -111,36 +106,48 @@ namespace Bun3.Server.Messaging
 
             var pending = new Pending();
             _pending[requestId] = pending;
-            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            timeoutCts.CancelAfter(_options.RequestTimeout);
-            using var registration = timeoutCts.Token.Register(() =>
+            try
             {
-                if (_pending.TryRemove(requestId, out var removed))
+                if (_closed)
                 {
-                    if (ct.IsCancellationRequested)
-                    {
-                        removed.Tcs.TrySetCanceled(ct);
-                    }
-                    else
-                    {
-                        removed.Tcs.TrySetException(
-                            new TimeoutException($"요청 {requestId} 응답 없음 ({_options.RequestTimeout})"));
-                    }
+                    throw new ConnectionClosedException("이미 종료된 연결");   // 재확인: insert 후엔 HandleClosed가 보게 됨
                 }
-            });
 
-            await SendAsync(Channels.Request, envelope).ConfigureAwait(false);
-            var (status, payload) = await pending.Tcs.Task.ConfigureAwait(false);
+                using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                timeoutCts.CancelAfter(_options.RequestTimeout);
+                using var registration = timeoutCts.Token.Register(() =>
+                {
+                    if (_pending.TryRemove(requestId, out var removed))
+                    {
+                        if (ct.IsCancellationRequested)
+                        {
+                            removed.Tcs.TrySetCanceled(ct);
+                        }
+                        else
+                        {
+                            removed.Tcs.TrySetException(
+                                new TimeoutException($"요청 {requestId} 응답 없음 ({_options.RequestTimeout})"));
+                        }
+                    }
+                });
 
-            if (status != 0)
-            {
-                return Reply<TRes>.Fail(status);
+                await SendAsync(Channels.Request, envelope).ConfigureAwait(false);
+                var (status, payload) = await pending.Tcs.Task.ConfigureAwait(false);
+
+                if (status != 0)
+                {
+                    return Reply<TRes>.Fail(status);
+                }
+
+                return payload is TRes typed
+                    ? Reply<TRes>.Ok(typed)
+                    : throw new InvalidOperationException(
+                        $"응답 본문 타입 불일치: {payload?.GetType().Name ?? "없음"} (기대: {typeof(TRes).Name})");
             }
-
-            return payload is TRes typed
-                ? Reply<TRes>.Ok(typed)
-                : throw new InvalidOperationException(
-                    $"응답 본문 타입 불일치: {payload?.GetType().Name ?? "없음"} (기대: {typeof(TRes).Name})");
+            finally
+            {
+                _pending.TryRemove(requestId, out _);   // 어떤 경로로 끝나든 엔트리 회수
+            }
         }
 
         /// <summary>푸시 구독. 같은 타입 재등록은 교체된다. 미등록 Update는 경고 로그 후 무시.</summary>
@@ -306,6 +313,10 @@ namespace Bun3.Server.Messaging
             catch (OperationCanceledException)
             {
                 // 연결 종료로 인한 정상 취소
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Ping 루프 예외 — 측정 중단");
             }
         }
 
