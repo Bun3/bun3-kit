@@ -150,20 +150,27 @@ public class MessagingE2ETests
     public async Task E2E_graceful_shutdown_fails_pending_and_fires_closed()
     {
         var (server, listener) = await StartServerAsync();
-        var closed = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var client = await ConnectClientAsync(listener);
-        client.Closed += _ => closed.TrySetResult(true);
+        try
+        {
+            var closed = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var client = await ConnectClientAsync(listener);
+            client.Closed += _ => closed.TrySetResult(true);
 
-        // 세션 수립 확인 후 정지
-        var warmup = await client.RequestAsync<GetServerTimeResponse>(new GetServerTimeRequest())
-            .AsTask().WaitAsync(Timeout);
-        Assert.That(warmup.IsOk, Is.True);
+            // 세션 수립 확인 후 정지
+            var warmup = await client.RequestAsync<GetServerTimeResponse>(new GetServerTimeRequest())
+                .AsTask().WaitAsync(Timeout);
+            Assert.That(warmup.IsOk, Is.True);
 
-        await server.StopAsync();
+            await server.StopAsync();
 
-        await closed.Task.WaitAsync(Timeout);
-        Assert.That(client.IsConnected, Is.False);
-        Assert.ThrowsAsync<ConnectionClosedException>(async () =>
-            await client.RequestAsync<GetServerTimeResponse>(new GetServerTimeRequest()));
+            await closed.Task.WaitAsync(Timeout);
+            Assert.That(client.IsConnected, Is.False);
+            Assert.ThrowsAsync<ConnectionClosedException>(async () =>
+                await client.RequestAsync<GetServerTimeResponse>(new GetServerTimeRequest()));
+        }
+        finally
+        {
+            await server.StopAsync();
+        }
     }
 }
