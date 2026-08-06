@@ -57,8 +57,8 @@ public static class ServerServiceCollectionExtensions
                 options.MaxQueuedPacketsPerSession);
         });
 
-        services.AddHostedService<ServerHostedService<TSession>>(sp =>
-            new ServerHostedService<TSession>(
+        services.AddHostedService(sp =>
+            new ServerLifetimeService<HostedServer<TSession>, TSession>(
                 sp.GetRequiredService<HostedServer<TSession>>(),
                 sp.GetRequiredService<IOptions<ServerOptions>>()));
 
@@ -66,7 +66,7 @@ public static class ServerServiceCollectionExtensions
     }
 
     // 최소 구성 호스트(DisableDefaults 등)에서 로깅이 없어도 동작하도록 방어
-    private static ILogger ResolveLogger(IServiceProvider sp) =>
+    internal static ILogger ResolveLogger(IServiceProvider sp) =>
         sp.GetService<ILoggerFactory>()?.CreateLogger("Bun3.Server")
         ?? (ILogger)Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance;
 }

@@ -3,9 +3,6 @@ using Bun3.Server.Messaging;
 using Bun3.Server.Transport.Tcp;
 using Google.Protobuf;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
 namespace Bun3.Server.Hosting;
@@ -49,7 +46,7 @@ public static class MessagingServiceCollectionExtensions
                     MaxPacketSize = options.MaxPacketSize,
                     Backlog = options.Backlog,
                 },
-                ResolveLogger(sp));
+                ServerServiceCollectionExtensions.ResolveLogger(sp));
         });
 
         services.AddSingleton(sp =>
@@ -71,40 +68,14 @@ public static class MessagingServiceCollectionExtensions
                 Factory,
                 config,
                 messagingServerOptions,
-                ResolveLogger(sp));
+                ServerServiceCollectionExtensions.ResolveLogger(sp));
         });
 
-        services.AddHostedService(sp => new MessagingHostedService<TSession, TRequest, TResponse, TUpdate>(
-            sp.GetRequiredService<MessagingServer<TSession, TRequest, TResponse, TUpdate>>(),
-            sp.GetRequiredService<IOptions<ServerOptions>>()));
+        services.AddHostedService(sp =>
+            new ServerLifetimeService<MessagingServer<TSession, TRequest, TResponse, TUpdate>, TSession>(
+                sp.GetRequiredService<MessagingServer<TSession, TRequest, TResponse, TUpdate>>(),
+                sp.GetRequiredService<IOptions<ServerOptions>>()));
 
         return services;
     }
-
-    private static ILogger ResolveLogger(IServiceProvider sp) =>
-        sp.GetService<ILoggerFactory>()?.CreateLogger("Bun3.Server")
-        ?? (ILogger)NullLogger.Instance;
-}
-
-internal sealed class MessagingHostedService<TSession, TRequest, TResponse, TUpdate> : IHostedService
-    where TSession : MessagingSession
-    where TRequest : class, IMessage<TRequest>, new()
-    where TResponse : class, IMessage<TResponse>, new()
-    where TUpdate : class, IMessage<TUpdate>, new()
-{
-    private readonly MessagingServer<TSession, TRequest, TResponse, TUpdate> _server;
-    private readonly IOptions<ServerOptions> _options;
-
-    public MessagingHostedService(
-        MessagingServer<TSession, TRequest, TResponse, TUpdate> server,
-        IOptions<ServerOptions> options)
-    {
-        _server = server;
-        _options = options;
-    }
-
-    public Task StartAsync(CancellationToken cancellationToken) => _server.StartAsync(cancellationToken);
-
-    public Task StopAsync(CancellationToken cancellationToken) =>
-        _server.StopAsync(_options.Value.DrainTimeout, cancellationToken);
 }
