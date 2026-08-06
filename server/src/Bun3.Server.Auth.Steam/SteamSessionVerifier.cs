@@ -122,7 +122,7 @@ namespace Bun3.Server.Auth.Steam
             ticket = Array.Empty<byte>();
             if (string.IsNullOrEmpty(credential)) return false;
 
-            var separator = credential!.IndexOf(':');
+            var separator = credential.IndexOf(':');
             if (separator <= 0 || separator == credential.Length - 1) return false;
 
             if (!ulong.TryParse(credential.Substring(0, separator), NumberStyles.None, CultureInfo.InvariantCulture, out steamId)
