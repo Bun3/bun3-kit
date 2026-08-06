@@ -21,7 +21,7 @@ public class RpcGateTests
 
         public GatedSession(IConnection connection) : base(connection) { }
 
-        protected internal override int OnGateRequest(Type requestType) =>
+        protected override int OnGateRequest(Type requestType) =>
             requestType == typeof(BuyItemRequest) ? 7 : RpcStatus.Ok;
     }
 
