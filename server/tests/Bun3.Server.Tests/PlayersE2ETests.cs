@@ -1,4 +1,5 @@
 using Bun3.Server.Abstractions;
+using Bun3.Server.Auth;
 using Bun3.Server.Players;
 using Bun3.Server.Rpc;
 using Bun3.Server.Tests.PlayersProtocol;
@@ -31,10 +32,15 @@ public class PlayersE2ETests
             Interlocked.Increment(ref loaderCalls);
             return new ValueTask<E2EPlayer>(new E2EPlayer());
         });
+        var verifier = new GuestVerifier();
         var config = new PlayersConfig<E2ESession>();
         config.OnRequestUnauthenticated<LoginRequest, LoginResponse>(async (s, req) =>
         {
-            var result = await s.SignInAsync($"guest:{req.DeviceId}");
+            var auth = await verifier.VerifyAsync(req.DeviceId);
+            if (!auth.Succeeded)
+                throw new InvalidOperationException(auth.Error);   // 이 E2E에 실패 경로 없음 — 방어만
+
+            var result = await s.SignInAsync(auth.Identity.ToAccountKey());
             return new LoginResponse { Gold = result.Player.Gold, IsReconnect = result.IsReconnect };
         });
         config.OnRequest<AddGoldRequest, AddGoldResponse>((s, req) =>
