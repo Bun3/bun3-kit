@@ -111,6 +111,7 @@ players.OnRequestUnauthenticated<LoginRequest, LoginResponse>(async (s, req) =>
 - `PlayerSession`이 훅 구현: 인증됨 또는 허용 목록(로그인 등)만 통과.
 - 등록은 `players.OnRequestUnauthenticated<TReq,TRes>(...)` = 일반 등록 + 허용
   목록 추가. Rpc는 Players를 모른다(범용 게이트 훅일 뿐).
+- 구현 노트: 프레임워크의 protected internal virtual 훅을 타 어셈블리에서 오버라이드할 때는 C# 규칙상 protected override로 선언한다(protected internal override는 CS0507).
 
 ## 6. 검증 (완료 조건)
 

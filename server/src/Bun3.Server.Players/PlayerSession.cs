@@ -32,7 +32,10 @@ namespace Bun3.Server.Players
         public ValueTask<SignInResult<TPlayer>> SignInAsync(string accountKey) =>
             RequireRegistry().SignInAsync(this, accountKey);
 
-        /// <summary>세션 종료 훅 재노출 (detach 처리 후 호출됨).</summary>
+        /// <summary>세션 종료 훅 (detach 처리 후 호출됨).
+        /// 주의: 중복 로그인(NewWins)으로 킥된 세션에서는 Player 소유권이 이미 새 세션으로
+        /// 이전된 뒤 실행될 수 있다 — 이 훅에서 Player를 저장하면 새 세션의 진행분을 덮어쓴다.
+        /// 저장은 Player.OnRetiredAsync에서만 할 것.</summary>
         protected virtual ValueTask OnPlayerSessionClosedAsync(Exception? error) => default;
 
         /// <summary>인증 여부/허용 목록으로 요청을 게이트한다. Players 계층이 소유하므로 봉인.</summary>

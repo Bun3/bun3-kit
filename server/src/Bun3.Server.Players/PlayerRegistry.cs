@@ -174,11 +174,13 @@ namespace Bun3.Server.Players
         }
 
         /// <summary>전 Player 은퇴(저장 플러시) — 서버 정지 후 호출. 스윕도 함께 멈춘다.</summary>
-        public async ValueTask RetireAllAsync()
+        /// <param name="ct">호스트 종료 기한 — 취소 시 남은 키의 은퇴를 중단한다(이미 처리된 키는 완료됨).</param>
+        public async ValueTask RetireAllAsync(CancellationToken ct = default)
         {
             _sweepCts.Cancel();
             foreach (var accountKey in _entries.Keys.ToArray())
             {
+                ct.ThrowIfCancellationRequested();
                 PlayerSession<TPlayer>? toKick = null;
                 var stripe = GetStripe(accountKey);
                 await stripe.WaitAsync().ConfigureAwait(false);

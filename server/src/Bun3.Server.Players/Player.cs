@@ -8,6 +8,8 @@ namespace Bun3.Server.Players
     /// accountKey당 1개, 재접속에 살아남는 단위. 상태(재화·인벤토리 등)는 이 파생
     /// 클래스에 둔다. 훅들은 레지스트리의 계정 키 스트라이프 락 안에서 실행되므로
     /// 훅 안에서 SignInAsync/Kick을 재호출하면 안 된다(교착).
+    /// 킥된 옛 세션의 잔여 핸들러가 소유권 이전 직후 잠시 같은 Player를 볼 수 있다 —
+    /// 저장 지점은 OnRetiredAsync 하나로 고정하는 이유다.
     /// </summary>
     public abstract class Player
     {
