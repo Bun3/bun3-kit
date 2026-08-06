@@ -61,9 +61,10 @@ namespace Bun3.Server.Auth.Steam
 
             if (beginResult != 0)
             {
-                _pending.TryRemove(steamId, out _);
+                if (!_pending.TryRemove(steamId, out _))
+                    return await tcs.Task.ConfigureAwait(false);   // 콜백이 경합에서 이김
                 _endSession(steamId);
-                return SteamAuthResult.Fail(AuthFailure.Rejected, "BeginAuthSession failed", beginResult);
+                return SteamAuthResult.Fail(AuthFailure.Rejected, "BeginAuthSession failed", beginResult, steamId: steamId);
             }
 
             var delay = Task.Delay(_timeout, ct);
@@ -78,7 +79,7 @@ namespace Bun3.Server.Auth.Steam
             _endSession(steamId);
             if (ct.IsCancellationRequested)
                 await delay.ConfigureAwait(false);   // OperationCanceledException 전파 (인프라 취소)
-            return SteamAuthResult.Fail(AuthFailure.Timeout, "auth callback not received", 0);
+            return SteamAuthResult.Fail(AuthFailure.Timeout, "auth callback not received", 0, steamId: steamId);
         }
 
         /// <summary>게임 글루가 Steamworks의 ValidateAuthTicketResponse 콜백에서 호출한다.
@@ -96,7 +97,7 @@ namespace Bun3.Server.Auth.Steam
                 else
                 {
                     _endSession(steamId);   // 실패 정리 규약
-                    result = SteamAuthResult.Fail(MapFailure(authSessionResponse), "auth session rejected", authSessionResponse);
+                    result = SteamAuthResult.Fail(MapFailure(authSessionResponse), "auth session rejected", authSessionResponse, steamId: steamId);
                 }
                 tcs.TrySetResult(result);
                 return;

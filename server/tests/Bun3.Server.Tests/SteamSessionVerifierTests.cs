@@ -70,6 +70,7 @@ public class SteamSessionVerifierTests
 
         Assert.That(result.Failure, Is.EqualTo(AuthFailure.Rejected));
         Assert.That(result.ValveErrorCode, Is.EqualTo(1));
+        Assert.That(result.SteamId, Is.EqualTo(SteamId));
         Assert.That(h.EndCalls, Is.EqualTo(new[] { SteamId }));   // 실패 정리 규약
     }
 
@@ -83,6 +84,7 @@ public class SteamSessionVerifierTests
         var result = (SteamAuthResult)await verify;
         Assert.That(result.Failure, Is.EqualTo(AuthFailure.Rejected));
         Assert.That(result.ValveErrorCode, Is.EqualTo(6));
+        Assert.That(result.SteamId, Is.EqualTo(SteamId));
         Assert.That(h.EndCalls, Is.EqualTo(new[] { SteamId }));
     }
 
@@ -103,9 +105,10 @@ public class SteamSessionVerifierTests
     public async Task Callback_timeout_fails_with_timeout_and_ends_session()
     {
         var h = new Harness(timeout: TimeSpan.FromMilliseconds(50));
-        var result = await h.Verifier.VerifyAsync(Credential);
+        var result = (SteamAuthResult)await h.Verifier.VerifyAsync(Credential);
 
         Assert.That(result.Failure, Is.EqualTo(AuthFailure.Timeout));
+        Assert.That(result.SteamId, Is.EqualTo(SteamId));
         Assert.That(h.EndCalls, Is.EqualTo(new[] { SteamId }));
     }
 
