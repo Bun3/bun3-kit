@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <LangVersion>9.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Bun3.Server.Players</RootNamespace>
+    <PackageId>Bun3.Server.Players</PackageId>
+    <Version>0.1.0</Version>
+    <Authors>Bun3</Authors>
+    <RepositoryUrl>https://github.com/Bun3/bun3-kit</RepositoryUrl>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <Description>재접속에 살아남는 Player 계층 — SignIn 수명주기(유예/중복 로그인), 미인증 게이트</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Bun3.Server.Abstractions\Bun3.Server.Abstractions.csproj" />
+    <ProjectReference Include="..\Bun3.Server.Core\Bun3.Server.Core.csproj" />
+    <ProjectReference Include="..\Bun3.Server.Rpc\Bun3.Server.Rpc.csproj" />
+  </ItemGroup>
+
+</Project>

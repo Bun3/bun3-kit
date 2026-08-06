@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+option csharp_namespace = "Bun3.Server.Tests.PlayersProtocol";
+
+package players_game;
+
+message PlayersRequest {
+  int64 request_id = 1;
+  oneof body {
+    LoginRequest login = 10;
+    AddGoldRequest add_gold = 11;
+    GetGoldRequest get_gold = 12;
+  }
+}
+
+message PlayersResponse {
+  int64 request_id = 1;
+  int32 status = 2;
+  oneof body {
+    LoginResponse login = 10;
+    AddGoldResponse add_gold = 11;
+    GetGoldResponse get_gold = 12;
+  }
+}
+
+message PlayersUpdate {
+  oneof body {
+    NoticeUpdate notice = 10;
+  }
+}
+
+message LoginRequest { string device_id = 1; }
+message LoginResponse { int64 gold = 1; bool is_reconnect = 2; }
+message AddGoldRequest { int32 amount = 1; }
+message AddGoldResponse { int64 gold = 1; }
+message GetGoldRequest {}
+message GetGoldResponse { int64 gold = 1; }
+message NoticeUpdate { string text = 1; }
