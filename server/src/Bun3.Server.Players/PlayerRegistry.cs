@@ -28,7 +28,8 @@ namespace Bun3.Server.Players
         }
 
         private readonly Func<string, ValueTask<TPlayer>> _loader;
-        private readonly PlayersOptions _options;
+        private readonly TimeSpan _gracePeriod;
+        private readonly DuplicateLoginPolicy _duplicatePolicy;
         private readonly ILogger _logger;
         private readonly ConcurrentDictionary<string, Entry> _entries =
             new ConcurrentDictionary<string, Entry>();
@@ -45,7 +46,9 @@ namespace Bun3.Server.Players
             ILogger? logger = null)
         {
             _loader = loader ?? throw new ArgumentNullException(nameof(loader));
-            _options = options ?? new PlayersOptions();
+            var effectiveOptions = options ?? new PlayersOptions();
+            _gracePeriod = effectiveOptions.GracePeriod;   // 생성 시점 스냅샷 — 이후 옵션 변이는 무시
+            _duplicatePolicy = effectiveOptions.DuplicatePolicy;
             _logger = new SafeLogger(logger ?? NullLogger.Instance);
             _stripes = new SemaphoreSlim[StripeCount];
             for (var i = 0; i < StripeCount; i++)
@@ -53,7 +56,7 @@ namespace Bun3.Server.Players
                 _stripes[i] = new SemaphoreSlim(1, 1);
             }
 
-            if (_options.GracePeriod > TimeSpan.Zero)
+            if (_gracePeriod > TimeSpan.Zero)
             {
                 _ = RunSweepAsync(_sweepCts.Token);
             }
@@ -73,10 +76,11 @@ namespace Bun3.Server.Players
         {
             if (config == null) throw new ArgumentNullException(nameof(config));
             if (factory == null) throw new ArgumentNullException(nameof(factory));
+            var unauthenticatedTypes = new HashSet<Type>(config.UnauthenticatedTypes);   // 검증 시점 스냅샷 — 뒤늦은 등록이 게이트를 몰래 열지 못한다
             return connection =>
             {
                 var session = factory(connection);
-                session.AttachPlayers(this, config.UnauthenticatedTypes);
+                session.AttachPlayers(this, unauthenticatedTypes);
                 return session;
             };
         }
@@ -101,7 +105,7 @@ namespace Bun3.Server.Players
             {
                 if (_entries.TryGetValue(accountKey, out var entry))
                 {
-                    if (entry.Session != null && _options.DuplicatePolicy == DuplicateLoginPolicy.RejectNew)
+                    if (entry.Session != null && _duplicatePolicy == DuplicateLoginPolicy.RejectNew)
                     {
                         throw new DuplicateLoginException(accountKey);
                     }
@@ -153,7 +157,7 @@ namespace Bun3.Server.Players
                 player.CurrentSession = null;
                 await SafeHookAsync(() => player.OnDetachedAsync(), "OnDetachedAsync").ConfigureAwait(false);
 
-                if (_options.GracePeriod <= TimeSpan.Zero)
+                if (_gracePeriod <= TimeSpan.Zero)
                 {
                     _entries.TryRemove(accountKey, out _);
                     await SafeHookAsync(() => player.OnRetiredAsync(), "OnRetiredAsync").ConfigureAwait(false);
@@ -219,7 +223,7 @@ namespace Bun3.Server.Players
 
         private async Task RunSweepAsync(CancellationToken ct)
         {
-            var half = TimeSpan.FromTicks(_options.GracePeriod.Ticks / 2);
+            var half = TimeSpan.FromTicks(_gracePeriod.Ticks / 2);
             var floor = TimeSpan.FromMilliseconds(50);
             var ceiling = TimeSpan.FromSeconds(15);
             var interval = half < floor ? floor : (half > ceiling ? ceiling : half);
@@ -228,7 +232,7 @@ namespace Bun3.Server.Players
                 while (!ct.IsCancellationRequested)
                 {
                     await Task.Delay(interval, ct).ConfigureAwait(false);
-                    var cutoff = DateTime.UtcNow.Ticks - _options.GracePeriod.Ticks;
+                    var cutoff = DateTime.UtcNow.Ticks - _gracePeriod.Ticks;
                     foreach (var pair in _entries)
                     {
                         var detachedAt = Volatile.Read(ref pair.Value.DetachedAtTicksUtc);
