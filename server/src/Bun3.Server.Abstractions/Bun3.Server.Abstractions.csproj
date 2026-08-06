@@ -4,17 +4,17 @@
     <TargetFramework>netstandard2.1</TargetFramework>
     <LangVersion>9.0</LangVersion>
     <Nullable>enable</Nullable>
-    <RootNamespace>Bun3.Server.Core</RootNamespace>
-    <PackageId>Bun3.Server.Core</PackageId>
+    <RootNamespace>Bun3.Server.Abstractions</RootNamespace>
+    <PackageId>Bun3.Server.Abstractions</PackageId>
     <Version>0.1.0</Version>
     <Authors>Bun3</Authors>
     <RepositoryUrl>https://github.com/Bun3/bun3-kit</RepositoryUrl>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <Description>세션 액터 기반 게임 서버 코어 — Session/ServerBase, 연결당 단일 소비 루프</Description>
+    <Description>게임 서버 모듈의 전송·로깅 계약 (netstandard2.1, Unity 호환)</Description>
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Bun3.Server.Abstractions\Bun3.Server.Abstractions.csproj" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
   </ItemGroup>
 
 </Project>
