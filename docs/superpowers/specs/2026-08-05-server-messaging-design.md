@@ -1,10 +1,11 @@
-# Bun3.Server.Messaging 설계 (v1: 타입 있는 요청/응답 + 서버 푸시)
+# Bun3.Server.Rpc 설계 (v1: 타입 있는 요청/응답 + 서버 푸시)
 
 - 날짜: 2026-08-05
 - 상태: 승인 대기
-- 범위: `Bun3.Server.Messaging` 패키지 신설 — protobuf 직렬화, 핸들러 등록/디스패치,
-  상태코드 응답, 클라이언트 커넥터(`IConnector`/`MessagingClient`), Ping/Pong
+- 범위: `Bun3.Server.Rpc` 패키지 신설 — protobuf 직렬화, 핸들러 등록/디스패치,
+  상태코드 응답, 클라이언트 커넥터(`IConnector`/`RpcClient`), Ping/Pong
 - 선행 문서: `2026-08-04-server-modulize-base-design.md` (v0 패킷 전송, §10 로드맵)
+- 2026-08-06 리네임: 패키지·타입의 Messaging 접두를 Rpc로 변경 (메시지버스/채팅 연상 회피)
 
 ## 1. 배경과 입력 결정
 
@@ -25,21 +26,21 @@ idlez의 상태코드 응답·코드젠 강제성의 가치를 프레임워크 �
 
 ```
 server/src/
-├── Bun3.Server.Messaging/        netstandard2.1 (신규)
+├── Bun3.Server.Rpc/        netstandard2.1 (신규)
 │   └ → Core, Abstractions + Google.Protobuf(NuGet)
 ├── Bun3.Server.Abstractions/     + IConnector (나가는 연결 계약)
 ├── Bun3.Server.Transport.Tcp/    + TcpConnector, → Bun3.Common 참조 추가
-└── (Core/Hosting 기존 유지; Hosting에 AddMessagingServer 확장 추가)
+└── (Core/Hosting 기존 유지; Hosting에 AddRpcServer 확장 추가)
 
 common/src/com.bun3.common/
 └── Runtime/Network/PacketFormat.cs   ← Transport.Tcp에서 이동 (와이어 규약은 클라·서버 공유)
 ```
 
-- **Google.Protobuf 의존은 Messaging에만 격리**된다. v0 패키지들은 protobuf를
-  모른다. Unity에서 Messaging을 쓸 때만 NuGetForUnity로 Google.Protobuf 설치가
+- **Google.Protobuf 의존은 Rpc에만 격리**된다. v0 패키지들은 protobuf를
+  모른다. Unity에서 Rpc를 쓸 때만 NuGetForUnity로 Google.Protobuf 설치가
   필요하다 (NuGet-in-Unity 완화 방침의 두 번째 적용, M.E.L.A에 이어).
-  (Hosting은 AddMessagingServer 확장으로 인해 Google.Protobuf를 전이 참조하지만,
-  Unity 소비 대상이 아니므로 격리 목표(클라 = Messaging/Transport.Tcp/Abstractions/Common만)는
+  (Hosting은 AddRpcServer 확장으로 인해 Google.Protobuf를 전이 참조하지만,
+  Unity 소비 대상이 아니므로 격리 목표(클라 = Rpc/Transport.Tcp/Abstractions/Common만)는
   유지된다.)
 - **proto 스키마는 게임이 소유하고 프레임워크는 스키마를 모른다.** 프레임워크가
   요구하는 규약은 루트 3형뿐:
@@ -67,7 +68,7 @@ v0 패킷(4바이트 길이 프리픽스) 위에 1바이트 채널:
 ```
 [길이:4] [채널:1] [protobuf 바이트]
 
-0x01 Control   (프레임워크 소유: Ping/Pong — Messaging 내장 control.proto)
+0x01 Control   (프레임워크 소유: Ping/Pong — Rpc 내장 control.proto)
 0x02 Request   (클라 → 서버)
 0x03 Response  (서버 → 클라)
 0x04 Update    (서버 → 클라, 푸시)
@@ -90,16 +91,16 @@ v0 패킷(4바이트 길이 프리픽스) 위에 1바이트 채널:
 ## 4. 서버 API
 
 ```csharp
-public sealed class MySession : MessagingSession        // 제네릭 없음
+public sealed class MySession : RpcSession        // 제네릭 없음
 {
     public MySession(IConnection connection) : base(connection) { }
     // OnPacketAsync는 프레임워크가 sealed 구현 — 게임은 바이트를 만지지 않는다.
     // OnConnectedAsync/OnDisconnectedAsync/OnHandlerError 훅은 v0 그대로.
 }
 
-builder.Services.AddMessagingServer<MySession, Request, Response, Update>(messaging =>
+builder.Services.AddRpcServer<MySession, Request, Response, Update>(rpc =>
 {
-    messaging.OnRequest<BuyItemRequest, BuyItemResponse>(async (session, req) =>
+    rpc.OnRequest<BuyItemRequest, BuyItemResponse>(async (session, req) =>
     {
         if (/* 골드 부족 */) return Reply.Fail(-1001);
         return new BuyItemResponse { ... };             // 암시 변환 = Reply.Ok
@@ -127,7 +128,7 @@ Session/MySession.BuyItem.cs ← partial class, 요청 하나의 구현 (idlez W
 ```csharp
 public static class ItemHandlers
 {
-    public static void Register(MessagingConfig<MySession> m)
+    public static void Register(RpcConfig<MySession> m)
     {
         m.OnRequest<BuyItemRequest, BuyItemResponse>((s, req) => s.HandleBuyItem(req));
         m.OnRequest<UseItemRequest, UseItemResponse>((s, req) => s.HandleUseItem(req));
@@ -140,7 +141,7 @@ public sealed partial class MySession
 }
 ```
 
-`Program.cs`의 `AddMessagingServer` 본문은 `ItemHandlers.Register(m);` 나열만
+`Program.cs`의 `AddRpcServer` 본문은 `ItemHandlers.Register(m);` 나열만
 남는다 — 파일 비대화는 구조적으로 발생하지 않는다.
 - **기동 검증**: `Request.body` 전 케이스에 핸들러 존재, 응답 타입이 매칭 규약
   충족, 중복 등록 없음 — 위반 시 전체 목록을 출력하며 기동 실패(fail-fast).
@@ -174,7 +175,7 @@ public static class Reply { public static ReplyFailure Fail(int status); }
 
 ```csharp
 var connector = new TcpConnector(new TcpConnectorOptions { Host = "...", Port = 20000 });
-var client = await MessagingClient.ConnectAsync<Request, Response, Update>(connector, options, ct);
+var client = await RpcClient.ConnectAsync<Request, Response, Update>(connector, options, ct);
 
 var reply = await client.RequestAsync<BuyItemResponse>(new BuyItemRequest { ... }, ct);
 if (reply.IsOk) Use(reply.Value); else ShowError(reply.Status);
@@ -183,8 +184,8 @@ client.OnUpdate<BroadcastedUpdate>(u => ...);
 ```
 
 - `IConnector`(Abstractions): 나가는 연결 계약. `TcpConnector`(Transport.Tcp)가
-  첫 구현. `MessagingClient`는 `IConnection`만 알므로 Steam 커넥터가 생겨도 무변경.
-- **Unity 스레딩**: `MessagingClientOptions.UseSynchronizationContext`(기본 on)가
+  첫 구현. `RpcClient`는 `IConnection`만 알므로 Steam 커넥터가 생겨도 무변경.
+- **Unity 스레딩**: `RpcClientOptions.UseSynchronizationContext`(기본 on)가
   캡처된 SynchronizationContext로 응답 재개·푸시 콜백을 올린다 — Unity에선 메인
   스레드, 컨텍스트 없는 환경(서버/테스트)에선 스레드풀.
 - 클라는 기동 검증을 하지 않는다 — 관심 없는 푸시 무시는 정당한 선택(미등록
@@ -229,7 +230,7 @@ E2E 5종 통과 = v1 완료.
 - `PacketFormat` → `common/src/com.bun3.common/Runtime/Network/`로 이동
   (Transport.Tcp에 Bun3.Common 참조 추가; meta 파일은 Unity 관례대로 커밋)
 - `IConnector` 계약 추가 (Abstractions), `TcpConnector` 구현 추가 (Transport.Tcp)
-- **v0 Core(Session/ServerBase)는 무변경** — MessagingSession이 상속으로 얹힌다
+- **v0 Core(Session/ServerBase)는 무변경** — RpcSession이 상속으로 얹힌다
 
 ## 9. 비동기 타입 원칙
 

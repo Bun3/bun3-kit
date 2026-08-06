@@ -2,7 +2,7 @@ using Bun3.Server.Abstractions;
 
 namespace Bun3.Server.Tests.Helpers;
 
-/// <summary>클라↔서버 양끝을 동기로 잇는 인메모리 커넥터. MessagingClient 단위 검증용.</summary>
+/// <summary>클라↔서버 양끝을 동기로 잇는 인메모리 커넥터. RpcClient 단위 검증용.</summary>
 public sealed class InMemoryConnector : IConnector
 {
     private readonly IConnectionHandler _serverHandler;

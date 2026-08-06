@@ -4,10 +4,10 @@ using System.Threading.Tasks;
 using Bun3.Server.Core;
 using Google.Protobuf;
 
-namespace Bun3.Server.Messaging
+namespace Bun3.Server.Rpc
 {
-    /// <summary>서버 수준 핸들러 등록표. 부팅 시 1회 구성되고 MessagingSchema.Validate로 전수 검증된다.</summary>
-    public sealed class MessagingConfig<TSession> where TSession : Session
+    /// <summary>서버 수준 핸들러 등록표. 부팅 시 1회 구성되고 RpcSchema.Validate로 전수 검증된다.</summary>
+    public sealed class RpcConfig<TSession> where TSession : Session
     {
         internal sealed class Registration
         {
@@ -40,7 +40,7 @@ namespace Bun3.Server.Messaging
 
             if (Registrations.ContainsKey(typeof(TReq)))
             {
-                throw new MessagingValidationException(new[] { $"중복 등록: {typeof(TReq).Name}" });
+                throw new RpcValidationException(new[] { $"중복 등록: {typeof(TReq).Name}" });
             }
 
             Registrations.Add(typeof(TReq), new Registration(

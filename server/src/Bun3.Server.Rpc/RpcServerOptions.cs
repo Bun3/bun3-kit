@@ -1,9 +1,9 @@
 using System;
 
-namespace Bun3.Server.Messaging
+namespace Bun3.Server.Rpc
 {
-    /// <summary>MessagingServer 기동 옵션.</summary>
-    public sealed class MessagingServerOptions
+    /// <summary>RpcServer 기동 옵션.</summary>
+    public sealed class RpcServerOptions
     {
         /// <summary>
         /// 이 시간 동안 아무 패킷도 안 온 세션을 킥한다. null = 비활성.

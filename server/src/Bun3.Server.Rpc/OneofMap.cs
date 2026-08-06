@@ -4,7 +4,7 @@ using System.Linq;
 using Google.Protobuf;
 using Google.Protobuf.Reflection;
 
-namespace Bun3.Server.Messaging
+namespace Bun3.Server.Rpc
 {
     /// <summary>oneof "body"의 케이스 하나. 접근자 델리게이트는 구축 시 1회 캐시된다.</summary>
     internal sealed class OneofCase

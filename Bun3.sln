@@ -35,7 +35,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "samples", "samples", "{8F08
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EchoServer", "server\samples\EchoServer\EchoServer.csproj", "{5F2F3651-ECC3-4122-8794-99B17E22CF44}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Bun3.Server.Messaging", "server\src\Bun3.Server.Messaging\Bun3.Server.Messaging.csproj", "{C7EE685C-5F53-4252-A88B-A2BCE10255FB}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Bun3.Server.Rpc", "server\src\Bun3.Server.Rpc\Bun3.Server.Rpc.csproj", "{C7EE685C-5F53-4252-A88B-A2BCE10255FB}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

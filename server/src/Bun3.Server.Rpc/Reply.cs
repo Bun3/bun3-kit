@@ -1,7 +1,7 @@
 using System;
 using Google.Protobuf;
 
-namespace Bun3.Server.Messaging
+namespace Bun3.Server.Rpc
 {
     /// <summary>요청 처리의 결과 — 성공(응답 메시지) 또는 실패(상태코드). 무할당 readonly struct.</summary>
     public readonly struct Reply<TRes> where TRes : class, IMessage<TRes>

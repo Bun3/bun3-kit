@@ -4,13 +4,13 @@ using Bun3.Server.Core;
 using Google.Protobuf;
 using Google.Protobuf.Reflection;
 
-namespace Bun3.Server.Messaging
+namespace Bun3.Server.Rpc
 {
     /// <summary>
     /// 게임 소유 루트 3형(Request/Response/Update)의 디스크립터에서 기동 1회 구축되는 스키마 맵.
     /// 규약: 세 루트 모두 oneof "body"; TRequest/TResponse에 int64 request_id; TResponse에 int32 status.
     /// </summary>
-    public sealed class MessagingSchema<TRequest, TResponse, TUpdate>
+    public sealed class RpcSchema<TRequest, TResponse, TUpdate>
         where TRequest : class, IMessage<TRequest>, new()
         where TResponse : class, IMessage<TResponse>, new()
         where TUpdate : class, IMessage<TUpdate>, new()
@@ -25,7 +25,7 @@ namespace Bun3.Server.Messaging
         internal MessageParser<TResponse> ResponseParser { get; } = new MessageParser<TResponse>(() => new TResponse());
         internal MessageParser<TUpdate> UpdateParser { get; } = new MessageParser<TUpdate>(() => new TUpdate());
 
-        private MessagingSchema(
+        private RpcSchema(
             OneofMap requestMap,
             OneofMap responseMap,
             OneofMap updateMap,
@@ -41,8 +41,8 @@ namespace Bun3.Server.Messaging
             StatusOfResponse = statusOfResponse;
         }
 
-        /// <summary>루트 규약 위반 시 전체 목록과 함께 MessagingValidationException.</summary>
-        public static MessagingSchema<TRequest, TResponse, TUpdate> Create()
+        /// <summary>루트 규약 위반 시 전체 목록과 함께 RpcValidationException.</summary>
+        public static RpcSchema<TRequest, TResponse, TUpdate> Create()
         {
             var errors = new List<string>();
             var requestDescriptor = new TRequest().Descriptor;
@@ -61,10 +61,10 @@ namespace Bun3.Server.Messaging
 
             if (errors.Count > 0)
             {
-                throw new MessagingValidationException(errors);
+                throw new RpcValidationException(errors);
             }
 
-            return new MessagingSchema<TRequest, TResponse, TUpdate>(
+            return new RpcSchema<TRequest, TResponse, TUpdate>(
                 requestMap!, responseMap!, updateMap!, requestId!, responseRequestId!, status!);
         }
 
@@ -96,7 +96,7 @@ namespace Bun3.Server.Messaging
         }
 
         /// <summary>등록표를 스키마에 대해 전수 검증한다. 위반 전체 목록과 함께 throw.</summary>
-        public void Validate<TSession>(MessagingConfig<TSession> config) where TSession : Session
+        public void Validate<TSession>(RpcConfig<TSession> config) where TSession : Session
         {
             var errors = new List<string>();
 
@@ -135,7 +135,7 @@ namespace Bun3.Server.Messaging
 
             if (errors.Count > 0)
             {
-                throw new MessagingValidationException(errors);
+                throw new RpcValidationException(errors);
             }
         }
     }

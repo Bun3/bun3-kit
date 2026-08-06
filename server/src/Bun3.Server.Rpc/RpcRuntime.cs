@@ -2,35 +2,35 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Bun3.Server.Core;
-using Bun3.Server.Messaging.ControlMessages;
+using Bun3.Server.Rpc.ControlMessages;
 using Google.Protobuf;
 using Microsoft.Extensions.Logging;
 
-namespace Bun3.Server.Messaging
+namespace Bun3.Server.Rpc
 {
-    /// <summary>MessagingSession이 패킷 처리를 위임하는 비제네릭 창구.</summary>
-    internal interface IMessagingRuntime
+    /// <summary>RpcSession이 패킷 처리를 위임하는 비제네릭 창구.</summary>
+    internal interface IRpcRuntime
     {
         TimeSpan? IdleKickTimeout { get; }
         ILogger Logger { get; }
-        ValueTask ProcessPacketAsync(MessagingSession session, ReadOnlyMemory<byte> packet);
+        ValueTask ProcessPacketAsync(RpcSession session, ReadOnlyMemory<byte> packet);
         ValueTask SendUpdateAsync(Session session, IMessage update);
     }
 
     /// <summary>채널 분기·요청 디스패치·응답 조립 — 서버 측 메시징의 두뇌. 상태는 전부 기동 시 구축.</summary>
-    internal sealed class MessagingRuntime<TSession, TRequest, TResponse, TUpdate> : IMessagingRuntime
-        where TSession : MessagingSession
+    internal sealed class RpcRuntime<TSession, TRequest, TResponse, TUpdate> : IRpcRuntime
+        where TSession : RpcSession
         where TRequest : class, IMessage<TRequest>, new()
         where TResponse : class, IMessage<TResponse>, new()
         where TUpdate : class, IMessage<TUpdate>, new()
     {
-        private readonly MessagingSchema<TRequest, TResponse, TUpdate> _schema;
-        private readonly Dictionary<Type, MessagingConfig<TSession>.Registration> _registrations;
+        private readonly RpcSchema<TRequest, TResponse, TUpdate> _schema;
+        private readonly Dictionary<Type, RpcConfig<TSession>.Registration> _registrations;
 
-        public MessagingRuntime(
-            MessagingSchema<TRequest, TResponse, TUpdate> schema,
-            MessagingConfig<TSession> config,
-            MessagingServerOptions options,
+        public RpcRuntime(
+            RpcSchema<TRequest, TResponse, TUpdate> schema,
+            RpcConfig<TSession> config,
+            RpcServerOptions options,
             ILogger logger)
         {
             schema.Validate(config);   // 기동 fail-fast — 위반 전체 목록과 함께 throw
@@ -38,7 +38,7 @@ namespace Bun3.Server.Messaging
             // 스냅샷 복사 — config는 기동 후에도 살아있는 호출자 소유 객체이므로,
             // 원본 Dictionary를 그대로 들고 있으면 이후 config.OnRequest(...) 호출이
             // 세션 스레드가 동시에 읽는 딕셔너리를 변경해 미정의 동작을 유발하고 Validate도 우회한다.
-            _registrations = new Dictionary<Type, MessagingConfig<TSession>.Registration>(config.Registrations);
+            _registrations = new Dictionary<Type, RpcConfig<TSession>.Registration>(config.Registrations);
             IdleKickTimeout = options.IdleKickTimeout;
             Logger = logger;
         }
@@ -47,7 +47,7 @@ namespace Bun3.Server.Messaging
 
         public ILogger Logger { get; }
 
-        public async ValueTask ProcessPacketAsync(MessagingSession session, ReadOnlyMemory<byte> packet)
+        public async ValueTask ProcessPacketAsync(RpcSession session, ReadOnlyMemory<byte> packet)
         {
             if (packet.Length < 1)
             {
@@ -80,7 +80,7 @@ namespace Bun3.Server.Messaging
             return SendAsync(session, Channels.Update, envelope);
         }
 
-        private async ValueTask HandleControlAsync(MessagingSession session, ReadOnlyMemory<byte> body)
+        private async ValueTask HandleControlAsync(RpcSession session, ReadOnlyMemory<byte> body)
         {
             Control control;
             try
@@ -104,7 +104,7 @@ namespace Bun3.Server.Messaging
             await SendAsync(session, Channels.Control, pong).ConfigureAwait(false);
         }
 
-        private async ValueTask HandleRequestAsync(MessagingSession session, ReadOnlyMemory<byte> body)
+        private async ValueTask HandleRequestAsync(RpcSession session, ReadOnlyMemory<byte> body)
         {
             TRequest envelope;
             try
@@ -171,7 +171,7 @@ namespace Bun3.Server.Messaging
         private static ValueTask SendAsync(Session session, byte channel, IMessage message) =>
             session.SendAsync(PacketWriter.Wrap(channel, message));
 
-        private void Violation(MessagingSession session, string reason)
+        private void Violation(RpcSession session, string reason)
         {
             Logger.LogWarning("Session {SessionId}: 프로토콜 위반 — {Reason}; kicking.", session.Id, reason);
             session.Kick();

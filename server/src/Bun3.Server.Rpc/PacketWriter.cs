@@ -1,6 +1,6 @@
 using Google.Protobuf;
 
-namespace Bun3.Server.Messaging
+namespace Bun3.Server.Rpc
 {
     /// <summary>채널 바이트 + 직렬화된 메시지 본문으로 패킷을 조립한다.</summary>
     internal static class PacketWriter

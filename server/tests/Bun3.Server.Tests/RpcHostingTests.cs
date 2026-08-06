@@ -1,5 +1,5 @@
 using Bun3.Server.Abstractions;
-using Bun3.Server.Messaging;
+using Bun3.Server.Rpc;
 using Bun3.Server.Hosting;
 using Bun3.Server.Tests.GameProtocol;
 using Bun3.Server.Transport.Tcp;
@@ -10,11 +10,11 @@ using NUnit.Framework;
 namespace Bun3.Server.Tests;
 
 [TestFixture]
-public class MessagingHostingTests
+public class RpcHostingTests
 {
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(10);
 
-    public sealed class HostedSession : MessagingSession
+    public sealed class HostedSession : RpcSession
     {
         public HostedSession(IConnection connection) : base(connection) { }
     }
@@ -23,12 +23,12 @@ public class MessagingHostingTests
     public async Task Host_boots_and_serves_typed_request()
     {
         var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings { DisableDefaults = true });
-        builder.Services.AddMessagingServer<HostedSession, Request, Response, Update>(
-            messaging =>
+        builder.Services.AddRpcServer<HostedSession, Request, Response, Update>(
+            rpc =>
             {
-                messaging.OnRequest<GetServerTimeRequest, GetServerTimeResponse>(
+                rpc.OnRequest<GetServerTimeRequest, GetServerTimeResponse>(
                     (s, req) => new ValueTask<Reply<GetServerTimeResponse>>(new GetServerTimeResponse { UnixMs = 99 }));
-                messaging.OnRequest<BuyItemRequest, BuyItemResponse>(
+                rpc.OnRequest<BuyItemRequest, BuyItemResponse>(
                     (s, req) => new ValueTask<Reply<BuyItemResponse>>(new BuyItemResponse { RemainingGold = 1 }));
             },
             serverOptions: options => options.Port = 0);
@@ -38,7 +38,7 @@ public class MessagingHostingTests
         try
         {
             var port = host.Services.GetRequiredService<TcpTransportListener>().BoundPort!.Value;
-            var client = await MessagingClient<Request, Response, Update>.ConnectAsync(
+            var client = await RpcClient<Request, Response, Update>.ConnectAsync(
                 new TcpConnector(new TcpConnectorOptions { Host = "127.0.0.1", Port = port }));
 
             var reply = await client.RequestAsync<GetServerTimeResponse>(new GetServerTimeRequest())
@@ -57,12 +57,12 @@ public class MessagingHostingTests
     public async Task Incomplete_config_fails_host_start_with_full_error_list()
     {
         var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings { DisableDefaults = true });
-        builder.Services.AddMessagingServer<HostedSession, Request, Response, Update>(
-            messaging => { },   // 아무 핸들러도 등록하지 않음
+        builder.Services.AddRpcServer<HostedSession, Request, Response, Update>(
+            rpc => { },   // 아무 핸들러도 등록하지 않음
             serverOptions: options => options.Port = 0);
         using var host = builder.Build();
 
-        var ex = Assert.ThrowsAsync<MessagingValidationException>(async () => await host.StartAsync())!;
+        var ex = Assert.ThrowsAsync<RpcValidationException>(async () => await host.StartAsync())!;
         Assert.That(ex.Message, Does.Contain("get_server_time"));
         Assert.That(ex.Message, Does.Contain("buy_item"));
     }

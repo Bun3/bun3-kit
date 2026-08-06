@@ -1,6 +1,6 @@
 using Bun3.Server.Abstractions;
-using Bun3.Server.Messaging;
-using Bun3.Server.Messaging.ControlMessages;
+using Bun3.Server.Rpc;
+using Bun3.Server.Rpc.ControlMessages;
 using Bun3.Server.Tests.GameProtocol;
 using Bun3.Server.Tests.Helpers;
 using Google.Protobuf;
@@ -10,7 +10,7 @@ using static Bun3.Server.Tests.Helpers.PacketTestHelper;
 namespace Bun3.Server.Tests;
 
 [TestFixture]
-public class MessagingClientTests
+public class RpcClientTests
 {
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(5);
 
@@ -28,10 +28,10 @@ public class MessagingClientTests
         public void OnClosed(IConnection connection, Exception? error) { }
     }
 
-    private static Task<MessagingClient<Request, Response, Update>> ConnectAsync(
-        ScriptedResponder responder, MessagingClientOptions? options = null)
+    private static Task<RpcClient<Request, Response, Update>> ConnectAsync(
+        ScriptedResponder responder, RpcClientOptions? options = null)
     {
-        return MessagingClient<Request, Response, Update>
+        return RpcClient<Request, Response, Update>
             .ConnectAsync(new InMemoryConnector(responder), options).AsTask();
     }
 
@@ -85,7 +85,7 @@ public class MessagingClientTests
     public async Task Silent_server_causes_TimeoutException()
     {
         var responder = new ScriptedResponder();   // 응답하지 않음
-        var client = await ConnectAsync(responder, new MessagingClientOptions
+        var client = await ConnectAsync(responder, new RpcClientOptions
         {
             RequestTimeout = TimeSpan.FromMilliseconds(200),
         });
@@ -112,7 +112,7 @@ public class MessagingClientTests
     public async Task Request_after_close_throws_immediately_not_after_timeout()
     {
         var responder = new ScriptedResponder();
-        var client = await ConnectAsync(responder, new MessagingClientOptions
+        var client = await ConnectAsync(responder, new RpcClientOptions
         {
             RequestTimeout = TimeSpan.FromSeconds(30),   // 타임아웃 경로로 새면 테스트가 초과로 실패
         });
@@ -131,7 +131,7 @@ public class MessagingClientTests
         var connector = new InMemoryConnector(responder);
         var received = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        var client = await MessagingClient<Request, Response, Update>.ConnectAsync(connector).AsTask();
+        var client = await RpcClient<Request, Response, Update>.ConnectAsync(connector).AsTask();
         client.OnUpdate<BroadcastedUpdate>(u => received.TrySetResult(u.Text));
 
         _ = connector.ServerConnection!.SendAsync(
@@ -145,7 +145,7 @@ public class MessagingClientTests
     {
         var responder = new ScriptedResponder { OnPacketReceived = RespondOk };
         var connector = new InMemoryConnector(responder);
-        var client = await MessagingClient<Request, Response, Update>.ConnectAsync(connector).AsTask();
+        var client = await RpcClient<Request, Response, Update>.ConnectAsync(connector).AsTask();
 
         _ = connector.ServerConnection!.SendAsync(
             Wrap(Channels.Update, new Update { Broadcasted = new BroadcastedUpdate { Text = "nobody listens" } }));
@@ -171,7 +171,7 @@ public class MessagingClientTests
                 Pong = new Pong { ClientTimeUnixMs = control.Ping.ClientTimeUnixMs },
             }));
         };
-        var client = await ConnectAsync(responder, new MessagingClientOptions
+        var client = await ConnectAsync(responder, new RpcClientOptions
         {
             PingInterval = TimeSpan.FromMilliseconds(100),
         });

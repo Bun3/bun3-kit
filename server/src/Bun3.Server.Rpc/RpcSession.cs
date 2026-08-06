@@ -6,20 +6,20 @@ using Bun3.Server.Core;
 using Google.Protobuf;
 using Microsoft.Extensions.Logging;
 
-namespace Bun3.Server.Messaging
+namespace Bun3.Server.Rpc
 {
     /// <summary>
     /// 메시징 계층의 세션 베이스. 원시 패킷 처리(OnPacketAsync)는 프레임워크가 소유하고,
     /// 게임은 OnSessionOpenedAsync/OnSessionClosedAsync 훅과 등록된 핸들러로만 참여한다.
     /// </summary>
-    public abstract class MessagingSession : Session
+    public abstract class RpcSession : Session
     {
-        private IMessagingRuntime? _runtime;
+        private IRpcRuntime? _runtime;
         private CancellationTokenSource? _watchdogCts;
         private long _lastReceivedTicksUtc;
 
         /// <summary>주어진 연결에 바인딩된 메시징 세션을 생성한다.</summary>
-        protected MessagingSession(IConnection connection) : base(connection) { }
+        protected RpcSession(IConnection connection) : base(connection) { }
 
         /// <summary>메시징 기본값: 핸들러 예외는 status=2 응답 + 세션 유지. 게임이 재정의 가능.</summary>
         protected override ErrorDecision OnHandlerError(Exception ex) => ErrorDecision.Continue;
@@ -65,13 +65,13 @@ namespace Bun3.Server.Messaging
             return OnSessionClosedAsync(error);
         }
 
-        internal void AttachRuntime(IMessagingRuntime runtime) => _runtime = runtime;
+        internal void AttachRuntime(IRpcRuntime runtime) => _runtime = runtime;
 
         internal ErrorDecision RaiseHandlerError(Exception ex) => OnHandlerError(ex);
 
-        private IMessagingRuntime RequireRuntime() =>
+        private IRpcRuntime RequireRuntime() =>
             _runtime ?? throw new InvalidOperationException(
-                "런타임 미부착 — MessagingSession은 MessagingServer를 통해서만 생성되어야 한다.");
+                "런타임 미부착 — RpcSession은 RpcServer를 통해서만 생성되어야 한다.");
 
         private void StartIdleWatchdog()
         {

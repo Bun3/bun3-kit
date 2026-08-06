@@ -1,7 +1,7 @@
 using Bun3.Server.Abstractions;
 using Bun3.Server.Core;
-using Bun3.Server.Messaging;
-using Bun3.Server.Messaging.ControlMessages;
+using Bun3.Server.Rpc;
+using Bun3.Server.Rpc.ControlMessages;
 using Bun3.Server.Tests.GameProtocol;
 using Bun3.Server.Tests.Helpers;
 using Google.Protobuf;
@@ -11,11 +11,11 @@ using static Bun3.Server.Tests.Helpers.PacketTestHelper;
 namespace Bun3.Server.Tests;
 
 [TestFixture]
-public class MessagingServerTests
+public class RpcServerTests
 {
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(5);
 
-    private sealed class TestSession : MessagingSession
+    private sealed class TestSession : RpcSession
     {
         public readonly TaskCompletionSource<Exception?> Closed =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -29,9 +29,9 @@ public class MessagingServerTests
         }
     }
 
-    private static MessagingConfig<TestSession> DefaultConfig()
+    private static RpcConfig<TestSession> DefaultConfig()
     {
-        var config = new MessagingConfig<TestSession>();
+        var config = new RpcConfig<TestSession>();
         config.OnRequest<GetServerTimeRequest, GetServerTimeResponse>(
             (s, req) => new ValueTask<Reply<GetServerTimeResponse>>(new GetServerTimeResponse { UnixMs = 123 }));
         config.OnRequest<BuyItemRequest, BuyItemResponse>((s, req) =>
@@ -43,11 +43,11 @@ public class MessagingServerTests
         return config;
     }
 
-    private static async Task<(MessagingServer<TestSession, Request, Response, Update> server, FakeTransport transport)>
-        StartAsync(MessagingServerOptions? options = null, MessagingConfig<TestSession>? config = null)
+    private static async Task<(RpcServer<TestSession, Request, Response, Update> server, FakeTransport transport)>
+        StartAsync(RpcServerOptions? options = null, RpcConfig<TestSession>? config = null)
     {
         var transport = new FakeTransport();
-        var server = new MessagingServer<TestSession, Request, Response, Update>(
+        var server = new RpcServer<TestSession, Request, Response, Update>(
             transport, conn => new TestSession(conn), config ?? DefaultConfig(), options);
         await server.StartAsync();
         return (server, transport);
@@ -201,13 +201,13 @@ public class MessagingServerTests
     [Test]
     public void Incomplete_config_fails_server_construction()
     {
-        var config = new MessagingConfig<TestSession>();  // 아무 핸들러 없음
-        Assert.Throws<MessagingValidationException>(() =>
-            new MessagingServer<TestSession, Request, Response, Update>(
+        var config = new RpcConfig<TestSession>();  // 아무 핸들러 없음
+        Assert.Throws<RpcValidationException>(() =>
+            new RpcServer<TestSession, Request, Response, Update>(
                 new FakeTransport(), conn => new TestSession(conn), config));
     }
 
-    private sealed class StrictSession : MessagingSession
+    private sealed class StrictSession : RpcSession
     {
         public readonly TaskCompletionSource<Exception?> Closed =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -227,12 +227,12 @@ public class MessagingServerTests
     public async Task OnHandlerError_override_can_close_instead_of_status2()
     {
         var transport = new FakeTransport();
-        var config = new MessagingConfig<StrictSession>();
+        var config = new RpcConfig<StrictSession>();
         config.OnRequest<GetServerTimeRequest, GetServerTimeResponse>(
             (s, req) => new ValueTask<Reply<GetServerTimeResponse>>(new GetServerTimeResponse()));
         config.OnRequest<BuyItemRequest, BuyItemResponse>(
             (s, req) => throw new InvalidOperationException("boom"));
-        var server = new MessagingServer<StrictSession, Request, Response, Update>(
+        var server = new RpcServer<StrictSession, Request, Response, Update>(
             transport, conn => new StrictSession(conn), config);
         await server.StartAsync();
         var conn = transport.Connect(1);
@@ -249,7 +249,7 @@ public class MessagingServerTests
     [Test]
     public async Task Idle_session_is_kicked_after_timeout()
     {
-        var (server, transport) = await StartAsync(new MessagingServerOptions
+        var (server, transport) = await StartAsync(new RpcServerOptions
         {
             IdleKickTimeout = TimeSpan.FromMilliseconds(200),
         });
@@ -261,7 +261,7 @@ public class MessagingServerTests
         await server.StopAsync();
     }
 
-    private sealed class OpenThrowsSession : MessagingSession
+    private sealed class OpenThrowsSession : RpcSession
     {
         public readonly TaskCompletionSource<Exception?> Closed =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -281,7 +281,7 @@ public class MessagingServerTests
     public async Task Throwing_OnSessionOpened_kicks_the_session()
     {
         var transport = new FakeTransport();
-        var config = new MessagingConfig<OpenThrowsSession>();
+        var config = new RpcConfig<OpenThrowsSession>();
         config.OnRequest<GetServerTimeRequest, GetServerTimeResponse>(
             (s, req) => new ValueTask<Reply<GetServerTimeResponse>>(new GetServerTimeResponse()));
         config.OnRequest<BuyItemRequest, BuyItemResponse>(
@@ -291,7 +291,7 @@ public class MessagingServerTests
         // server.Sessions.Single()은 빈 컬렉션을 볼 수 있다(SessionActorTests의
         // Kick_during_OnConnected_still_disconnects_cleanly와 동일한 패턴).
         OpenThrowsSession? session = null;
-        var server = new MessagingServer<OpenThrowsSession, Request, Response, Update>(
+        var server = new RpcServer<OpenThrowsSession, Request, Response, Update>(
             transport, conn => session = new OpenThrowsSession(conn), config);
         await server.StartAsync();
 

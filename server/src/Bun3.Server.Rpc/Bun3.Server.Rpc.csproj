@@ -4,13 +4,13 @@
     <TargetFramework>netstandard2.1</TargetFramework>
     <LangVersion>9.0</LangVersion>
     <Nullable>enable</Nullable>
-    <RootNamespace>Bun3.Server.Messaging</RootNamespace>
-    <PackageId>Bun3.Server.Messaging</PackageId>
+    <RootNamespace>Bun3.Server.Rpc</RootNamespace>
+    <PackageId>Bun3.Server.Rpc</PackageId>
     <Version>0.1.0</Version>
     <Authors>Bun3</Authors>
     <RepositoryUrl>https://github.com/Bun3/bun3-kit</RepositoryUrl>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <Description>protobuf 기반 타입 메시징 — 요청/응답(상태코드)·서버 푸시·기동 검증·클라이언트</Description>
+    <Description>protobuf 기반 타입 RPC — 요청/응답(상태코드)·서버 푸시·기동 검증·클라이언트. gRPC가 아닌 자체 경량 프로토콜(v0 패킷 전송 위 1바이트 채널)</Description>
   </PropertyGroup>
 
   <ItemGroup>

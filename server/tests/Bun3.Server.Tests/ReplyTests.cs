@@ -1,4 +1,4 @@
-using Bun3.Server.Messaging;
+using Bun3.Server.Rpc;
 using Bun3.Server.Tests.GameProtocol;
 using Google.Protobuf.Reflection;
 using NUnit.Framework;

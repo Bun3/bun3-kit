@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-option csharp_namespace = "Bun3.Server.Messaging.ControlMessages";
+option csharp_namespace = "Bun3.Server.Rpc.ControlMessages";
 
 package bun3.control;
 

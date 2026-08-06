@@ -1,4 +1,4 @@
-namespace Bun3.Server.Messaging
+namespace Bun3.Server.Rpc
 {
     /// <summary>패킷 첫 바이트의 채널 값. 0x10 이상은 예약(게임 커스텀/고빈도 채널).</summary>
     public static class Channels

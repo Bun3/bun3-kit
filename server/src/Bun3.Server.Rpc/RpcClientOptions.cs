@@ -1,9 +1,9 @@
 using System;
 
-namespace Bun3.Server.Messaging
+namespace Bun3.Server.Rpc
 {
-    /// <summary>MessagingClient의 동작을 조정하는 옵션.</summary>
-    public sealed class MessagingClientOptions
+    /// <summary>RpcClient의 동작을 조정하는 옵션.</summary>
+    public sealed class RpcClientOptions
     {
         /// <summary>요청별 응답 대기 기한. 초과 시 해당 요청만 TimeoutException.</summary>
         public TimeSpan RequestTimeout { get; set; } = TimeSpan.FromSeconds(10);

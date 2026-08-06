@@ -1,5 +1,5 @@
 using Bun3.Server.Abstractions;
-using Bun3.Server.Messaging;
+using Bun3.Server.Rpc;
 using Bun3.Server.Tests.GameProtocol;
 using Bun3.Server.Transport.Tcp;
 using NUnit.Framework;
@@ -7,11 +7,11 @@ using NUnit.Framework;
 namespace Bun3.Server.Tests;
 
 [TestFixture]
-public class MessagingE2ETests
+public class RpcE2ETests
 {
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(5);
 
-    private sealed class E2ESession : MessagingSession
+    private sealed class E2ESession : RpcSession
     {
         public E2ESession(IConnection connection) : base(connection) { }
 
@@ -19,9 +19,9 @@ public class MessagingE2ETests
             SendUpdateAsync(new BroadcastedUpdate { Text = "welcome" });
     }
 
-    private static MessagingConfig<E2ESession> Config()
+    private static RpcConfig<E2ESession> Config()
     {
-        var config = new MessagingConfig<E2ESession>();
+        var config = new RpcConfig<E2ESession>();
         config.OnRequest<GetServerTimeRequest, GetServerTimeResponse>(
             (s, req) => new ValueTask<Reply<GetServerTimeResponse>>(new GetServerTimeResponse { UnixMs = 777 }));
         config.OnRequest<BuyItemRequest, BuyItemResponse>((s, req) =>
@@ -31,25 +31,25 @@ public class MessagingE2ETests
         return config;
     }
 
-    private static async Task<(MessagingServer<E2ESession, Request, Response, Update> server, TcpTransportListener listener)>
+    private static async Task<(RpcServer<E2ESession, Request, Response, Update> server, TcpTransportListener listener)>
         StartServerAsync()
     {
         var listener = new TcpTransportListener(new TcpTransportOptions { Port = 0 });
-        var server = new MessagingServer<E2ESession, Request, Response, Update>(
+        var server = new RpcServer<E2ESession, Request, Response, Update>(
             listener, conn => new E2ESession(conn), Config());
         await server.StartAsync();
         return (server, listener);
     }
 
-    private static ValueTask<MessagingClient<Request, Response, Update>> ConnectClientAsync(
-        TcpTransportListener listener, MessagingClientOptions? options = null)
+    private static ValueTask<RpcClient<Request, Response, Update>> ConnectClientAsync(
+        TcpTransportListener listener, RpcClientOptions? options = null)
     {
         var connector = new TcpConnector(new TcpConnectorOptions
         {
             Host = "127.0.0.1",
             Port = listener.BoundPort!.Value,
         });
-        return MessagingClient<Request, Response, Update>.ConnectAsync(connector, options);
+        return RpcClient<Request, Response, Update>.ConnectAsync(connector, options);
     }
 
     [Test]
@@ -102,7 +102,7 @@ public class MessagingE2ETests
                 Host = "127.0.0.1",
                 Port = listener.BoundPort!.Value,
             });
-            var client = await MessagingClient<Request, Response, Update>.ConnectAsync(
+            var client = await RpcClient<Request, Response, Update>.ConnectAsync(
                 connector,
                 configure: c => c.OnUpdate<BroadcastedUpdate>(u => received.TrySetResult(u.Text)));
 

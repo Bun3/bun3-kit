@@ -3,24 +3,24 @@ using System.Collections.Concurrent;
 using System.Threading;
 using System.Threading.Tasks;
 using Bun3.Server.Abstractions;
-using Bun3.Server.Messaging.ControlMessages;
+using Bun3.Server.Rpc.ControlMessages;
 using Google.Protobuf;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
-namespace Bun3.Server.Messaging
+namespace Bun3.Server.Rpc
 {
     /// <summary>
     /// 타입 있는 요청/응답과 푸시 구독을 제공하는 클라이언트.
     /// 서버 판정은 Reply 값으로, 인프라 실패(타임아웃·연결 종료)는 예외로 구분된다.
     /// </summary>
-    public sealed class MessagingClient<TRequest, TResponse, TUpdate>
+    public sealed class RpcClient<TRequest, TResponse, TUpdate>
         where TRequest : class, IMessage<TRequest>, new()
         where TResponse : class, IMessage<TResponse>, new()
         where TUpdate : class, IMessage<TUpdate>, new()
     {
-        private readonly MessagingSchema<TRequest, TResponse, TUpdate> _schema;
-        private readonly MessagingClientOptions _options;
+        private readonly RpcSchema<TRequest, TResponse, TUpdate> _schema;
+        private readonly RpcClientOptions _options;
         private readonly ILogger _logger;
         private readonly ConcurrentDictionary<long, TaskCompletionSource<(int Status, IMessage? Payload)>> _pending =
             new ConcurrentDictionary<long, TaskCompletionSource<(int Status, IMessage? Payload)>>();
@@ -34,9 +34,9 @@ namespace Bun3.Server.Messaging
         private long _lastRttMs = -1;
         private volatile bool _closed;
 
-        private MessagingClient(MessagingClientOptions options, ILogger logger)
+        private RpcClient(RpcClientOptions options, ILogger logger)
         {
-            _schema = MessagingSchema<TRequest, TResponse, TUpdate>.Create();
+            _schema = RpcSchema<TRequest, TResponse, TUpdate>.Create();
             _options = options;
             _logger = logger;
         }
@@ -56,11 +56,11 @@ namespace Bun3.Server.Messaging
         /// <param name="logger">로거. null이면 무동작 로거.</param>
         /// <param name="configure">소켓이 열리기 전에 클라이언트에 적용할 설정(주로 OnUpdate 구독) — 접속 직후 서버 푸시의 유실을 막는다.</param>
         /// <param name="ct">연결 수립을 취소할 토큰.</param>
-        public static async ValueTask<MessagingClient<TRequest, TResponse, TUpdate>> ConnectAsync(
+        public static async ValueTask<RpcClient<TRequest, TResponse, TUpdate>> ConnectAsync(
             IConnector connector,
-            MessagingClientOptions? options = null,
+            RpcClientOptions? options = null,
             ILogger? logger = null,
-            Action<MessagingClient<TRequest, TResponse, TUpdate>>? configure = null,
+            Action<RpcClient<TRequest, TResponse, TUpdate>>? configure = null,
             CancellationToken ct = default)
         {
             if (connector == null)
@@ -68,8 +68,8 @@ namespace Bun3.Server.Messaging
                 throw new ArgumentNullException(nameof(connector));
             }
 
-            var client = new MessagingClient<TRequest, TResponse, TUpdate>(
-                options ?? new MessagingClientOptions(),
+            var client = new RpcClient<TRequest, TResponse, TUpdate>(
+                options ?? new RpcClientOptions(),
                 new SafeLogger(logger ?? NullLogger.Instance));
             if (client._options.UseSynchronizationContext)
             {
@@ -372,9 +372,9 @@ namespace Bun3.Server.Messaging
 
         private sealed class Handler : IConnectionHandler
         {
-            private readonly MessagingClient<TRequest, TResponse, TUpdate> _client;
+            private readonly RpcClient<TRequest, TResponse, TUpdate> _client;
 
-            public Handler(MessagingClient<TRequest, TResponse, TUpdate> client) => _client = client;
+            public Handler(RpcClient<TRequest, TResponse, TUpdate> client) => _client = client;
 
             public void OnConnected(IConnection connection) => _client._connection = connection;
 
