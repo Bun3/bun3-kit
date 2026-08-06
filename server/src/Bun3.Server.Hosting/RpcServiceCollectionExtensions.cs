@@ -29,25 +29,7 @@ public static class RpcServiceCollectionExtensions
     {
         ArgumentNullException.ThrowIfNull(configure);
 
-        var optionsBuilder = services.AddOptions<ServerOptions>()
-            .BindConfiguration(ServerOptions.SectionName);
-        if (serverOptions != null)
-        {
-            optionsBuilder.Configure(serverOptions);
-        }
-
-        services.AddSingleton(sp =>
-        {
-            var options = sp.GetRequiredService<IOptions<ServerOptions>>().Value;
-            return new TcpTransportListener(
-                new TcpTransportOptions
-                {
-                    Port = options.Port,
-                    MaxPacketSize = options.MaxPacketSize,
-                    Backlog = options.Backlog,
-                },
-                ServerServiceCollectionExtensions.ResolveLogger(sp));
-        });
+        services.AddServerTransport(serverOptions);
 
         services.AddSingleton(sp =>
         {
