@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Threading;
 using System.Threading.Tasks;
 using Bun3.Server.Abstractions;
 using Bun3.Server.Rpc;
@@ -8,36 +7,13 @@ using Bun3.Server.Rpc;
 namespace Bun3.Server.Players
 {
     /// <summary>
-    /// 현재/직전 디스패치(핸들러 호출)의 진행 상태를 추적하는 비제네릭 창구.
-    /// PlayersConfig의 핸들러 래핑과 PlayerRegistry의 중복 로그인 킥이 TSession/TPlayer
-    /// 제네릭 인자 없이도 세션의 진행 상태를 관찰하기 위해 쓴다.
-    /// 목적: 같은 세션이 방금 자신의 SignInAsync 호출(반드시 그 세션의 "첫" 디스패치 —
-    /// 재호출은 InvalidOperationException)로 새 계정을 만든 직후, 그 응답을 채 보내기도
-    /// 전에 다른 세션의 중복 로그인이 이 세션을 킥해 응답이 유실되는 경합을 피한다.
-    /// DispatchCount가 1보다 크면 그 첫 디스패치의 응답은 Session의 순차 처리 보장상
-    /// (다음 패킷은 이전 패킷의 OnPacketAsync가 SendAsync까지 전부 끝나야 디큐된다)
-    /// 이미 전송이 끝난 것이 결정적으로 보장되므로 그 경우엔 대기가 전혀 필요 없다.
-    /// </summary>
-    internal interface IDispatchSettlement
-    {
-        void MarkDispatchStart();
-        void MarkDispatchEnd();
-        Task? PendingDispatchTask { get; }
-
-        /// <summary>이 세션이 지금까지 시작한 디스패치 총수(현재 것 포함).</summary>
-        int DispatchCount { get; }
-    }
-
-    /// <summary>
     /// Player 수명주기가 붙은 세션 베이스. 반드시 PlayerRegistry.Wrap을 거친 팩토리로
     /// 생성해야 한다(레지스트리·허용 목록 부착).
     /// </summary>
-    public abstract class PlayerSession<TPlayer> : RpcSession, IDispatchSettlement where TPlayer : Player
+    public abstract class PlayerSession<TPlayer> : RpcSession where TPlayer : Player
     {
         private PlayerRegistry<TPlayer>? _registry;
         private HashSet<Type>? _unauthenticatedTypes;
-        private volatile TaskCompletionSource<bool>? _dispatchSettlement;
-        private int _dispatchCount;
 
         /// <summary>주어진 연결에 바인딩된 세션을 생성한다.</summary>
         protected PlayerSession(IConnection connection) : base(connection) { }
@@ -84,18 +60,6 @@ namespace Bun3.Server.Players
         }
 
         internal void SetPlayer(TPlayer? player) => Player = player;
-
-        void IDispatchSettlement.MarkDispatchStart()
-        {
-            Interlocked.Increment(ref _dispatchCount);
-            _dispatchSettlement = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        }
-
-        void IDispatchSettlement.MarkDispatchEnd() => _dispatchSettlement?.TrySetResult(true);
-
-        Task? IDispatchSettlement.PendingDispatchTask => _dispatchSettlement?.Task;
-
-        int IDispatchSettlement.DispatchCount => Volatile.Read(ref _dispatchCount);
 
         private PlayerRegistry<TPlayer> RequireRegistry() =>
             _registry ?? throw new InvalidOperationException(

@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -127,58 +126,8 @@ namespace Bun3.Server.Players
             finally
             {
                 stripe.Release();
-                if (kickAfterRelease != null)
-                {
-                    _ = KickAfterOwnResponseFlushesAsync(kickAfterRelease);
-                }
+                kickAfterRelease?.Kick();
             }
-        }
-
-        /// <summary>
-        /// 핸들러 반환 뒤에도 Rpc 계층(응답 조립+SendAsync, Players에서 훅 불가)이 몇 줄 더
-        /// 동기로 이어질 수 있는 구간을 덮는 유예 폭. 이 유예는 "그 세션의 첫 디스패치가
-        /// 아직 진행/정착 직후"인 경우에만 실행되므로(아래 DispatchCount 판별) 충분히
-        /// 넉넉하게 잡아도 무해하다.
-        /// </summary>
-        private static readonly TimeSpan ResponseFlushGrace = TimeSpan.FromMilliseconds(50);
-
-        /// <summary>
-        /// NewWins로 대체된 옛 세션을 킥한다.
-        ///
-        /// 세션은 Player별로 딱 한 번, 첫 디스패치(로그인 요청)에서만 SignInAsync를 호출할
-        /// 수 있다(재호출은 InvalidOperationException) — 즉 entry.Session으로 잡힐 수 있는
-        /// 시점은 항상 "그 세션의 첫 디스패치가 만든" 것이다. DispatchCount(IDispatchSettlement,
-        /// PlayersConfig가 채운다)가 1보다 크면, Session의 순차 처리 보장상(다음 패킷은 이전
-        /// 패킷의 OnPacketAsync가 SendAsync까지 완전히 끝나야 디큐된다) 그 첫 응답은 이미
-        /// 전송이 끝났음이 결정적으로 보장되므로 즉시 킥한다 — 순차 시나리오(옛 세션이 로그인
-        /// 이후 요청을 더 처리한 뒤 대체됨)는 지연이 전혀 없다.
-        ///
-        /// DispatchCount가 아직 1이면(동시 로그인 경합 — 막 만든 세션이 자신의 로그인 응답을
-        /// 보내는 중일 수 있다) 그 첫 핸들러가 반환할 때까지 기다린 뒤, 남은 Rpc 계층 꼬리
-        /// 구간에 짧게 양보한다.
-        /// </summary>
-        private static async Task KickAfterOwnResponseFlushesAsync(PlayerSession<TPlayer> session)
-        {
-            var tracker = (IDispatchSettlement)session;
-            if (tracker.DispatchCount > 1)
-            {
-                session.Kick();
-                return;
-            }
-
-            var pending = tracker.PendingDispatchTask;
-            if (pending != null && !pending.IsCompleted)
-            {
-                await pending.ConfigureAwait(false);
-            }
-
-            var deadline = Stopwatch.GetTimestamp() + (long)(Stopwatch.Frequency * ResponseFlushGrace.TotalSeconds);
-            while (Stopwatch.GetTimestamp() < deadline)
-            {
-                await Task.Yield();
-            }
-
-            session.Kick();
         }
 
         internal async ValueTask HandleSessionClosedAsync(PlayerSession<TPlayer> session)

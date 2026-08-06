@@ -238,6 +238,8 @@ public class PlayersTests
         await h.Server.StopAsync();
     }
 
+    /// <summary>동시 중복 로그인: 로더는 1회, 생존자는 정확히 1명.
+    /// 패자의 로그인 응답은 킥에 밀려 유실될 수 있다(실서비스 의미론 — 킥 사유 전달은 v2).</summary>
     [Test]
     public async Task Concurrent_same_key_logins_load_exactly_once()
     {
@@ -246,15 +248,45 @@ public class PlayersTests
         var connA = h.Transport.Connect(1);
         var connB = h.Transport.Connect(2);
 
-        var taskA = LoginAsync(connA, "a");
-        var taskB = LoginAsync(connB, "a");
+        var taskA = TryLoginAsync(connA, "a");
+        var taskB = TryLoginAsync(connB, "a");
         await Task.WhenAll(taskA, taskB).WaitAsync(Timeout);
 
         Assert.That(h.LoaderCalls, Is.EqualTo(1));
-        // 새 연결 승리 정책상 정확히 한 연결만 살아남는다 (승자는 순서에 따라 다름)
-        for (var i = 0; i < 50 && connA.IsOpen && connB.IsOpen; i++) await Task.Delay(20);
+
+        // 정확히 한 연결만 생존
+        for (var i = 0; i < 100 && connA.IsOpen && connB.IsOpen; i++) await Task.Delay(20);
         Assert.That(connA.IsOpen ^ connB.IsOpen, Is.True);
+
+        // 생존자는 정상 동작한다
+        var survivor = connA.IsOpen ? connA : connB;
+        var gold = await RoundtripAsync(survivor, new PlayersRequest { RequestId = 9, GetGold = new GetGoldRequest() });
+        Assert.That(gold.Status, Is.EqualTo(RpcStatus.Ok));
         await h.Server.StopAsync();
+    }
+
+    /// <summary>응답 수신 또는 연결 종료(응답 유실) 중 먼저 오는 쪽으로 끝나는 관대한 로그인.</summary>
+    private static async Task<PlayersResponse?> TryLoginAsync(FakeConnection conn, string device)
+    {
+        conn.ReceivePacket(Wrap(Channels.Request, new PlayersRequest { RequestId = 1, Login = new LoginRequest { DeviceId = device } }));
+        var deadline = DateTime.UtcNow + Timeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            if (conn.SentPackets.TryDequeue(out var packet) && packet[0] == Channels.Response)
+            {
+                // SendAsync는 Enqueue 다음에 SentSignal.Release()를 호출한다 — 큐를 직접
+                // 폴링해 짝 없이 뽑아가면 신호가 하나 밀려 이후 같은 연결의 RoundtripAsync가
+                // 그 잔여 신호로 조기 반환해 버린다. 방금 뽑은 패킷의 신호를 여기서 마저 비운다.
+                await conn.SentSignal.WaitAsync(Timeout);
+                return PlayersResponse.Parser.ParseFrom(packet.AsSpan(1).ToArray());
+            }
+            if (!conn.IsOpen)
+            {
+                return null;   // 킥으로 응답 유실 — 합법
+            }
+            await Task.Delay(10);
+        }
+        throw new TimeoutException("로그인 응답도 종료도 오지 않음");
     }
 
     [Test]
