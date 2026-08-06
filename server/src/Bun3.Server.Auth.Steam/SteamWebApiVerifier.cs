@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using System.Linq;
 using System.Net.Http;
 using System.Text.Json;
 using System.Threading;
@@ -45,8 +46,8 @@ namespace Bun3.Server.Auth.Steam
         public async ValueTask<AuthResult> VerifyAsync(string credential, CancellationToken ct = default)
         {
             var ticket = credential?.Trim() ?? string.Empty;
-            if (ticket.Length == 0 || !IsHex(ticket))
-                return AuthResult.Fail(AuthFailure.InvalidCredential, "ticket must be a hex string");
+            if (ticket.Length == 0 || !ticket.All(Uri.IsHexDigit))
+                return SteamAuthResult.Fail(AuthFailure.InvalidCredential, "ticket must be a hex string", 0);
 
             var url = Endpoint +
                       "?key=" + Uri.EscapeDataString(_webApiKey) +
@@ -87,16 +88,6 @@ namespace Bun3.Server.Auth.Steam
                 return SteamAuthResult.Fail(AuthFailure.Banned, "publisher banned", 0, steamId, ownerSteamId, vacBanned, publisherBanned);
 
             return SteamAuthResult.Success(steamId, ownerSteamId, vacBanned, publisherBanned);
-        }
-
-        private static bool IsHex(string value)
-        {
-            foreach (var c in value)
-            {
-                var isHex = (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
-                if (!isHex) return false;
-            }
-            return true;
         }
     }
 }

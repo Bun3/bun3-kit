@@ -135,19 +135,12 @@ namespace Bun3.Server.Auth.Steam
             var bytes = new byte[hex.Length / 2];
             for (var i = 0; i < bytes.Length; i++)
             {
-                var hi = HexValue(hex[i * 2]);
-                var lo = HexValue(hex[i * 2 + 1]);
-                if (hi < 0 || lo < 0) return false;
-                bytes[i] = (byte)((hi << 4) | lo);
+                if (!Uri.IsHexDigit(hex[i * 2]) || !Uri.IsHexDigit(hex[i * 2 + 1])) return false;
+                bytes[i] = (byte)((Uri.FromHex(hex[i * 2]) << 4) | Uri.FromHex(hex[i * 2 + 1]));
             }
 
             ticket = bytes;
             return true;
         }
-
-        private static int HexValue(char c) =>
-            c >= '0' && c <= '9' ? c - '0' :
-            c >= 'a' && c <= 'f' ? c - 'a' + 10 :
-            c >= 'A' && c <= 'F' ? c - 'A' + 10 : -1;
     }
 }
