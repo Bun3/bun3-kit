@@ -24,7 +24,8 @@ namespace Bun3.Server.Auth.Steam
         public string Provider => "steam";
 
         /// <summary>접속 승인 "이후" 도착한 무효화 통지(게임 중 밴, 티켓 취소) —
-        /// (SteamID64, EAuthSessionResponse). 게임이 구독해서 해당 플레이어를 킥한다.</summary>
+        /// (SteamID64, EAuthSessionResponse). 게임이 구독해서 해당 플레이어를 킥한다.
+        /// 타임아웃으로 이미 실패한 검증의 늦은 콜백에도 발화될 수 있다 — steamId 킥은 그 경우 무해한 no-op이다.</summary>
         public event Action<ulong, int>? SessionInvalidated;
 
         /// <summary>검증기를 생성한다. 델리게이트 누락은 즉시 거부(부팅 시 즉사).</summary>
@@ -42,11 +43,11 @@ namespace Bun3.Server.Auth.Steam
         public async ValueTask<AuthResult> VerifyAsync(string credential, CancellationToken ct = default)
         {
             if (!TryParseCredential(credential, out var steamId, out var ticket))
-                return AuthResult.Fail(AuthFailure.InvalidCredential, "credential must be \"steamId64:ticketHex\"");
+                return SteamAuthResult.Fail(AuthFailure.InvalidCredential, "credential must be \"steamId64:ticketHex\"", 0);
 
             var tcs = new TaskCompletionSource<AuthResult>(TaskCreationOptions.RunContinuationsAsynchronously);
             if (!_pending.TryAdd(steamId, tcs))
-                return AuthResult.Fail(AuthFailure.Rejected, "verification already pending for this steamId");
+                return SteamAuthResult.Fail(AuthFailure.Rejected, "verification already pending for this steamId", 0, steamId: steamId);
 
             int beginResult;
             try

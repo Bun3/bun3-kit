@@ -122,6 +122,17 @@ public class SteamWebApiVerifierTests
         Assert.That(result.PublisherBanned, Is.True);
     }
 
+    [Test]
+    public async Task Publisher_ban_passes_when_reject_disabled()
+    {
+        var (verifier, handler) = Create(o => o.RejectPublisherBanned = false);
+        handler.Respond = _ => FakeHandler.Json(PublisherBannedJson);
+
+        var result = (SteamAuthResult)await verifier.VerifyAsync("a1b2");
+        Assert.That(result.Succeeded, Is.True);
+        Assert.That(result.PublisherBanned, Is.True);    // 입장 판단용 플래그는 유지
+    }
+
     [TestCase("")]
     [TestCase("   ")]
     [TestCase("xyz!")]     // hex 아님
