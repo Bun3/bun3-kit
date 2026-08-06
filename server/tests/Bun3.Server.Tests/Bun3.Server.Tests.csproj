@@ -25,6 +25,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Bun3.Server.Auth\Bun3.Server.Auth.csproj" />
+    <ProjectReference Include="..\..\src\Bun3.Server.Auth.Steam\Bun3.Server.Auth.Steam.csproj" />
     <ProjectReference Include="..\..\src\Bun3.Server.Abstractions\Bun3.Server.Abstractions.csproj" />
     <ProjectReference Include="..\..\src\Bun3.Server.Core\Bun3.Server.Core.csproj" />
     <ProjectReference Include="..\..\src\Bun3.Server.Transport.Tcp\Bun3.Server.Transport.Tcp.csproj" />
