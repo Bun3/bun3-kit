@@ -125,11 +125,21 @@ namespace Bun3.Server.Rpc
                 return;
             }
 
+            var gate = session.OnGateRequest(requestCase.PayloadType);
+            if (gate != RpcStatus.Ok)
+            {
+                var gatedResponse = new TResponse();
+                _schema.RequestIdOfResponse.Accessor.SetValue(gatedResponse, requestId);
+                _schema.StatusOfResponse.Accessor.SetValue(gatedResponse, gate);
+                await SendAsync(session, Channels.Response, gatedResponse).ConfigureAwait(false);
+                return;
+            }
+
             int status;
             IMessage? responsePayload = null;
             if (!_registrations.TryGetValue(requestCase.PayloadType, out var registration))
             {
-                status = 1;   // 기동 검증상 불가 — 방어
+                status = RpcStatus.UnregisteredHandler;   // 기동 검증상 불가 — 방어
             }
             else
             {
@@ -153,7 +163,7 @@ namespace Bun3.Server.Rpc
                     Logger.LogError(ex,
                         "Session {SessionId}: handler exception on {Case}; replying status 2.",
                         session.Id, requestCase.Name);
-                    status = 2;
+                    status = RpcStatus.HandlerException;
                 }
             }
 

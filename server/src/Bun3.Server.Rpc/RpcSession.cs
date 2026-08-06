@@ -30,6 +30,13 @@ namespace Bun3.Server.Rpc
         /// <summary>세션 종료 훅 (v0 OnDisconnectedAsync 대체). 정상 종료면 error는 null.</summary>
         protected virtual ValueTask OnSessionClosedAsync(Exception? error) => default;
 
+        /// <summary>
+        /// 요청 디스패치 직전 호출되는 게이트. RpcStatus.Ok(0)이면 진행,
+        /// 비0이면 그 상태코드로 즉시 응답하고 핸들러에 도달하지 않는다.
+        /// Control 채널(Ping)은 게이트 대상이 아니다.
+        /// </summary>
+        protected internal virtual int OnGateRequest(Type requestType) => RpcStatus.Ok;
+
         /// <summary>서버 푸시. update는 게임 Update oneof의 케이스 타입이어야 한다.</summary>
         public ValueTask SendUpdateAsync(IMessage update) =>
             RequireRuntime().SendUpdateAsync(this, update);
