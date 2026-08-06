@@ -1,9 +1,9 @@
-using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using Bun3.Common.Network;
 using Bun3.Server.Abstractions;
+using Bun3.Server.Tests.Helpers;
 using Bun3.Server.Transport.Tcp;
 using NUnit.Framework;
 
@@ -13,33 +13,6 @@ namespace Bun3.Server.Tests;
 public class TcpTransportTests
 {
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(5);
-
-    private sealed class RecordingHandler : IConnectionHandler
-    {
-        public readonly TaskCompletionSource<IConnection> Connected =
-            new(TaskCreationOptions.RunContinuationsAsynchronously);
-        public readonly TaskCompletionSource<Exception?> Closed =
-            new(TaskCreationOptions.RunContinuationsAsynchronously);
-        public readonly ConcurrentQueue<byte[]> Packets = new();
-        public readonly SemaphoreSlim PacketSignal = new(0);
-        public readonly ConcurrentQueue<long> ConnectionIds = new();
-        public readonly SemaphoreSlim ConnectedSignal = new(0);
-
-        public void OnConnected(IConnection connection)
-        {
-            ConnectionIds.Enqueue(connection.Id);
-            ConnectedSignal.Release();
-            Connected.TrySetResult(connection);
-        }
-
-        public void OnPacket(IConnection connection, ReadOnlyMemory<byte> packet)
-        {
-            Packets.Enqueue(packet.ToArray());
-            PacketSignal.Release();
-        }
-
-        public void OnClosed(IConnection connection, Exception? error) => Closed.TrySetResult(error);
-    }
 
     private static async Task<(TcpTransportListener listener, RecordingHandler handler)> StartListenerAsync(
         int maxPacketSize = 1024 * 1024)

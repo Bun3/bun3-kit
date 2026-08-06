@@ -5,6 +5,7 @@ using Bun3.Server.Tests.GameProtocol;
 using Bun3.Server.Tests.Helpers;
 using Google.Protobuf;
 using NUnit.Framework;
+using static Bun3.Server.Tests.Helpers.PacketTestHelper;
 
 namespace Bun3.Server.Tests;
 
@@ -25,15 +26,6 @@ public class MessagingClientTests
             OnPacketReceived?.Invoke(connection, packet.ToArray());
 
         public void OnClosed(IConnection connection, Exception? error) { }
-    }
-
-    private static byte[] Wrap(byte channel, IMessage message)
-    {
-        var body = message.ToByteArray();
-        var packet = new byte[1 + body.Length];
-        packet[0] = channel;
-        body.CopyTo(packet, 1);
-        return packet;
     }
 
     private static Task<MessagingClient<Request, Response, Update>> ConnectAsync(
