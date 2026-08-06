@@ -21,6 +21,7 @@
     <ProjectReference Include="..\Bun3.Server.Core\Bun3.Server.Core.csproj" />
     <ProjectReference Include="..\Bun3.Server.Transport.Tcp\Bun3.Server.Transport.Tcp.csproj" />
     <ProjectReference Include="..\Bun3.Server.Rpc\Bun3.Server.Rpc.csproj" />
+    <ProjectReference Include="..\Bun3.Server.Players\Bun3.Server.Players.csproj" />
   </ItemGroup>
 
 </Project>
