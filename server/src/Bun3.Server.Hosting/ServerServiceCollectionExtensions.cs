@@ -30,20 +30,7 @@ public static class ServerServiceCollectionExtensions
         Action<ServerOptions>? configure = null)
         where TSession : Session
     {
-        var optionsBuilder = services.AddOptions<ServerOptions>()
-            .BindConfiguration(ServerOptions.SectionName);
-        if (configure != null)
-        {
-            optionsBuilder.Configure(configure);
-        }
-
-        services.AddSingleton(sp =>
-        {
-            var options = sp.GetRequiredService<IOptions<ServerOptions>>().Value;
-            return new TcpTransportListener(
-                new TcpTransportOptions { Port = options.Port, MaxPacketSize = options.MaxPacketSize, Backlog = options.Backlog },
-                ResolveLogger(sp));
-        });
+        services.AddServerTransport(configure);
 
         services.AddSingleton(sp =>
         {
@@ -69,4 +56,28 @@ public static class ServerServiceCollectionExtensions
     internal static ILogger ResolveLogger(IServiceProvider sp) =>
         sp.GetService<ILoggerFactory>()?.CreateLogger("Bun3.Server")
         ?? (ILogger)Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance;
+
+    /// <summary>ServerOptions("Bun3:Server" 바인딩 + 람다) 파이프라인과 TCP 리스너 싱글턴 등록 — 세 서버 확장의 공통 앞부분.</summary>
+    internal static void AddServerTransport(this IServiceCollection services, Action<ServerOptions>? serverOptions)
+    {
+        var optionsBuilder = services.AddOptions<ServerOptions>()
+            .BindConfiguration(ServerOptions.SectionName);
+        if (serverOptions != null)
+        {
+            optionsBuilder.Configure(serverOptions);
+        }
+
+        services.AddSingleton(sp =>
+        {
+            var options = sp.GetRequiredService<IOptions<ServerOptions>>().Value;
+            return new TcpTransportListener(
+                new TcpTransportOptions
+                {
+                    Port = options.Port,
+                    MaxPacketSize = options.MaxPacketSize,
+                    Backlog = options.Backlog,
+                },
+                ResolveLogger(sp));
+        });
+    }
 }
