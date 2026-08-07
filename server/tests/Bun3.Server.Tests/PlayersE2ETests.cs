@@ -1,5 +1,6 @@
 using Bun3.Server.Abstractions;
 using Bun3.Server.Auth;
+using Bun3.Server.Core;
 using Bun3.Server.Players;
 using Bun3.Server.Rpc;
 using Bun3.Server.Tests.PlayersProtocol;
@@ -89,14 +90,15 @@ public class PlayersE2ETests
             Assert.That(loaderCalls, Is.EqualTo(1));
 
             // ⑤ 같은 계정 두 번째 클라 → 기존 클라 킥
-            var client2Closed = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-            client2.Closed += _ => client2Closed.TrySetResult(true);
+            var client2Closed = new TaskCompletionSource<DisconnectInfo>(TaskCreationOptions.RunContinuationsAsynchronously);
+            client2.Closed += info => client2Closed.TrySetResult(info);
             var client3 = await Connect();
             var login3 = await client3.RequestAsync<LoginResponse>(new LoginRequest { DeviceId = "e2e" })
                 .AsTask().WaitAsync(Timeout);
             Assert.That(login3.Value!.IsReconnect, Is.True);
             Assert.That(login3.Value.Gold, Is.EqualTo(123));
-            await client2Closed.Task.WaitAsync(Timeout);
+            var kicked = await client2Closed.Task.WaitAsync(Timeout);
+            Assert.That(kicked.Code, Is.EqualTo(DisconnectCode.DuplicateLogin));   // "다른 기기에서 로그인" 사유 전달
             Assert.That(loaderCalls, Is.EqualTo(1));
             client3.Close();
         }

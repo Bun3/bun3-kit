@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using System.Threading.Tasks;
 using Bun3.Server.Rpc;
 using Google.Protobuf;
@@ -47,7 +48,6 @@ namespace Bun3.Server.Players
             return true;
         }
 
-        private bool _dirty;
         internal long LastTickAtTicksUtc;    // PlayerTicker 전용 — Attach 시 리셋
         internal long NextSaveAtTicksUtc;    // PlayerTicker 전용 — Attach 시 재무장
 
@@ -61,18 +61,23 @@ namespace Bun3.Server.Players
         /// 시 — 둘 다 dirty일 때만 — 호출된다. 유예 만료의 최종 지점은 OnRetiredAsync.</summary>
         protected internal virtual ValueTask OnSaveAsync() => default;
 
-        /// <summary>상태 변경 후 호출 — 다음 저장 주기의 대상으로 표시한다.</summary>
-        public void MarkDirty() => _dirty = true;
+        private int _dirtyVersion;
+        private int _savedVersion;
+
+        /// <summary>상태 변경 후 호출 — 다음 저장 주기의 대상으로 표시한다.
+        /// 저장이 진행 중일 때 호출해도 그 변경은 다음 저장 대상으로 살아남는다(버전 카운터).</summary>
+        public void MarkDirty() => Interlocked.Increment(ref _dirtyVersion);
 
         /// <summary>저장 대기 중인 변경이 있는지 여부.</summary>
-        public bool IsDirty => _dirty;
+        public bool IsDirty => Volatile.Read(ref _dirtyVersion) != Volatile.Read(ref _savedVersion);
 
         internal async ValueTask TrySaveAsync(ILogger logger)
         {
+            var capturedVersion = Volatile.Read(ref _dirtyVersion);
             try
             {
                 await OnSaveAsync().ConfigureAwait(false);
-                _dirty = false;
+                Volatile.Write(ref _savedVersion, capturedVersion);   // 저장 중 MarkDirty는 버전이 앞서 dirty 유지
             }
             catch (Exception ex)
             {
