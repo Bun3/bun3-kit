@@ -38,6 +38,7 @@ public static class RpcServiceCollectionExtensions
             var rpcServerOptions = new RpcServerOptions();
             var options = sp.GetRequiredService<IOptions<ServerOptions>>().Value;
             rpcServerOptions.MaxQueuedPackets = options.MaxQueuedPacketsPerSession;
+            rpcServerOptions.SlowWorkWarning = options.SlowWorkWarning;
             rpcOptions?.Invoke(rpcServerOptions);
 
             TSession Factory(IConnection connection) =>

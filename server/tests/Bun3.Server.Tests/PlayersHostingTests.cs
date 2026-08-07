@@ -107,4 +107,42 @@ public class PlayersHostingTests
         await player.Retired.Task.WaitAsync(Timeout);
         Assert.That(registry.Players, Is.Empty);
     }
+
+    [Test]
+    public async Task AddPlayerServer_starts_tick_loop_and_runs_registered_jobs()
+    {
+        var jobRuns = 0;
+        var builder = Host.CreateApplicationBuilder();
+        builder.Configuration["Bun3:Server:Port"] = "0";
+        builder.Services.AddPlayerServer<HostSession, HostPlayer, PlayersRequest, PlayersResponse, PlayersUpdate>(
+            loader: (_, _) => new ValueTask<HostPlayer>(new HostPlayer()),
+            configure: players =>
+            {
+                players.OnRequestUnauthenticated<LoginRequest, LoginResponse>(async (s, req) =>
+                {
+                    var result = await s.SignInAsync($"guest:{req.DeviceId}");
+                    return new LoginResponse { Gold = result.Player.Gold, IsReconnect = result.IsReconnect };
+                });
+                players.OnRequest<AddGoldRequest, AddGoldResponse>((s, req) =>
+                {
+                    s.Player!.Gold += req.Amount;
+                    return new ValueTask<Reply<AddGoldResponse>>(new AddGoldResponse { Gold = s.Player.Gold });
+                });
+                players.OnRequest<GetGoldRequest, GetGoldResponse>((s, req) =>
+                    new ValueTask<Reply<GetGoldResponse>>(new GetGoldResponse { Gold = s.Player!.Gold }));
+            },
+            ticking: o => o.TickInterval = TimeSpan.FromMilliseconds(20),
+            jobs: loop => loop.Every(TimeSpan.FromMilliseconds(50), _ =>
+            {
+                Interlocked.Increment(ref jobRuns);
+                return default;
+            }, "test-job"));
+
+        using var host = builder.Build();
+        await host.StartAsync();
+        await Task.Delay(400);
+        await host.StopAsync();
+
+        Assert.That(jobRuns, Is.GreaterThanOrEqualTo(3), "AddPlayerServer만으로 틱 루프가 돌고 jobs가 실행된다");
+    }
 }
