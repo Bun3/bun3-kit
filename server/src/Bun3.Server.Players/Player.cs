@@ -11,7 +11,8 @@ namespace Bun3.Server.Players
     /// 클래스에 둔다. 훅들은 레지스트리의 계정 키 스트라이프 락 안에서 실행되므로
     /// 훅 안에서 SignInAsync/Kick을 재호출하면 안 된다(교착).
     /// 킥된 옛 세션의 잔여 핸들러가 소유권 이전 직후 잠시 같은 Player를 볼 수 있다 —
-    /// 저장 지점은 OnRetiredAsync 하나로 고정하는 이유다.
+    /// PlayerTicker가 틱/저장 실행 직전에 소유권을 재확인하는 이유다. 저장 지점은
+    /// 셋: 주기 스윕·detach(둘 다 dirty일 때만)와 은퇴(OnRetiredAsync, dirty 무관).
     /// </summary>
     public abstract class Player
     {
@@ -56,8 +57,8 @@ namespace Bun3.Server.Players
         /// 제약은 핸들러와 동일: 짧게, 자기/타 세션 완료를 동기 대기하지 말 것.</summary>
         protected internal virtual ValueTask OnTickAsync(TimeSpan delta) => default;
 
-        /// <summary>저장 훅 — 게임이 DB 쓰기를 구현한다. 주기 스윕(dirty일 때)과
-        /// 연결 끊김(detach) 시 호출된다. 유예 만료의 최종 지점은 OnRetiredAsync.</summary>
+        /// <summary>저장 훅 — 게임이 DB 쓰기를 구현한다. 주기 스윕과 연결 끊김(detach)
+        /// 시 — 둘 다 dirty일 때만 — 호출된다. 유예 만료의 최종 지점은 OnRetiredAsync.</summary>
         protected internal virtual ValueTask OnSaveAsync() => default;
 
         /// <summary>상태 변경 후 호출 — 다음 저장 주기의 대상으로 표시한다.</summary>

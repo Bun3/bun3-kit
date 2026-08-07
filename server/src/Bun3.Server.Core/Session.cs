@@ -134,7 +134,7 @@ namespace Bun3.Server.Core
                     await _signal.WaitAsync().ConfigureAwait(false);
                     if (_closed)
                     {
-                        break; // 종료 후 잔여 패킷은 처리하지 않는다
+                        break; // 종료 후 잔여 항목(패킷·Post 작업)은 처리하지 않는다
                     }
 
                     var dequeued = _inbox.TryDequeue(out var item);
