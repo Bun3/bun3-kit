@@ -21,20 +21,24 @@ namespace Bun3.Server.Core
         private readonly ITransportListener _transport;
         private readonly ILogger _logger;
         private readonly int _maxQueuedPackets;
+        private readonly TimeSpan _slowWorkWarning;
         private readonly ConcurrentDictionary<long, SessionEntry> _sessions =
             new ConcurrentDictionary<long, SessionEntry>();
         private readonly Handler _handler;
         private volatile bool _running;
 
-        /// <summary>서버 베이스를 구성한다. transport는 시작 시 handler를 바인딩받는다.</summary>
+        /// <summary>서버 베이스를 구성한다. transport는 시작 시 handler를 바인딩받는다.
+        /// slowWorkWarning: 세션 큐 항목이 이 시간을 넘기면 경고 로그(null=1초, 0 이하=끔).</summary>
         protected ServerBase(
             ITransportListener transport,
             ILogger? logger = null,
-            int maxQueuedPackets = 256)
+            int maxQueuedPackets = 256,
+            TimeSpan? slowWorkWarning = null)
         {
             _transport = transport ?? throw new ArgumentNullException(nameof(transport));
             _logger = new SafeLogger(logger ?? NullLogger.Instance);
             _maxQueuedPackets = maxQueuedPackets;
+            _slowWorkWarning = slowWorkWarning ?? TimeSpan.FromSeconds(1);
             _handler = new Handler(this);
         }
 
@@ -96,7 +100,7 @@ namespace Bun3.Server.Core
                 return;
             }
 
-            session.Initialize(_logger, _maxQueuedPackets);
+            session.Initialize(_logger, _maxQueuedPackets, _slowWorkWarning);
             var entry = new SessionEntry(session);
             _sessions[connection.Id] = entry;
             entry.BindRunTask(session.RunAsync());

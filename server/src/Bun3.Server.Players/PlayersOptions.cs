@@ -20,5 +20,11 @@ namespace Bun3.Server.Players
 
         /// <summary>중복 로그인 처리 정책.</summary>
         public DuplicateLoginPolicy DuplicatePolicy { get; set; } = DuplicateLoginPolicy.NewWins;
+
+        /// <summary>접속 중 Player의 OnTickAsync 호출 주기.</summary>
+        public TimeSpan PlayerTickInterval { get; set; } = TimeSpan.FromSeconds(1);
+
+        /// <summary>dirty Player의 주기 저장 간격 — 크래시 시 손실 상한.</summary>
+        public TimeSpan SaveInterval { get; set; } = TimeSpan.FromSeconds(30);
     }
 }

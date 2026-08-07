@@ -29,6 +29,7 @@ namespace Bun3.Server.Players
 
         private readonly Func<string, ValueTask<TPlayer>> _loader;
         private readonly TimeSpan _gracePeriod;
+        private readonly TimeSpan _saveInterval;
         private readonly DuplicateLoginPolicy _duplicatePolicy;
         private readonly ILogger _logger;
         private readonly ConcurrentDictionary<string, Entry> _entries =
@@ -48,6 +49,7 @@ namespace Bun3.Server.Players
             _loader = loader ?? throw new ArgumentNullException(nameof(loader));
             var effectiveOptions = options ?? new PlayersOptions();
             _gracePeriod = effectiveOptions.GracePeriod;   // 생성 시점 스냅샷 — 이후 옵션 변이는 무시
+            _saveInterval = effectiveOptions.SaveInterval;
             _duplicatePolicy = effectiveOptions.DuplicatePolicy;
             _logger = new SafeLogger(logger ?? NullLogger.Instance);
             _stripes = new SemaphoreSlim[StripeCount];
@@ -157,6 +159,11 @@ namespace Bun3.Server.Players
                 player.CurrentSession = null;
                 await SafeHookAsync(() => player.OnDetachedAsync(), "OnDetachedAsync").ConfigureAwait(false);
 
+                if (player.IsDirty)
+                {
+                    await player.TrySaveAsync(_logger).ConfigureAwait(false);   // detach 즉시 저장 → 유예 중 = 항상 저장됨
+                }
+
                 if (_gracePeriod <= TimeSpan.Zero)
                 {
                     _entries.TryRemove(accountKey, out _);
@@ -205,6 +212,9 @@ namespace Bun3.Server.Players
         {
             entry.Session = session;
             entry.Player.CurrentSession = session;
+            var now = DateTime.UtcNow.Ticks;
+            entry.Player.LastTickAtTicksUtc = now;                          // delta 리셋 — 오프라인 구간 미합산
+            entry.Player.NextSaveAtTicksUtc = now + _saveInterval.Ticks;    // 저장 주기 재무장
             session.SetPlayer(entry.Player);
         }
 

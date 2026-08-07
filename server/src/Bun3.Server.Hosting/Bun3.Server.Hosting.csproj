@@ -6,7 +6,7 @@
     <Nullable>enable</Nullable>
     <RootNamespace>Bun3.Server.Hosting</RootNamespace>
     <PackageId>Bun3.Server.Hosting</PackageId>
-    <Version>0.2.0</Version>
+    <Version>0.3.0</Version>
     <Authors>Bun3</Authors>
     <RepositoryUrl>https://github.com/Bun3/bun3-kit</RepositoryUrl>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
@@ -22,6 +22,7 @@
     <ProjectReference Include="..\Bun3.Server.Transport.Tcp\Bun3.Server.Transport.Tcp.csproj" />
     <ProjectReference Include="..\Bun3.Server.Rpc\Bun3.Server.Rpc.csproj" />
     <ProjectReference Include="..\Bun3.Server.Players\Bun3.Server.Players.csproj" />
+    <ProjectReference Include="..\Bun3.Server.Ticking\Bun3.Server.Ticking.csproj" />
   </ItemGroup>
 
 </Project>

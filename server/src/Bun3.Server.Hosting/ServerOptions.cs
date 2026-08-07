@@ -20,4 +20,7 @@ public sealed class ServerOptions
 
     /// <summary>종료 시 세션 소비 루프 종료를 기다리는 시간.</summary>
     public TimeSpan DrainTimeout { get; set; } = TimeSpan.FromSeconds(5);
+
+    /// <summary>세션 큐 항목(핸들러·Post 작업)이 이 시간을 넘기면 경고 로그. 0 이하 = 끔.</summary>
+    public TimeSpan SlowWorkWarning { get; set; } = TimeSpan.FromSeconds(1);
 }

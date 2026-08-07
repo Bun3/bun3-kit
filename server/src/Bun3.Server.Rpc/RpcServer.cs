@@ -32,7 +32,7 @@ namespace Bun3.Server.Rpc
             ILogger? logger = null)
             // options는 base(...) 인자 평가 시 한 번만 기본값으로 채워지고(단일 평가),
             // 본문에서도 같은(이제 non-null) 값을 재사용한다.
-            : base(transport, logger, (options ??= new RpcServerOptions()).MaxQueuedPackets)
+            : base(transport, logger, (options ??= new RpcServerOptions()).MaxQueuedPackets, options.SlowWorkWarning)
         {
             _sessionFactory = sessionFactory ?? throw new ArgumentNullException(nameof(sessionFactory));
             _runtime = new RpcRuntime<TSession, TRequest, TResponse, TUpdate>(
