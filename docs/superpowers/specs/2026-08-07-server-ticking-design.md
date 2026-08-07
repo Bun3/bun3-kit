@@ -19,6 +19,7 @@ idlez 패턴(전역 `Run()` 루프 + 플레이어별 루프/세마포어 + 30초
 | 동시성 모델 | **A안** — 공유 틱 루프 1개 + Player 작업은 세션 액터로 포스팅(락 제로). idlez식 플레이어별 루프/세마포어(B안), 게임 책임(C안)은 기각 — CLAUDE.md 프레임워크-우선 원칙 |
 | 느린 작업 대책 | **감시 로그(기본 켜짐), 강제 중단 없음** — WaitAsync식 포기는 버려진 작업과 다음 핸들러가 같은 Player를 동시에 만져 직렬화 보장을 깨므로 기각. 협조적 취소/킥 정책은 v2 |
 | 시계 | **TimeProvider 채택** (`Microsoft.Bcl.TimeProvider`, ns2.0 호환) — DailyAt 결정적 테스트 |
+| 시간대 | **UTC 전용** (사용자 결정 — 다중 시간대 비희망). idlez의 `world.utc_offset_hours`(월드별 지역 시간대 인프라, 실제로는 단일 월드 운용)는 일반화하지 않는다. DailyAt은 UTC 시각만 받는다 |
 
 ## 2. 패키지 구조와 버전
 
@@ -54,10 +55,11 @@ loop:
   가짜 시계로 전진 가능.
 - **Every(interval, job, name?)**: 잡별 nextAt — 지났으면 실행, `nextAt += interval`.
   job은 `Func<TimeSpan, ValueTask>` — delta = 이 잡의 지난 실행 이후 실제 경과.
-- **DailyAt(timeOfDay, utcOffset, job, name?)**: 다음 발생 시각 계산(오늘 남았으면
-  오늘, 지났으면 내일). **놓친 발생 캐치업 없음** — 서버가 꺼져 있던 사이의 리셋은
-  발화하지 않는다. "이 플레이어가 오늘 리셋을 받았나"는 게임 데이터 몫
-  (§8 권장: idlez `day_reset_at` 패턴). `TimeOnly`는 net6+라 `TimeSpan` 사용.
+- **DailyAt(timeOfDay, job, name?)**: 다음 발생 시각 계산(오늘 남았으면 오늘,
+  지났으면 내일). **UTC 전용** — 지역별 시각이 필요하면 게임이 환산해 넘긴다.
+  **놓친 발생 캐치업 없음** — 서버가 꺼져 있던 사이의 리셋은 발화하지 않는다.
+  "이 플레이어가 오늘 리셋을 받았나"는 게임 데이터 몫(§8 권장: idlez
+  `day_reset_at` 패턴). `TimeOnly`는 net6+라 `TimeSpan` 사용.
 - 등록은 **Start 전에만** — 이후 호출은 InvalidOperationException(부팅 검증 정신).
 - `Start()` / `Task StopAsync()` — 정지는 진행 중 틱 완료까지 대기.
 - 잡은 루프에서 순차 실행 — 짧아야 한다(문서화). 무거운 작업은 잡 안에서 게임이
@@ -145,7 +147,7 @@ PlayerTicker 잡 (PlayerTickInterval마다, 틱 루프 스레드):
 AddPlayerServer<...>(loader, configure,
     serverOptions: ..., playersOptions: ...,
     ticking: o => o.TickInterval = ...,   // 신규(선택)
-    jobs: loop => loop.DailyAt(TimeSpan.FromHours(5), TimeSpan.FromHours(9), ResetDaily));  // 신규(선택)
+    jobs: loop => loop.DailyAt(TimeSpan.FromHours(20), ResetDaily));  // 신규(선택) — UTC 20:00 = KST 05:00
 ```
 
 - TickLoop 싱글턴 + PlayerTicker 자동 등록 — **옵션 없이도 틱+주기 저장이 기본
@@ -157,7 +159,7 @@ AddPlayerServer<...>(loader, configure,
 
 | 대상 | 케이스 |
 |---|---|
-| TickLoop | Every 실행+delta(짧은 실간격), 잡 예외 격리(한 잡 throw → 다른 잡 계속+로그), Start 후 등록 예외, StopAsync 진행 중 틱 완료 대기, DailyAt 다음 발생 — 오늘 남음/지남(내일)/오프셋 자정 경계(FakeTimeProvider), 캐치업 없음 |
+| TickLoop | Every 실행+delta(짧은 실간격), 잡 예외 격리(한 잡 throw → 다른 잡 계속+로그), Start 후 등록 예외, StopAsync 진행 중 틱 완료 대기, DailyAt 다음 발생 — 오늘 남음/지남(내일)/정확히 같음(전진)/비UTC now 정규화, 캐치업 없음 |
 | Session.Post | 패킷과 순서 인터리브 보장, 닫힌 세션 false, 큐 상한 false, 작업 예외 → 로그+세션 생존 |
 | 감시 | threshold 초과 → 경고 로그 1회, 통과 → 무로그 (threshold 수십 ms) |
 | Player 틱 | 세션 액터에서 실행(재진입 카운터로 동시 실행 없음 검증), 유예 중 스킵, 재바인딩 후 재개+delta 리셋, NewWins 직후 옛 세션 포스트 스킵 |

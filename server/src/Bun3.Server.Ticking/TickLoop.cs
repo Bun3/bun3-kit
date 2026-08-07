@@ -84,10 +84,11 @@ namespace Bun3.Server.Ticking
                 firstAt: lastRunAt + interval));
         }
 
-        /// <summary>매일 지정 시각(utcOffset 기준 하루 중 시각)에 발화하는 잡을 등록한다.
+        /// <summary>매일 지정 시각(UTC 기준 하루 중 시각)에 발화하는 잡을 등록한다.
+        /// 시간대는 UTC 하나만 지원한다 — 지역별 시각이 필요하면 게임이 환산해서 넘긴다.
         /// 서버가 꺼져 있던 사이의 발생은 캐치업하지 않는다 — "오늘 리셋을 받았나"는
         /// 게임 데이터로 판정할 것(스펙 §8 권장 패턴).</summary>
-        public void DailyAt(TimeSpan timeOfDay, TimeSpan utcOffset, Func<ValueTask> job, string? name = null)
+        public void DailyAt(TimeSpan timeOfDay, Func<ValueTask> job, string? name = null)
         {
             if (timeOfDay < TimeSpan.Zero || timeOfDay >= TimeSpan.FromHours(24))
             {
@@ -99,17 +100,17 @@ namespace Bun3.Server.Ticking
             _jobs.Add(new Job(
                 name ?? string.Format(CultureInfo.InvariantCulture, "daily-{0:hh\\:mm}", timeOfDay),
                 run: _ => job(),
-                advance: (now, _) => NextDailyOccurrence(now, timeOfDay, utcOffset),
-                firstAt: NextDailyOccurrence(_timeProvider.GetUtcNow(), timeOfDay, utcOffset)));
+                advance: (now, _) => NextDailyOccurrence(now, timeOfDay),
+                firstAt: NextDailyOccurrence(_timeProvider.GetUtcNow(), timeOfDay)));
         }
 
-        /// <summary>다음 발생 시각을 계산한다 — nowUtc "이후"의 첫 (utcOffset 기준 timeOfDay).
+        /// <summary>다음 발생 시각(UTC)을 계산한다 — nowUtc "이후"의 첫 timeOfDay.
         /// 정확히 발생 시각과 같으면 다음날로 전진한다(중복 발화 방지).</summary>
-        public static DateTimeOffset NextDailyOccurrence(DateTimeOffset nowUtc, TimeSpan timeOfDay, TimeSpan utcOffset)
+        public static DateTimeOffset NextDailyOccurrence(DateTimeOffset nowUtc, TimeSpan timeOfDay)
         {
-            var local = nowUtc.ToOffset(utcOffset);
-            var todayAt = new DateTimeOffset(local.Date, utcOffset) + timeOfDay;
-            return (todayAt > local ? todayAt : todayAt.AddDays(1)).ToUniversalTime();
+            var utc = nowUtc.ToUniversalTime();
+            var todayAt = new DateTimeOffset(utc.Date, TimeSpan.Zero) + timeOfDay;
+            return todayAt > utc ? todayAt : todayAt.AddDays(1);
         }
 
         /// <summary>루프를 시작한다. 1회만 호출 가능.</summary>

@@ -58,7 +58,7 @@ public class TickLoopTests
         {
             Assert.Throws<InvalidOperationException>(() => loop.Every(TimeSpan.FromSeconds(1), _ => default));
             Assert.Throws<InvalidOperationException>(() =>
-                loop.DailyAt(TimeSpan.FromHours(5), TimeSpan.Zero, () => default));
+                loop.DailyAt(TimeSpan.FromHours(5), () => default));
         }
         finally
         {
@@ -86,18 +86,17 @@ public class TickLoopTests
         Assert.That(completed, Is.GreaterThanOrEqualTo(1));   // 진행 중이던 잡이 끝난 뒤에 정지했다
     }
 
-    // NextDailyOccurrence — 순수 함수 결정적 검증 (가짜 시계 불필요)
-    [TestCase("2026-01-15T02:00:00+00:00", 5, 0, "2026-01-15T05:00:00+00:00")]   // 오늘 아직 안 지남
-    [TestCase("2026-01-15T06:00:00+00:00", 5, 0, "2026-01-16T05:00:00+00:00")]   // 오늘 지남 → 내일
-    [TestCase("2026-01-14T21:00:00+00:00", 5, 9, "2026-01-15T20:00:00+00:00")]   // KST 06:00 → 다음 KST 05:00
-    [TestCase("2026-01-15T20:00:00+00:00", 5, 9, "2026-01-16T20:00:00+00:00")]   // 정확히 발생 시각 → 다음날 (전진 보장)
+    // NextDailyOccurrence — 순수 함수 결정적 검증 (가짜 시계 불필요, UTC 전용)
+    [TestCase("2026-01-15T02:00:00+00:00", 5, "2026-01-15T05:00:00+00:00")]   // 오늘 아직 안 지남
+    [TestCase("2026-01-15T06:00:00+00:00", 5, "2026-01-16T05:00:00+00:00")]   // 오늘 지남 → 내일
+    [TestCase("2026-01-15T05:00:00+00:00", 5, "2026-01-16T05:00:00+00:00")]   // 정확히 발생 시각 → 다음날 (전진 보장)
+    [TestCase("2026-01-15T05:00:00+09:00", 20, "2026-01-15T20:00:00+00:00")]  // now가 비UTC 오프셋이어도 UTC로 정규화
     public void NextDailyOccurrence_computes_next_fire_time(
-        string nowIso, int hourOfDay, int offsetHours, string expectedIso)
+        string nowIso, int hourOfDay, string expectedIso)
     {
         var next = TickLoop.NextDailyOccurrence(
             DateTimeOffset.Parse(nowIso),
-            TimeSpan.FromHours(hourOfDay),
-            TimeSpan.FromHours(offsetHours));
+            TimeSpan.FromHours(hourOfDay));
 
         Assert.That(next, Is.EqualTo(DateTimeOffset.Parse(expectedIso)));
     }
@@ -114,7 +113,7 @@ public class TickLoopTests
 
         var fired = 0;
         var loop = new TickLoop(new TickingOptions { TickInterval = TimeSpan.FromMilliseconds(20) });
-        loop.DailyAt(timeOfDay, TimeSpan.Zero, () =>
+        loop.DailyAt(timeOfDay, () =>
         {
             Interlocked.Increment(ref fired);
             return default;
