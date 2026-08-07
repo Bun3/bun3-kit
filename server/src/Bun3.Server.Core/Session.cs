@@ -57,6 +57,10 @@ namespace Bun3.Server.Core
         /// <summary>서버 주도로 연결을 끊는다. 전송의 OnClosed 통지를 거쳐 세션이 정리된다.</summary>
         public void Kick() => Connection.Close();
 
+        /// <summary>사유 코드와 함께 연결을 끊는다. Core는 와이어 전달을 모르므로 기본은
+        /// 사유 없는 킥과 동일 — Rpc 계층(RpcSession)이 재정의해 Disconnect를 best-effort 송신한다.</summary>
+        public virtual void Kick(int reasonCode) => Kick();
+
         /// <summary>
         /// 세션 액터 큐에 작업을 주입한다 — 패킷 처리와 같은 줄에서 순차 실행되므로
         /// 핸들러와 같은 상태를 락 없이 만질 수 있다. 세션이 닫혔거나 큐가 상한이면
@@ -101,7 +105,7 @@ namespace Bun3.Server.Core
                 Interlocked.Decrement(ref _queuedCount);
                 _logger.LogWarning(
                     "Session {SessionId}: inbox overflow (>{MaxQueuedPackets}); kicking.", Id, _maxQueuedPackets);
-                Kick();
+                Kick(DisconnectCode.QueueOverflow);
                 return;
             }
 

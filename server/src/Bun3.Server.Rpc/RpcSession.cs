@@ -3,6 +3,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Bun3.Server.Abstractions;
 using Bun3.Server.Core;
+using Bun3.Server.Rpc.ControlMessages;
 using Google.Protobuf;
 using Microsoft.Extensions.Logging;
 
@@ -17,6 +18,7 @@ namespace Bun3.Server.Rpc
         private IRpcRuntime? _runtime;
         private CancellationTokenSource? _watchdogCts;
         private long _lastReceivedTicksUtc;
+        private int _disconnectSent;
 
         /// <summary>주어진 연결에 바인딩된 메시징 세션을 생성한다.</summary>
         protected RpcSession(IConnection connection) : base(connection) { }
@@ -40,6 +42,38 @@ namespace Bun3.Server.Rpc
         /// <summary>서버 푸시. update는 게임 Update oneof의 케이스 타입이어야 한다.</summary>
         public ValueTask SendUpdateAsync(IMessage update) =>
             RequireRuntime().SendUpdateAsync(this, update);
+
+        /// <summary>사유 코드와 함께 킥한다 — Disconnect{code}를 best-effort 송신(1초 상한,
+        /// 예외 무시, 최초 1회만) 후 연결을 닫는다. 멱등.</summary>
+        public override void Kick(int reasonCode)
+        {
+            if (Interlocked.Exchange(ref _disconnectSent, 1) != 0)
+            {
+                // 사유는 이미 송신 중 — 그 작업의 finally가 닫기를 보장한다(최대 1초 상한).
+                // 여기서 raw Kick()으로 즉시 닫으면 아직 플러시 중인 송신을 끊어버릴 수 있다.
+                return;
+            }
+
+            _ = SendDisconnectThenCloseAsync(reasonCode);
+        }
+
+        private async Task SendDisconnectThenCloseAsync(int reasonCode)
+        {
+            try
+            {
+                var control = new Control { Disconnect = new Disconnect { Code = reasonCode } };
+                var send = SendAsync(PacketWriter.Wrap(Channels.Control, control)).AsTask();
+                await Task.WhenAny(send, Task.Delay(TimeSpan.FromSeconds(1))).ConfigureAwait(false);
+            }
+            catch
+            {
+                // best-effort — 어차피 끊는 중
+            }
+            finally
+            {
+                Kick();
+            }
+        }
 
         /// <summary>v0 연결 훅. 메시징 계층이 소유하므로 봉인되어 있다 — 게임은 OnSessionOpenedAsync를 재정의한다.</summary>
         protected sealed override async ValueTask OnConnectedAsync()
@@ -105,7 +139,7 @@ namespace Bun3.Server.Rpc
                     {
                         RequireRuntime().Logger.LogInformation(
                             "Session {SessionId}: idle for {Timeout}; kicking.", Id, timeout);
-                        Kick();
+                        Kick(DisconnectCode.IdleKick);
                         return;
                     }
                 }
