@@ -143,7 +143,10 @@ namespace Bun3.Server.Transport.Tcp
                         break; // 원격의 깨끗한 종료(또는 로컬 셧다운에 대한 응답)
                     }
 
-                    _handler.OnPacket(this, packet);
+                    if (IsOpen)
+                    {
+                        _handler.OnPacket(this, packet);   // half-close 유예 중(드레인)에는 전달하지 않는다
+                    }
                 }
             }
             catch (Exception) when (!IsOpen)

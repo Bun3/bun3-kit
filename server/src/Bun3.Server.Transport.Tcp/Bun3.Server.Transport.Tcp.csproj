@@ -10,7 +10,7 @@
     <Authors>Bun3</Authors>
     <RepositoryUrl>https://github.com/Bun3/bun3-kit</RepositoryUrl>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <Description>?쒖닔 Socket TCP ?꾩넚 + 4諛붿씠??湲몄씠 ?꾨━?쎌뒪 ?⑦궥 ?꾨젅?대컢</Description>
+    <Description>순수 Socket TCP 전송 + 4바이트 길이 프리픽스 패킷 프레이밍</Description>
   </PropertyGroup>
 
   <ItemGroup>

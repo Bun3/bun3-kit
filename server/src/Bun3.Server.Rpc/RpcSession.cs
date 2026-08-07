@@ -47,6 +47,12 @@ namespace Bun3.Server.Rpc
         /// 예외 무시, 최초 1회만) 후 연결을 닫는다. 멱등.</summary>
         public override void Kick(int reasonCode)
         {
+            if (reasonCode == DisconnectCode.None)
+            {
+                Kick();   // 0은 와이어에 싣지 않는다 — 사유 없는 킥과 동일 처리 (원샷 가드도 소모 안 함)
+                return;
+            }
+
             if (Interlocked.Exchange(ref _disconnectSent, 1) != 0)
             {
                 // 사유는 이미 송신 중 — 그 작업의 finally가 닫기를 보장한다(최대 1초 상한).

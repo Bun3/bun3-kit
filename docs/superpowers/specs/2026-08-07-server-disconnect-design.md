@@ -132,6 +132,7 @@ public event Action<DisconnectInfo>? Closed;   // 기존 Action<Exception?> 대�
 | 패키지 | 버전 | 변경 |
 |---|---|---|
 | Core | 0.2.0 → **0.3.0** | DisconnectCode, `Kick(int)` 가상, 큐/셧다운 사유 배선 |
+| Transport.Tcp | 0.1.0 → **0.2.0** | (구현 중 편입) 우아한 half-close — close 시 RST가 방금 보낸 Disconnect를 파괴하는 실버그 수정 |
 | Rpc | 0.3.0 → **0.4.0** | control.proto Disconnect, RpcSession.Kick 재정의, RpcClient `Closed` 파괴적 변경 + IDisposable |
 | Players | 0.2.0 → **0.3.0** | NewWins 사유, SignIn 가드, `_retired`, dirty 버전 카운터, Registry IDisposable |
 | Ticking | 0.1.0 → **0.2.0** | StopAsync(ct) |

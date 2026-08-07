@@ -252,7 +252,7 @@ namespace Bun3.Server.Players
             finally
             {
                 stripe.Release();
-                toKick?.Kick();
+                toKick?.Kick(DisconnectCode.ServerShutdown);   // 비호스팅에서 직접 RetireAll을 불러도 사유 전달
             }
         }
 

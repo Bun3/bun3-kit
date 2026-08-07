@@ -168,7 +168,7 @@ public class LifecycleSealTests
         await client.RequestAsync<AddGoldResponse>(new AddGoldRequest { Amount = 1 }).AsTask().WaitAsync(Timeout);
 
         var deadline = DateTime.UtcNow + Timeout;
-        while (player.SaveCalls < 2 && DateTime.UtcNow < deadline)
+        while ((player.SaveCalls < 2 || player.IsDirty) && DateTime.UtcNow < deadline)
         {
             await Task.Delay(20);
         }

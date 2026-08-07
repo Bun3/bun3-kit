@@ -174,7 +174,8 @@ namespace Bun3.Server.Rpc
         /// <summary>연결을 닫는다. 대기 중인 요청은 ConnectionClosedException으로 실패한다.</summary>
         public void Close() => _connection?.Close();
 
-        /// <summary>연결을 닫고 내부 자원(핑 루프 CTS)을 정리한다. 멱등.</summary>
+        /// <summary>연결을 닫고 내부 자원(핑 루프 CTS)을 정리한다. 멱등.
+        /// Closed 이벤트는 Dispose 반환 "이후"에 발화될 수 있다 — 콜백에서 파괴된 객체를 만지지 말 것.</summary>
         public void Dispose()
         {
             if (Interlocked.Exchange(ref _disposed, 1) != 0)
