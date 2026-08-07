@@ -67,6 +67,11 @@ namespace Bun3.Server.Players
                         _logger.LogError(ex, "OnTickAsync 예외 (Player {AccountKey})", captured.AccountKey);
                     }
 
+                    if (!ReferenceEquals(captured.CurrentSession, session))
+                    {
+                        return;   // OnTickAsync 도중 소유권 이전(NewWins) — 저장은 새 세션의 스윕이 맡는다 (dirty 유지)
+                    }
+
                     if (now >= captured.NextSaveAtTicksUtc && captured.IsDirty)
                     {
                         captured.NextSaveAtTicksUtc = now + _saveInterval.Ticks;
