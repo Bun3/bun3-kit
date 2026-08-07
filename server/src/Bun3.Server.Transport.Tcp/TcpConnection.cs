@@ -159,8 +159,9 @@ namespace Bun3.Server.Transport.Tcp
             }
             finally
             {
-                // 루프가 끝났다는 것 자체가 "더 드레인할 것이 없다"는 신호 — 유예 없이 바로 정리한다.
-                Close();          // _closed 플래그 보장(아직 안 닫혔다면 셧다운 시도, 이미 닫혔다면 no-op)
+                // 루프가 끝났다는 것 자체가 "더 드레인할 것이 없다"는 신호 — 유예(Close의 200ms
+                // 지연 정리)를 거치지 않고 플래그만 확정한 뒤 즉시 정리한다.
+                Interlocked.Exchange(ref _closed, 1);
                 DisposeSocket();
                 _handler.OnClosed(this, error ?? Volatile.Read(ref _closeError));
             }
