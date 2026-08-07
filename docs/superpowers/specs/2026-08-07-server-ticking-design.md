@@ -23,12 +23,14 @@ idlez 패턴(전역 `Run()` 루프 + 플레이어별 루프/세마포어 + 30초
 ## 2. 패키지 구조와 버전
 
 ```
-Bun3.Server.Ticking  신규 0.1.0 (ns2.1) — 의존: M.E.L.Abstractions, Microsoft.Bcl.TimeProvider
+Bun3.Server.Ticking  신규 0.1.0 (ns2.1) — 의존: Microsoft.Bcl.TimeProvider, Core 참조(SafeLogger 재사용 — 로거 예외가 루프를 죽이지 못하게)
 ├── TickLoop.cs          전역 루프 1개 — 드리프트 보정, 잡별 예외 격리
 ├── TickingOptions.cs    { TickInterval=100ms, TimeProvider=System }
-└── (잡 등록: Every / DailyAt — cron 파서 없음)
+└── (잡 등록: Every / DailyAt — cron 파서 없음. DailyAt 발생 시각 계산은
+    공개 순수 함수 NextDailyOccurrence로 노출 — 결정적 테스트용)
 
 Bun3.Server.Core     0.2.0 — Session.Post(작업 주입) + 세션 큐 감시 로그
+Bun3.Server.Rpc      0.3.0 — RpcServerOptions.SlowWorkWarning 추가(감시 threshold를 ServerBase로 전달)
 Bun3.Server.Players  0.2.0 — Ticking 참조 추가. Player 틱/저장 훅, PlayerTicker
 Bun3.Server.Hosting  0.3.0 — AddPlayerServer가 TickLoop+PlayerTicker 자동 배선
 ```
@@ -163,8 +165,9 @@ AddPlayerServer<...>(loader, configure,
 | Hosting | AddPlayerServer만으로 틱+저장 동작, 정지 순서(TickLoop→drain→RetireAll) |
 | E2E | 수직 슬라이스 확장: 로그인 → MarkDirty → (SaveInterval 단축) 주기 저장 → 절단 → detach 저장 → 재접속 상태 확인 |
 
-시계 전략: 루프 역학은 짧은 실간격(Players 유예 테스트 방식), DailyAt 발생 시각
-계산만 FakeTimeProvider(`Microsoft.Extensions.TimeProvider.Testing`, 테스트 전용 의존).
+시계 전략: 루프 역학은 짧은 실간격(Players 유예 테스트 방식). DailyAt 발생 시각
+계산은 순수 함수 `NextDailyOccurrence(now, timeOfDay, offset)`를 직접 검증 —
+가짜 시계 패키지 불필요. `TickingOptions.TimeProvider`는 런타임 주입점으로 유지.
 
 ## 8. 권장 패턴 — 일일 리셋 (게임 몫)
 
