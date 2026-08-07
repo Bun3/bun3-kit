@@ -13,5 +13,9 @@ namespace Bun3.Server.Rpc
 
         /// <summary>세션 수신 큐 상한 (v0 Session과 동일 의미).</summary>
         public int MaxQueuedPackets { get; set; } = 256;
+
+        /// <summary>세션 큐 항목(핸들러·Post 작업)이 이 시간을 넘기면 경고 로그를 남긴다.
+        /// 강제 중단은 하지 않는다(직렬화 유지). 0 이하 = 감시 끔.</summary>
+        public TimeSpan SlowWorkWarning { get; set; } = TimeSpan.FromSeconds(1);
     }
 }
