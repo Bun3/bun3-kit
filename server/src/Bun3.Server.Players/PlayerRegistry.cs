@@ -113,6 +113,12 @@ namespace Bun3.Server.Players
             await stripe.WaitAsync().ConfigureAwait(false);
             try
             {
+                // 락 안 재확인 — 위 빠른 검사와 여기 사이(스트라이프 대기 중)에 RetireAll이 끼어들 수 있다.
+                if (_retired)
+                {
+                    throw new InvalidOperationException("레지스트리가 은퇴됨(서버 종료 중) — SignIn 불가.");
+                }
+
                 if (_entries.TryGetValue(accountKey, out var entry))
                 {
                     if (entry.Session != null && _duplicatePolicy == DuplicateLoginPolicy.RejectNew)
@@ -130,6 +136,13 @@ namespace Bun3.Server.Players
                 // ponytail: 스트라이프 락 안 DB 로드 — 같은 스트라이프의 다른 키가 로드 시간만큼
                 // 대기한다(256 스트라이프라 희박). 병목이 측정되면 키별 락 승격.
                 var player = await _loader(accountKey).ConfigureAwait(false);
+
+                // 로더가 느린 동안 RetireAll이 끝났을 수 있다 — 삽입 직전 재확인해야 고아 entry를 막는다.
+                if (_retired)
+                {
+                    throw new InvalidOperationException("레지스트리가 은퇴됨(서버 종료 중) — SignIn 불가.");
+                }
+
                 player.AccountKey = accountKey;
                 var created = new Entry(player);
                 _entries[accountKey] = created;
@@ -193,30 +206,53 @@ namespace Bun3.Server.Players
         public async ValueTask RetireAllAsync(CancellationToken ct = default)
         {
             _retired = true;
-            if (Volatile.Read(ref _disposed) == 0)
+            try
             {
-                _sweepCts.Cancel();
+                if (Volatile.Read(ref _disposed) == 0)
+                {
+                    _sweepCts.Cancel();
+                }
             }
+            catch (ObjectDisposedException)
+            {
+                // Dispose와의 경합 — 스윕은 이미 멈췄다
+            }
+
+            // 1차: 현재 스냅샷을 은퇴시킨다.
             foreach (var accountKey in _entries.Keys.ToArray())
             {
                 ct.ThrowIfCancellationRequested();
-                PlayerSession<TPlayer>? toKick = null;
-                var stripe = GetStripe(accountKey);
-                await stripe.WaitAsync().ConfigureAwait(false);
-                try
+                await RetireKeyAsync(accountKey).ConfigureAwait(false);
+            }
+
+            // 2차: 1차 진행 중 느린 로더가 끝나 끼어든 신규 entry까지 회수한다
+            // (SignInAsync는 삽입 직전 _retired를 재확인하지만, 그 확인과 1차 스냅샷이
+            // 아주 좁게 경합할 수 있는 잔여 창을 여기서 닫는다).
+            foreach (var accountKey in _entries.Keys.ToArray())
+            {
+                ct.ThrowIfCancellationRequested();
+                await RetireKeyAsync(accountKey).ConfigureAwait(false);
+            }
+        }
+
+        private async ValueTask RetireKeyAsync(string accountKey)
+        {
+            PlayerSession<TPlayer>? toKick = null;
+            var stripe = GetStripe(accountKey);
+            await stripe.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                if (_entries.TryRemove(accountKey, out var entry))
                 {
-                    if (_entries.TryRemove(accountKey, out var entry))
-                    {
-                        toKick = entry.Session;
-                        entry.Player.CurrentSession = null;
-                        await SafeHookAsync(() => entry.Player.OnRetiredAsync(), "OnRetiredAsync").ConfigureAwait(false);
-                    }
+                    toKick = entry.Session;
+                    entry.Player.CurrentSession = null;
+                    await SafeHookAsync(() => entry.Player.OnRetiredAsync(), "OnRetiredAsync").ConfigureAwait(false);
                 }
-                finally
-                {
-                    stripe.Release();
-                    toKick?.Kick();
-                }
+            }
+            finally
+            {
+                stripe.Release();
+                toKick?.Kick();
             }
         }
 

@@ -50,12 +50,13 @@ public class LifecycleSealTests
         public TickLoop? Loop;
 
         public static async Task<Harness> StartAsync(
-            PlayersOptions? playersOptions = null, bool withTicker = false)
+            PlayersOptions? playersOptions = null, bool withTicker = false,
+            Func<string, ValueTask<SealPlayer>>? loader = null)
         {
             var h = new Harness();
             var options = playersOptions ?? new PlayersOptions();
             h.Registry = new PlayerRegistry<SealPlayer>(
-                _ => new ValueTask<SealPlayer>(new SealPlayer()), options);
+                loader ?? (_ => new ValueTask<SealPlayer>(new SealPlayer())), options);
 
             var config = new PlayersConfig<SealSession>();
             config.OnRequestUnauthenticated<LoginRequest, LoginResponse>(async (s, req) =>
@@ -200,5 +201,31 @@ public class LifecycleSealTests
         // Dispose는 은퇴가 아니다 — 스윕이 멈췄으므로 유예가 만료돼도 은퇴가 일어나지 않는다
         Assert.That(player.RetireCalls, Is.Zero);
         Assert.That(h.Registry.TryGet("guest:sweep"), Is.Not.Null);
+    }
+
+    [Test]
+    public async Task Retire_during_slow_load_leaves_no_orphan_entry()
+    {
+        var gate = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        await using var h = await Harness.StartAsync(loader: async _ =>
+        {
+            await gate.Task;
+            return new SealPlayer();
+        });
+        var (client, _) = await h.ConnectAsync();
+
+        // 로그인 발사 — 로더가 gate에서 블록되어 SignInAsync가 accountKey의 스트라이프를 쥔 채 멈춘다
+        var loginTask = client.RequestAsync<LoginResponse>(new LoginRequest { DeviceId = "slow" }).AsTask();
+        await Task.Delay(100);   // 로더가 확실히 블록 중임을 보장
+
+        // RetireAll 시점엔 entry가 아직 없어 스냅샷에 안 잡힌다 — 스트라이프 경합 없이 완료된다
+        await h.Registry.RetireAllAsync();
+
+        gate.TrySetResult(true);   // 로더 해제 — 삽입 직전 재확인이 _retired를 보고 막아야 한다
+        var reply = await loginTask.WaitAsync(Timeout);
+
+        Assert.That(reply.Status, Is.EqualTo(RpcStatus.HandlerException));
+        Assert.That(h.Registry.TryGet("guest:slow"), Is.Null, "은퇴 중 느리게 로드된 신규 entry가 고아로 남으면 안 된다");
+        client.Close();
     }
 }
