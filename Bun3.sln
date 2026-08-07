@@ -43,6 +43,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Bun3.Server.Auth", "server\
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Bun3.Server.Auth.Steam", "server\src\Bun3.Server.Auth.Steam\Bun3.Server.Auth.Steam.csproj", "{A0248D39-2662-4F11-910B-7115EC3E569D}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Bun3.Server.Ticking", "server\src\Bun3.Server.Ticking\Bun3.Server.Ticking.csproj", "{E33E1700-6CA7-4C69-83D5-054F7FEC4A73}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -197,6 +199,18 @@ Global
 		{A0248D39-2662-4F11-910B-7115EC3E569D}.Release|x64.Build.0 = Release|Any CPU
 		{A0248D39-2662-4F11-910B-7115EC3E569D}.Release|x86.ActiveCfg = Release|Any CPU
 		{A0248D39-2662-4F11-910B-7115EC3E569D}.Release|x86.Build.0 = Release|Any CPU
+		{E33E1700-6CA7-4C69-83D5-054F7FEC4A73}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E33E1700-6CA7-4C69-83D5-054F7FEC4A73}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E33E1700-6CA7-4C69-83D5-054F7FEC4A73}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{E33E1700-6CA7-4C69-83D5-054F7FEC4A73}.Debug|x64.Build.0 = Debug|Any CPU
+		{E33E1700-6CA7-4C69-83D5-054F7FEC4A73}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{E33E1700-6CA7-4C69-83D5-054F7FEC4A73}.Debug|x86.Build.0 = Debug|Any CPU
+		{E33E1700-6CA7-4C69-83D5-054F7FEC4A73}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E33E1700-6CA7-4C69-83D5-054F7FEC4A73}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E33E1700-6CA7-4C69-83D5-054F7FEC4A73}.Release|x64.ActiveCfg = Release|Any CPU
+		{E33E1700-6CA7-4C69-83D5-054F7FEC4A73}.Release|x64.Build.0 = Release|Any CPU
+		{E33E1700-6CA7-4C69-83D5-054F7FEC4A73}.Release|x86.ActiveCfg = Release|Any CPU
+		{E33E1700-6CA7-4C69-83D5-054F7FEC4A73}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -220,5 +234,6 @@ Global
 		{487A330A-782B-4A22-B806-484751538FF6} = {2132E9AA-A8A6-6DB3-1CCB-FE240A8CB002}
 		{65284382-B611-4A9C-9071-599A2F26F44F} = {2132E9AA-A8A6-6DB3-1CCB-FE240A8CB002}
 		{A0248D39-2662-4F11-910B-7115EC3E569D} = {2132E9AA-A8A6-6DB3-1CCB-FE240A8CB002}
+		{E33E1700-6CA7-4C69-83D5-054F7FEC4A73} = {2132E9AA-A8A6-6DB3-1CCB-FE240A8CB002}
 	EndGlobalSection
 EndGlobal

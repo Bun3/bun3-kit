@@ -32,6 +32,7 @@
     <ProjectReference Include="..\..\src\Bun3.Server.Hosting\Bun3.Server.Hosting.csproj" />
     <ProjectReference Include="..\..\src\Bun3.Server.Rpc\Bun3.Server.Rpc.csproj" />
     <ProjectReference Include="..\..\src\Bun3.Server.Players\Bun3.Server.Players.csproj" />
+    <ProjectReference Include="..\..\src\Bun3.Server.Ticking\Bun3.Server.Ticking.csproj" />
   </ItemGroup>
 
 </Project>
