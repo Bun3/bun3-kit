@@ -125,4 +125,27 @@ public class TickLoopTests
 
         Assert.That(fired, Is.EqualTo(1));   // 발화 1회 — 다음 발생은 내일이므로 재발화 없음
     }
+
+    [Test]
+    public async Task StopAsync_with_canceled_ct_abandons_wait()
+    {
+        var block = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var entered = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var loop = new TickLoop(new TickingOptions { TickInterval = TimeSpan.FromMilliseconds(10) });
+        loop.Every(TimeSpan.FromMilliseconds(10), async _ =>
+        {
+            entered.TrySetResult(true);
+            await block.Task;   // 잡이 행 — ct가 기다림을 포기하게 한다
+        });
+
+        loop.Start();
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+        Assert.ThrowsAsync<TaskCanceledException>(() => loop.StopAsync(cts.Token));
+
+        block.TrySetResult(true);          // 잡 해제 — 루프는 취소 신호를 받았으므로 스스로 종료
+        await loop.StopAsync();            // ct 없는 재호출은 정상 대기로 완료
+    }
 }

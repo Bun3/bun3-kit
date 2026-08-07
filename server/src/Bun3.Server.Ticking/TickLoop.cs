@@ -124,14 +124,26 @@ namespace Bun3.Server.Ticking
             _runTask = Task.Run(() => RunAsync(_cts.Token));
         }
 
-        /// <summary>루프를 정지한다 — 진행 중인 틱(잡)이 끝날 때까지 기다린다.</summary>
-        public async Task StopAsync()
+        /// <summary>루프를 정지한다 — 진행 중인 틱(잡)이 끝날 때까지 기다린다.
+        /// ct는 "기다림의 포기"만 의미한다: 취소되어도 루프 강제 중단은 없으며(직렬화/무중단 철학),
+        /// 이미 취소 신호를 받은 루프는 현재 잡이 끝나는 대로 스스로 종료한다.</summary>
+        public async Task StopAsync(CancellationToken ct = default)
         {
             _cts.Cancel();
-            if (_runTask != null)
+            if (_runTask == null)
+            {
+                return;
+            }
+
+            if (!ct.CanBeCanceled)
             {
                 await _runTask.ConfigureAwait(false);
+                return;
             }
+
+            var abandon = Task.Delay(System.Threading.Timeout.Infinite, ct);
+            var completed = await Task.WhenAny(_runTask, abandon).ConfigureAwait(false);
+            await completed.ConfigureAwait(false);   // 루프 완료 또는 TaskCanceledException 전파
         }
 
         private void EnsureNotStarted()
