@@ -1,6 +1,8 @@
+using System;
 using System.Threading.Tasks;
 using Bun3.Server.Rpc;
 using Google.Protobuf;
+using Microsoft.Extensions.Logging;
 
 namespace Bun3.Server.Players
 {
@@ -42,6 +44,39 @@ namespace Bun3.Server.Players
 
             await session.SendUpdateAsync(update).ConfigureAwait(false);
             return true;
+        }
+
+        private bool _dirty;
+        internal long LastTickAtTicksUtc;    // PlayerTicker 전용 — Attach 시 리셋
+        internal long NextSaveAtTicksUtc;    // PlayerTicker 전용 — Attach 시 재무장
+
+        /// <summary>접속 중일 때 주기 호출되는 틱 훅 — 현재 세션 액터 안에서 실행되므로
+        /// 요청 핸들러와 동시에 실행되지 않는다. delta는 지난 틱 이후 실제 경과
+        /// (재바인딩 시 리셋 — 오프라인 구간은 OnAttachedAsync에서 게임이 처리).
+        /// 제약은 핸들러와 동일: 짧게, 자기/타 세션 완료를 동기 대기하지 말 것.</summary>
+        protected internal virtual ValueTask OnTickAsync(TimeSpan delta) => default;
+
+        /// <summary>저장 훅 — 게임이 DB 쓰기를 구현한다. 주기 스윕(dirty일 때)과
+        /// 연결 끊김(detach) 시 호출된다. 유예 만료의 최종 지점은 OnRetiredAsync.</summary>
+        protected internal virtual ValueTask OnSaveAsync() => default;
+
+        /// <summary>상태 변경 후 호출 — 다음 저장 주기의 대상으로 표시한다.</summary>
+        public void MarkDirty() => _dirty = true;
+
+        /// <summary>저장 대기 중인 변경이 있는지 여부.</summary>
+        public bool IsDirty => _dirty;
+
+        internal async ValueTask TrySaveAsync(ILogger logger)
+        {
+            try
+            {
+                await OnSaveAsync().ConfigureAwait(false);
+                _dirty = false;
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "OnSaveAsync 실패 — dirty 유지, 다음 주기에 재시도 (Player {AccountKey})", AccountKey);
+            }
         }
     }
 }
