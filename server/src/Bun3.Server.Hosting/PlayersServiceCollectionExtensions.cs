@@ -127,7 +127,7 @@ internal sealed class PlayersLifetimeService<TSession, TPlayer, TRequest, TRespo
 
     public async Task StopAsync(CancellationToken cancellationToken)
     {
-        await _tickLoop.StopAsync().ConfigureAwait(false);   // 틱 먼저 정지 — 정지 중 새 틱 작업 유입 차단
+        await _tickLoop.StopAsync(cancellationToken).ConfigureAwait(false);   // 틱 먼저 정지 — 정지 중 새 틱 작업 유입 차단
         await _server.StopAsync(_options.Value.DrainTimeout, cancellationToken).ConfigureAwait(false);
         await _registry.RetireAllAsync(cancellationToken).ConfigureAwait(false);   // 최종 저장
     }

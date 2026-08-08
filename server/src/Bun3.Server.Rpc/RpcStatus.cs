@@ -12,7 +12,7 @@ namespace Bun3.Server.Rpc
         /// <summary>핸들러 예외 (OnHandlerError 기본 정책).</summary>
         public const int HandlerException = 2;
 
-        /// <summary>미인증 — OnGateRequest 게이트 거부 (Players 모듈 등).</summary>
+        /// <summary>미인증 — OnGateRequest 게이트 거부.</summary>
         public const int Unauthenticated = 3;
     }
 }

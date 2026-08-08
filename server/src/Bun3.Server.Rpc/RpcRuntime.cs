@@ -184,7 +184,7 @@ namespace Bun3.Server.Rpc
         private void Violation(RpcSession session, string reason)
         {
             Logger.LogWarning("Session {SessionId}: 프로토콜 위반 — {Reason}; kicking.", session.Id, reason);
-            session.Kick();
+            session.Kick(DisconnectCode.ProtocolViolation);
         }
     }
 }

@@ -14,7 +14,7 @@ namespace Bun3.Server.Rpc
     /// 타입 있는 요청/응답과 푸시 구독을 제공하는 클라이언트.
     /// 서버 판정은 Reply 값으로, 인프라 실패(타임아웃·연결 종료)는 예외로 구분된다.
     /// </summary>
-    public sealed class RpcClient<TRequest, TResponse, TUpdate>
+    public sealed class RpcClient<TRequest, TResponse, TUpdate> : IDisposable
         where TRequest : class, IMessage<TRequest>, new()
         where TResponse : class, IMessage<TResponse>, new()
         where TUpdate : class, IMessage<TUpdate>, new()
@@ -33,6 +33,8 @@ namespace Bun3.Server.Rpc
         private long _nextRequestId;
         private long _lastRttMs = -1;
         private volatile bool _closed;
+        private int _receivedDisconnectCode;
+        private int _disposed;
 
         private RpcClient(RpcClientOptions options, ILogger logger)
         {
@@ -47,8 +49,9 @@ namespace Bun3.Server.Rpc
         /// <summary>연결이 열려 있고 아직 닫히지 않았는지 여부.</summary>
         public bool IsConnected => !_closed && _connection?.IsOpen == true;
 
-        /// <summary>연결 종료 시 1회. 정상 종료면 null. UseSynchronizationContext 시 캡처 컨텍스트에서 호출.</summary>
-        public event Action<Exception?>? Closed;
+        /// <summary>연결 종료 시 1회. Code 0 = 사유 미수신(자발적 Close/네트워크).
+        /// UseSynchronizationContext 시 캡처 컨텍스트에서 호출.</summary>
+        public event Action<DisconnectInfo>? Closed;
 
         /// <summary>커넥터로 연결을 수립하고 클라이언트를 생성한다. 접속 시점의 SynchronizationContext를 캡처한다.</summary>
         /// <param name="connector">실제 소켓 연결을 수립하는 커넥터.</param>
@@ -171,6 +174,20 @@ namespace Bun3.Server.Rpc
         /// <summary>연결을 닫는다. 대기 중인 요청은 ConnectionClosedException으로 실패한다.</summary>
         public void Close() => _connection?.Close();
 
+        /// <summary>연결을 닫고 내부 자원(핑 루프 CTS)을 정리한다. 멱등.
+        /// Closed 이벤트는 Dispose 반환 "이후"에 발화될 수 있다 — 콜백에서 파괴된 객체를 만지지 말 것.</summary>
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref _disposed, 1) != 0)
+            {
+                return;
+            }
+
+            Close();
+            _lifetimeCts.Cancel();
+            _lifetimeCts.Dispose();
+        }
+
         private void HandlePacket(ReadOnlyMemory<byte> packet)
         {
             if (packet.Length < 1)
@@ -271,6 +288,10 @@ namespace Bun3.Server.Rpc
                 var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
                 Volatile.Write(ref _lastRttMs, Math.Max(0, now - control.Pong.ClientTimeUnixMs));
             }
+            else if (control.BodyCase == Control.BodyOneofCase.Disconnect)
+            {
+                Volatile.Write(ref _receivedDisconnectCode, control.Disconnect.Code);   // 절단 시 통지에 사용
+            }
             else
             {
                 // 의도적 관대함: 미래 서버의 새 Control 메시지와의 전방 호환 (서버 쪽은 엄격)
@@ -281,7 +302,15 @@ namespace Bun3.Server.Rpc
         private void HandleClosed(Exception? error)
         {
             _closed = true;
-            _lifetimeCts.Cancel();
+            try
+            {
+                _lifetimeCts.Cancel();
+            }
+            catch (ObjectDisposedException)
+            {
+                // Dispose()가 먼저 실행되어 이미 취소·정리된 경우 — 무해(경합 시 best-effort)
+            }
+
             foreach (var pair in _pending)
             {
                 if (_pending.TryRemove(pair.Key, out var pending))
@@ -290,7 +319,7 @@ namespace Bun3.Server.Rpc
                 }
             }
 
-            Dispatch(() => Closed?.Invoke(error));
+            Dispatch(() => Closed?.Invoke(new DisconnectInfo(Volatile.Read(ref _receivedDisconnectCode), error)));
         }
 
         private void StartPingLoop()

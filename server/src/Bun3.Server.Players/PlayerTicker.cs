@@ -47,35 +47,34 @@ namespace Bun3.Server.Players
                     continue;   // 유예 중 — 틱 없음
                 }
 
-                var captured = player;
                 var posted = session.Post(async () =>
                 {
-                    if (!ReferenceEquals(captured.CurrentSession, session))
+                    if (!ReferenceEquals(player.CurrentSession, session))
                     {
                         return;   // 실행 시점 재확인 — NewWins 이전/킥 경합 방어
                     }
 
                     var now = DateTime.UtcNow.Ticks;
-                    var delta = TimeSpan.FromTicks(Math.Max(0, now - captured.LastTickAtTicksUtc));
-                    captured.LastTickAtTicksUtc = now;
+                    var delta = TimeSpan.FromTicks(Math.Max(0, now - player.LastTickAtTicksUtc));
+                    player.LastTickAtTicksUtc = now;
                     try
                     {
-                        await captured.OnTickAsync(delta).ConfigureAwait(false);
+                        await player.OnTickAsync(delta).ConfigureAwait(false);
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogError(ex, "OnTickAsync 예외 (Player {AccountKey})", captured.AccountKey);
+                        _logger.LogError(ex, "OnTickAsync 예외 (Player {AccountKey})", player.AccountKey);
                     }
 
-                    if (!ReferenceEquals(captured.CurrentSession, session))
+                    if (!ReferenceEquals(player.CurrentSession, session))
                     {
                         return;   // OnTickAsync 도중 소유권 이전(NewWins) — 저장은 새 세션의 스윕이 맡는다 (dirty 유지)
                     }
 
-                    if (now >= captured.NextSaveAtTicksUtc && captured.IsDirty)
+                    if (now >= player.NextSaveAtTicksUtc && player.IsDirty)
                     {
-                        captured.NextSaveAtTicksUtc = now + _saveInterval.Ticks;
-                        await captured.TrySaveAsync(_logger).ConfigureAwait(false);
+                        player.NextSaveAtTicksUtc = now + _saveInterval.Ticks;
+                        await player.TrySaveAsync(_logger).ConfigureAwait(false);
                     }
                 });
 

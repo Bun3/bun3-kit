@@ -10,6 +10,10 @@ namespace Bun3.Server.Transport.Tcp
 {
     internal sealed class TcpConnection : IConnection
     {
+        // 그레이스풀 종료 유예 상한 — 로컬호스트에서 잔여 수신 바이트를 드레인하기엔 충분히 크고,
+        // 비협조적인 원격(수신 루프 미사용 상대 등)에서도 종료가 이 이상 지연되지 않도록 상한을 둔다.
+        private static readonly TimeSpan GracefulCloseGrace = TimeSpan.FromMilliseconds(200);
+
         private readonly TcpClient _client;
         private readonly NetworkStream _stream;
         private readonly TcpTransportOptions _options;
@@ -18,6 +22,7 @@ namespace Bun3.Server.Transport.Tcp
         private readonly SemaphoreSlim _sendLock = new SemaphoreSlim(1, 1);
         private int _closed; // 0 = open, 1 = closed
         private Exception? _closeError;
+        private volatile bool _receiveLoopStarted;
 
         internal TcpConnection(
             long id,
@@ -83,6 +88,35 @@ namespace Bun3.Server.Transport.Tcp
 
             try
             {
+                // 아직 읽지 않은 수신 데이터가 남은 채로 소켓을 바로 닫으면 OS가 RST를 보내
+                // 방금 보낸 데이터(예: Kick의 Disconnect)까지 유실시킬 수 있다(Windows WSAECONNRESET 등).
+                // 송신 방향만 먼저 셧다운(FIN)해 상대가 마지막 데이터를 받게 하고, 수신 루프가
+                // 남은 바이트를 드레인할 짧은 유예를 준 뒤 실제 소켓을 정리한다.
+                _client.Client.Shutdown(SocketShutdown.Send);
+            }
+            catch
+            {
+                // 이미 끊겼거나 셧다운 불가 — 바로 정리해도 안전하다
+                DisposeSocket();
+                return;
+            }
+
+            if (!_receiveLoopStarted)
+            {
+                // 수신 루프가 시작되지 않았다(연결 설정 실패 등) — 그 루프의 finally가
+                // 정리를 대신할 수 없으므로 여기서 직접 소켓을 해제한다.
+                DisposeSocket();
+                return;
+            }
+
+            _ = Task.Delay(GracefulCloseGrace).ContinueWith(
+                _ => DisposeSocket(), CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+        }
+
+        private void DisposeSocket()
+        {
+            try
+            {
                 _client.Close(); // 수신 루프의 Read를 깨워 OnClosed 통지로 이어진다
             }
             catch
@@ -96,6 +130,7 @@ namespace Bun3.Server.Transport.Tcp
         /// </summary>
         internal async Task RunReceiveLoopAsync()
         {
+            _receiveLoopStarted = true;
             Exception? error = null;
             try
             {
@@ -105,10 +140,13 @@ namespace Bun3.Server.Transport.Tcp
                         .ConfigureAwait(false);
                     if (packet == null)
                     {
-                        break; // 원격의 깨끗한 종료
+                        break; // 원격의 깨끗한 종료(또는 로컬 셧다운에 대한 응답)
                     }
 
-                    _handler.OnPacket(this, packet);
+                    if (IsOpen)
+                    {
+                        _handler.OnPacket(this, packet);   // half-close 유예 중(드레인)에는 전달하지 않는다
+                    }
                 }
             }
             catch (Exception) when (!IsOpen)
@@ -121,7 +159,10 @@ namespace Bun3.Server.Transport.Tcp
             }
             finally
             {
-                Close();
+                // 루프가 끝났다는 것 자체가 "더 드레인할 것이 없다"는 신호 — 유예(Close의 200ms
+                // 지연 정리)를 거치지 않고 플래그만 확정한 뒤 즉시 정리한다.
+                Interlocked.Exchange(ref _closed, 1);
+                DisposeSocket();
                 _handler.OnClosed(this, error ?? Volatile.Read(ref _closeError));
             }
         }

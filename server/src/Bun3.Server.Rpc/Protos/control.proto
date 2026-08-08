@@ -9,6 +9,7 @@ message Control {
   oneof body {
     Ping ping = 1;
     Pong pong = 2;
+    Disconnect disconnect = 3;
   }
 }
 
@@ -19,4 +20,9 @@ message Ping {
 // 서버는 client_time_unix_ms를 그대로 에코한다 — 클라가 RTT를 계산한다.
 message Pong {
   int64 client_time_unix_ms = 1;
+}
+
+// 서버가 사유 있는 킥 직전에 best-effort로 보낸다. 클라는 절단 시 이 코드로 통지한다.
+message Disconnect {
+  int32 code = 1;   // 1~99 프레임워크 예약, 음수 게임 정의 (Reply.Status와 동일 규약)
 }

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using Bun3.Server.Abstractions;
 using Bun3.Server.Rpc;
@@ -14,6 +15,7 @@ namespace Bun3.Server.Players
     {
         private PlayerRegistry<TPlayer>? _registry;
         private HashSet<Type>? _unauthenticatedTypes;
+        private int _signingIn;
 
         /// <summary>주어진 연결에 바인딩된 세션을 생성한다.</summary>
         protected PlayerSession(IConnection connection) : base(connection) { }
@@ -26,11 +28,27 @@ namespace Bun3.Server.Players
 
         /// <summary>
         /// 자격증명 검증(게임 몫) 후 호출하는 프레임워크 진입점. 신규 로드/유예 재바인딩/
-        /// 중복 로그인 이전을 처리한다. RejectNew 정책에서 이미 접속 중이면
-        /// DuplicateLoginException, 같은 세션 이중 호출이면 InvalidOperationException.
+        /// 중복 로그인 이전을 처리한다. 같은 세션의 동시·이중 호출은 원자적으로 거부되어
+        /// InvalidOperationException, RejectNew 정책에서 이미 접속 중이면 DuplicateLoginException.
+        /// 실패(예외) 시 가드가 풀려 재시도할 수 있다.
         /// </summary>
-        public ValueTask<SignInResult<TPlayer>> SignInAsync(string accountKey) =>
-            RequireRegistry().SignInAsync(this, accountKey);
+        public async ValueTask<SignInResult<TPlayer>> SignInAsync(string accountKey)
+        {
+            if (Interlocked.CompareExchange(ref _signingIn, 1, 0) != 0)
+            {
+                throw new InvalidOperationException("이미 인증되었거나 SignInAsync가 진행 중인 세션이다.");
+            }
+
+            try
+            {
+                return await RequireRegistry().SignInAsync(this, accountKey).ConfigureAwait(false);
+            }
+            catch
+            {
+                Interlocked.Exchange(ref _signingIn, 0);
+                throw;
+            }
+        }
 
         /// <summary>세션 종료 훅 (detach 처리 후 호출됨).
         /// 주의: 중복 로그인(NewWins)으로 킥된 세션에서는 Player 소유권이 이미 새 세션으로

@@ -71,7 +71,7 @@ namespace Bun3.Server.Core
             var entries = _sessions.Values.ToArray();
             foreach (var entry in entries)
             {
-                entry.Session.Kick();
+                entry.Session.Kick(DisconnectCode.ServerShutdown);
             }
 
             var drain = Task.WhenAll(entries.Select(e => e.Completion));
