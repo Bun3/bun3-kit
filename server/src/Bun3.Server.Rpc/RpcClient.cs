@@ -123,7 +123,9 @@ namespace Bun3.Server.Rpc
                     throw new ConnectionClosedException("이미 종료된 연결");
                 }
 
-                using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                using var timeoutCts = ct.CanBeCanceled
+                    ? CancellationTokenSource.CreateLinkedTokenSource(ct)
+                    : new CancellationTokenSource();   // ct가 default인 흔한 경로 — 링크드 소스/등록 할당 생략
                 timeoutCts.CancelAfter(_options.RequestTimeout);
                 using var registration = timeoutCts.Token.Register(() =>
                 {
@@ -188,7 +190,7 @@ namespace Bun3.Server.Rpc
             _lifetimeCts.Dispose();
         }
 
-        private void HandlePacket(ReadOnlyMemory<byte> packet)
+        private void HandlePacket(byte[] packet)
         {
             if (packet.Length < 1)
             {
@@ -196,18 +198,17 @@ namespace Bun3.Server.Rpc
                 return;
             }
 
-            var channel = packet.Span[0];
-            var body = packet.Slice(1).ToArray();
+            var channel = packet[0];
             switch (channel)
             {
                 case Channels.Response:
-                    HandleResponse(body);
+                    HandleResponse(packet);
                     break;
                 case Channels.Update:
-                    HandleUpdate(body);
+                    HandleUpdate(packet);
                     break;
                 case Channels.Control:
-                    HandleControl(body);
+                    HandleControl(packet);
                     break;
                 default:
                     ViolationClose($"허용되지 않은 채널 0x{channel:X2}");
@@ -215,12 +216,12 @@ namespace Bun3.Server.Rpc
             }
         }
 
-        private void HandleResponse(byte[] body)
+        private void HandleResponse(byte[] packet)
         {
             TResponse envelope;
             try
             {
-                envelope = _schema.ResponseParser.ParseFrom(body);
+                envelope = _schema.ResponseParser.ParseFrom(packet, 1, packet.Length - 1);   // 무복사 파싱
             }
             catch (InvalidProtocolBufferException ex)
             {
@@ -240,12 +241,12 @@ namespace Bun3.Server.Rpc
             pending.TrySetResult((status, payload));
         }
 
-        private void HandleUpdate(byte[] body)
+        private void HandleUpdate(byte[] packet)
         {
             TUpdate envelope;
             try
             {
-                envelope = _schema.UpdateParser.ParseFrom(body);
+                envelope = _schema.UpdateParser.ParseFrom(packet, 1, packet.Length - 1);   // 무복사 파싱
             }
             catch (InvalidProtocolBufferException ex)
             {
@@ -267,15 +268,60 @@ namespace Bun3.Server.Rpc
             }
 
             var payload = updateCase.Get(envelope)!;
-            Dispatch(() => handler(payload));
+            DispatchUpdate(handler, payload);
         }
 
-        private void HandleControl(byte[] body)
+        // 업데이트 핫패스 전용 디스패치 — 클로저 2개 대신 상태 객체 1개만 할당한다(컨텍스트 없으면 0).
+        private void DispatchUpdate(Action<IMessage> handler, IMessage payload)
+        {
+            var context = _syncContext;
+            if (context == null)
+            {
+                RunUpdate(handler, payload);
+                return;
+            }
+
+            context.Post(UpdateCallback, new UpdateDispatch(this, handler, payload));
+        }
+
+        private static readonly SendOrPostCallback UpdateCallback = state =>
+        {
+            var dispatch = (UpdateDispatch)state!;
+            dispatch.Client.RunUpdate(dispatch.Handler, dispatch.Payload);
+        };
+
+        private void RunUpdate(Action<IMessage> handler, IMessage payload)
+        {
+            try
+            {
+                handler(payload);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "푸시/이벤트 콜백 예외");
+            }
+        }
+
+        private sealed class UpdateDispatch
+        {
+            public readonly RpcClient<TRequest, TResponse, TUpdate> Client;
+            public readonly Action<IMessage> Handler;
+            public readonly IMessage Payload;
+
+            public UpdateDispatch(RpcClient<TRequest, TResponse, TUpdate> client, Action<IMessage> handler, IMessage payload)
+            {
+                Client = client;
+                Handler = handler;
+                Payload = payload;
+            }
+        }
+
+        private void HandleControl(byte[] packet)
         {
             Control control;
             try
             {
-                control = Control.Parser.ParseFrom(body);
+                control = Control.Parser.ParseFrom(packet, 1, packet.Length - 1);   // 무복사 파싱
             }
             catch (InvalidProtocolBufferException ex)
             {
@@ -407,7 +453,7 @@ namespace Bun3.Server.Rpc
 
             public void OnConnected(IConnection connection) => _client._connection = connection;
 
-            public void OnPacket(IConnection connection, ReadOnlyMemory<byte> packet) =>
+            public void OnPacket(IConnection connection, byte[] packet) =>
                 _client.HandlePacket(packet);
 
             public void OnClosed(IConnection connection, Exception? error) => _client.HandleClosed(error);

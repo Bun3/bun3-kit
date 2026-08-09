@@ -57,8 +57,8 @@ public sealed class DuplexConnection : IConnection
     {
         if (IsOpen && Peer != null)
         {
-            // 상대편 핸들러에 동기 전달 — 버퍼는 호출 동안만 유효 계약 그대로
-            Peer._handler.OnPacket(Peer, packet);
+            // 소유권 이전 계약 — 송신자 버퍼를 넘겨줄 수 없으므로 복사본을 이전한다
+            Peer._handler.OnPacket(Peer, packet.ToArray());
         }
         return default;
     }

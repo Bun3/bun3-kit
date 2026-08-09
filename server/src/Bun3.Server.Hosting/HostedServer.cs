@@ -13,8 +13,9 @@ internal sealed class HostedServer<TSession> : ServerBase<TSession> where TSessi
         ITransportListener transport,
         Func<IConnection, TSession> sessionFactory,
         ILogger logger,
-        int maxQueuedPackets)
-        : base(transport, logger, maxQueuedPackets)
+        int maxQueuedPackets,
+        TimeSpan slowWorkWarning)
+        : base(transport, logger, maxQueuedPackets, slowWorkWarning)
     {
         _sessionFactory = sessionFactory;
     }

@@ -6,7 +6,7 @@
     <Nullable>enable</Nullable>
     <RootNamespace>Bun3.Server.Auth</RootNamespace>
     <PackageId>Bun3.Server.Auth</PackageId>
-    <Version>0.1.0</Version>
+    <Version>0.2.0</Version>
     <Authors>Bun3</Authors>
     <RepositoryUrl>https://github.com/Bun3/bun3-kit</RepositoryUrl>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>

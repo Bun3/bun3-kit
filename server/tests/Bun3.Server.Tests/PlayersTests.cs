@@ -210,6 +210,7 @@ public class PlayersTests
         await LoginAsync(connA, "a");
         await RoundtripAsync(connA, new PlayersRequest { RequestId = 2, AddGold = new AddGoldRequest { Amount = 5 } });
         var player = h.Registry.TryGet("guest:a")!;
+        var sessionA = h.Server.Sessions.Single();
 
         var connB = h.Transport.Connect(2);
         var loginB = await LoginAsync(connB, "a");
@@ -217,6 +218,7 @@ public class PlayersTests
         Assert.That(loginB.Login.IsReconnect, Is.True);
         Assert.That(loginB.Login.Gold, Is.EqualTo(105));   // 같은 Player
         Assert.That(connA.IsOpen, Is.False);               // 옛 연결 킥
+        Assert.That(sessionA.Player, Is.Null);             // 옛 세션 즉시 무권한화 — 큐 잔여 요청은 게이트가 차단
         Assert.That(h.LoaderCalls, Is.EqualTo(1));
         Assert.That(ReferenceEquals(h.Registry.TryGet("guest:a"), player), Is.True);
         await h.Server.StopAsync();

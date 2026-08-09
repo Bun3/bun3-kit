@@ -22,8 +22,8 @@ public class RpcClientTests
 
         public void OnConnected(IConnection connection) => Connection = connection;
 
-        public void OnPacket(IConnection connection, ReadOnlyMemory<byte> packet) =>
-            OnPacketReceived?.Invoke(connection, packet.ToArray());
+        public void OnPacket(IConnection connection, byte[] packet) =>
+            OnPacketReceived?.Invoke(connection, packet);
 
         public void OnClosed(IConnection connection, Exception? error) { }
     }

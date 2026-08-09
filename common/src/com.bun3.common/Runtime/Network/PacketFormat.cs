@@ -16,16 +16,22 @@ namespace Bun3.Common.Network
         public const int HeaderSize = 4;
 
         /// <summary>패킷 하나를 길이 프리픽스와 함께 스트림에 쓴다.</summary>
+        public static ValueTask WritePacketAsync(
+            Stream stream, ReadOnlyMemory<byte> packet, CancellationToken ct = default) =>
+            WritePacketAsync(stream, packet, new byte[HeaderSize], ct);
+
+        /// <summary>헤더 스크래치 버퍼(길이 ≥ 4)를 재사용하는 오버로드 — 패킷당 헤더 할당을 없앤다.
+        /// 호출자는 같은 스크래치에 대한 동시 호출이 없음을 보장해야 한다(연결당 송신 직렬화 등).</summary>
         public static async ValueTask WritePacketAsync(
-            Stream stream, ReadOnlyMemory<byte> packet, CancellationToken ct = default)
+            Stream stream, ReadOnlyMemory<byte> packet, byte[] headerScratch, CancellationToken ct = default)
         {
             var length = packet.Length;
-            var header = new byte[HeaderSize];
+            var header = headerScratch;
             header[0] = (byte)length;
             header[1] = (byte)(length >> 8);
             header[2] = (byte)(length >> 16);
             header[3] = (byte)(length >> 24);
-            await stream.WriteAsync(header.AsMemory(), ct).ConfigureAwait(false);
+            await stream.WriteAsync(header.AsMemory(0, HeaderSize), ct).ConfigureAwait(false);
             if (length > 0)
             {
                 await stream.WriteAsync(packet, ct).ConfigureAwait(false);
@@ -37,10 +43,17 @@ namespace Bun3.Common.Network
         /// 패킷 도중 EOF는 <see cref="EndOfStreamException"/>,
         /// 길이가 음수이거나 maxPacketSize 초과면 <see cref="InvalidDataException"/>.
         /// </summary>
+        public static ValueTask<byte[]?> ReadPacketAsync(
+            Stream stream, int maxPacketSize, CancellationToken ct = default) =>
+            ReadPacketAsync(stream, maxPacketSize, new byte[HeaderSize], ct);
+
+        /// <summary>헤더 스크래치 버퍼(길이 ≥ 4)를 재사용하는 오버로드 — 패킷당 헤더 할당을 없앤다.
+        /// 호출자는 같은 스크래치에 대한 동시 호출이 없음을 보장해야 한다(연결당 단일 수신 루프 등).
+        /// 반환된 본문 배열의 소유권은 호출자에게 있다.</summary>
         public static async ValueTask<byte[]?> ReadPacketAsync(
-            Stream stream, int maxPacketSize, CancellationToken ct = default)
+            Stream stream, int maxPacketSize, byte[] headerScratch, CancellationToken ct = default)
         {
-            var header = new byte[HeaderSize];
+            var header = headerScratch;
             var got = await ReadExactAsync(stream, header, HeaderSize, allowCleanEof: true, ct).ConfigureAwait(false);
             if (got == 0)
             {

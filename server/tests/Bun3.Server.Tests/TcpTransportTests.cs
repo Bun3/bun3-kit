@@ -65,6 +65,42 @@ public class TcpTransportTests
     }
 
     [Test]
+    public async Task Connections_over_MaxConnections_are_rejected_until_capacity_frees()
+    {
+        var handler = new RecordingHandler();
+        var listener = new TcpTransportListener(new TcpTransportOptions { Port = 0, MaxConnections = 1 });
+        await listener.StartAsync(handler);
+        try
+        {
+            using var first = await ConnectAsync(listener);
+            await handler.ConnectedSignal.WaitAsync(Timeout);
+
+            // 상한 초과 — 수락 즉시 닫힌다(핸들러 OnConnected 없이 원격 종료 관측: EOF 또는 리셋)
+            using var second = await ConnectAsync(listener);
+            int got;
+            try
+            {
+                got = await second.GetStream().ReadAsync(new byte[1]).AsTask().WaitAsync(Timeout);
+            }
+            catch (IOException)
+            {
+                got = 0;
+            }
+            Assert.That(got, Is.Zero);
+
+            // 자리가 나면 다시 수락된다
+            first.Close();
+            await handler.Closed.Task.WaitAsync(Timeout);
+            using var third = await ConnectAsync(listener);
+            await handler.ConnectedSignal.WaitAsync(Timeout);
+        }
+        finally
+        {
+            await listener.StopAsync();
+        }
+    }
+
+    [Test]
     public async Task Client_packet_reaches_handler_intact()
     {
         var (listener, handler) = await StartListenerAsync();
@@ -229,7 +265,7 @@ public class TcpTransportTests
             SecondConnected.TrySetResult(connection);
         }
 
-        public void OnPacket(IConnection connection, ReadOnlyMemory<byte> packet) { }
+        public void OnPacket(IConnection connection, byte[] packet) { }
         public void OnClosed(IConnection connection, Exception? error) { }
     }
 }

@@ -67,8 +67,19 @@ namespace Bun3.Server.Players
             }
         }
 
-        /// <summary>현재 레지스트리의 Player 스냅샷 (브로드캐스트용).</summary>
+        /// <summary>현재 레지스트리의 Player 스냅샷 (브로드캐스트용). 호출마다 배열을
+        /// 할당한다 — 주기 순회는 <see cref="ForEachPlayer"/>를 쓸 것.</summary>
         public IReadOnlyCollection<TPlayer> Players => _entries.Values.Select(e => e.Player).ToArray();
+
+        /// <summary>무할당 순회 — ConcurrentDictionary 열거자는 스냅샷 없이 락프리로 순회한다
+        /// (순회 중 추가/제거 안전, 그 시점 반영 여부는 미정의). PlayerTicker의 틱 경로용.</summary>
+        internal void ForEachPlayer(Action<TPlayer> action)
+        {
+            foreach (var pair in _entries)
+            {
+                action(pair.Value.Player);
+            }
+        }
 
         /// <summary>accountKey로 조회. 없으면 null.</summary>
         public TPlayer? TryGet(string accountKey) =>
@@ -127,6 +138,11 @@ namespace Bun3.Server.Players
                     }
 
                     kickAfterRelease = entry.Session;   // NewWins: 락 해제 후 킥 (재진입 교착 방지)
+                    // 구 세션 즉시 무권한화 — 킥 완료 전까지 구 세션 큐에 남아 있던 요청이
+                    // 게이트(Unauthenticated)에서 차단되어 이전된 Player를 만질 수 없다.
+                    // 이미 실행 "중"인 핸들러 1건까지는 선점할 수 없다 — 그 핸들러가
+                    // Player를 다시 읽으면 null을 보고 실패하며, 세션은 어차피 킥 중이다.
+                    kickAfterRelease?.SetPlayer(null);
                     entry.DetachedAtTicksUtc = 0;
                     Attach(entry, session);
                     await SafeHookAsync(() => entry.Player.OnAttachedAsync(true), "OnAttachedAsync").ConfigureAwait(false);
@@ -146,6 +162,17 @@ namespace Bun3.Server.Players
                 player.AccountKey = accountKey;
                 var created = new Entry(player);
                 _entries[accountKey] = created;
+
+                // 삽입 직후 재확인 — 위 확인과 삽입 사이에 RetireAll이 스냅샷을 떠 완료했다면
+                // 이 entry는 회수 대상에서 빠져 있다. 삽입자가 스스로 되돌려 고아를 막는다.
+                // (_retired가 여기서 false였다면 삽입은 RetireAll의 스냅샷 이전에 가시화된 것 —
+                // ConcurrentDictionary 삽입/열거의 락 펜스가 이를 보장한다.)
+                if (_retired)
+                {
+                    _entries.TryRemove(accountKey, out _);
+                    throw new InvalidOperationException("레지스트리가 은퇴됨(서버 종료 중) — SignIn 불가.");
+                }
+
                 Attach(created, session);
                 await SafeHookAsync(() => player.OnAttachedAsync(false), "OnAttachedAsync").ConfigureAwait(false);
                 return new SignInResult<TPlayer>(player, false);
@@ -218,16 +245,9 @@ namespace Bun3.Server.Players
                 // Dispose와의 경합 — 스윕은 이미 멈췄다
             }
 
-            // 1차: 현재 스냅샷을 은퇴시킨다.
-            foreach (var accountKey in _entries.Keys.ToArray())
-            {
-                ct.ThrowIfCancellationRequested();
-                await RetireKeyAsync(accountKey).ConfigureAwait(false);
-            }
-
-            // 2차: 1차 진행 중 느린 로더가 끝나 끼어든 신규 entry까지 회수한다
-            // (SignInAsync는 삽입 직전 _retired를 재확인하지만, 그 확인과 1차 스냅샷이
-            // 아주 좁게 경합할 수 있는 잔여 창을 여기서 닫는다).
+            // 단일 순회로 충분하다: 삽입자는 스트라이프 안에서 _retired를 삽입 전후로
+            // 재확인하고, 스냅샷을 놓친 늦은 삽입은 스스로 되돌린다(고아 불가).
+            // RetireAll은 in-flight 로더를 기다리지 않는다 — 종료가 느린 DB 로드에 볼모잡히지 않는다.
             foreach (var accountKey in _entries.Keys.ToArray())
             {
                 ct.ThrowIfCancellationRequested();

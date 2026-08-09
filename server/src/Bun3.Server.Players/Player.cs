@@ -11,8 +11,9 @@ namespace Bun3.Server.Players
     /// accountKey당 1개, 재접속에 살아남는 단위. 상태(재화·인벤토리 등)는 이 파생
     /// 클래스에 둔다. 훅들은 레지스트리의 계정 키 스트라이프 락 안에서 실행되므로
     /// 훅 안에서 SignInAsync/Kick을 재호출하면 안 된다(교착).
-    /// 킥된 옛 세션의 잔여 핸들러가 소유권 이전 직후 잠시 같은 Player를 볼 수 있다 —
-    /// PlayerTicker가 틱/저장 실행 직전에 소유권을 재확인하는 이유다. 저장 지점은
+    /// 중복 로그인(NewWins) 이전 시 옛 세션은 즉시 무권한화되어(Player=null) 큐에 남은
+    /// 요청이 게이트에서 차단된다 — 단, 이전 순간에 이미 실행 중이던 핸들러 1건은
+    /// 선점되지 않으므로 PlayerTicker가 틱/저장 실행 직전에 소유권을 재확인한다. 저장 지점은
     /// 셋: 주기 스윕·detach(둘 다 dirty일 때만)와 은퇴(OnRetiredAsync, dirty 무관).
     /// </summary>
     public abstract class Player
@@ -50,6 +51,11 @@ namespace Bun3.Server.Players
 
         internal long LastTickAtTicksUtc;    // PlayerTicker 전용 — Attach 시 리셋
         internal long NextSaveAtTicksUtc;    // PlayerTicker 전용 — Attach 시 재무장
+
+        // PlayerTicker 전용 틱 작업 캐시 — 세션 재바인딩 시에만 재생성해 틱당 클로저 할당을 없앤다.
+        // 틱 루프 스레드에서만 읽고 쓴다.
+        internal Func<ValueTask>? TickWork;
+        internal object? TickWorkSession;
 
         /// <summary>접속 중일 때 주기 호출되는 틱 훅 — 현재 세션 액터 안에서 실행되므로
         /// 요청 핸들러와 동시에 실행되지 않는다. delta는 지난 틱 이후 실제 경과

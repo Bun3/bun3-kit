@@ -51,8 +51,8 @@ namespace Bun3.Server.Players
         }
 
         /// <summary>세션 종료 훅 (detach 처리 후 호출됨).
-        /// 주의: 중복 로그인(NewWins)으로 킥된 세션에서는 Player 소유권이 이미 새 세션으로
-        /// 이전된 뒤 실행될 수 있다 — 이 훅에서 Player를 저장하면 새 세션의 진행분을 덮어쓴다.
+        /// 주의: 중복 로그인(NewWins)으로 킥된 세션은 소유권 이전 시점에 Player가 null로
+        /// 분리된 채 실행된다 — 이 훅에서 Player를 저장하려 하지 말 것.
         /// 저장은 Player.OnRetiredAsync에서만 할 것.</summary>
         protected virtual ValueTask OnPlayerSessionClosedAsync(Exception? error) => default;
 

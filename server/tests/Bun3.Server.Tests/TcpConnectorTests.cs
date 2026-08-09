@@ -150,7 +150,7 @@ public class TcpConnectorTests
     private sealed class ThrowingHandler : IConnectionHandler
     {
         public void OnConnected(IConnection connection) => throw new InvalidOperationException("reject");
-        public void OnPacket(IConnection connection, ReadOnlyMemory<byte> packet) { }
+        public void OnPacket(IConnection connection, byte[] packet) { }
         public void OnClosed(IConnection connection, Exception? error) { }
     }
 }

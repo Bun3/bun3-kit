@@ -19,6 +19,8 @@ namespace Bun3.Server.Transport.Tcp
         private long _nextConnectionId;
         private int? _boundPort;
         private volatile bool _stopping;
+        private int _activeConnections;
+        private volatile bool _capacityLogged;
 
         /// <summary>TCP 리스너를 구성한다. StartAsync 전까지는 바인딩하지 않는다.</summary>
         public TcpTransportListener(TcpTransportOptions options, ILogger? logger = null)
@@ -43,7 +45,7 @@ namespace Bun3.Server.Transport.Tcp
                 throw new InvalidOperationException("Listener is already started.");
             }
 
-            _listener = new TcpListener(IPAddress.Any, _options.Port);
+            _listener = new TcpListener(_options.BindAddress ?? IPAddress.Any, _options.Port);
             _listener.Start(_options.Backlog);
             _boundPort = ((IPEndPoint)_listener.LocalEndpoint).Port;
             _logger.LogInformation("TCP listening on port {Port}.", BoundPort);
@@ -65,6 +67,7 @@ namespace Bun3.Server.Transport.Tcp
         private async Task AcceptLoopAsync(IConnectionHandler handler)
         {
             var listener = _listener!;
+            var counted = new CountingHandler(this, handler);   // OnClosed에서 활성 연결 수를 회수한다
             while (true)
             {
                 TcpClient client;
@@ -83,25 +86,71 @@ namespace Bun3.Server.Transport.Tcp
                     continue;
                 }
 
+                // 연결 수 상한 — accept 루프는 단일 스레드이므로 검사·증가에 경합이 없다.
+                if (_options.MaxConnections > 0
+                    && Volatile.Read(ref _activeConnections) >= _options.MaxConnections)
+                {
+                    if (!_capacityLogged)
+                    {
+                        _capacityLogged = true;   // 상한 도달당 1회만 경고 — 거부 폭주가 로그를 뒤덮지 않게
+                        _logger.LogWarning(
+                            "Connection limit {MaxConnections} reached; rejecting new connections.",
+                            _options.MaxConnections);
+                    }
+
+                    try { client.Close(); } catch { }
+                    continue;
+                }
+
+                Interlocked.Increment(ref _activeConnections);
                 try
                 {
                     client.NoDelay = true;
                     var connection = new TcpConnection(
-                        Interlocked.Increment(ref _nextConnectionId), client, _options, handler, _logger);
+                        Interlocked.Increment(ref _nextConnectionId), client, _options, counted, _logger);
 
                     // 계약: OnConnected 반환 전에는 OnPacket/OnClosed가 발생하지 않도록
                     // 수신 루프는 OnConnected 이후에 시작한다.
-                    handler.OnConnected(connection);
+                    counted.OnConnected(connection);
                     _ = Task.Run(connection.RunReceiveLoopAsync);
                 }
                 catch (Exception ex)
                 {
                     // OnConnected가 던지면 핸들러가 이 연결을 등록하지 못한 것이므로
                     // OnClosed를 통지하지 않고 소켓만 정리한다 (exactly-once는 OnConnected가
-                    // 정상 반환한 연결에 대한 계약).
+                    // 정상 반환한 연결에 대한 계약). OnClosed가 오지 않으므로 카운트도 여기서 회수.
+                    OnConnectionClosed();
                     _logger.LogError(ex, "Connection setup failed; closing client.");
                     try { client.Close(); } catch { }
                 }
+            }
+        }
+
+        private void OnConnectionClosed()
+        {
+            Interlocked.Decrement(ref _activeConnections);
+            _capacityLogged = false;   // 다음에 다시 상한에 닿으면 재경고
+        }
+
+        private sealed class CountingHandler : IConnectionHandler
+        {
+            private readonly TcpTransportListener _listener;
+            private readonly IConnectionHandler _inner;
+
+            public CountingHandler(TcpTransportListener listener, IConnectionHandler inner)
+            {
+                _listener = listener;
+                _inner = inner;
+            }
+
+            public void OnConnected(IConnection connection) => _inner.OnConnected(connection);
+
+            public void OnPacket(IConnection connection, byte[] packet) => _inner.OnPacket(connection, packet);
+
+            public void OnClosed(IConnection connection, Exception? error)
+            {
+                _listener.OnConnectionClosed();
+                _inner.OnClosed(connection, error);
             }
         }
     }

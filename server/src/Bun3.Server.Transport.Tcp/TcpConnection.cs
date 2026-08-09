@@ -20,6 +20,9 @@ namespace Bun3.Server.Transport.Tcp
         private readonly IConnectionHandler _handler;
         private readonly ILogger _logger;
         private readonly SemaphoreSlim _sendLock = new SemaphoreSlim(1, 1);
+        // 헤더 스크래치 — 송신은 _sendLock으로, 수신은 단일 루프로 직렬화되므로 재사용 안전.
+        private readonly byte[] _sendHeader = new byte[PacketFormat.HeaderSize];
+        private readonly byte[] _receiveHeader = new byte[PacketFormat.HeaderSize];
         private int _closed; // 0 = open, 1 = closed
         private Exception? _closeError;
         private volatile bool _receiveLoopStarted;
@@ -61,7 +64,7 @@ namespace Bun3.Server.Transport.Tcp
                     return;
                 }
 
-                await PacketFormat.WritePacketAsync(_stream, packet, ct).ConfigureAwait(false);
+                await PacketFormat.WritePacketAsync(_stream, packet, _sendHeader, ct).ConfigureAwait(false);
             }
             catch (Exception) when (!IsOpen)
             {
@@ -136,7 +139,7 @@ namespace Bun3.Server.Transport.Tcp
             {
                 while (true)
                 {
-                    var packet = await PacketFormat.ReadPacketAsync(_stream, _options.MaxPacketSize)
+                    var packet = await PacketFormat.ReadPacketAsync(_stream, _options.MaxPacketSize, _receiveHeader)
                         .ConfigureAwait(false);
                     if (packet == null)
                     {

@@ -1,4 +1,4 @@
-using Bun3.Server.Auth;
+﻿using Bun3.Server.Auth;
 using NUnit.Framework;
 
 namespace Bun3.Server.Tests;
@@ -30,6 +30,10 @@ public class AuthTests
     [TestCase("")]
     [TestCase("   ")]
     [TestCase("dev:ice")]            // 키 규약 오염 — ':' 금지
+    [TestCase("dev\nice")]           // 로그 인젝션 — 개행 금지
+    [TestCase("dev\u001b[31mice")]   // 로그 인젝션 — ANSI 이스케이프 금지
+    [TestCase("dev ice")]            // 화이트리스트 밖 — 내부 공백 금지
+    [TestCase("dev+ice")]            // 화이트리스트 밖 — 특수문자 금지
     public async Task GuestVerifier_rejects_invalid_credential(string credential)
     {
         var result = await new GuestVerifier().VerifyAsync(credential);

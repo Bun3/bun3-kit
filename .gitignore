@@ -8,3 +8,6 @@ server/**/obj/
 *.user
 .vs/
 /.idea/
+
+# 테스트 러너 산출물(blame 덤프 등)
+TestResults/
