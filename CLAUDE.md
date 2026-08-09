@@ -23,6 +23,10 @@
   플랜(`docs/superpowers/plans/`) → SDD 실행. 스펙이 결정의 원본이다.
 - 패키지 코드: netstandard2.1 + C#9(블록 네임스페이스), 모든 public 멤버 한국어
   XML 문서, 빌드 경고 0, 라이브러리 await에는 `ConfigureAwait(false)`.
+- **런타임 문자열 할당 최소화**: 프레임워크 코어는 핫패스에서 문자열을 만들지 않는다 —
+  포맷은 `TryFormat(Span<char>)` 패턴, 식별자는 기동 시 1회 인터닝, 로그는 저빈도 경로만.
+  Unity 계층은 ZString + TMP `SetText` 적극 사용(목표: Unity에서 `.text` 문자열 할당 제로).
+  틱/패킷 핫패스 무할당 규율(클로저·LINQ·스냅샷 복사 금지)은 전 패키지 공통.
 - 퍼블리시: 내용이 바뀌면 반드시 버전을 올린다 — **같은 버전 재퍼블리시 금지**.
 - 커밋: gitmoji + `Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>` 트레일러.
   서브에이전트 커밋은 `git commit -m "<제목>" -m "<트레일러>"` 이중 플래그로
