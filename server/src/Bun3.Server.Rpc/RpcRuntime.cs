@@ -1,4 +1,5 @@
 using System;
+using System.Buffers;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Bun3.Server.Core;
@@ -85,7 +86,7 @@ namespace Bun3.Server.Rpc
             Control control;
             try
             {
-                control = Control.Parser.ParseFrom(body.ToArray());
+                control = Control.Parser.ParseFrom(new ReadOnlySequence<byte>(body));   // 무복사 파싱
             }
             catch (InvalidProtocolBufferException ex)
             {
@@ -109,7 +110,7 @@ namespace Bun3.Server.Rpc
             TRequest envelope;
             try
             {
-                envelope = _schema.RequestParser.ParseFrom(body.ToArray());
+                envelope = _schema.RequestParser.ParseFrom(new ReadOnlySequence<byte>(body));   // 무복사 파싱
             }
             catch (InvalidProtocolBufferException ex)
             {

@@ -21,9 +21,9 @@ public sealed class RecordingHandler : IConnectionHandler
         Connected.TrySetResult(connection);
     }
 
-    public void OnPacket(IConnection connection, ReadOnlyMemory<byte> packet)
+    public void OnPacket(IConnection connection, byte[] packet)
     {
-        Packets.Enqueue(packet.ToArray());
+        Packets.Enqueue(packet);
         PacketSignal.Release();
     }
 

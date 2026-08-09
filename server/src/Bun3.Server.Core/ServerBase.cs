@@ -106,7 +106,7 @@ namespace Bun3.Server.Core
             entry.BindRunTask(session.RunAsync());
         }
 
-        private void HandlePacket(IConnection connection, ReadOnlyMemory<byte> packet)
+        private void HandlePacket(IConnection connection, byte[] packet)
         {
             if (_sessions.TryGetValue(connection.Id, out var entry))
             {
@@ -155,7 +155,7 @@ namespace Bun3.Server.Core
 
             public void OnConnected(IConnection connection) => _server.HandleConnected(connection);
 
-            public void OnPacket(IConnection connection, ReadOnlyMemory<byte> packet) =>
+            public void OnPacket(IConnection connection, byte[] packet) =>
                 _server.HandlePacket(connection, packet);
 
             public void OnClosed(IConnection connection, Exception? error) =>

@@ -38,14 +38,19 @@ public static class PlayersServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(loader);
         ArgumentNullException.ThrowIfNull(configure);
 
-        var effectivePlayersOptions = new PlayersOptions();
-        playersOptions?.Invoke(effectivePlayersOptions);
-
         services.AddServerTransport(serverOptions);
+
+        // ServerOptions와 같은 옵션 파이프라인 — appsettings("Bun3:Players") 바인딩 후 람다 적용.
+        var playersOptionsBuilder = services.AddOptions<PlayersOptions>()
+            .BindConfiguration(PlayersOptions.SectionName);
+        if (playersOptions != null)
+        {
+            playersOptionsBuilder.Configure(playersOptions);
+        }
 
         services.AddSingleton(sp => new PlayerRegistry<TPlayer>(
             key => loader(sp, key),
-            effectivePlayersOptions,
+            sp.GetRequiredService<IOptions<PlayersOptions>>().Value,
             ServerServiceCollectionExtensions.ResolveLogger(sp)));
 
         services.AddSingleton(sp =>
@@ -55,7 +60,7 @@ public static class PlayersServiceCollectionExtensions
             var loop = new TickLoop(tickingOptions, ServerServiceCollectionExtensions.ResolveLogger(sp));
             new PlayerTicker<TPlayer>(
                     sp.GetRequiredService<PlayerRegistry<TPlayer>>(),
-                    effectivePlayersOptions,
+                    sp.GetRequiredService<IOptions<PlayersOptions>>().Value,
                     ServerServiceCollectionExtensions.ResolveLogger(sp))
                 .Register(loop);
             jobs?.Invoke(loop);   // 게임 전역 잡 — Start 전 등록 규약 충족
@@ -127,8 +132,16 @@ internal sealed class PlayersLifetimeService<TSession, TPlayer, TRequest, TRespo
 
     public async Task StopAsync(CancellationToken cancellationToken)
     {
-        await _tickLoop.StopAsync(cancellationToken).ConfigureAwait(false);   // 틱 먼저 정지 — 정지 중 새 틱 작업 유입 차단
-        await _server.StopAsync(_options.Value.DrainTimeout, cancellationToken).ConfigureAwait(false);
-        await _registry.RetireAllAsync(cancellationToken).ConfigureAwait(false);   // 최종 저장
+        try
+        {
+            await _tickLoop.StopAsync(cancellationToken).ConfigureAwait(false);   // 틱 먼저 정지 — 정지 중 새 틱 작업 유입 차단
+            await _server.StopAsync(_options.Value.DrainTimeout, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            // 최종 저장은 앞 단계가 취소/실패해도 반드시 시도한다 — 여기서 못 하면 접속자 진행분이 유실된다.
+            // 종료 기한(cancellationToken)이 이미 소진된 경우에도 저장은 마지막 기회이므로 토큰을 전달하지 않는다.
+            await _registry.RetireAllAsync(CancellationToken.None).ConfigureAwait(false);
+        }
     }
 }

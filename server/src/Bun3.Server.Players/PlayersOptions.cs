@@ -12,9 +12,13 @@ namespace Bun3.Server.Players
         RejectNew,
     }
 
-    /// <summary>PlayerRegistry 동작 옵션.</summary>
+    /// <summary>PlayerRegistry 동작 옵션. 호스팅(AddPlayerServer)은 구성 섹션
+    /// "Bun3:Players"에서 바인딩한 뒤 람다를 적용한다.</summary>
     public sealed class PlayersOptions
     {
+        /// <summary>구성 바인딩에 사용되는 섹션 이름.</summary>
+        public const string SectionName = "Bun3:Players";
+
         /// <summary>연결이 끊긴 Player를 메모리에 유지하는 재접속 유예. Zero면 즉시 은퇴.</summary>
         public TimeSpan GracePeriod { get; set; } = TimeSpan.FromSeconds(60);
 

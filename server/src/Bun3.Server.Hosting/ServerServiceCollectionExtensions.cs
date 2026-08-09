@@ -41,7 +41,8 @@ public static class ServerServiceCollectionExtensions
                 sp.GetRequiredService<TcpTransportListener>(),
                 Factory,
                 ResolveLogger(sp),
-                options.MaxQueuedPacketsPerSession);
+                options.MaxQueuedPacketsPerSession,
+                options.SlowWorkWarning);
         });
 
         services.AddHostedService(sp =>
@@ -74,6 +75,10 @@ public static class ServerServiceCollectionExtensions
                 new TcpTransportOptions
                 {
                     Port = options.Port,
+                    BindAddress = string.IsNullOrEmpty(options.BindAddress)
+                        ? null
+                        : System.Net.IPAddress.Parse(options.BindAddress),   // 잘못된 값은 기동 시점에 실패
+                    MaxConnections = options.MaxConnections,
                     MaxPacketSize = options.MaxPacketSize,
                     Backlog = options.Backlog,
                 },

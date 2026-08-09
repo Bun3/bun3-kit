@@ -93,7 +93,7 @@ namespace Bun3.Server.Core
             _slowWorkWarning = slowWorkWarning;
         }
 
-        internal void EnqueuePacket(ReadOnlyMemory<byte> packet)
+        internal void EnqueuePacket(byte[] packet)
         {
             if (_closed)
             {
@@ -109,7 +109,7 @@ namespace Bun3.Server.Core
                 return;
             }
 
-            _inbox.Enqueue(packet.ToArray()); // 버퍼는 호출 동안만 유효하므로 복사
+            _inbox.Enqueue(packet); // 소유권 이전 계약(IConnectionHandler) — 복사 없이 그대로 큐잉
             _signal.Release();
         }
 
@@ -149,7 +149,7 @@ namespace Bun3.Server.Core
                     {
                         try
                         {
-                            await WatchAsync(() => OnPacketAsync(packet), "handler").ConfigureAwait(false);
+                            await WatchAsync(OnPacketAsync(packet), "handler").ConfigureAwait(false);
                         }
                         catch (Exception ex)
                         {
@@ -161,7 +161,7 @@ namespace Bun3.Server.Core
                         var work = (Func<ValueTask>)item!;
                         try
                         {
-                            await WatchAsync(work, "posted work").ConfigureAwait(false);
+                            await WatchAsync(work(), "posted work").ConfigureAwait(false);
                         }
                         catch (Exception ex)
                         {
@@ -183,18 +183,12 @@ namespace Bun3.Server.Core
             }
         }
 
-        private async ValueTask WatchAsync(Func<ValueTask> action, string kind)
+        // 진행 중인 ValueTask를 직접 받는다 — 호출부에서 클로저를 만들지 않는 무할당 fast path.
+        private async ValueTask WatchAsync(ValueTask pending, string kind)
         {
-            if (_slowWorkWarning <= TimeSpan.Zero)
+            if (pending.IsCompleted || _slowWorkWarning <= TimeSpan.Zero)
             {
-                await action().ConfigureAwait(false);
-                return;
-            }
-
-            var pending = action();
-            if (pending.IsCompleted)
-            {
-                await pending.ConfigureAwait(false);   // 동기 완료 — 감시 불필요 (fast path, 무할당)
+                await pending.ConfigureAwait(false);   // 동기 완료 또는 감시 꺼짐 — 감시 기계 진입 없음
                 return;
             }
 
