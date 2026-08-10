@@ -1,0 +1,10 @@
+E:\Projects\orca\workspace\bun3-kit\server-modulize-base\gameplay\artifacts\bin\Bun3.Gameplay\debug\Bun3.Gameplay.deps.json
+E:\Projects\orca\workspace\bun3-kit\server-modulize-base\gameplay\artifacts\bin\Bun3.Gameplay\debug\Bun3.Gameplay.dll
+E:\Projects\orca\workspace\bun3-kit\server-modulize-base\gameplay\artifacts\bin\Bun3.Gameplay\debug\Bun3.Gameplay.pdb
+E:\Projects\orca\workspace\bun3-kit\server-modulize-base\gameplay\artifacts\obj\Bun3.Gameplay\debug\Bun3.Gameplay.GeneratedMSBuildEditorConfig.editorconfig
+E:\Projects\orca\workspace\bun3-kit\server-modulize-base\gameplay\artifacts\obj\Bun3.Gameplay\debug\Bun3.Gameplay.AssemblyInfoInputs.cache
+E:\Projects\orca\workspace\bun3-kit\server-modulize-base\gameplay\artifacts\obj\Bun3.Gameplay\debug\Bun3.Gameplay.AssemblyInfo.cs
+E:\Projects\orca\workspace\bun3-kit\server-modulize-base\gameplay\artifacts\obj\Bun3.Gameplay\debug\Bun3.Gameplay.csproj.CoreCompileInputs.cache
+E:\Projects\orca\workspace\bun3-kit\server-modulize-base\gameplay\artifacts\obj\Bun3.Gameplay\debug\Bun3.Gameplay.sourcelink.json
+E:\Projects\orca\workspace\bun3-kit\server-modulize-base\gameplay\artifacts\obj\Bun3.Gameplay\debug\Bun3.Gameplay.dll
+E:\Projects\orca\workspace\bun3-kit\server-modulize-base\gameplay\artifacts\obj\Bun3.Gameplay\debug\Bun3.Gameplay.pdb

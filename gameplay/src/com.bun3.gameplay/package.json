@@ -1,0 +1,12 @@
+{
+  "name": "com.bun3.gameplay",
+  "displayName": "Bun3 Gameplay",
+  "version": "0.1.0",
+  "unity": "2020.1",
+  "description": "Generic gameplay framework (BigNum, tags, attributes, effects, abilities). netstandard2.1; no UnityEngine dependency.",
+  "author": {
+    "name": "Bun3",
+    "url": "https://github.com/Bun3",
+    "email": "bun3.dev@gmail.com"
+  }
+}
