@@ -144,6 +144,19 @@ public class BigNumFormatTests
     }
 
     [Test]
+    public void ToDisplayString_matches_TryFormat()
+    {
+        // 저빈도 경로용 편의 메서드 — TryFormat과 같은 결과의 문자열
+        Assert.That(((BigNum)3_450_000_000L).ToDisplayString(), Is.EqualTo("3.45B"));
+        Assert.That(((BigNum)15_000).ToDisplayString(BigNumFormat.Korean), Is.EqualTo("1.5만"));
+
+        // 128자 초과(TopUnit 대형 정수부)도 성장 경로로 처리
+        var big = BigNum.FromParts(1, 200).ToDisplayString();
+        Assert.That(big.Length, Is.EqualTo(183 + 2));   // 정수부 183자리 + "Qi"
+        Assert.That(big.EndsWith("Qi"), Is.True);
+    }
+
+    [Test]
     public void Insufficient_destination_returns_false()
     {
         Span<char> tiny = stackalloc char[2];
