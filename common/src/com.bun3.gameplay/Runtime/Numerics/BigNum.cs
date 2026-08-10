@@ -523,8 +523,8 @@ namespace Bun3.Gameplay.Numerics
                    && TryWriteFraction(destination, ref written, fraction, fracLen, format);
         }
 
-        // 소수부 쓰기. fraction은 fracDigits 자리(선행 0 포함) 값. MaxFractionDigits로
-        // 절사한 뒤 트레일링 0을 제거하고, 소수부가 비면 소수점 자체를 생략한다.
+        // 소수부 쓰기. fraction은 fracDigits 자리(선행 0 포함) 값. MaxFractionDigits로 절사한 뒤
+        // Trim이면 트레일링 0 제거(비면 소수점 생략), 아니면 정확히 MaxFractionDigits 자리로 0 패딩.
         private static bool TryWriteFraction(
             Span<char> destination, ref int written, ulong fraction, int fracDigits, BigNumFormat format)
         {
@@ -534,15 +534,22 @@ namespace Bun3.Gameplay.Numerics
                 fracDigits--;
             }
 
-            while (fraction != 0 && fraction % 10 == 0)
+            if (format.TrimFractionZeros)
             {
-                fraction /= 10;
-                fracDigits--;
-            }
+                while (fraction != 0 && fraction % 10 == 0)
+                {
+                    fraction /= 10;
+                    fracDigits--;
+                }
 
-            if (fraction == 0)
+                if (fraction == 0)
+                {
+                    return true;   // 소수부 없음 — 소수점 생략
+                }
+            }
+            else if (format.MaxFractionDigits == 0)
             {
-                return true;   // 소수부 없음 — 소수점 생략
+                return true;
             }
 
             if (!TryAppendChar(destination, ref written, '.'))
@@ -563,6 +570,18 @@ namespace Bun3.Gameplay.Numerics
                 if (!TryAppendChar(destination, ref written, digits[i]))
                 {
                     return false;
+                }
+            }
+
+            // 고정 소수: 남은 자리를 0으로 채운다 ("2.00M")
+            if (!format.TrimFractionZeros)
+            {
+                for (var i = fracDigits; i < format.MaxFractionDigits; i++)
+                {
+                    if (!TryAppendChar(destination, ref written, '0'))
+                    {
+                        return false;
+                    }
                 }
             }
 

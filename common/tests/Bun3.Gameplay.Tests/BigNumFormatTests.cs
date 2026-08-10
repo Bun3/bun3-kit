@@ -123,6 +123,18 @@ public class BigNumFormatTests
     }
 
     [Test]
+    public void Fixed_fraction_idlez_style_pads_zeros()
+    {
+        // idlez decimalPlace 스타일: 고정 소수 자릿수, 트레일링 0 유지 (표시 폭 안정)
+        var fmt = new BigNumFormat(3, new[] { "", "K", "M" },
+            maxFractionDigits: 1, trimFractionZeros: false);
+        Assert.That(Format((BigNum)2_000_000, fmt), Is.EqualTo("2.0M"));
+        Assert.That(Format((BigNum)1_234, fmt), Is.EqualTo("1.2K"));
+        Assert.That(Format((BigNum)999, fmt), Is.EqualTo("999"));   // plain 정수엔 소수 없음
+        Assert.That(Format(BigNum.FromParts(125, -2), fmt), Is.EqualTo("1.2"));
+    }
+
+    [Test]
     public void Invalid_format_options_throw()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
