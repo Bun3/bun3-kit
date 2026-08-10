@@ -238,6 +238,260 @@ namespace Bun3.Gameplay.Numerics
         /// <summary>이상.</summary>
         public static bool operator >=(BigNum a, BigNum b) => a.CompareTo(b) >= 0;
 
+        /// <summary>
+        /// 무할당 표시 포맷. 단위 테이블 안이면 "1.5만"/"3.45B" 형태(소수 최대 2자리,
+        /// 트레일링 0 제거), 테이블을 넘으면 "1.23e45" 지수 표기. format이 null이면
+        /// <see cref="BigNumFormat.Alpha"/>. 버퍼가 부족하면 false.
+        /// </summary>
+        public bool TryFormat(Span<char> destination, out int charsWritten, BigNumFormat? format = null)
+        {
+            format ??= BigNumFormat.Alpha;
+            charsWritten = 0;
+
+            if (IsZero)
+            {
+                return TryAppendChar(destination, ref charsWritten, '0');
+            }
+
+            var negative = Mantissa < 0;
+            var absMantissa = (ulong)Math.Abs(Mantissa);
+            var digitCount = CountDigits(absMantissa);
+            var magnitude = (long)Exponent + digitCount - 1;   // 최상위 자리의 십진 지수
+
+            if (negative && !TryAppendChar(destination, ref charsWritten, '-'))
+            {
+                return false;
+            }
+
+            // 1) 그룹 미만의 작은 값: 자릿수 그대로 (소수 포함, magnitude ≥ -2까지)
+            if (magnitude < format.GroupDigits && Exponent >= -18 && magnitude >= -2)
+            {
+                return TryWritePlain(destination, ref charsWritten, absMantissa, Exponent);
+            }
+
+            // 2) 단위 테이블 범위: 선두부를 단위로 나눠 쓴다
+            var unitIndex = magnitude >= 0 ? (int)(magnitude / format.GroupDigits) : -1;
+            if (unitIndex >= 1 && unitIndex < format.Units.Length)
+            {
+                var integerDigits = (int)(magnitude - (long)unitIndex * format.GroupDigits) + 1;
+                return TryWriteScaled(destination, ref charsWritten, absMantissa, digitCount,
+                           integerDigits)
+                       && TryAppendString(destination, ref charsWritten, format.Units[unitIndex]);
+            }
+
+            // 3) 폴백: 지수 표기 m.mm'e'EEE
+            if (!TryWriteScaled(destination, ref charsWritten, absMantissa, digitCount, 1)
+                || !TryAppendChar(destination, ref charsWritten, 'e'))
+            {
+                return false;
+            }
+
+            return TryAppendUInt(destination, ref charsWritten, (ulong)magnitude);
+        }
+
+        private static int CountDigits(ulong value)
+        {
+            var digits = 1;
+            while (value >= 10)
+            {
+                value /= 10;
+                digits++;
+            }
+
+            return digits;
+        }
+
+        // 정수/소수 그대로: mantissa × 10^exponent (exponent ≤ 0 구간 전용)
+        private static bool TryWritePlain(
+            Span<char> destination, ref int written, ulong mantissa, int exponent)
+        {
+            if (exponent >= 0)
+            {
+                // 정규형에서 이 경로의 exponent > 0은 mantissa에 0을 붙여 표기
+                if (!TryAppendUInt(destination, ref written, mantissa))
+                {
+                    return false;
+                }
+
+                for (var i = 0; i < exponent; i++)
+                {
+                    if (!TryAppendChar(destination, ref written, '0'))
+                    {
+                        return false;
+                    }
+                }
+
+                return true;
+            }
+
+            var fracDigits = -exponent;
+            var divisor = 1UL;
+            for (var i = 0; i < fracDigits; i++)
+            {
+                divisor *= 10;
+            }
+
+            var integerPart = mantissa / divisor;
+            var fraction = mantissa % divisor;
+            if (!TryAppendUInt(destination, ref written, integerPart)
+                || !TryAppendChar(destination, ref written, '.'))
+            {
+                return false;
+            }
+
+            // 소수부: 선행 0 유지, 트레일링 0 제거
+            while (fraction != 0 && fraction % 10 == 0)
+            {
+                fraction /= 10;
+                fracDigits--;
+            }
+
+            Span<char> frac = stackalloc char[20];
+            var f = fracDigits;
+            for (var i = 0; i < fracDigits; i++)
+            {
+                frac[--f] = (char)('0' + (int)(fraction % 10));
+                fraction /= 10;
+            }
+
+            for (var i = 0; i < fracDigits; i++)
+            {
+                if (!TryAppendChar(destination, ref written, frac[i]))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        // 가수의 선두 integerDigits 자리를 정수부로, 이어 최대 2자리 소수부(절사, 0 제거)
+        private static bool TryWriteScaled(
+            Span<char> destination, ref int written, ulong mantissa, int digitCount, int integerDigits)
+        {
+            // 정수부 자릿수가 가수 자릿수보다 많으면 0 패딩 (예: 가수 92, 정수부 3자리 → "920")
+            if (integerDigits >= digitCount)
+            {
+                if (!TryAppendUInt(destination, ref written, mantissa))
+                {
+                    return false;
+                }
+
+                for (var i = 0; i < integerDigits - digitCount; i++)
+                {
+                    if (!TryAppendChar(destination, ref written, '0'))
+                    {
+                        return false;
+                    }
+                }
+
+                return true;
+            }
+
+            // 정수부 뒤 소수 2자리까지만 남기고 절사
+            var keep = integerDigits + 2;
+            var drop = digitCount - keep;
+            for (var i = 0; i < drop; i++)
+            {
+                mantissa /= 10;
+            }
+
+            var scale = 1UL;
+            var fracLen = Math.Min(2, Math.Max(0, digitCount - integerDigits));
+            for (var i = 0; i < fracLen; i++)
+            {
+                scale *= 10;
+            }
+
+            var integerPart = mantissa / scale;
+            var fraction = mantissa % scale;
+
+            while (fraction != 0 && fraction % 10 == 0)
+            {
+                fraction /= 10;
+                fracLen--;
+            }
+
+            if (!TryAppendUInt(destination, ref written, integerPart))
+            {
+                return false;
+            }
+
+            if (fraction == 0)
+            {
+                return true;
+            }
+
+            if (!TryAppendChar(destination, ref written, '.'))
+            {
+                return false;
+            }
+
+            Span<char> frac = stackalloc char[4];
+            var f = fracLen;
+            for (var i = 0; i < fracLen; i++)
+            {
+                frac[--f] = (char)('0' + (int)(fraction % 10));
+                fraction /= 10;
+            }
+
+            for (var i = 0; i < fracLen; i++)
+            {
+                if (!TryAppendChar(destination, ref written, frac[i]))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private static bool TryAppendChar(Span<char> destination, ref int written, char c)
+        {
+            if (written >= destination.Length)
+            {
+                return false;
+            }
+
+            destination[written++] = c;
+            return true;
+        }
+
+        private static bool TryAppendString(Span<char> destination, ref int written, string s)
+        {
+            foreach (var c in s)
+            {
+                if (!TryAppendChar(destination, ref written, c))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private static bool TryAppendUInt(Span<char> destination, ref int written, ulong value)
+        {
+            Span<char> digits = stackalloc char[20];
+            var count = 0;
+            do
+            {
+                digits[count++] = (char)('0' + (int)(value % 10));
+                value /= 10;
+            }
+            while (value != 0);
+
+            for (var i = count - 1; i >= 0; i--)
+            {
+                if (!TryAppendChar(destination, ref written, digits[i]))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
         /// <summary>디버그 표기. 핫패스 사용 금지 — 표시용은 TryFormat(Task 5).</summary>
         public override string ToString() =>
             Exponent == 0 ? Mantissa.ToString() : $"{Mantissa}e{Exponent}";
