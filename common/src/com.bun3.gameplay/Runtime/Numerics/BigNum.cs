@@ -411,11 +411,11 @@ namespace Bun3.Gameplay.Numerics
         /// 무할당 표시 포맷. 단위 상한(MaxUnits) 안이면 "1.5만"/"3.45B" 형태, 상한을 넘으면
         /// OverflowStyle에 따라 지수 표기("1.23e45") 또는 상한 단위 유지("12,345M" —
         /// idlez ToUnitString 방식). 소수 자릿수·고정 소수·정수부 구분자는 format 설정을
-        /// 따른다. format이 null이면 <see cref="BigNumFormat.Alpha"/>. 버퍼가 부족하면 false.
+        /// 따른다. format이 null이면 <see cref="BigNumFormat.Base"/>. 버퍼가 부족하면 false.
         /// </summary>
         public bool TryFormat(Span<char> destination, out int charsWritten, BigNumFormat? format = null)
         {
-            format ??= BigNumFormat.Alpha;
+            format ??= BigNumFormat.Base;
             charsWritten = 0;
 
             if (IsZero)
@@ -523,8 +523,8 @@ namespace Bun3.Gameplay.Numerics
                    && TryWriteFraction(destination, ref written, fraction, fracLen, format);
         }
 
-        // 소수부 쓰기. fraction은 fracDigits 자리(선행 0 포함) 값. MaxFractionDigits로 절사한 뒤
-        // Trim이면 트레일링 0 제거(비면 소수점 생략), 아니면 정확히 MaxFractionDigits 자리로 0 패딩.
+        // 소수부 쓰기. fraction은 fracDigits 자리(선행 0 포함) 값. MaxFractionDigits로
+        // 절사한 뒤 트레일링 0을 제거하고, 소수부가 비면 소수점 자체를 생략한다.
         private static bool TryWriteFraction(
             Span<char> destination, ref int written, ulong fraction, int fracDigits, BigNumFormat format)
         {
@@ -534,22 +534,15 @@ namespace Bun3.Gameplay.Numerics
                 fracDigits--;
             }
 
-            if (format.TrimFractionZeros)
+            while (fraction != 0 && fraction % 10 == 0)
             {
-                while (fraction != 0 && fraction % 10 == 0)
-                {
-                    fraction /= 10;
-                    fracDigits--;
-                }
-
-                if (fraction == 0)
-                {
-                    return true;   // 소수부 없음 — 소수점 생략
-                }
+                fraction /= 10;
+                fracDigits--;
             }
-            else if (format.MaxFractionDigits == 0)
+
+            if (fraction == 0)
             {
-                return true;
+                return true;   // 소수부 없음 — 소수점 생략
             }
 
             if (!TryAppendChar(destination, ref written, '.'))
@@ -570,18 +563,6 @@ namespace Bun3.Gameplay.Numerics
                 if (!TryAppendChar(destination, ref written, digits[i]))
                 {
                     return false;
-                }
-            }
-
-            // 고정 소수: 남은 자리를 0으로 채운다 ("2.00M")
-            if (!format.TrimFractionZeros)
-            {
-                for (var i = fracDigits; i < format.MaxFractionDigits; i++)
-                {
-                    if (!TryAppendChar(destination, ref written, '0'))
-                    {
-                        return false;
-                    }
                 }
             }
 

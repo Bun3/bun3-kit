@@ -59,11 +59,22 @@ public class BigNumFormatTests
     }
 
     [Test]
-    public void Beyond_unit_table_falls_back_to_scientific()
+    public void Default_overflow_keeps_top_unit_and_grows_integer()
     {
-        Assert.That(Format(BigNum.FromParts(123, 43)), Is.EqualTo("1.23e45"));
-        Assert.That(Format(BigNum.FromParts(-123, 43)), Is.EqualTo("-1.23e45"));
-        Assert.That(Format(BigNum.FromParts(1, 100)), Is.EqualTo("1e100"));
+        // 기본 스타일(TopUnit): 상한 단위 유지, 정수부 성장 (idlez limit 시맨틱)
+        Assert.That(Format(BigNum.FromParts(123, 43)),
+            Is.EqualTo("1230000000000000000000000000Qi"));   // 1.23e45, Qi = 10^18
+        Assert.That(Format(BigNum.FromParts(3, 20)), Is.EqualTo("300Qi"));
+    }
+
+    [Test]
+    public void Scientific_overflow_style_falls_back_to_exponent()
+    {
+        var sci = new BigNumFormat(3, new[] { "", "K", "M", "B", "T", "Qa", "Qi" },
+            overflowStyle: BigNumOverflowStyle.Scientific);
+        Assert.That(Format(BigNum.FromParts(123, 43), sci), Is.EqualTo("1.23e45"));
+        Assert.That(Format(BigNum.FromParts(-123, 43), sci), Is.EqualTo("-1.23e45"));
+        Assert.That(Format(BigNum.FromParts(1, 100), sci), Is.EqualTo("1e100"));
     }
 
     [Test]
@@ -73,7 +84,7 @@ public class BigNumFormatTests
         var custom = new BigNumFormat(3, new[] { "", "k", "m" });
         Assert.That(Format((BigNum)1_500, custom), Is.EqualTo("1.5k"));
         Assert.That(Format((BigNum)2_000_000, custom), Is.EqualTo("2m"));
-        Assert.That(Format(BigNum.FromParts(3, 9), custom), Is.EqualTo("3e9"));   // 테이블 초과 → 폴백
+        Assert.That(Format(BigNum.FromParts(3, 9), custom), Is.EqualTo("3000m"));   // 상한 초과 → 기본 TopUnit
     }
 
     [Test]
@@ -98,15 +109,17 @@ public class BigNumFormatTests
     }
 
     [Test]
-    public void Fixed_fraction_idlez_style_pads_zeros()
+    public void MaxFractionDigits_caps_fraction()
     {
-        // idlez decimalPlace 스타일: 고정 소수 자릿수, 트레일링 0 유지
-        var fmt = new BigNumFormat(3, new[] { "", "K", "M" },
-            maxFractionDigits: 1, trimFractionZeros: false);
-        Assert.That(Format((BigNum)2_000_000, fmt), Is.EqualTo("2.0M"));
+        // idlez decimalPlace 대응: 소수 자릿수 상한 (트레일링 0은 항상 제거)
+        var fmt = new BigNumFormat(3, new[] { "", "K", "M" }, maxFractionDigits: 1);
+        Assert.That(Format((BigNum)2_000_000, fmt), Is.EqualTo("2M"));
         Assert.That(Format((BigNum)1_234, fmt), Is.EqualTo("1.2K"));
-        Assert.That(Format((BigNum)999, fmt), Is.EqualTo("999"));   // plain 정수엔 소수 없음
+        Assert.That(Format((BigNum)999, fmt), Is.EqualTo("999"));
         Assert.That(Format(BigNum.FromParts(125, -2), fmt), Is.EqualTo("1.2"));
+
+        var noFraction = new BigNumFormat(3, new[] { "", "K", "M" }, maxFractionDigits: 0);
+        Assert.That(Format((BigNum)1_500, noFraction), Is.EqualTo("1K"));
     }
 
     [Test]
