@@ -144,6 +144,70 @@ namespace Bun3.Gameplay.Numerics
         public static BigNum operator -(BigNum value) =>
             value.IsZero ? value : new BigNum(-value.Mantissa, value.Exponent);
 
+        private const ulong TenPow18 = 1_000_000_000_000_000_000UL;
+
+        /// <summary>곱셈. 결과는 유효 18~19자리로 절사(0 방향)된다.</summary>
+        public static BigNum operator *(BigNum a, BigNum b)
+        {
+            if (a.IsZero || b.IsZero)
+            {
+                return Zero;
+            }
+
+            var negative = (a.Mantissa < 0) != (b.Mantissa < 0);
+            var ua = (ulong)Math.Abs(a.Mantissa);
+            var ub = (ulong)Math.Abs(b.Mantissa);
+
+            Int128Math.Mul64(ua, ub, out var hi, out var lo);
+            var exponent = (long)a.Exponent + b.Exponent;
+            var mantissa = ReduceToLong(hi, lo, ref exponent);
+            return Canonicalize(negative ? -mantissa : mantissa, exponent);
+        }
+
+        /// <summary>나눗셈. 결과는 유효 18~19자리로 절사(0 방향)된다. 0으로 나누면 던진다.</summary>
+        public static BigNum operator /(BigNum a, BigNum b)
+        {
+            if (b.IsZero)
+            {
+                throw new DivideByZeroException();
+            }
+
+            if (a.IsZero)
+            {
+                return Zero;
+            }
+
+            var negative = (a.Mantissa < 0) != (b.Mantissa < 0);
+            var ua = (ulong)Math.Abs(a.Mantissa);
+            var ub = (ulong)Math.Abs(b.Mantissa);
+
+            // (가수a × 10^18) ÷ 가수b — 몫이 18~19자리 정밀도를 갖도록 분자를 키운다
+            Int128Math.Mul64(ua, TenPow18, out var hi, out var lo);
+            Int128Math.DivRem(hi, lo, ub, out var qHi, out var qLo, out _);
+            var exponent = (long)a.Exponent - b.Exponent - 18;
+            var mantissa = ReduceToLong(qHi, qLo, ref exponent);
+            return Canonicalize(negative ? -mantissa : mantissa, exponent);
+        }
+
+        // 128비트 값을 long 범위(≤ long.MaxValue)까지 10^k 절사로 줄인다. exponent에 k를 더한다.
+        private static long ReduceToLong(ulong hi, ulong lo, ref long exponent)
+        {
+            if (hi != 0)
+            {
+                Int128Math.DivRem(hi, lo, TenPow18, out hi, out lo, out _);
+                exponent += 18;
+            }
+
+            // 위 나눗셈 후에도 최대 ~8.5×10^19 — 한두 자리 더 내린다
+            while (hi != 0 || lo > long.MaxValue)
+            {
+                Int128Math.DivRem(hi, lo, 10, out hi, out lo, out _);
+                exponent++;
+            }
+
+            return (long)lo;
+        }
+
         /// <summary>값 비교. 유효 자릿수 밖 차이는 같음으로 본다(정밀도 계약과 일관).</summary>
         public int CompareTo(BigNum other) => (this - other).Sign;
 
