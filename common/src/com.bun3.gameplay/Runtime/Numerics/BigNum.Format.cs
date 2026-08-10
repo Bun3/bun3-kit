@@ -54,7 +54,7 @@ namespace Bun3.Gameplay.Numerics
             }
 
             // 1) 그룹 미만의 작은 값: 자릿수 그대로 (소수 포함, magnitude ≥ -2까지)
-            if (magnitude < format.GroupDigits && Exponent >= -18 && magnitude >= -2)
+            if (magnitude < format.GroupDigits && Exponent >= -ScaleDigits && magnitude >= -2)
             {
                 return TryWritePlain(destination, ref charsWritten, absMantissa, Exponent, format);
             }
@@ -214,7 +214,7 @@ namespace Bun3.Gameplay.Numerics
         private static bool TryAppendGroupedInteger(
             Span<char> destination, ref int written, ulong value, int totalDigits, char? separator)
         {
-            Span<char> lead = stackalloc char[20];
+            Span<char> lead = stackalloc char[MantissaMaxDigits + 1];
             var leadCount = 0;
             do
             {
@@ -269,7 +269,7 @@ namespace Bun3.Gameplay.Numerics
 
         private static bool TryAppendUInt(Span<char> destination, ref int written, ulong value)
         {
-            Span<char> digits = stackalloc char[20];
+            Span<char> digits = stackalloc char[MantissaMaxDigits + 1];
             var count = 0;
             do
             {

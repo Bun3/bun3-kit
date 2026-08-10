@@ -14,7 +14,16 @@ namespace Bun3.Gameplay.Numerics
         /// <summary>지수 한계. 초과는 <see cref="BigNumOverflowException"/>, 미만(언더플로)은 0으로 수렴.</summary>
         public const int MaxExponent = 100_000_000;
 
-        // 10^0 .. 10^19 (10^19까지 ulong에 든다)
+        // 가수(long)가 담는 최대 십진 유효 자릿수. 정수 정확 한계(±9.2×10^18)의 근원.
+        private const int MantissaMaxDigits = 19;
+
+        // 내부 스케일 자릿수(= 10^18) — 나눗셈 분자 확장 폭이자 덧셈 정렬 창.
+        private const int ScaleDigits = MantissaMaxDigits - 1;
+
+        // 128비트 값의 최대 십진 자릿수 — 자릿수 테이블 크기.
+        private const int MaxDigits128 = 39;
+
+        // 10^0 .. 10^MantissaMaxDigits (10^19까지 ulong에 든다)
         private static readonly ulong[] Pow10 = BuildPow10();
 
         // long.MaxValue / 10^k (k = 0..18) — "×10^k가 long을 안 넘는가" 경계표
@@ -22,8 +31,8 @@ namespace Bun3.Gameplay.Numerics
 
         private static long[] BuildLongMaxDivPow10()
         {
-            var table = new long[19];
-            for (var i = 0; i < 19; i++)
+            var table = new long[MantissaMaxDigits];
+            for (var i = 0; i < table.Length; i++)
             {
                 table[i] = (long)((ulong)long.MaxValue / Pow10[i]);
             }
@@ -32,13 +41,13 @@ namespace Bun3.Gameplay.Numerics
         }
 
         // 10^i의 128비트 표현 (i = 0..38) — 128비트 값의 자릿수 계산용
-        private static readonly ulong[] Pow10Hi128 = new ulong[39];
-        private static readonly ulong[] Pow10Lo128 = new ulong[39];
+        private static readonly ulong[] Pow10Hi128 = new ulong[MaxDigits128];
+        private static readonly ulong[] Pow10Lo128 = new ulong[MaxDigits128];
 
         static BigNum()
         {
             Pow10Lo128[0] = 1;
-            for (var i = 1; i < 39; i++)
+            for (var i = 1; i < MaxDigits128; i++)
             {
                 // (hi:lo) × 10 — lo 곱의 자리올림을 hi에 편입
                 Int128Math.Mul64(Pow10Lo128[i - 1], 10, out var carry, out var lo);
@@ -49,9 +58,9 @@ namespace Bun3.Gameplay.Numerics
 
         private static ulong[] BuildPow10()
         {
-            var table = new ulong[20];
+            var table = new ulong[MantissaMaxDigits + 1];
             table[0] = 1;
-            for (var i = 1; i < 20; i++)
+            for (var i = 1; i < table.Length; i++)
             {
                 table[i] = table[i - 1] * 10;
             }
@@ -110,8 +119,8 @@ namespace Bun3.Gameplay.Numerics
             }
 
             // hi != 0 ⇒ 값 ≥ 2^64 > 10^19 ⇒ 자릿수 ∈ [20, 39]. "값 < 10^d"인 최소 d를 이진 탐색.
-            var low = 20;
-            var high = 39;
+            var low = MantissaMaxDigits + 1;
+            var high = MaxDigits128;
             while (low < high)
             {
                 var mid = (low + high) >> 1;
@@ -247,7 +256,7 @@ namespace Bun3.Gameplay.Numerics
             if (diff > 0)
             {
                 var abs = am < 0 ? -am : am;   // 정규형 보장으로 long.MinValue 불가
-                var k = 19 - CountDigits64((ulong)abs);
+                var k = MantissaMaxDigits - CountDigits64((ulong)abs);
                 if (k > diff)
                 {
                     k = (int)diff;
@@ -263,7 +272,7 @@ namespace Bun3.Gameplay.Numerics
             }
 
             var gap = ae - be;
-            if (gap > 18)
+            if (gap > ScaleDigits)
             {
                 return a;   // b는 유효 자릿수 창 밖
             }
@@ -292,6 +301,7 @@ namespace Bun3.Gameplay.Numerics
         public static BigNum operator -(BigNum value) =>
             value.IsZero ? value : new BigNum(-value.Mantissa, value.Exponent);
 
+        // = Pow10[ScaleDigits] — const 문맥에서 배열 참조가 불가해 리터럴로 유지
         private const ulong TenPow18 = 1_000_000_000_000_000_000UL;
 
         /// <summary>곱셈. 결과는 유효 18~19자리로 절사(0 방향)된다.</summary>
@@ -328,16 +338,16 @@ namespace Bun3.Gameplay.Numerics
             var negative = (a.Mantissa < 0) != (b.Mantissa < 0);
             var ua = (ulong)Math.Abs(a.Mantissa);
             var ub = (ulong)Math.Abs(b.Mantissa);
-            var exponent = (long)a.Exponent - b.Exponent - 18;
+            var exponent = (long)a.Exponent - b.Exponent - ScaleDigits;
 
             // 두 가수를 [10^18, 10^19) 구간으로 정규화 — 고정폭 스케일링은 소가수/대가수
             // 조합에서 유효 자릿수가 붕괴하고, 분모 가수가 분자×10^18보다 크면 0으로 무너진다.
             // 자릿수 기반 일괄 스케일: ×10^k 1회 (루프 반복과 결과 동일).
-            var scaleA = 19 - CountDigits64(ua);
+            var scaleA = MantissaMaxDigits - CountDigits64(ua);
             ua *= Pow10[scaleA];
             exponent -= scaleA;
 
-            var scaleB = 19 - CountDigits64(ub);
+            var scaleB = MantissaMaxDigits - CountDigits64(ub);
             ub *= Pow10[scaleB];
             exponent += scaleB;
 
@@ -359,9 +369,9 @@ namespace Bun3.Gameplay.Numerics
             }
 
             var digits = CountDigits128(hi, lo);
-            if (digits > 19)
+            if (digits > MantissaMaxDigits)
             {
-                var k = Math.Min(digits - 19, 19);   // Pow10 테이블 상한(10^19) 방어
+                var k = Math.Min(digits - MantissaMaxDigits, MantissaMaxDigits);   // Pow10 테이블 상한(10^19) 방어
                 Int128Math.DivRem(hi, lo, Pow10[k], out hi, out lo, out _);
                 exponent += k;
             }
