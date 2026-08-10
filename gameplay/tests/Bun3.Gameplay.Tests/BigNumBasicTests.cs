@@ -94,6 +94,20 @@ public class BigNumBasicTests
     }
 
     [Test]
+    public void Addition_is_exact_up_to_long_range()
+    {
+        // 실제 오버플로 전에는 절사하지 않는다 (최종 리뷰 Important 회귀 가드)
+        Assert.That((BigNum)9_000_000_000_000_000_000L + 1,
+            Is.EqualTo((BigNum)9_000_000_000_000_000_001L));
+        Assert.That((BigNum)5_000_000_000_000_000_000L + 1,
+            Is.EqualTo((BigNum)5_000_000_000_000_000_001L));
+
+        // 실제 오버플로 시 한 자리 양보 (양쪽 절사 후 합)
+        Assert.That((BigNum)long.MaxValue + long.MaxValue,
+            Is.EqualTo(BigNum.FromParts(184_467_440_737_095_516L, 2)));
+    }
+
+    [Test]
     public void Determinism_same_ops_same_bits()
     {
         // 연산 결과의 비트 동일성 — 결정론 계약의 최소 검증

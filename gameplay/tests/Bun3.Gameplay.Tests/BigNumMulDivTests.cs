@@ -95,4 +95,53 @@ public class BigNumMulDivTests
         var huge = BigNum.FromParts(1, BigNum.MaxExponent - 1);
         Assert.That(tiny / huge, Is.EqualTo(BigNum.Zero));
     }
+
+    [Test]
+    public void Divide_preserves_significant_digits_in_mid_range()
+    {
+        // 중간값 [2^64, 1e35) 구간 — 필요 이상 깎으면 안 된다 (최종 리뷰 Critical 회귀 가드)
+        Assert.That((BigNum)77 / 3, Is.EqualTo(BigNum.FromParts(2_566_666_666_666_666_666L, -17)));
+        Assert.That((BigNum)92 / 3, Is.EqualTo(BigNum.FromParts(3_066_666_666_666_666_666L, -17)));
+    }
+
+    [Test]
+    public void Multiply_preserves_significant_digits_in_mid_range()
+    {
+        // 9999999999² = 99999999980000000001 → 19자리 절사
+        Assert.That((BigNum)9_999_999_999L * 9_999_999_999L,
+            Is.EqualTo(BigNum.FromParts(9_999_999_998L, 10)));
+
+        // 풀정밀 가수 × 소형 배율 — "값 × 1.05 배율" 패턴의 회귀 가드
+        var third = (BigNum)1 / 3;                            // 3.33...e-1 (18자리)
+        var scaled = third * BigNum.FromParts(105, -1);       // × 10.5
+        Assert.That(scaled, Is.EqualTo(BigNum.FromParts(3_499_999_999_999_999_996L, -18)));
+    }
+
+    [Test]
+    public void Divide_matches_BigInteger_oracle_prefix()
+    {
+        long[] numerators = { 77, 92, 1_000_000_007, 123_456_789_012_345_680, long.MaxValue };
+        long[] denominators = { 3, 999_999_937, 987_654_321 };
+        foreach (var n in numerators)
+        foreach (var d in denominators)
+        {
+            var q = (BigNum)n / d;
+            var oracle = (BigInteger)n * BigInteger.Pow(10, 30) / d;
+            var oracleStr = oracle.ToString();
+            var mantissaStr = Math.Abs(q.Mantissa).ToString();
+            Assert.That(oracleStr.StartsWith(mantissaStr), Is.True,
+                $"{n}/{d}: got {q.Mantissa}e{q.Exponent}");
+            Assert.That(mantissaStr.Length, Is.GreaterThanOrEqualTo(17), $"{n}/{d} 유효 자릿수 유지");
+        }
+    }
+
+    [Test]
+    public void Divide_small_by_large_mantissa_does_not_collapse_to_zero()
+    {
+        // 분모 가수 > 분자×10^18 이던 옛 설계에서 0으로 붕괴하던 케이스
+        var q = (BigNum)1 / long.MaxValue;   // ≈ 1.0842e-19
+        Assert.That(q.IsZero, Is.False);
+        Assert.That(q > BigNum.FromParts(1084, -22) && q < BigNum.FromParts(1085, -22), Is.True,
+            $"got {q.Mantissa}e{q.Exponent}");
+    }
 }

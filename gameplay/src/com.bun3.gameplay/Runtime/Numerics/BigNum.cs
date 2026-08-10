@@ -15,7 +15,6 @@ namespace Bun3.Gameplay.Numerics
         public const int MaxExponent = 100_000_000;
 
         private const long LongMaxDiv10 = long.MaxValue / 10;          //  922337203685477580
-        private const long HalfLongMax = long.MaxValue / 2;
 
         /// <summary>가수. 정규 형식에서 10의 배수가 아니다(0 제외).</summary>
         public readonly long Mantissa;
@@ -126,15 +125,18 @@ namespace Bun3.Gameplay.Numerics
                 bm /= 10;
             }
 
-            // 합이 long을 넘지 않도록 한 자리 양보 (같은 지수 정렬 유지)
-            if (am > HalfLongMax || am < -HalfLongMax || bm > HalfLongMax || bm < -HalfLongMax)
+            // 실제 오버플로가 날 때만 한 자리 양보 (같은 지수 정렬 유지) — long 범위 안의
+            // 합은 항상 정확하다(스펙 §6: 9.2e18까지 정수 정확).
+            var sum = unchecked(am + bm);
+            if (((am ^ sum) & (bm ^ sum)) < 0)   // 같은 부호 피연산자 합의 부호 반전 = 오버플로
             {
                 am /= 10;
                 bm /= 10;
                 ae++;
+                sum = am + bm;   // |가수| ≤ 9.3e17 — 재오버플로 불가
             }
 
-            return Canonicalize(am + bm, ae);
+            return Canonicalize(sum, ae);
         }
 
         /// <summary>뺄셈.</summary>
@@ -164,7 +166,7 @@ namespace Bun3.Gameplay.Numerics
             return Canonicalize(negative ? -mantissa : mantissa, exponent);
         }
 
-        /// <summary>나눗셈. 결과는 유효 18~19자리로 절사(0 방향)된다. 0으로 나누면 던진다.</summary>
+        /// <summary>나눗셈. 결과는 유효 17~19자리로 절사(0 방향)된다. 0으로 나누면 던진다.</summary>
         public static BigNum operator /(BigNum a, BigNum b)
         {
             if (b.IsZero)
@@ -180,25 +182,34 @@ namespace Bun3.Gameplay.Numerics
             var negative = (a.Mantissa < 0) != (b.Mantissa < 0);
             var ua = (ulong)Math.Abs(a.Mantissa);
             var ub = (ulong)Math.Abs(b.Mantissa);
+            var exponent = (long)a.Exponent - b.Exponent - 18;
 
-            // (가수a × 10^18) ÷ 가수b — 몫이 18~19자리 정밀도를 갖도록 분자를 키운다
+            // 두 가수를 [10^18, 10^19) 구간으로 정규화 — 고정폭 스케일링은 소가수/대가수
+            // 조합에서 유효 자릿수가 붕괴하고, 분모 가수가 분자×10^18보다 크면 0으로 무너진다.
+            while (ua < TenPow18)
+            {
+                ua *= 10;
+                exponent--;
+            }
+
+            while (ub < TenPow18)
+            {
+                ub *= 10;
+                exponent++;
+            }
+
             Int128Math.Mul64(ua, TenPow18, out var hi, out var lo);
             Int128Math.DivRem(hi, lo, ub, out var qHi, out var qLo, out _);
-            var exponent = (long)a.Exponent - b.Exponent - 18;
             var mantissa = ReduceToLong(qHi, qLo, ref exponent);
             return Canonicalize(negative ? -mantissa : mantissa, exponent);
         }
 
         // 128비트 값을 long 범위(≤ long.MaxValue)까지 10^k 절사로 줄인다. exponent에 k를 더한다.
+        // 반드시 한 자리씩 줄인다 — 큰 폭 점프는 필요 이상으로 깎아 유효 자릿수를 파괴한다.
+        // (10^18 점프 최적화가 실제로 그 버그였다. 성능이 병목으로 측정되면 자릿수 계산
+        // 기반 최소 시프트로 교체하되, 절사 폭이 "필요한 만큼만"이라는 불변식을 지킬 것.)
         private static long ReduceToLong(ulong hi, ulong lo, ref long exponent)
         {
-            if (hi != 0)
-            {
-                Int128Math.DivRem(hi, lo, TenPow18, out hi, out lo, out _);
-                exponent += 18;
-            }
-
-            // 위 나눗셈 후에도 최대 ~8.5×10^19 — 한두 자리 더 내린다
             while (hi != 0 || lo > long.MaxValue)
             {
                 Int128Math.DivRem(hi, lo, 10, out hi, out lo, out _);
@@ -208,7 +219,8 @@ namespace Bun3.Gameplay.Numerics
             return (long)lo;
         }
 
-        /// <summary>값 비교. 유효 자릿수 밖 차이는 같음으로 본다(정밀도 계약과 일관).</summary>
+        /// <summary>값 비교. 유효 자릿수 밖 차이는 같음으로 본다(정밀도 계약과 일관) —
+        /// Equals(비트 동등)와 판정이 다를 수 있으므로 정렬 컨테이너의 키로 쓰지 말 것.</summary>
         public int CompareTo(BigNum other) => (this - other).Sign;
 
         /// <summary>정규 형식 필드 비교 — 같은 값은 항상 같은 비트다.</summary>

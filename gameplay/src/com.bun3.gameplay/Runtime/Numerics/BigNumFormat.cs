@@ -35,8 +35,16 @@ namespace Bun3.Gameplay.Numerics
                 throw new ArgumentException("Units[0]은 빈 문자열이어야 한다.", nameof(units));
             }
 
+            for (var i = 1; i < units.Length; i++)
+            {
+                if (units[i] == null)
+                {
+                    throw new ArgumentException("Units에 null 원소가 있다.", nameof(units));
+                }
+            }
+
             GroupDigits = groupDigits;
-            Units = units;
+            Units = (string[])units.Clone();   // 외부 변이 차단
         }
     }
 }
