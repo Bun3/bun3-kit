@@ -279,11 +279,21 @@ namespace Bun3.Gameplay.Numerics
                        && TryAppendString(destination, ref charsWritten, format.Units[unitIndex]);
             }
 
-            // 3) 폴백: 지수 표기 m.mm'e'EEE
+            // 3) 폴백: 지수 표기 m.mm'e'[-]EEE
             if (!TryWriteScaled(destination, ref charsWritten, absMantissa, digitCount, 1)
                 || !TryAppendChar(destination, ref charsWritten, 'e'))
             {
                 return false;
+            }
+
+            if (magnitude < 0)
+            {
+                if (!TryAppendChar(destination, ref charsWritten, '-'))
+                {
+                    return false;
+                }
+
+                return TryAppendUInt(destination, ref charsWritten, (ulong)(-magnitude));
             }
 
             return TryAppendUInt(destination, ref charsWritten, (ulong)magnitude);
@@ -307,7 +317,6 @@ namespace Bun3.Gameplay.Numerics
         {
             if (exponent >= 0)
             {
-                // 정규형에서 이 경로의 exponent > 0은 mantissa에 0을 붙여 표기
                 if (!TryAppendUInt(destination, ref written, mantissa))
                 {
                     return false;
@@ -333,17 +342,33 @@ namespace Bun3.Gameplay.Numerics
 
             var integerPart = mantissa / divisor;
             var fraction = mantissa % divisor;
-            if (!TryAppendUInt(destination, ref written, integerPart)
-                || !TryAppendChar(destination, ref written, '.'))
+
+            // 소수부 최대 2자리 절사(스펙 §6) — 그 후 트레일링 0 제거
+            while (fracDigits > 2)
             {
-                return false;
+                fraction /= 10;
+                fracDigits--;
             }
 
-            // 소수부: 선행 0 유지, 트레일링 0 제거
             while (fraction != 0 && fraction % 10 == 0)
             {
                 fraction /= 10;
                 fracDigits--;
+            }
+
+            if (!TryAppendUInt(destination, ref written, integerPart))
+            {
+                return false;
+            }
+
+            if (fraction == 0)
+            {
+                return true;   // 절사/제거 후 소수부 없음 — 정수만
+            }
+
+            if (!TryAppendChar(destination, ref written, '.'))
+            {
+                return false;
             }
 
             Span<char> frac = stackalloc char[20];

@@ -82,4 +82,19 @@ public class BigNumFormatTests
         Span<char> tiny = stackalloc char[2];
         Assert.That(((BigNum)12_345).TryFormat(tiny, out _, null), Is.False);
     }
+
+    [Test]
+    public void Plain_fraction_truncates_to_two_digits()
+    {
+        Assert.That(Format(BigNum.FromParts(523, -4)), Is.EqualTo("0.05"));    // 0.0523 절사
+        Assert.That(Format(BigNum.FromParts(10001, -4)), Is.EqualTo("1"));     // 1.0001 → .00 제거
+    }
+
+    [Test]
+    public void Tiny_values_fall_back_to_scientific_with_negative_exponent()
+    {
+        Assert.That(Format(BigNum.FromParts(1, -50)), Is.EqualTo("1e-50"));
+        Assert.That(Format(BigNum.FromParts(123, -45)), Is.EqualTo("1.23e-43"));
+        Assert.That(Format(BigNum.FromParts(-1, -50)), Is.EqualTo("-1e-50"));
+    }
 }
