@@ -19,6 +19,10 @@
 
 ## 작업 관례
 
+- 레포 최상위 분기는 `common/` `server/` `unity/` 셋뿐이다 — 신규 패키지는 반드시
+  이 세 영역 하위(`<영역>/src/<패키지>`, `<영역>/tests/<테스트>`)에 둔다.
+  공용(클라+서버) 패키지는 common, 서버 전용은 server, Unity 전용은 unity.
+
 - 설계·구현 흐름: superpowers 브레인스토밍 → 스펙(`docs/superpowers/specs/`) →
   플랜(`docs/superpowers/plans/`) → SDD 실행. 스펙이 결정의 원본이다.
 - 패키지 코드: netstandard2.1 + C#9(블록 네임스페이스), 모든 public 멤버 한국어
