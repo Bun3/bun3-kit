@@ -165,6 +165,49 @@ namespace Bun3.Gameplay.Numerics
         /// <summary>int 정수는 정확하게 변환된다.</summary>
         public static implicit operator BigNum(int value) => Canonicalize(value, 0);
 
+        // double 변환 정규화 구간 [1e15, 1e16) — 유효 16자리 확보
+        private const double DoubleNormalizeLow = 1e15;
+        private const double DoubleNormalizeHigh = 1e16;
+
+        /// <summary>double을 절사 변환한다(유효 약 16자리) — **명시적**: 손실 변환이며,
+        /// 런타임 부동소수 값을 심에 무심코 흘리는 실수를 캐스트가 막는다(결정론 경계).
+        /// 데이터 로드 등 경계에서 1회 변환하는 용도. NaN/무한대는 던진다.
+        /// 변환 자체는 IEEE 기본 연산(×10/÷10)만 사용해 같은 입력 비트면 어디서나 같은 결과다.</summary>
+        public static explicit operator BigNum(double value)
+        {
+            if (double.IsNaN(value) || double.IsInfinity(value))
+            {
+                throw new ArgumentException("NaN/무한대는 BigNum으로 변환할 수 없다.", nameof(value));
+            }
+
+            if (value == 0d)
+            {
+                return Zero;
+            }
+
+            var negative = value < 0d;
+            var abs = negative ? -value : value;
+            var exponent = 0L;
+
+            while (abs >= DoubleNormalizeHigh)
+            {
+                abs /= 10d;
+                exponent++;
+            }
+
+            while (abs < DoubleNormalizeLow)
+            {
+                abs *= 10d;
+                exponent--;
+            }
+
+            var mantissa = (long)abs;   // 절사 (0 방향)
+            return Canonicalize(negative ? -mantissa : mantissa, exponent);
+        }
+
+        /// <summary>float을 절사 변환한다(유효 약 7자리) — 명시적. 규칙은 double과 동일.</summary>
+        public static explicit operator BigNum(float value) => (BigNum)(double)value;
+
         /// <summary>값이 0인지 여부.</summary>
         public bool IsZero => Mantissa == 0;
 

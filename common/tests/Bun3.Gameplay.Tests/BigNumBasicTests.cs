@@ -108,6 +108,19 @@ public class BigNumBasicTests
     }
 
     [Test]
+    public void Float_double_convert_explicitly()
+    {
+        Assert.That((BigNum)1.5, Is.EqualTo(BigNum.FromParts(15, -1)));
+        Assert.That((BigNum)(-2.25), Is.EqualTo(BigNum.FromParts(-225, -2)));
+        Assert.That((BigNum)100.0, Is.EqualTo((BigNum)100));
+        Assert.That((BigNum)1e20, Is.EqualTo(BigNum.FromParts(1, 20)));
+        Assert.That((BigNum)0.0, Is.EqualTo(BigNum.Zero));
+        Assert.That((BigNum)1.5f, Is.EqualTo(BigNum.FromParts(15, -1)));
+        Assert.That(() => _ = (BigNum)double.NaN, Throws.ArgumentException);
+        Assert.That(() => _ = (BigNum)double.PositiveInfinity, Throws.ArgumentException);
+    }
+
+    [Test]
     public void Determinism_same_ops_same_bits()
     {
         // 연산 결과의 비트 동일성 — 결정론 계약의 최소 검증
