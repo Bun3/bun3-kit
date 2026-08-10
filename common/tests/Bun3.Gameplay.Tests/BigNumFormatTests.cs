@@ -77,6 +77,48 @@ public class BigNumFormatTests
     }
 
     [Test]
+    public void MaxUnits_caps_unitization_with_top_unit_growth()
+    {
+        // idlez ToUnitString(limit) 시맨틱: 상한 단위 유지 + 정수부 성장 + 3자리 구분자
+        var fmt = new BigNumFormat(3, new[] { "", "K", "M" }, maxUnits: 2,
+            integerGroupSeparator: ',', overflowStyle: BigNumOverflowStyle.TopUnit);
+        Assert.That(Format((BigNum)1_500, fmt), Is.EqualTo("1.5K"));
+        Assert.That(Format(BigNum.FromParts(1, 10), fmt), Is.EqualTo("10,000M"));      // 1e10
+        Assert.That(Format(BigNum.FromParts(123, 7), fmt), Is.EqualTo("1,230M"));      // 1.23e9
+        Assert.That(Format((BigNum)123_456_789, fmt), Is.EqualTo("123.45M"));
+    }
+
+    [Test]
+    public void MaxUnits_lower_than_table_respects_cap()
+    {
+        // 테이블에 M이 있어도 maxUnits=1이면 K까지만 유닛화 ("몇 번까지" 제어)
+        var fmt = new BigNumFormat(3, new[] { "", "K", "M", "B" }, maxUnits: 1,
+            integerGroupSeparator: ',', overflowStyle: BigNumOverflowStyle.TopUnit);
+        Assert.That(Format((BigNum)2_000_000, fmt), Is.EqualTo("2,000K"));
+    }
+
+    [Test]
+    public void Fixed_fraction_idlez_style_pads_zeros()
+    {
+        // idlez decimalPlace 스타일: 고정 소수 자릿수, 트레일링 0 유지
+        var fmt = new BigNumFormat(3, new[] { "", "K", "M" },
+            maxFractionDigits: 1, trimFractionZeros: false);
+        Assert.That(Format((BigNum)2_000_000, fmt), Is.EqualTo("2.0M"));
+        Assert.That(Format((BigNum)1_234, fmt), Is.EqualTo("1.2K"));
+        Assert.That(Format((BigNum)999, fmt), Is.EqualTo("999"));   // plain 정수엔 소수 없음
+        Assert.That(Format(BigNum.FromParts(125, -2), fmt), Is.EqualTo("1.2"));
+    }
+
+    [Test]
+    public void Invalid_format_options_throw()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            _ = new BigNumFormat(3, new[] { "", "K" }, maxUnits: 2));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            _ = new BigNumFormat(3, new[] { "", "K" }, maxFractionDigits: 10));
+    }
+
+    [Test]
     public void Insufficient_destination_returns_false()
     {
         Span<char> tiny = stackalloc char[2];

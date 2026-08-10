@@ -86,8 +86,11 @@ Bun3.Server.Gameplay     (netstandard2.1)
 - 연산: 사칙/비교/음수. **지수 오버플로와 0 나눗셈은 예외**(밸런스 공식 폭주 버그를
   숨기지 않는다 — fail-fast). 권위·미러가 같은 연산에서 같은 예외 → 결정론 유지.
 - proto: `sint64 mantissa + int32 exponent`.
-- **표시 포맷 내장**: 단위 문자 테이블(만/억/조/경… 또는 K/M/B/T)을 설정으로 오버라이드
-  가능한 기본 포매터 제공. `TryFormat(Span<char>, out int written, ...)` 무할당 패턴 —
+- **표시 포맷 내장**: idlez ToUnitString의 일반화 — 몇 자리마다(GroupDigits)·무엇으로
+  (Units: 만/억/조/경… 또는 K/M/B/T)·최대 몇 번(MaxUnits) 유닛화할지, 소수 자릿수
+  (MaxFractionDigits)와 고정 소수 여부(TrimFractionZeros), 정수부 3자리 구분자,
+  상한 초과 표기(Scientific 지수 폴백 | TopUnit 상한 단위 유지+정수부 성장)를 전부
+  설정으로 제어. `TryFormat(Span<char>, out int written, ...)` 무할당 패턴 —
   Unity에선 TMP `SetText(char[])`/ZString과 그대로 합성.
 
 FixedFloat(Q47.16, idlez)은 공간/기하 전용으로 이동 동기화 스펙에서 Bun3.Common 승격을
