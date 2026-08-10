@@ -27,9 +27,9 @@ namespace Bun3.Gameplay.Numerics
         }
 
         /// <summary>
-        /// 부호 없는 128비트 ÷ 64비트 → 몫 128비트 + 나머지. 이진 롱 디비전(128회 루프) —
-        /// 단순하고 자명하게 정확하다. BigNum 연산 빈도(수정자 재계산 수준)에는 충분히 빠르며,
-        /// 병목으로 측정되면 Knuth D로 교체한다.
+        /// 부호 없는 128비트 ÷ 64비트 → 몫 128비트 + 나머지. 상위 워드 분할 후
+        /// Knuth Algorithm D의 2-림 특수화(하드웨어 나눗셈 수 회)로 처리 — 정수 연산만
+        /// 사용하므로 결정론이 유지된다. 실측 병목(이진 루프 128회)을 교체한 구현.
         /// </summary>
         internal static void DivRem(
             ulong uHi, ulong uLo, ulong divisor, out ulong qHi, out ulong qLo, out ulong remainder)
@@ -47,28 +47,78 @@ namespace Bun3.Gameplay.Numerics
                 return;
             }
 
-            qHi = 0;
-            qLo = 0;
-            ulong rem = 0;
-            for (var i = 127; i >= 0; i--)
+            if (uHi >= divisor)
             {
-                var carry = rem >> 63;
-                rem = (rem << 1) | ((i >= 64 ? uHi >> (i - 64) : uLo >> i) & 1);
-                if (carry != 0 || rem >= divisor)
+                // 상위 워드를 먼저 나눠 몫의 상위 절반을 얻고, 나머지를 하위 나눗셈에 넘긴다:
+                // (uHi:uLo)/d = (uHi/d)·2^64 + ((uHi%d):uLo)/d — 정확한 분해.
+                qHi = uHi / divisor;
+                uHi %= divisor;
+            }
+            else
+            {
+                qHi = 0;
+            }
+
+            qLo = DivRem128By64(uHi, uLo, divisor, out remainder);
+        }
+
+        // (uHi:uLo) ÷ divisor. 전제: uHi < divisor (몫이 64비트에 들어온다).
+        // Knuth Algorithm D의 32비트 2-림 특수화(Hacker's Delight udivdi3 계열).
+        // 추정 몫의 보정 루프는 최대 2회 — unchecked 랩어라운드는 알고리즘의 일부다.
+        private static ulong DivRem128By64(ulong uHi, ulong uLo, ulong divisor, out ulong remainder)
+        {
+            const ulong Base = 1UL << 32;
+
+            var shift = LeadingZeroCount(divisor);
+            var v = divisor << shift;
+            var vn1 = v >> 32;
+            var vn0 = (uint)v;
+
+            var un32 = shift == 0 ? uHi : (uHi << shift) | (uLo >> (64 - shift));
+            var un10 = uLo << shift;
+            var un1 = un10 >> 32;
+            var un0 = (uint)un10;
+
+            var q1 = un32 / vn1;
+            var rhat = un32 % vn1;
+            while (q1 >= Base || q1 * vn0 > Base * rhat + un1)
+            {
+                q1--;
+                rhat += vn1;
+                if (rhat >= Base)
                 {
-                    rem -= divisor;   // carry 시 2^64 초과분이 언더플로 래핑으로 정확히 상쇄된다
-                    if (i >= 64)
-                    {
-                        qHi |= 1UL << (i - 64);
-                    }
-                    else
-                    {
-                        qLo |= 1UL << i;
-                    }
+                    break;
                 }
             }
 
-            remainder = rem;
+            var un21 = unchecked(un32 * Base + un1 - q1 * v);
+            var q0 = un21 / vn1;
+            rhat = un21 % vn1;
+            while (q0 >= Base || q0 * vn0 > Base * rhat + un0)
+            {
+                q0--;
+                rhat += vn1;
+                if (rhat >= Base)
+                {
+                    break;
+                }
+            }
+
+            remainder = unchecked(un21 * Base + un0 - q0 * v) >> shift;
+            return q1 * Base + q0;
+        }
+
+        // netstandard2.1에는 BitOperations.LeadingZeroCount가 없다 — 이진 축소 6단계.
+        private static int LeadingZeroCount(ulong value)
+        {
+            var count = 0;
+            if ((value >> 32) == 0) { count += 32; value <<= 32; }
+            if ((value >> 48) == 0) { count += 16; value <<= 16; }
+            if ((value >> 56) == 0) { count += 8; value <<= 8; }
+            if ((value >> 60) == 0) { count += 4; value <<= 4; }
+            if ((value >> 62) == 0) { count += 2; value <<= 2; }
+            if ((value >> 63) == 0) { count += 1; }
+            return count;
         }
     }
 }
