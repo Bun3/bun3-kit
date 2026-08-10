@@ -23,7 +23,7 @@ proto 생성 클래스=심 상태 결합, 스탯 하드코딩(UnitStat 프로퍼
 |---|---|
 | 접근 | 하이브리드(GAS 실전형): Effect는 선언 데이터 + 선택 훅, Ability는 코드 |
 | 심 위치 | 공용 netstandard2.1 라이브러리 — 호스트(권위)와 원격 클라(미러)가 같은 코드 |
-| 수치 | BigNum(long 가수+int 지수, 결정론적) — Attribute/경제 전반. FixedFloat은 이동 스펙에서 |
+| 수치 | BigNum(long 가수+int 지수) — Attribute/경제. FixedMathSharp Fixed64(Q32.32) — 위치/공간 |
 | 태그 | 언리얼식 계층 문자열, 런타임 인터닝 핸들, 카운트 보유, 미등록은 동적 등록 |
 | 복제 | 프레임워크 내장 — `gameplay.proto` + 게임 Update oneof에 필드 1개, 시야 필터 훅 |
 | 이동/위치 동기화 | 범위 밖 — 별도 스펙(비신뢰 채널 + 보간/예측, Transport.Steam 포함) |
@@ -93,8 +93,10 @@ Bun3.Server.Gameplay     (netstandard2.1)
   설정으로 제어. `TryFormat(Span<char>, out int written, ...)` 무할당 패턴 —
   Unity에선 TMP `SetText(char[])`/ZString과 그대로 합성.
 
-FixedFloat(Q47.16, idlez)은 공간/기하 전용으로 이동 동기화 스펙에서 Bun3.Common 승격을
-다룬다. 범위 ±1.4e14·곱셈 중간 오버플로 특성상 경제 수치에는 부적합(스펙 논의 확정).
+공간/기하 수치는 직접 만든 FixedFloat 대신 `FixedMathSharp.Fixed64` Q32.32를 사용한다.
+`FixedMathSharp.Lean`의 동일 버전을 서버와 Unity에 고정하고, 네트워크·스냅샷에는 Raw
+`long`을 기록한다. 패키지 경계와 결정론 규율은
+`2026-08-10-bignum-fixed64-determinism-design.md`에서 확정한다.
 
 ## 7. GameplayTag
 
@@ -225,6 +227,6 @@ GameplayObject (베이스): TagSet 보유
 
 ## 14. 미래 확장 (이 스펙의 문이 열어두는 것)
 
-- 이동 동기화 모듈(비신뢰 채널 + FixedFloat 공간 수치 + Transport.Steam) — 다음 스펙
+- 이동 동기화 모듈(비신뢰 채널 + FixedMathSharp Fixed64 공간 수치 + Transport.Steam) — 다음 스펙
 - 락스텝 동기화 모듈(입력 복제, 틱 상태 해시 desync 감지) — 결정론 준비 코어 위에
 - 태그 계층 데이터 테이블, 저장소 계약 패키지, 예측(prediction) — 수요 발생 시
