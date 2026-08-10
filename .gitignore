@@ -1,7 +1,6 @@
-# .NET build outputs (common/, server/, gameplay/ — artifacts layout)
+# .NET build outputs (common/, server/ — artifacts layout)
 common/artifacts/
 server/artifacts/
-gameplay/artifacts/
 common/**/bin/
 common/**/obj/
 server/**/bin/
