@@ -1,8 +1,0 @@
-is_global = true
-build_property.RootNamespace = Bun3.Gameplay
-build_property.ProjectDir = E:\Projects\orca\workspace\bun3-kit\server-modulize-base\gameplay\src\com.bun3.gameplay\
-build_property.EnableComHosting = 
-build_property.EnableGeneratedComInterfaceComImportInterop = 
-build_property.CsWinRTUseWindowsUIXamlProjections = false
-build_property.EffectiveAnalysisLevelStyle = 
-build_property.EnableCodeStyleSeverity = 
