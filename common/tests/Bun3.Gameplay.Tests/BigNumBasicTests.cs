@@ -141,6 +141,34 @@ public class BigNumBasicTests
     }
 
     [Test]
+    public void Float_conversion_truncates_to_seven_significant_digits()
+    {
+        Assert.That((BigNum)12_345_678f,
+            Is.EqualTo(BigNum.FromParts(1_234_567, 1)));
+        Assert.That((BigNum)(-12_345_678f),
+            Is.EqualTo(BigNum.FromParts(-1_234_567, 1)));
+    }
+
+    [Test]
+    public void Double_conversion_preserves_sixteen_significant_digits()
+    {
+        const double exactSixteenDigitInteger = 1_234_567_890_123_456d;
+        Assert.That((BigNum)exactSixteenDigitInteger,
+            Is.EqualTo(BigNum.FromParts(1_234_567_890_123_456L, 0)));
+
+        Assert.That((BigNum)(double)12_345_678f,
+            Is.EqualTo((BigNum)12_345_678L));
+    }
+
+    [Test]
+    public void Float_non_finite_values_are_rejected()
+    {
+        Assert.That(() => _ = (BigNum)float.NaN, Throws.ArgumentException);
+        Assert.That(() => _ = (BigNum)float.PositiveInfinity, Throws.ArgumentException);
+        Assert.That(() => _ = (BigNum)float.NegativeInfinity, Throws.ArgumentException);
+    }
+
+    [Test]
     public void Determinism_same_ops_same_bits()
     {
         // 연산 결과의 비트 동일성 — 결정론 계약의 최소 검증

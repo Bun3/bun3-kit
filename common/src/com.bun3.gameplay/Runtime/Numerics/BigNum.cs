@@ -175,6 +175,9 @@ namespace Bun3.Gameplay.Numerics
         private const double DoubleNormalizeLow = 1e15;
         private const double DoubleNormalizeHigh = 1e16;
 
+        private const float FloatNormalizeLow = 1e6f;
+        private const float FloatNormalizeHigh = 1e7f;
+
         /// <summary>double을 절사 변환한다(유효 약 16자리) — **명시적**: 손실 변환이며,
         /// 런타임 부동소수 값을 심에 무심코 흘리는 실수를 캐스트가 막는다(결정론 경계).
         /// 데이터 로드 등 경계에서 1회 변환하는 용도. NaN/무한대는 던진다.
@@ -212,7 +215,37 @@ namespace Bun3.Gameplay.Numerics
         }
 
         /// <summary>float을 절사 변환한다(유효 약 7자리) — 명시적. 규칙은 double과 동일.</summary>
-        public static explicit operator BigNum(float value) => (BigNum)(double)value;
+        public static explicit operator BigNum(float value)
+        {
+            if (float.IsNaN(value) || float.IsInfinity(value))
+            {
+                throw new ArgumentException("NaN/Infinity cannot be converted to BigNum.", nameof(value));
+            }
+
+            if (value == 0f)
+            {
+                return Zero;
+            }
+
+            var negative = value < 0f;
+            var abs = negative ? -value : value;
+            var exponent = 0L;
+
+            while (abs >= FloatNormalizeHigh)
+            {
+                abs /= 10f;
+                exponent++;
+            }
+
+            while (abs < FloatNormalizeLow)
+            {
+                abs *= 10f;
+                exponent--;
+            }
+
+            var mantissa = (long)abs;
+            return Canonicalize(negative ? -mantissa : mantissa, exponent);
+        }
 
         /// <summary>값이 0인지 여부.</summary>
         public bool IsZero => Mantissa == 0;
