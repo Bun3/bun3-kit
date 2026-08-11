@@ -11,6 +11,9 @@ namespace Bun3.Gameplay.Unity.Tests
         {
             Assert.That((BigNum)long.MaxValue + (BigNum)long.MaxValue,
                 Is.EqualTo(BigNum.FromParts(1_844_674_407_370_955_161L, 1)));
+            Assert.That(
+                BigNum.FromParts(1, 19) + (BigNum)(-1),
+                Is.EqualTo(BigNum.FromParts(999_999_999_999_999_999L, 1)));
             Assert.That(BigNum.MaxValue > BigNum.MinValue, Is.True);
             Assert.That(BigNum.FromParts(12_345, 6).GetHashCode(), Is.EqualTo(930_490_798));
 

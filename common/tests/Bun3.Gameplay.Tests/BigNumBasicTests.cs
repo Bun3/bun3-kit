@@ -90,6 +90,68 @@ public class BigNumBasicTests
         Assert.That(big + 1, Is.EqualTo(big));
     }
 
+    [TestCase(19, 999_999_999_999_999_999L, 1)]
+    [TestCase(20, 999_999_999_999_999_999L, 2)]
+    [TestCase(100, 999_999_999_999_999_999L, 82)]
+    public void Opposite_sign_far_gap_propagates_borrow(
+        int exponent, long expectedMantissa, int expectedExponent)
+    {
+        var actual = BigNum.FromParts(1, exponent) + (BigNum)(-1);
+        Assert.That(actual, Is.EqualTo(BigNum.FromParts(expectedMantissa, expectedExponent)));
+    }
+
+    [TestCase(-1L, 1L, 19, 999_999_999_999_999_999L, 1)]
+    [TestCase(-1L, 1L, 100, 999_999_999_999_999_999L, 82)]
+    [TestCase(1L, -1L, 20, -999_999_999_999_999_999L, 2)]
+    public void Opposite_sign_far_gap_with_larger_right_propagates_borrow(
+        long smallerMantissa, long largerMantissa, int largerExponent,
+        long expectedMantissa, int expectedExponent)
+    {
+        var actual = (BigNum)smallerMantissa
+                     + BigNum.FromParts(largerMantissa, largerExponent);
+        Assert.That(actual, Is.EqualTo(BigNum.FromParts(expectedMantissa, expectedExponent)));
+    }
+
+    [Test]
+    public void Opposite_sign_far_gap_handles_canonical_nineteen_digit_mantissa_window()
+    {
+        var actual = BigNum.FromParts(9_223_372_036_854_775_807L, 20) + (BigNum)(-1);
+        Assert.That(actual,
+            Is.EqualTo(BigNum.FromParts(9_223_372_036_854_775_806L, 20)));
+    }
+
+    [Test]
+    public void Opposite_sign_far_gap_handles_nineteen_digit_window_over_long_max()
+    {
+        var actual = BigNum.FromParts(999, 20) + (BigNum)(-1);
+        Assert.That(actual,
+            Is.EqualTo(BigNum.FromParts(998_999_999_999_999_999L, 5)));
+    }
+
+    [Test]
+    public void Opposite_sign_far_gap_is_sign_symmetric()
+    {
+        var positive = BigNum.FromParts(1, 20) + (BigNum)(-1);
+        var negative = BigNum.FromParts(-1, 20) + (BigNum)1;
+        Assert.That(negative, Is.EqualTo(-positive));
+    }
+
+    [Test]
+    public void Opposite_sign_far_gap_handles_max_exponent()
+    {
+        var actual = BigNum.FromParts(1, BigNum.MaxExponent) + (BigNum)(-1);
+        Assert.That(actual, Is.EqualTo(BigNum.FromParts(
+            999_999_999_999_999_999L, BigNum.MaxExponent - 18)));
+    }
+
+    [Test]
+    public void Same_sign_far_gap_still_ignores_out_of_precision_operand()
+    {
+        Assert.That(
+            BigNum.FromParts(1, 20) + (BigNum)1,
+            Is.EqualTo(BigNum.FromParts(1, 20)));
+    }
+
     [Test]
     public void Subtraction_cancellation_is_exact_within_window()
     {
@@ -194,6 +256,11 @@ public class BigNumBasicTests
         TestName = "Addition_oracle_positive_near_cancellation")]
     [TestCase(1L, 18, 1L, 0, TestName = "Addition_oracle_exponent_gap_18")]
     [TestCase(1L, 19, 1L, 0, TestName = "Addition_oracle_exponent_gap_19")]
+    [TestCase(1L, 18, -1L, 0, TestName = "Addition_oracle_opposite_sign_gap_18")]
+    [TestCase(1L, 19, -1L, 0, TestName = "Addition_oracle_opposite_sign_gap_19")]
+    [TestCase(1L, 20, -1L, 0, TestName = "Addition_oracle_opposite_sign_gap_20")]
+    [TestCase(1L, 100, -1L, 0, TestName = "Addition_oracle_opposite_sign_gap_100")]
+    [TestCase(-1L, 20, 1L, 0, TestName = "Addition_oracle_negative_opposite_sign_gap_20")]
     public void Addition_matches_independent_big_integer_oracle(
         long leftMantissa, int leftExponent, long rightMantissa, int rightExponent)
     {

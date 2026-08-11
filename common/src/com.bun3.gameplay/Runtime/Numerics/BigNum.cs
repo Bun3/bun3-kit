@@ -302,7 +302,10 @@ namespace Bun3.Gameplay.Numerics
             return new BigNum(mantissa, (int)exponent);
         }
 
-        /// <summary>덧셈. 유효 자릿수 밖의 항은 절사된다(0 방향).</summary>
+        /// <summary>
+        /// 덧셈. 보존 범위 밖의 같은 부호 항은 무시하고, 반대 부호 항은 borrow를 반영한 뒤
+        /// 0 방향으로 절사한다.
+        /// </summary>
         public static BigNum operator +(BigNum a, BigNum b)
         {
             if (a.IsZero)
@@ -325,12 +328,12 @@ namespace Bun3.Gameplay.Numerics
             var magnitudeDifference = aDecimalMagnitude - bDecimalMagnitude;
             if (magnitudeDifference > ScaleDigits)
             {
-                return a;
+                return aNegative == bNegative ? a : SubtractFarMagnitude(a);
             }
 
             if (magnitudeDifference < -ScaleDigits)
             {
-                return b;
+                return aNegative == bNegative ? b : SubtractFarMagnitude(b);
             }
 
             var exponent = Math.Min(a.Exponent, b.Exponent);
@@ -368,6 +371,27 @@ namespace Bun3.Gameplay.Numerics
             long resultExponent = exponent;
             var mantissa = ReduceToLong(resultHi, resultLo, ref resultExponent);
             return Canonicalize(resultNegative ? -mantissa : mantissa, resultExponent);
+        }
+
+        private static BigNum SubtractFarMagnitude(BigNum larger)
+        {
+            var negative = larger.Mantissa < 0;
+            var magnitude = (ulong)(negative ? -larger.Mantissa : larger.Mantissa);
+            var digitCount = CountDigits64(magnitude);
+
+            long retainedExponent = (long)larger.Exponent + digitCount - MantissaMaxDigits;
+            var decimalShift = (int)((long)larger.Exponent - retainedExponent);
+            var retainedMantissa = magnitude * Pow10[decimalShift];
+
+            if (retainedMantissa > long.MaxValue)
+            {
+                retainedMantissa /= 10;
+                retainedExponent++;
+            }
+
+            retainedMantissa--; // nonzero smaller operand below the retained window borrows exactly one
+            var signedMantissa = negative ? -(long)retainedMantissa : (long)retainedMantissa;
+            return Canonicalize(signedMantissa, retainedExponent);
         }
 
         /// <summary>뺄셈.</summary>
