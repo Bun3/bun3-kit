@@ -16,4 +16,9 @@
     <ProjectReference Include="..\..\src\com.bun3.common\Bun3.Common.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Include="..\..\src\com.bun3.common\Tests\Editor\Fixed64ConformanceTests.cs"
+             Link="Fixed64ConformanceTests.cs" />
+  </ItemGroup>
+
 </Project>

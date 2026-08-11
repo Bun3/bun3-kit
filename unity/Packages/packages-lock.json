@@ -4,7 +4,9 @@
       "version": "file:../../common/src/com.bun3.common",
       "depth": 0,
       "source": "local",
-      "dependencies": {}
+      "dependencies": {
+        "com.mrdav30.fixedmathsharp.lean": "7.0.0"
+      }
     },
     "com.bun3.unity.core": {
       "version": "file:com.bun3.unity.core",
@@ -55,6 +57,13 @@
       "source": "git",
       "dependencies": {},
       "hash": "5fadcb6564f0c6e988641e2e4a4aba4b6b1caafe"
+    },
+    "com.mrdav30.fixedmathsharp.lean": {
+      "version": "https://github.com/mrdav30/FixedMathSharp-Unity.git?path=/com.mrdav30.fixedmathsharp.lean#v7.0.0",
+      "depth": 0,
+      "source": "git",
+      "dependencies": {},
+      "hash": "168b6f4f2a7dcf4164aab93db81754bae737de40"
     },
     "com.unity.2d.animation": {
       "version": "13.0.5",

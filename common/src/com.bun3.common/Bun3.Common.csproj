@@ -6,9 +6,17 @@
     <RootNamespace>Bun3.Common</RootNamespace>
     <AssemblyName>Bun3.Common</AssemblyName>
     <PackageId>Bun3.Common</PackageId>
-    <Version>0.2.0</Version>
+    <Version>0.3.0</Version>
     <Authors>Bun3</Authors>
     <RepositoryUrl>https://github.com/Bun3/bun3-kit</RepositoryUrl>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="Tests/**/*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="FixedMathSharp.Lean" Version="7.0.0" />
+  </ItemGroup>
 
 </Project>
