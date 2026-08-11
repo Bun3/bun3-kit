@@ -3,20 +3,21 @@
   <PropertyGroup>
     <TargetFramework>netstandard2.1</TargetFramework>
     <LangVersion>9.0</LangVersion>
-    <RootNamespace>Bun3.Common</RootNamespace>
-    <AssemblyName>Bun3.Common</AssemblyName>
-    <PackageId>Bun3.Common</PackageId>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Bun3.Gameplay</RootNamespace>
+    <AssemblyName>Bun3.Gameplay</AssemblyName>
+    <PackageId>Bun3.Gameplay</PackageId>
     <Version>0.4.0</Version>
     <Authors>Bun3</Authors>
     <RepositoryUrl>https://github.com/Bun3/bun3-kit</RepositoryUrl>
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Remove="Tests/**/*.cs" />
+    <InternalsVisibleTo Include="Bun3.Gameplay.Tests" />
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="FixedMathSharp.Lean" Version="[7.0.0]" />
+    <Compile Remove="Tests/**/*.cs" />
   </ItemGroup>
 
 </Project>

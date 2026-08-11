@@ -1,9 +1,12 @@
 {
   "name": "com.bun3.common",
   "displayName": "Bun3 Common",
-  "version": "0.1.0",
-  "unity": "2020.1",
+  "version": "0.4.0",
+  "unity": "2022.3",
   "description": "Platform-agnostic shared library for Bun3 packages. netstandard2.1; no UnityEngine dependency.",
+  "dependencies": {
+    "com.mrdav30.fixedmathsharp.lean": "7.0.0"
+  },
   "author": {
     "name": "Bun3",
     "url": "https://github.com/Bun3",

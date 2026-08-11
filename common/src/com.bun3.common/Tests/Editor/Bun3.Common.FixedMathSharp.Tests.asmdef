@@ -1,0 +1,25 @@
+{
+  "name": "Bun3.Common.FixedMathSharp.Tests",
+  "rootNamespace": "Bun3.Common.Tests",
+  "references": [
+    "FixedMathSharp.Lean.Runtime",
+    "UnityEngine.TestRunner",
+    "UnityEditor.TestRunner"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": true,
+  "precompiledReferences": [
+    "FixedMathSharp.dll",
+    "nunit.framework.dll"
+  ],
+  "autoReferenced": false,
+  "defineConstraints": [
+    "UNITY_INCLUDE_TESTS"
+  ],
+  "versionDefines": [],
+  "noEngineReferences": false
+}
