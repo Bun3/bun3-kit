@@ -44,6 +44,26 @@ public class BigNumBasicTests
     }
 
     [Test]
+    public void Long_min_value_is_rejected_instead_of_truncated()
+    {
+        Assert.That(() => _ = (BigNum)long.MinValue,
+            Throws.TypeOf<ArgumentOutOfRangeException>());
+        Assert.That(() => _ = BigNum.FromParts(long.MinValue, 17),
+            Throws.TypeOf<ArgumentOutOfRangeException>());
+    }
+
+    [Test]
+    public void Published_extrema_are_exact_and_symmetric()
+    {
+        Assert.That(BigNum.MaxValue.Mantissa, Is.EqualTo(long.MaxValue));
+        Assert.That(BigNum.MaxValue.Exponent, Is.EqualTo(BigNum.MaxExponent));
+        Assert.That(BigNum.MinValue.Mantissa, Is.EqualTo(-long.MaxValue));
+        Assert.That(BigNum.MinValue.Exponent, Is.EqualTo(BigNum.MaxExponent));
+        Assert.That(-BigNum.MaxValue, Is.EqualTo(BigNum.MinValue));
+        Assert.That(-BigNum.MinValue, Is.EqualTo(BigNum.MaxValue));
+    }
+
+    [Test]
     public void Addition_small_integers_exact()
     {
         Assert.That((BigNum)3 + 5, Is.EqualTo((BigNum)8));

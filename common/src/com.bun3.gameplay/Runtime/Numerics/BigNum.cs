@@ -149,6 +149,12 @@ namespace Bun3.Gameplay.Numerics
         /// <summary>1.</summary>
         public static readonly BigNum One = new BigNum(1, 0);
 
+        /// <summary>표현 가능한 최소값. <c>-long.MaxValue × 10^MaxExponent</c>.</summary>
+        public static readonly BigNum MinValue = new BigNum(-long.MaxValue, MaxExponent);
+
+        /// <summary>표현 가능한 최대값. <c>long.MaxValue × 10^MaxExponent</c>.</summary>
+        public static readonly BigNum MaxValue = new BigNum(long.MaxValue, MaxExponent);
+
         private BigNum(long mantissa, int exponent)
         {
             Mantissa = mantissa;
@@ -223,9 +229,10 @@ namespace Bun3.Gameplay.Numerics
 
             if (mantissa == long.MinValue)
             {
-                // 절댓값 부정이 불가능한 유일한 값 — 한 자리 내려 정규화 경로에 합류
-                mantissa /= 10;
-                exponent++;
+                // 절댓값 부정이 불가능한 유일한 값 — 대칭 가수 범위 밖이므로 즉시 거부
+                throw new ArgumentOutOfRangeException(
+                    nameof(mantissa), mantissa,
+                    "BigNum 가수는 -long.MaxValue 이상이어야 합니다.");
             }
 
             if (mantissa % 10 == 0)
