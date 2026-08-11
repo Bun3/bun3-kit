@@ -480,4 +480,3 @@ git commit -m "🐛 BigNum·Fixed64 결정론 경계 보완" `
 ```
 
 최종 보고서에는 각 finding별 root cause, RED/GREEN 명령·핵심 출력, 변경 파일, .NET/Unity/package 검증, 남은 관찰사항을 기록한다.
-

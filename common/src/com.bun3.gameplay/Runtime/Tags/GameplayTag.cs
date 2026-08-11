@@ -1,3 +1,4 @@
+#nullable enable
 using System;
 
 namespace Bun3.Gameplay.Tags
