@@ -1,7 +1,7 @@
 # BigNum 결정론 보강과 Fixed64 도입 설계
 
 - 날짜: 2026-08-10
-- 상태: 문서 검토 대기
+- 상태: 승인
 - 상위 설계: `2026-08-10-gameplay-framework-design.md`
 - 범위: `Bun3.Gameplay.Numerics.BigNum`, `BigNumFormat`, `Bun3.Common`의 고정소수점 의존성
 
@@ -97,6 +97,8 @@ float 변환을 double 변환에 위임하지 않는다. 위임하면 float가 �
 - .NET/NuGet: `FixedMathSharp.Lean` `7.0.0`을 `Bun3.Common`의 전이 의존성으로 추가한다.
 - Unity/UPM: `FixedMathSharp-Unity`의 `v7.0.0` 태그와
   `com.mrdav30.fixedmathsharp.lean` 경로를 Git URL로 고정한다.
+- FixedMathSharp Unity 패키지의 공식 하한에 맞춰 `com.bun3.common`의 Unity 최소 버전을
+  `2022.3`으로 올린다.
 - `com.bun3.common/package.json`은 `com.mrdav30.fixedmathsharp.lean: 7.0.0` 의존성을
   선언하고, 프로젝트 manifest는 해당 Git URL을 실제 해석 경로로 제공한다.
 - Bun3.Common은 .NET과 UPM 패키지 버전을 모두 `0.3.0`으로 맞춘다.
