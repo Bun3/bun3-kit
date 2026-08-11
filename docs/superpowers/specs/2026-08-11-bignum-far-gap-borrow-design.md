@@ -1,6 +1,6 @@
 # BigNum 반대 부호 원거리 Borrow 보완 설계
 
-> 상태: 검토 요청
+> 상태: 승인
 > 작성일: 2026-08-11
 > 선행 설계: `2026-08-11-bignum-fixed64-final-review-remediation-design.md`
 
@@ -71,7 +71,7 @@ helper가 `smaller`를 인자로 받지 않는 이유는 진입 조건이 이미
 
 public API 시그니처는 바뀌지 않는다. `operator +`의 19자리/0 방향 절사 XML 계약을 실제 구현과 일치하도록 보완한다.
 
-Gameplay runtime 내용이 다시 바뀌므로 같은 `0.3.0`으로 재발행하지 않고 .NET/UPM 버전을 `0.4.0`으로 올린다. Common은 변경하지 않고 `0.4.0`을 유지한다. Unity manifest의 local Gameplay lock version도 resolver가 `0.4.0`으로 갱신하게 한다.
+Gameplay runtime 내용이 다시 바뀌므로 같은 `0.3.0`으로 재발행하지 않고 .NET/UPM 버전을 `0.4.0`으로 올린다. Common은 변경하지 않고 `0.4.0`을 유지한다. Unity의 local package lock은 package version이 아니라 `file:../../common/src/com.bun3.gameplay` 경로를 기록하므로 lock에 0.4.0을 강제로 쓰지 않는다. 대신 package.json 0.4.0과 실제 Unity import/smoke로 버전을 검증한다.
 
 ## 검증
 
@@ -79,7 +79,7 @@ Gameplay runtime 내용이 다시 바뀌므로 같은 `0.3.0`으로 재발행하
 - 최소 sticky-borrow helper를 구현하고 focused BigNum tests를 GREEN으로 만든다.
 - BigNum allocation smoke가 계속 0인지 확인한다.
 - Gameplay 전체 및 solution 전체 test를 clean build 뒤 실행한다.
-- Gameplay `0.4.0` nupkg와 UPM metadata/Unity lock 일치를 확인한다.
+- Gameplay `0.4.0` nupkg와 UPM metadata를 확인하고 Unity local lock 경로가 유지되는지 확인한다.
 - Unity Gameplay smoke에 `1e19 - 1` literal을 추가하고 전체 EditMode를 실행한다.
 - build 경고·오류 0, `git diff --check`, clean working tree를 확인한다.
 
@@ -90,4 +90,3 @@ Gameplay runtime 내용이 다시 바뀌므로 같은 `0.3.0`으로 재발행하
 - Fixed64/Common 재변경
 - 같은 부호 원거리 작은 피연산자 보존
 - 기존 256자 출력 예산 또는 패키지 구조 변경
-
