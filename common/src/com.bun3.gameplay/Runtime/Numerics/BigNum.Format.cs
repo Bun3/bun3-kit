@@ -5,27 +5,54 @@ namespace Bun3.Gameplay.Numerics
     /// <summary>BigNum의 표시 포맷 파트 — 수학 코어(BigNum.cs)와 분리된 partial.</summary>
     public readonly partial struct BigNum
     {
-        /// <summary>표시 문자열을 생성한다 — **힙 할당 발생**. 매 프레임 갱신되는 UI 핫패스에선
-        /// <see cref="TryFormat"/>(+ZString/TMP SetText 합성)를 쓰고, 이 메서드는 저빈도
-        /// 경로(로그·텍스트 조립 등)에서만 쓸 것.</summary>
-        public string ToDisplayString(BigNumFormat? format = null)
+        /// <summary>최대 256자 예산으로 표시 문자열을 생성한다. 문자열 힙 할당이 발생하므로
+        /// 매 프레임 UI 핫패스에서는 caller-owned 버퍼와 <see cref="TryFormat"/>을 사용한다.</summary>
+        /// <param name="format">표시 형식. <see langword="null"/>이면 <see cref="BigNumFormat.Base"/>.</param>
+        /// <returns>지정한 형식의 표시 문자열.</returns>
+        /// <exception cref="InvalidOperationException">표시 결과가 기본 256자 예산을 초과한 경우.</exception>
+        public string ToDisplayString(BigNumFormat? format = null) =>
+            ToDisplayString(format, 256);
+
+        /// <summary>지정한 최대 길이 예산으로 표시 문자열을 생성한다. 문자열과, 128자를 넘는
+        /// 경우 최대 <paramref name="maxLength"/> 크기의 임시 배열 힙 할당이 발생한다.</summary>
+        /// <param name="format">표시 형식. <see langword="null"/>이면 <see cref="BigNumFormat.Base"/>.</param>
+        /// <param name="maxLength">허용할 표시 문자열의 최대 문자 수.</param>
+        /// <returns>지정한 형식의 표시 문자열.</returns>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="maxLength"/>가 1보다 작은 경우.</exception>
+        /// <exception cref="InvalidOperationException">표시 결과가 <paramref name="maxLength"/> 예산을 초과한 경우.</exception>
+        public string ToDisplayString(BigNumFormat? format, int maxLength)
         {
-            Span<char> buffer = stackalloc char[128];
-            if (TryFormat(buffer, out var written, format))
+            if (maxLength <= 0)
             {
-                return new string(buffer.Slice(0, written));
+                throw new ArgumentOutOfRangeException(nameof(maxLength));
             }
 
-            // 128자를 넘는 표기(TopUnit 대형 정수부) — 필요한 만큼 키워 재시도
-            for (var size = 512; ; size *= 4)
+            Span<char> initial = stackalloc char[128];
+            var first = maxLength < initial.Length ? initial.Slice(0, maxLength) : initial;
+            if (TryFormat(first, out var written, format))
             {
-                var grown = new char[size];
-                if (TryFormat(grown, out written, format))
-                {
-                    return new string(grown, 0, written);
-                }
+                return new string(first.Slice(0, written));
             }
+
+            if (maxLength <= initial.Length)
+            {
+                throw CreateDisplayBudgetException(maxLength);
+            }
+
+            var buffer = new char[maxLength];
+            if (TryFormat(buffer, out written, format))
+            {
+                return new string(buffer, 0, written);
+            }
+
+            throw CreateDisplayBudgetException(maxLength);
         }
+
+        private static InvalidOperationException CreateDisplayBudgetException(int maxLength) =>
+            new InvalidOperationException(
+                $"BigNum 표시 결과가 {maxLength}자 예산을 초과했습니다. "
+                + "BigNumOverflowStyle.Scientific을 사용하거나 더 큰 maxLength를 지정하거나 "
+                + "caller-owned 버퍼로 TryFormat을 호출하세요.");
 
         /// <summary>
         /// 무할당 표시 포맷. 단위 상한(MaxUnits) 안이면 "1.5만"/"3.45B" 형태, 상한을 넘으면

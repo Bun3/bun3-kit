@@ -1,4 +1,6 @@
 using System;
+using System.Globalization;
+using System.Numerics;
 using Bun3.Gameplay.Numerics;
 using NUnit.Framework;
 
@@ -122,9 +124,86 @@ public class BigNumBasicTests
         Assert.That((BigNum)5_000_000_000_000_000_000L + 1,
             Is.EqualTo((BigNum)5_000_000_000_000_000_001L));
 
-        // 실제 오버플로 시 한 자리 양보 (양쪽 절사 후 합)
+        // exact intermediate를 만든 뒤 한 번만 축약한다.
         Assert.That((BigNum)long.MaxValue + long.MaxValue,
-            Is.EqualTo(BigNum.FromParts(184_467_440_737_095_516L, 2)));
+            Is.EqualTo(BigNum.FromParts(1_844_674_407_370_955_161L, 1)));
+    }
+
+    [Test]
+    public void Addition_reduces_valid_negative_long_min_intermediate()
+    {
+        var actual = (BigNum)(-long.MaxValue) + (BigNum)(-1);
+        Assert.That(actual, Is.EqualTo(BigNum.FromParts(-92_233_720_368_547_758L, 2)));
+    }
+
+    [Test]
+    public void Addition_reduces_exact_sum_once_after_carry()
+    {
+        var actual = (BigNum)long.MaxValue + (BigNum)long.MaxValue;
+        Assert.That(actual, Is.EqualTo(BigNum.FromParts(1_844_674_407_370_955_161L, 1)));
+    }
+
+    [Test]
+    public void Addition_preserves_exact_near_cancellation()
+    {
+        var actual = BigNum.FromParts(-922_337_203_685_477_581L, -2)
+                     + BigNum.FromParts(3, -3);
+        Assert.That(actual, Is.EqualTo(BigNum.FromParts(-long.MaxValue, -3)));
+    }
+
+    [Test]
+    public void Comparison_is_total_at_extrema_and_opposite_signs()
+    {
+        Assert.That(BigNum.MaxValue.CompareTo(BigNum.MinValue), Is.GreaterThan(0));
+        Assert.That(BigNum.MinValue.CompareTo(BigNum.MaxValue), Is.LessThan(0));
+        Assert.That(BigNum.MaxValue > BigNum.MinValue, Is.True);
+        Assert.That(((BigNum)(-1)).CompareTo((BigNum)long.MaxValue), Is.LessThan(0));
+    }
+
+    [Test]
+    public void Hash_code_uses_fixed_fnv1a_golden()
+    {
+        Assert.That(BigNum.FromParts(12_345, 6).GetHashCode(), Is.EqualTo(930_490_798));
+        Assert.That(BigNum.MinValue.GetHashCode(), Is.EqualTo(1_520_456_044));
+    }
+
+    [Test]
+    public void ToString_uses_invariant_culture()
+    {
+        var originalCulture = CultureInfo.CurrentCulture;
+        var customCulture = (CultureInfo)CultureInfo.InvariantCulture.Clone();
+        customCulture.NumberFormat.NegativeSign = "~";
+        try
+        {
+            CultureInfo.CurrentCulture = customCulture;
+            Assert.That(BigNum.FromParts(-123, 2).ToString(), Is.EqualTo("-123e2"));
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = originalCulture;
+        }
+    }
+
+    [TestCase(9_223_372_036_854_775_807L, 0, 9_223_372_036_854_775_807L, 0,
+        TestName = "Addition_oracle_same_sign_carry")]
+    [TestCase(-9_223_372_036_854_775_807L, 0, -9_223_372_036_854_775_807L, 0,
+        TestName = "Addition_oracle_negative_same_sign_carry")]
+    [TestCase(-922_337_203_685_477_581L, -2, 3L, -3,
+        TestName = "Addition_oracle_opposite_sign_near_cancellation")]
+    [TestCase(922_337_203_685_477_581L, -2, -3L, -3,
+        TestName = "Addition_oracle_positive_near_cancellation")]
+    [TestCase(1L, 18, 1L, 0, TestName = "Addition_oracle_exponent_gap_18")]
+    [TestCase(1L, 19, 1L, 0, TestName = "Addition_oracle_exponent_gap_19")]
+    public void Addition_matches_independent_big_integer_oracle(
+        long leftMantissa, int leftExponent, long rightMantissa, int rightExponent)
+    {
+        var expected = AddWithBigIntegerOracle(
+            leftMantissa, leftExponent, rightMantissa, rightExponent);
+        var actual = BigNum.FromParts(leftMantissa, leftExponent)
+                     + BigNum.FromParts(rightMantissa, rightExponent);
+
+        Assert.That(actual.Mantissa, Is.EqualTo(expected.Mantissa));
+        Assert.That(actual.Exponent, Is.EqualTo(expected.Exponent));
     }
 
     [Test]
@@ -176,5 +255,45 @@ public class BigNumBasicTests
         var x2 = BigNum.FromParts(123_456_789, 5) + BigNum.FromParts(-987, 10) - 42;
         Assert.That(x1.Mantissa, Is.EqualTo(x2.Mantissa));
         Assert.That(x1.Exponent, Is.EqualTo(x2.Exponent));
+    }
+
+    private static (long Mantissa, int Exponent) AddWithBigIntegerOracle(
+        long leftMantissa, int leftExponent, long rightMantissa, int rightExponent)
+    {
+        var exponent = Math.Min(leftExponent, rightExponent);
+        var left = new BigInteger(leftMantissa)
+                   * BigInteger.Pow(10, leftExponent - exponent);
+        var right = new BigInteger(rightMantissa)
+                    * BigInteger.Pow(10, rightExponent - exponent);
+        var sum = left + right;
+        if (sum.IsZero)
+        {
+            return (0, 0);
+        }
+
+        var negative = sum.Sign < 0;
+        var magnitude = BigInteger.Abs(sum);
+        var digitCount = magnitude.ToString(CultureInfo.InvariantCulture).Length;
+        if (digitCount > 19)
+        {
+            var discardedDigits = digitCount - 19;
+            magnitude /= BigInteger.Pow(10, discardedDigits);
+            exponent += discardedDigits;
+        }
+
+        while (magnitude > long.MaxValue)
+        {
+            magnitude /= 10;
+            exponent++;
+        }
+
+        var mantissa = (long)magnitude;
+        while (mantissa % 10 == 0)
+        {
+            mantissa /= 10;
+            exponent++;
+        }
+
+        return (negative ? -mantissa : mantissa, exponent);
     }
 }

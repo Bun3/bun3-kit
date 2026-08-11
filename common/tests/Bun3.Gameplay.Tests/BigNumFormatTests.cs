@@ -184,6 +184,41 @@ public class BigNumFormatTests
     }
 
     [Test]
+    public void ToDisplayString_default_budget_rejects_oversized_top_unit_output()
+    {
+        Assert.That(
+            () => BigNum.MaxValue.ToDisplayString(),
+            Throws.TypeOf<InvalidOperationException>());
+    }
+
+    [Test]
+    public void ToDisplayString_explicit_budget_allows_larger_output()
+    {
+        var value = BigNum.FromParts(1, 300);
+        var text = value.ToDisplayString(BigNumFormat.Base, 512);
+        Assert.That(text.Length, Is.GreaterThan(256));
+    }
+
+    [TestCase(0)]
+    [TestCase(-1)]
+    public void ToDisplayString_rejects_nonpositive_budget(int maxLength)
+    {
+        Assert.That(
+            () => BigNum.One.ToDisplayString(BigNumFormat.Base, maxLength),
+            Throws.TypeOf<ArgumentOutOfRangeException>());
+    }
+
+    [Test]
+    public void ToDisplayString_scientific_formats_extrema_within_default_budget()
+    {
+        var scientific = new BigNumFormat(
+            3,
+            new[] { "", "K", "M", "B", "T" },
+            overflowStyle: BigNumOverflowStyle.Scientific);
+        Assert.That(BigNum.MaxValue.ToDisplayString(scientific).Length, Is.LessThanOrEqualTo(256));
+    }
+
+    [Test]
     public void Insufficient_destination_returns_false()
     {
         Span<char> tiny = stackalloc char[2];

@@ -1,6 +1,7 @@
 {
   "dependencies": {
     "com.bun3.common": "file:../../common/src/com.bun3.common",
+    "com.bun3.gameplay": "file:../../common/src/com.bun3.gameplay",
     "com.cysharp.unitask": "https://github.com/Cysharp/UniTask.git?path=src/UniTask/Assets/Plugins/UniTask",
     "com.github-glitchenzo.nugetforunity": "https://github.com/GlitchEnzo/NuGetForUnity.git?path=/src/NuGetForUnity",
     "com.mackysoft.serializereference-extensions": "https://github.com/mackysoft/Unity-SerializeReferenceExtensions.git?path=Assets/MackySoft/MackySoft.SerializeReferenceExtensions",
@@ -63,6 +64,7 @@
     "com.unity.modules.xr": "1.0.0"
   },
   "testables": [
-    "com.bun3.common"
+    "com.bun3.common",
+    "com.bun3.gameplay"
   ]
 }

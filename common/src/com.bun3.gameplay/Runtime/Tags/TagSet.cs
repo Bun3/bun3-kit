@@ -23,6 +23,8 @@ namespace Bun3.Gameplay.Tags
         public int KindCount => _counts.Count;
 
         /// <summary>태그를 count만큼 추가한다.</summary>
+        /// <exception cref="OverflowException">기존 카운트와 <paramref name="count"/>의 합이
+        /// <see cref="int.MaxValue"/>를 넘는 경우.</exception>
         public void Add(GameplayTag tag, int count = 1)
         {
             RequireValid(tag);
@@ -32,7 +34,8 @@ namespace Bun3.Gameplay.Tags
             }
 
             _counts.TryGetValue(tag.Handle, out var current);
-            _counts[tag.Handle] = current + count;
+            var next = checked(current + count);
+            _counts[tag.Handle] = next;
         }
 
         /// <summary>태그를 count만큼 제거한다. 0 이하가 되면 집합에서 빠진다.
@@ -92,6 +95,8 @@ namespace Bun3.Gameplay.Tags
         }
 
         /// <summary>계층 카운트: tag 자신·하위 태그들의 카운트 합.</summary>
+        /// <exception cref="OverflowException">계층 카운트 합이 <see cref="int.MaxValue"/>를
+        /// 넘는 경우.</exception>
         public int Count(GameplayTag tag)
         {
             if (!tag.IsValid)
@@ -104,7 +109,7 @@ namespace Bun3.Gameplay.Tags
             {
                 if (_registry.IsAncestorOrSelf(tag, new GameplayTag(pair.Key)))
                 {
-                    total += pair.Value;
+                    total = checked(total + pair.Value);
                 }
             }
 

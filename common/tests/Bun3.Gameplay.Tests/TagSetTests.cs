@@ -89,4 +89,20 @@ public class TagSetTests
         Assert.Throws<ArgumentOutOfRangeException>(() => _set.Add(_hasted, 0));
         Assert.Throws<ArgumentOutOfRangeException>(() => _set.Remove(_hasted, -1));
     }
+
+    [Test]
+    public void Add_fails_fast_before_exact_count_wraps_negative()
+    {
+        _set.Add(_hasted, int.MaxValue);
+        Assert.That(() => _set.Add(_hasted), Throws.TypeOf<OverflowException>());
+        Assert.That(_set.ExactCount(_hasted), Is.EqualTo(int.MaxValue));
+    }
+
+    [Test]
+    public void Hierarchical_count_fails_fast_before_sum_wraps_negative()
+    {
+        _set.Add(_dead, int.MaxValue);
+        _set.Add(_ghost);
+        Assert.That(() => _set.Count(_state), Throws.TypeOf<OverflowException>());
+    }
 }

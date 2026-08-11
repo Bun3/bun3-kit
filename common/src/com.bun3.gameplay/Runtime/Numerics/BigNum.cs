@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 
 namespace Bun3.Gameplay.Numerics
 {
@@ -25,20 +26,6 @@ namespace Bun3.Gameplay.Numerics
 
         // 10^0 .. 10^MantissaMaxDigits (10^19까지 ulong에 든다)
         private static readonly ulong[] Pow10 = BuildPow10();
-
-        // long.MaxValue / 10^k (k = 0..18) — "×10^k가 long을 안 넘는가" 경계표
-        private static readonly long[] LongMaxDivPow10 = BuildLongMaxDivPow10();
-
-        private static long[] BuildLongMaxDivPow10()
-        {
-            var table = new long[MantissaMaxDigits];
-            for (var i = 0; i < table.Length; i++)
-            {
-                table[i] = (long)((ulong)long.MaxValue / Pow10[i]);
-            }
-
-            return table;
-        }
 
         // 10^i의 128비트 표현 (i = 0..38) — 128비트 값의 자릿수 계산용
         private static readonly ulong[] Pow10Hi128 = new ulong[MaxDigits128];
@@ -162,10 +149,16 @@ namespace Bun3.Gameplay.Numerics
         }
 
         /// <summary>가수×10^지수로 값을 만든다. 정규화하며, 지수 한계 초과 시 던진다.</summary>
+        /// <exception cref="ArgumentOutOfRangeException">
+        /// <paramref name="mantissa"/>가 대칭 가수 범위 밖인 <see cref="long.MinValue"/>인 경우.
+        /// </exception>
         public static BigNum FromParts(long mantissa, int exponent) =>
             Canonicalize(mantissa, exponent);
 
         /// <summary>long 정수는 정확하게 변환된다.</summary>
+        /// <exception cref="ArgumentOutOfRangeException">
+        /// <paramref name="value"/>가 대칭 가수 범위 밖인 <see cref="long.MinValue"/>인 경우.
+        /// </exception>
         public static implicit operator BigNum(long value) => Canonicalize(value, 0);
 
         /// <summary>int 정수는 정확하게 변환된다.</summary>
@@ -322,59 +315,59 @@ namespace Bun3.Gameplay.Numerics
                 return a;
             }
 
-            if (a.Exponent < b.Exponent)
+            var aNegative = a.Mantissa < 0;
+            var bNegative = b.Mantissa < 0;
+            var aMagnitude = (ulong)(aNegative ? -a.Mantissa : a.Mantissa);
+            var bMagnitude = (ulong)(bNegative ? -b.Mantissa : b.Mantissa);
+            var aDecimalMagnitude = (long)CountDigits64(aMagnitude) + a.Exponent - 1;
+            var bDecimalMagnitude = (long)CountDigits64(bMagnitude) + b.Exponent - 1;
+
+            var magnitudeDifference = aDecimalMagnitude - bDecimalMagnitude;
+            if (magnitudeDifference > ScaleDigits)
             {
-                (a, b) = (b, a);   // a가 큰 지수
+                return a;
             }
 
-            long am = a.Mantissa;
-            long ae = a.Exponent;
-            long bm = b.Mantissa;
-            long be = b.Exponent;
-
-            // a 가수를 키워 지수를 b에 근접 — 정밀도 보존. 자릿수 기반 일괄 ×10^k
-            // (한 자리씩 곱하는 루프와 결과 비트 동일: 경계 M-7..M에 10의 배수가 없어
-            // "곱해도 long.MaxValue 이하" 판정이 루프 조건과 일치한다).
-            var diff = ae - be;
-            if (diff > 0)
+            if (magnitudeDifference < -ScaleDigits)
             {
-                var abs = am < 0 ? -am : am;   // 정규형 보장으로 long.MinValue 불가
-                var k = MantissaMaxDigits - CountDigits64((ulong)abs);
-                if (k > diff)
+                return b;
+            }
+
+            var exponent = Math.Min(a.Exponent, b.Exponent);
+            ScaleMantissa128(aMagnitude, a.Exponent - exponent, out var aHi, out var aLo);
+            ScaleMantissa128(bMagnitude, b.Exponent - exponent, out var bHi, out var bLo);
+
+            ulong resultHi;
+            ulong resultLo;
+            bool resultNegative;
+            if (aNegative == bNegative)
+            {
+                Add128(aHi, aLo, bHi, bLo, out resultHi, out resultLo);
+                resultNegative = aNegative;
+            }
+            else
+            {
+                var comparison = Compare128(aHi, aLo, bHi, bLo);
+                if (comparison == 0)
                 {
-                    k = (int)diff;
+                    return Zero;
                 }
 
-                while (k > 0 && abs > LongMaxDivPow10[k])
+                if (comparison > 0)
                 {
-                    k--;   // 자릿수 추정의 경계 보정 — 최대 1회
+                    Subtract128(aHi, aLo, bHi, bLo, out resultHi, out resultLo);
+                    resultNegative = aNegative;
                 }
-
-                am *= (long)Pow10[k];
-                ae -= k;
+                else
+                {
+                    Subtract128(bHi, bLo, aHi, aLo, out resultHi, out resultLo);
+                    resultNegative = bNegative;
+                }
             }
 
-            var gap = ae - be;
-            if (gap > ScaleDigits)
-            {
-                return a;   // b는 유효 자릿수 창 밖
-            }
-
-            // 남은 갭은 b를 절사해 올린다 (10^gap 일괄 나눗셈 = /10 gap회 합성과 동일)
-            bm /= (long)Pow10[gap];
-
-            // 실제 오버플로가 날 때만 한 자리 양보 (같은 지수 정렬 유지) — long 범위 안의
-            // 합은 항상 정확하다(스펙 §6: 9.2e18까지 정수 정확).
-            var sum = unchecked(am + bm);
-            if (((am ^ sum) & (bm ^ sum)) < 0)   // 같은 부호 피연산자 합의 부호 반전 = 오버플로
-            {
-                am /= 10;
-                bm /= 10;
-                ae++;
-                sum = am + bm;   // |가수| ≤ 9.3e17 — 재오버플로 불가
-            }
-
-            return Canonicalize(sum, ae);
+            long resultExponent = exponent;
+            var mantissa = ReduceToLong(resultHi, resultLo, ref resultExponent);
+            return Canonicalize(resultNegative ? -mantissa : mantissa, resultExponent);
         }
 
         /// <summary>뺄셈.</summary>
@@ -469,9 +462,83 @@ namespace Bun3.Gameplay.Numerics
             return (long)lo;
         }
 
-        /// <summary>값 비교. 유효 자릿수 밖 차이는 같음으로 본다(정밀도 계약과 일관) —
-        /// Equals(비트 동등)와 판정이 다를 수 있으므로 정렬 컨테이너의 키로 쓰지 말 것.</summary>
-        public int CompareTo(BigNum other) => (this - other).Sign;
+        private static void Add128(
+            ulong leftHi, ulong leftLo, ulong rightHi, ulong rightLo,
+            out ulong resultHi, out ulong resultLo)
+        {
+            resultLo = unchecked(leftLo + rightLo);
+            var carry = resultLo < leftLo ? 1UL : 0UL;
+            resultHi = unchecked(leftHi + rightHi + carry);
+        }
+
+        private static int Compare128(
+            ulong leftHi, ulong leftLo, ulong rightHi, ulong rightLo)
+        {
+            if (leftHi != rightHi)
+            {
+                return leftHi < rightHi ? -1 : 1;
+            }
+
+            if (leftLo == rightLo)
+            {
+                return 0;
+            }
+
+            return leftLo < rightLo ? -1 : 1;
+        }
+
+        private static void Subtract128(
+            ulong largerHi, ulong largerLo, ulong smallerHi, ulong smallerLo,
+            out ulong resultHi, out ulong resultLo)
+        {
+            var borrow = largerLo < smallerLo ? 1UL : 0UL;
+            resultLo = unchecked(largerLo - smallerLo);
+            resultHi = unchecked(largerHi - smallerHi - borrow);
+        }
+
+        private static void ScaleMantissa128(
+            ulong mantissa, int decimalShift, out ulong hi, out ulong lo)
+        {
+            hi = 0;
+            lo = mantissa;
+            while (decimalShift > 0)
+            {
+                var chunk = Math.Min(decimalShift, ScaleDigits);
+                var factor = Pow10[chunk];
+                Int128Math.Mul64(lo, factor, out var carry, out var scaledLo);
+                hi = unchecked(hi * factor + carry);
+                lo = scaledLo;
+                decimalShift -= chunk;
+            }
+        }
+
+        /// <summary>값을 직접 비교하여 전체 순서를 반환한다.</summary>
+        public int CompareTo(BigNum other)
+        {
+            var signComparison = Sign.CompareTo(other.Sign);
+            if (signComparison != 0 || IsZero)
+            {
+                return signComparison;
+            }
+
+            var magnitude = (long)CountDigits64((ulong)Math.Abs(Mantissa)) + Exponent - 1;
+            var otherMagnitude = (long)CountDigits64((ulong)Math.Abs(other.Mantissa))
+                                 + other.Exponent - 1;
+            var magnitudeComparison = magnitude.CompareTo(otherMagnitude);
+            if (magnitudeComparison != 0)
+            {
+                return Sign > 0 ? magnitudeComparison : -magnitudeComparison;
+            }
+
+            var exponent = Math.Min(Exponent, other.Exponent);
+            ScaleMantissa128(
+                (ulong)Math.Abs(Mantissa), Exponent - exponent, out var hi, out var lo);
+            ScaleMantissa128(
+                (ulong)Math.Abs(other.Mantissa), other.Exponent - exponent,
+                out var otherHi, out var otherLo);
+            var alignedComparison = Compare128(hi, lo, otherHi, otherLo);
+            return Sign > 0 ? alignedComparison : -alignedComparison;
+        }
 
         /// <summary>정규 형식 필드 비교 — 같은 값은 항상 같은 비트다.</summary>
         public bool Equals(BigNum other) => Mantissa == other.Mantissa && Exponent == other.Exponent;
@@ -480,7 +547,17 @@ namespace Bun3.Gameplay.Numerics
         public override bool Equals(object? obj) => obj is BigNum other && Equals(other);
 
         /// <inheritdoc />
-        public override int GetHashCode() => HashCode.Combine(Mantissa, Exponent);
+        public override int GetHashCode()
+        {
+            unchecked
+            {
+                var hash = (int)2_166_136_261u;
+                hash = (hash ^ (int)Mantissa) * 16_777_619;
+                hash = (hash ^ (int)(Mantissa >> 32)) * 16_777_619;
+                hash = (hash ^ Exponent) * 16_777_619;
+                return hash;
+            }
+        }
 
         /// <summary>동등 비교.</summary>
         public static bool operator ==(BigNum a, BigNum b) => a.Equals(b);
@@ -502,6 +579,9 @@ namespace Bun3.Gameplay.Numerics
 
         /// <summary>디버그 표기. 핫패스 사용 금지 — 표시용은 TryFormat(Task 5).</summary>
         public override string ToString() =>
-            Exponent == 0 ? Mantissa.ToString() : $"{Mantissa}e{Exponent}";
+            Exponent == 0
+                ? Mantissa.ToString(CultureInfo.InvariantCulture)
+                : Mantissa.ToString(CultureInfo.InvariantCulture) + "e"
+                  + Exponent.ToString(CultureInfo.InvariantCulture);
     }
 }

@@ -8,6 +8,12 @@
         "com.mrdav30.fixedmathsharp.lean": "7.0.0"
       }
     },
+    "com.bun3.gameplay": {
+      "version": "file:../../common/src/com.bun3.gameplay",
+      "depth": 0,
+      "source": "local",
+      "dependencies": {}
+    },
     "com.bun3.unity.core": {
       "version": "file:com.bun3.unity.core",
       "depth": 0,
