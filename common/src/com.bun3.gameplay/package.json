@@ -1,7 +1,7 @@
 {
   "name": "com.bun3.gameplay",
   "displayName": "Bun3 Gameplay",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "unity": "2020.1",
   "description": "Generic gameplay framework (BigNum, tags, attributes, effects, abilities). netstandard2.1; no UnityEngine dependency.",
   "author": {

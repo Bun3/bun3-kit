@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
 
 namespace Bun3.Gameplay.Numerics
 {
@@ -20,11 +22,15 @@ namespace Bun3.Gameplay.Numerics
     /// </summary>
     public sealed class BigNumFormat
     {
+        private readonly string[] _units;
+
         /// <summary>단위 하나가 감당하는 십진 자릿수(한국식 4, 알파벳식 3).</summary>
         public int GroupDigits { get; }
 
-        /// <summary>단위 문자 테이블. [0]은 단위 없음("")이어야 한다.</summary>
-        public string[] Units { get; }
+        /// <summary>단위 문자열 테이블의 읽기 전용 뷰. [0]은 단위 없음(빈 문자열)이다.</summary>
+        public IReadOnlyList<string> Units { get; }
+
+        internal string GetUnit(int index) => _units[index];
 
         /// <summary>유닛화 최대 횟수(사용할 최상위 단위의 인덱스). Units.Length - 1 이하.</summary>
         public int MaxUnits { get; }
@@ -42,11 +48,11 @@ namespace Bun3.Gameplay.Numerics
         /// <summary>단위 상한을 넘어선 값의 표기 방식.</summary>
         public BigNumOverflowStyle OverflowStyle { get; }
 
-        /// <summary>알파벳 축약(1K = 10^3): "", K, M, B, T, Qa, Qi. 상한 초과는 지수 표기.</summary>
+        /// <summary>알파벳 축약(1K = 10^3): "", K, M, B, T, Qa, Qi. 상한 초과는 기본값인 최상위 단위로 표시.</summary>
         public static readonly BigNumFormat Base =
             new BigNumFormat(3, new[] { "", "K", "M", "B", "T", "Qa", "Qi" });
 
-        /// <summary>한국식(1만 = 10^4): "", 만, 억, 조, 경, 해, 자, 양, 구, 간, 정, 재, 극. 상한 초과는 지수 표기.</summary>
+        /// <summary>한국식(1만 = 10^4): "", 만, 억, 조, 경, 해, 자, 양, 구, 간, 정, 재, 극. 상한 초과는 기본값인 최상위 단위로 표시.</summary>
         public static readonly BigNumFormat Korean =
             new BigNumFormat(4, new[] { "", "만", "억", "조", "경", "해", "자", "양", "구", "간", "정", "재", "극" });
 
@@ -65,17 +71,27 @@ namespace Bun3.Gameplay.Numerics
                 throw new ArgumentOutOfRangeException(nameof(groupDigits));
             }
 
-            if (units == null || units.Length == 0 || units[0].Length != 0)
+            if (units == null)
             {
-                throw new ArgumentException("Units[0]은 빈 문자열이어야 한다.", nameof(units));
+                throw new ArgumentNullException(nameof(units));
             }
 
-            for (var i = 1; i < units.Length; i++)
+            if (units.Length == 0)
+            {
+                throw new ArgumentException("Units에는 하나 이상의 요소가 필요합니다.", nameof(units));
+            }
+
+            for (var i = 0; i < units.Length; i++)
             {
                 if (units[i] == null)
                 {
                     throw new ArgumentException("Units에 null 원소가 있다.", nameof(units));
                 }
+            }
+
+            if (units[0].Length != 0)
+            {
+                throw new ArgumentException("Units[0]은 빈 문자열이어야 합니다.", nameof(units));
             }
 
             if (maxUnits >= units.Length)
@@ -89,7 +105,8 @@ namespace Bun3.Gameplay.Numerics
             }
 
             GroupDigits = groupDigits;
-            Units = (string[])units.Clone();   // 외부 변이 차단
+            _units = (string[])units.Clone();
+            Units = new ReadOnlyCollection<string>(_units);
             MaxUnits = maxUnits < 0 ? units.Length - 1 : maxUnits;
             MaxFractionDigits = maxFractionDigits;
             TrimFractionZeros = trimFractionZeros;

@@ -69,7 +69,7 @@ namespace Bun3.Gameplay.Numerics
                     var integerDigits = (int)(magnitude - (long)index * format.GroupDigits) + 1;
                     return TryWriteScaled(destination, ref charsWritten, absMantissa, digitCount,
                                integerDigits, format)
-                           && TryAppendString(destination, ref charsWritten, format.Units[index]);
+                           && TryAppendString(destination, ref charsWritten, format.GetUnit(index));
                 }
             }
 

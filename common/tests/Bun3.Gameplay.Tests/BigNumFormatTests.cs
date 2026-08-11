@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using Bun3.Gameplay.Numerics;
 using NUnit.Framework;
 
@@ -141,6 +143,31 @@ public class BigNumFormatTests
             _ = new BigNumFormat(3, new[] { "", "K" }, maxUnits: 2));
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             _ = new BigNumFormat(3, new[] { "", "K" }, maxFractionDigits: 10));
+    }
+
+    [Test]
+    public void Unit_table_cannot_change_after_construction()
+    {
+        var source = new[] { "", "K" };
+        var format = new BigNumFormat(3, source);
+
+        source[1] = "X";
+        Assert.That(format.Units[1], Is.EqualTo("K"));
+        Assert.That(format.Units, Is.InstanceOf<ReadOnlyCollection<string>>());
+        Assert.That(() => ((IList<string>)format.Units)[1] = "X",
+            Throws.TypeOf<NotSupportedException>());
+        Assert.That(Format((BigNum)1_500, format), Is.EqualTo("1.5K"));
+    }
+
+    [Test]
+    public void Null_unit_entries_report_argument_errors()
+    {
+        Assert.That(() => _ = new BigNumFormat(3, null!),
+            Throws.TypeOf<ArgumentNullException>());
+        Assert.That(() => _ = new BigNumFormat(3, new string[] { null!, "K" }),
+            Throws.TypeOf<ArgumentException>());
+        Assert.That(() => _ = new BigNumFormat(3, new string[] { "", null! }),
+            Throws.TypeOf<ArgumentException>());
     }
 
     [Test]
