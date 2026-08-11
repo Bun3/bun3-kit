@@ -1,6 +1,6 @@
 # BigNum·Fixed64 최종 리뷰 보완 설계
 
-> 상태: 검토 요청
+> 상태: 승인
 > 작성일: 2026-08-11
 > 기준: `2026-08-10-bignum-fixed64-determinism-design.md` 및 최종 whole-branch 리뷰
 
