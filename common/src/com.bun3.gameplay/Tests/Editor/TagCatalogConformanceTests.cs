@@ -1,4 +1,5 @@
 #nullable enable
+using System;
 using System.IO;
 using System.Text;
 using Bun3.Gameplay.Tags;
@@ -23,6 +24,10 @@ namespace Bun3.Gameplay.Tests
             var catalog = TagCatalog.Load(stream);
 
             Assert.That(catalog.Count, Is.EqualTo(7));
+            Assert.That(catalog.TryGetByIndex(GameplayTag.None.Index, out var none), Is.True);
+            Assert.That(none, Is.EqualTo(GameplayTag.None));
+            Assert.That(none.Index, Is.Zero);
+            Assert.That(catalog.GetRequiredByIndex(none.Index), Is.EqualTo(GameplayTag.None));
             Assert.That(catalog.GetRequired("ability").Index, Is.EqualTo(1));
             Assert.That(catalog.GetRequired("ability.movement.jump").Index, Is.EqualTo(3));
             Assert.That(catalog.GetRequired("state.dead").Index, Is.EqualTo(5));
@@ -78,11 +83,12 @@ namespace Bun3.Gameplay.Tests
             using var peerStream = new MemoryStream(Encoding.UTF8.GetBytes(changedRedirectJson));
             var peer = TagCatalog.Load(peerStream);
             var simulationStarts = 0;
+            Action onSimulationStart = () => simulationStarts++;
 
-            Assert.That(TryStartSimulation(local, peer.Fingerprint, ref simulationStarts), Is.False);
+            Assert.That(TryStartSimulation(local, peer.Fingerprint, onSimulationStart), Is.False);
             Assert.That(simulationStarts, Is.Zero);
             var matchingFingerprint = local.Fingerprint.ToArray();
-            Assert.That(TryStartSimulation(local, matchingFingerprint, ref simulationStarts), Is.True);
+            Assert.That(TryStartSimulation(local, matchingFingerprint, onSimulationStart), Is.True);
             Assert.That(simulationStarts, Is.EqualTo(1));
         }
 
@@ -106,9 +112,11 @@ namespace Bun3.Gameplay.Tests
 
             Assert.That(subject.Remove(abilityGranted), Is.EqualTo(1));
             Assert.That(subject.ExactCount(dead), Is.EqualTo(2));
+            Assert.That(subject.Count(state), Is.EqualTo(2));
             Assert.That(subject.Has(state), Is.True);
             Assert.That(subject.Remove(effectGranted), Is.EqualTo(1));
             Assert.That(subject.ExactCount(dead), Is.EqualTo(1));
+            Assert.That(subject.Count(state), Is.EqualTo(1));
             Assert.That(subject.Has(state), Is.True);
             Assert.That(subject.Remove(equipmentGranted), Is.EqualTo(1));
             Assert.That(subject.ExactCount(dead), Is.Zero);
@@ -119,11 +127,11 @@ namespace Bun3.Gameplay.Tests
         private static bool TryStartSimulation(
             TagCatalog local,
             System.ReadOnlySpan<byte> peerFingerprint,
-            ref int simulationStarts)
+            Action onSimulationStart)
         {
             if (!local.MatchesFingerprint(peerFingerprint))
                 return false;
-            simulationStarts++;
+            onSimulationStart();
             return true;
         }
 
