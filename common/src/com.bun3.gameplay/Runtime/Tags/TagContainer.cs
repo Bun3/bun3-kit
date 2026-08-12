@@ -3,9 +3,7 @@ using System;
 
 namespace Bun3.Gameplay.Tags
 {
-    /// <summary>
-    /// Stores up to 64 unique explicit gameplay tags from one catalog in sorted wire-index order.
-    /// </summary>
+    /// <summary>하나의 카탈로그에서 최대 64개의 고유한 명시적 게임플레이 태그를 정렬된 와이어 인덱스 순서로 저장합니다.</summary>
     public sealed class TagContainer
     {
         private readonly TagCatalog _catalog;
@@ -21,14 +19,14 @@ namespace Bun3.Gameplay.Tags
             _indices = expectedExactKinds == 0 ? Array.Empty<ushort>() : new ushort[expectedExactKinds];
         }
 
-        /// <summary>Gets the number of explicitly stored tag kinds.</summary>
+        /// <summary>명시적으로 저장된 태그 종류 수를 가져옵니다.</summary>
         public int ExactKindCount => _count;
 
-        /// <summary>Adds a tag when it is not already explicitly stored.</summary>
-        /// <param name="tag">The catalog tag to add.</param>
-        /// <returns><see langword="true"/> when the tag was added; otherwise <see langword="false"/>.</returns>
-        /// <exception cref="ArgumentException"><paramref name="tag"/> is <see cref="GameplayTag.None"/>.</exception>
-        /// <exception cref="InvalidOperationException">The container already holds 64 explicit kinds.</exception>
+        /// <summary>아직 명시적으로 저장되지 않은 태그를 추가합니다.</summary>
+        /// <param name="tag">추가할 카탈로그 태그입니다.</param>
+        /// <returns>태그가 추가되면 <see langword="true"/>이고, 이미 저장되어 있으면 <see langword="false"/>입니다.</returns>
+        /// <exception cref="ArgumentException"><paramref name="tag"/>가 <see cref="GameplayTag.None"/>인 경우입니다.</exception>
+        /// <exception cref="InvalidOperationException">컨테이너에 이미 64개의 명시적 종류가 저장된 경우입니다.</exception>
         public bool Add(GameplayTag tag)
         {
             ValidateMutationTag(tag);
@@ -46,10 +44,10 @@ namespace Bun3.Gameplay.Tags
             return true;
         }
 
-        /// <summary>Removes an explicitly stored tag.</summary>
-        /// <param name="tag">The catalog tag to remove.</param>
-        /// <returns><see langword="true"/> when the tag was removed; otherwise <see langword="false"/>.</returns>
-        /// <exception cref="ArgumentException"><paramref name="tag"/> is <see cref="GameplayTag.None"/>.</exception>
+        /// <summary>명시적으로 저장된 태그를 제거합니다.</summary>
+        /// <param name="tag">제거할 카탈로그 태그입니다.</param>
+        /// <returns>태그가 제거되면 <see langword="true"/>이고, 저장되어 있지 않으면 <see langword="false"/>입니다.</returns>
+        /// <exception cref="ArgumentException"><paramref name="tag"/>가 <see cref="GameplayTag.None"/>인 경우입니다.</exception>
         public bool Remove(GameplayTag tag)
         {
             ValidateMutationTag(tag);
@@ -64,21 +62,21 @@ namespace Bun3.Gameplay.Tags
             return true;
         }
 
-        /// <summary>Determines whether an explicitly stored tag is the queried tag or one of its descendants.</summary>
-        /// <param name="tag">The tag to query.</param>
-        /// <returns><see langword="true"/> when a matching explicit tag is stored.</returns>
+        /// <summary>명시적으로 저장된 태그가 조회 태그 자신이거나 그 자손인지 확인합니다.</summary>
+        /// <param name="tag">조회할 태그입니다.</param>
+        /// <returns>일치하는 명시적 태그가 저장되어 있으면 <see langword="true"/>입니다.</returns>
         public bool Has(GameplayTag tag) => HasCore(tag, exact: false, out _);
 
-        /// <summary>Determines whether the queried tag is explicitly stored.</summary>
-        /// <param name="tag">The tag to query.</param>
-        /// <returns><see langword="true"/> when the exact tag is stored.</returns>
+        /// <summary>조회 태그가 명시적으로 저장되어 있는지 확인합니다.</summary>
+        /// <param name="tag">조회할 태그입니다.</param>
+        /// <returns>정확히 일치하는 태그가 저장되어 있으면 <see langword="true"/>입니다.</returns>
         public bool HasExact(GameplayTag tag) => HasCore(tag, exact: true, out _);
 
-        /// <summary>Determines whether any hierarchical query tag matches this container.</summary>
-        /// <param name="query">The query tags from the same catalog instance.</param>
-        /// <returns><see langword="true"/> when any query tag matches; otherwise <see langword="false"/>.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="query"/> is <see langword="null"/>.</exception>
-        /// <exception cref="ArgumentException"><paramref name="query"/> belongs to another catalog instance.</exception>
+        /// <summary>계층형 조회 태그 중 하나라도 이 컨테이너와 일치하는지 확인합니다.</summary>
+        /// <param name="query">같은 카탈로그 인스턴스에서 만든 조회 태그입니다.</param>
+        /// <returns>조회 태그 중 하나라도 일치하면 <see langword="true"/>이고, 그렇지 않으면 <see langword="false"/>입니다.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="query"/>가 <see langword="null"/>인 경우입니다.</exception>
+        /// <exception cref="ArgumentException"><paramref name="query"/>가 다른 카탈로그 인스턴스에 속한 경우입니다.</exception>
         public bool HasAny(TagContainer query)
         {
             ValidateQueryCatalog(query);
@@ -91,11 +89,11 @@ namespace Bun3.Gameplay.Tags
             return false;
         }
 
-        /// <summary>Determines whether every hierarchical query tag matches this container.</summary>
-        /// <param name="query">The query tags from the same catalog instance.</param>
-        /// <returns><see langword="true"/> when every query tag matches, including an empty query.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="query"/> is <see langword="null"/>.</exception>
-        /// <exception cref="ArgumentException"><paramref name="query"/> belongs to another catalog instance.</exception>
+        /// <summary>계층형 조회 태그가 모두 이 컨테이너와 일치하는지 확인합니다.</summary>
+        /// <param name="query">같은 카탈로그 인스턴스에서 만든 조회 태그입니다.</param>
+        /// <returns>빈 조회를 포함해 모든 조회 태그가 일치하면 <see langword="true"/>입니다.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="query"/>가 <see langword="null"/>인 경우입니다.</exception>
+        /// <exception cref="ArgumentException"><paramref name="query"/>가 다른 카탈로그 인스턴스에 속한 경우입니다.</exception>
         public bool HasAll(TagContainer query)
         {
             ValidateQueryCatalog(query);
@@ -108,11 +106,11 @@ namespace Bun3.Gameplay.Tags
             return true;
         }
 
-        /// <summary>Determines whether any exact query tag is explicitly stored.</summary>
-        /// <param name="query">The query tags from the same catalog instance.</param>
-        /// <returns><see langword="true"/> when any exact query tag matches; otherwise <see langword="false"/>.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="query"/> is <see langword="null"/>.</exception>
-        /// <exception cref="ArgumentException"><paramref name="query"/> belongs to another catalog instance.</exception>
+        /// <summary>정확한 조회 태그 중 하나라도 명시적으로 저장되어 있는지 확인합니다.</summary>
+        /// <param name="query">같은 카탈로그 인스턴스에서 만든 조회 태그입니다.</param>
+        /// <returns>정확한 조회 태그 중 하나라도 일치하면 <see langword="true"/>이고, 그렇지 않으면 <see langword="false"/>입니다.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="query"/>가 <see langword="null"/>인 경우입니다.</exception>
+        /// <exception cref="ArgumentException"><paramref name="query"/>가 다른 카탈로그 인스턴스에 속한 경우입니다.</exception>
         public bool HasAnyExact(TagContainer query)
         {
             ValidateQueryCatalog(query);
@@ -125,11 +123,11 @@ namespace Bun3.Gameplay.Tags
             return false;
         }
 
-        /// <summary>Determines whether every exact query tag is explicitly stored.</summary>
-        /// <param name="query">The query tags from the same catalog instance.</param>
-        /// <returns><see langword="true"/> when every exact query tag matches, including an empty query.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="query"/> is <see langword="null"/>.</exception>
-        /// <exception cref="ArgumentException"><paramref name="query"/> belongs to another catalog instance.</exception>
+        /// <summary>정확한 조회 태그가 모두 명시적으로 저장되어 있는지 확인합니다.</summary>
+        /// <param name="query">같은 카탈로그 인스턴스에서 만든 조회 태그입니다.</param>
+        /// <returns>빈 조회를 포함해 모든 정확한 조회 태그가 일치하면 <see langword="true"/>입니다.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="query"/>가 <see langword="null"/>인 경우입니다.</exception>
+        /// <exception cref="ArgumentException"><paramref name="query"/>가 다른 카탈로그 인스턴스에 속한 경우입니다.</exception>
         public bool HasAllExact(TagContainer query)
         {
             ValidateQueryCatalog(query);
