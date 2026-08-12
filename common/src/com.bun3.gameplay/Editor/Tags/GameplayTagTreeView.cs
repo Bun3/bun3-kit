@@ -44,6 +44,25 @@ namespace Bun3.Gameplay.Editor.Tags
             return false;
         }
 
+        internal void SynchronizeSelection(string path)
+        {
+            if (path is null) throw new ArgumentNullException(nameof(path));
+
+            if (path.Length > 0)
+            {
+                foreach (var pair in _rowsById)
+                {
+                    if (string.Equals(pair.Value.Path, path, StringComparison.OrdinalIgnoreCase))
+                    {
+                        SetSelection(new[] { pair.Key }, TreeViewSelectionOptions.None);
+                        return;
+                    }
+                }
+            }
+
+            SetSelection(Array.Empty<int>(), TreeViewSelectionOptions.None);
+        }
+
         internal static GUIContent CreateLabelContent(GameplayTagTreeRowModel row)
         {
             var segmentOffset = row.Path.LastIndexOf('.') + 1;

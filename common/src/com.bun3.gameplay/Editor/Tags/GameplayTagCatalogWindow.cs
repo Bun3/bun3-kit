@@ -253,11 +253,13 @@ namespace Bun3.Gameplay.Editor.Tags
             {
                 _model = null;
                 _treeView.SetRows(Array.Empty<GameplayTagTreeRowModel>());
+                _treeView.SynchronizeSelection(string.Empty);
                 return;
             }
 
             _model = new GameplayTagCatalogViewModel(_controller.Session);
             _treeView.SetRows(_model.Filter(_search));
+            _treeView.SynchronizeSelection(_controller.SelectedPath);
             if (_controller.SelectedPath.Length > 0)
             {
                 _comment = FindComment(_controller.SelectedPath);
