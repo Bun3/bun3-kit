@@ -86,18 +86,8 @@ namespace Bun3.Gameplay.Tags
                 }
 
                 var explicitTags = ReadTags(tags);
-                var redirects = root.Property("redirects", StringComparison.Ordinal)?.Value;
-                if (redirects is not null)
-                {
-                    if (redirects is not JArray redirectArray)
-                    {
-                        throw Error("redirects는 배열이어야 합니다.", redirects);
-                    }
-
-                    ValidateRedirects(redirectArray);
-                }
-
-                return Build(explicitTags);
+                var redirectDefinitions = ReadRedirects(root.Property("redirects", StringComparison.Ordinal)?.Value);
+                return Create(explicitTags, redirectDefinitions);
             }
 
             private static List<ExplicitTag> ReadTags(JArray tags)
@@ -139,9 +129,16 @@ namespace Bun3.Gameplay.Tags
                 return explicitTags;
             }
 
-            private static void ValidateRedirects(JArray redirects)
+            private static List<RedirectDefinition> ReadRedirects(JToken? redirects)
             {
-                foreach (var token in redirects)
+                if (redirects is null) return new List<RedirectDefinition>();
+                if (redirects is not JArray redirectArray)
+                {
+                    throw Error("redirects는 배열이어야 합니다.", redirects);
+                }
+
+                var definitions = new List<RedirectDefinition>(redirectArray.Count);
+                foreach (var token in redirectArray)
                 {
                     if (token is not JObject redirect)
                     {
@@ -151,9 +148,17 @@ namespace Bun3.Gameplay.Tags
                     RequireAllowedProperties(redirect, "from", "to");
                     var from = RequireString(redirect, "from");
                     var to = RequireString(redirect, "to");
-                    TagName.ValidateAndFold(from.Value, from.Path, from.LineNumber, from.LinePosition);
-                    TagName.ValidateAndFold(to.Value, to.Path, to.LineNumber, to.LinePosition);
+                    var canonicalFrom = TagName.ValidateAndFold(from.Value, from.Path, from.LineNumber, from.LinePosition);
+                    var canonicalTo = TagName.ValidateAndFold(to.Value, to.Path, to.LineNumber, to.LinePosition);
+                    definitions.Add(new RedirectDefinition(
+                        canonicalFrom,
+                        canonicalTo,
+                        from.Path,
+                        from.LineNumber,
+                        from.LinePosition));
                 }
+
+                return definitions;
             }
 
             private static LocatedString RequireString(JObject value, string propertyName)

@@ -11,25 +11,111 @@ namespace Bun3.Gameplay.Tags
     public sealed partial class TagCatalog
     {
         private readonly Dictionary<string, ushort> _byCanonicalName;
+        private readonly Dictionary<string, ushort> _redirects;
         private readonly string[] _displayNames;
         private readonly ushort[] _parents;
         private readonly ushort[] _subtreeEnds;
+        private readonly byte[] _fingerprint;
 
         private TagCatalog(
             Dictionary<string, ushort> byCanonicalName,
             string[] displayNames,
             ushort[] parents,
             ushort[] subtreeEnds)
+            : this(
+                byCanonicalName,
+                new Dictionary<string, ushort>(StringComparer.Ordinal),
+                displayNames,
+                parents,
+                subtreeEnds,
+                ComputeFingerprint(1, CreateCanonicalNames(byCanonicalName, displayNames.Length), Array.Empty<RedirectEntry>()))
+        {
+        }
+
+        private TagCatalog(
+            Dictionary<string, ushort> byCanonicalName,
+            Dictionary<string, ushort> redirects,
+            string[] displayNames,
+            ushort[] parents,
+            ushort[] subtreeEnds,
+            byte[] fingerprint)
         {
             _byCanonicalName = byCanonicalName;
+            _redirects = redirects;
             _displayNames = displayNames;
             _parents = parents;
             _subtreeEnds = subtreeEnds;
+            _fingerprint = fingerprint;
             Count = displayNames.Length - 1;
+        }
+
+        private static TagCatalog Create(List<ExplicitTag> explicitTags, List<RedirectDefinition> definitions)
+        {
+            var catalog = Build(explicitTags);
+            var redirects = BuildRedirects(definitions, catalog._byCanonicalName, out var fingerprintRedirects);
+            var canonicalNames = CreateCanonicalNames(catalog._byCanonicalName, catalog._displayNames.Length);
+            return new TagCatalog(
+                catalog._byCanonicalName,
+                redirects,
+                catalog._displayNames,
+                catalog._parents,
+                catalog._subtreeEnds,
+                ComputeFingerprint(1, canonicalNames, fingerprintRedirects));
+        }
+
+        private static Dictionary<string, ushort> BuildRedirects(
+            List<RedirectDefinition> definitions,
+            Dictionary<string, ushort> byCanonicalName,
+            out RedirectEntry[] fingerprintRedirects)
+        {
+            var redirects = new Dictionary<string, ushort>(definitions.Count, StringComparer.Ordinal);
+            var entries = new List<RedirectEntry>(definitions.Count);
+            foreach (var definition in definitions)
+            {
+                if (byCanonicalName.ContainsKey(definition.From))
+                {
+                    throw new TagCatalogException("redirect source는 활성 태그와 겹칠 수 없습니다.", definition.JsonPath, definition.LineNumber, definition.LinePosition);
+                }
+
+                if (!byCanonicalName.TryGetValue(definition.To, out var target))
+                {
+                    throw new TagCatalogException("redirect target은 활성 태그여야 합니다.", definition.JsonPath, definition.LineNumber, definition.LinePosition);
+                }
+
+                if (!redirects.TryAdd(definition.From, target))
+                {
+                    throw new TagCatalogException("대소문자를 제외하고 중복된 redirect source입니다.", definition.JsonPath, definition.LineNumber, definition.LinePosition);
+                }
+
+                entries.Add(new RedirectEntry(definition.From, definition.To));
+            }
+
+            entries.Sort((left, right) => StringComparer.Ordinal.Compare(left.From, right.From));
+            fingerprintRedirects = entries.ToArray();
+            return redirects;
+        }
+
+        private static string[] CreateCanonicalNames(Dictionary<string, ushort> byCanonicalName, int length)
+        {
+            var canonicalNames = new string[length];
+            foreach (var pair in byCanonicalName)
+            {
+                canonicalNames[pair.Value] = pair.Key;
+            }
+
+            return canonicalNames;
         }
 
         /// <summary>카탈로그에 있는 태그 수이며 None은 포함하지 않습니다.</summary>
         public int Count { get; }
+
+        /// <summary>카탈로그의 canonical SHA-256 fingerprint를 가져옵니다.</summary>
+        public ReadOnlySpan<byte> Fingerprint => _fingerprint;
+
+        /// <summary>입력 fingerprint가 이 카탈로그의 fingerprint와 같은지 검사합니다.</summary>
+        /// <param name="other">비교할 fingerprint bytes입니다.</param>
+        /// <returns>두 fingerprint가 같으면 true입니다.</returns>
+        public bool MatchesFingerprint(ReadOnlySpan<byte> other) => other.SequenceEqual(_fingerprint);
 
         /// <summary>
         /// UTF-8 JSON 스트림의 현재 위치부터 끝까지 읽어 불변 카탈로그를 만듭니다.
@@ -59,6 +145,12 @@ namespace Bun3.Gameplay.Tags
             }
 
             if (_byCanonicalName.TryGetValue(canonical, out var index))
+            {
+                tag = new GameplayTag(index);
+                return true;
+            }
+
+            if (_redirects.TryGetValue(canonical, out index))
             {
                 tag = new GameplayTag(index);
                 return true;
@@ -141,5 +233,35 @@ namespace Bun3.Gameplay.Tags
 
         internal ushort GetSubtreeEnd(GameplayTag tag) =>
             tag.IsValid && tag.Index <= Count ? _subtreeEnds[tag.Index] : (ushort)0;
+
+        private readonly struct RedirectDefinition
+        {
+            internal RedirectDefinition(string from, string to, string jsonPath, int lineNumber, int linePosition)
+            {
+                From = from;
+                To = to;
+                JsonPath = jsonPath;
+                LineNumber = lineNumber;
+                LinePosition = linePosition;
+            }
+
+            internal string From { get; }
+            internal string To { get; }
+            internal string JsonPath { get; }
+            internal int LineNumber { get; }
+            internal int LinePosition { get; }
+        }
+
+        private readonly struct RedirectEntry
+        {
+            internal RedirectEntry(string from, string to)
+            {
+                From = from;
+                To = to;
+            }
+
+            internal string From { get; }
+            internal string To { get; }
+        }
     }
 }
