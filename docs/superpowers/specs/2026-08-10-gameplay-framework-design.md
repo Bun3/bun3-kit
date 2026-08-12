@@ -24,7 +24,7 @@ proto 생성 클래스=심 상태 결합, 스탯 하드코딩(UnitStat 프로퍼
 | 접근 | 하이브리드(GAS 실전형): Effect는 선언 데이터 + 선택 훅, Ability는 코드 |
 | 심 위치 | 공용 netstandard2.1 라이브러리 — 호스트(권위)와 원격 클라(미러)가 같은 코드 |
 | 수치 | BigNum(long 가수+int 지수) — Attribute/경제. FixedMathSharp Fixed64(Q32.32) — 위치/공간 |
-| 태그 | 언리얼식 계층 문자열, 런타임 인터닝 핸들, 카운트 보유, 미등록은 동적 등록 |
+| 태그 | JSON 계층 경로를 기동 시 불변 `ushort` 카탈로그로 로드, 런타임 등록 금지 — 전용 태그 설계 참조 |
 | 복제 | 프레임워크 내장 — `gameplay.proto` + 게임 Update oneof에 필드 1개, 시야 필터 훅 |
 | 이동/위치 동기화 | 범위 밖 — 별도 스펙(비신뢰 채널 + 보간/예측, Transport.Steam 포함) |
 | 락스텝/결정론 | 코어는 "결정론 준비"만(틱 전진·시드 RNG·스냅샷). 락스텝 동기화 모듈은 후속 스펙 |
@@ -35,13 +35,12 @@ proto 생성 클래스=심 상태 결합, 스탯 하드코딩(UnitStat 프로퍼
 
 ## 3. 범위 / 비목표
 
-**범위**: BigNum, GameplayTag/TagSet, Attribute/AttributeSet, Effect, Ability, Item/Inventory,
+**범위**: BigNum, GameplayTag/TagCatalog/TagContainer/TagCountContainer, Attribute/AttributeSet, Effect, Ability, Item/Inventory,
 Unit, World, 복제(gameplay.proto + 서버 글루), 코드 룰(CLAUDE.md).
 
 **비목표(후속 스펙)**:
 - 이동/위치 동기화(비신뢰 채널, 보간/예측, Transport.Steam) — 디덕션 게임 전 필수, 바로 뒤이어
 - 락스텝 동기화 모듈(입력 복제·desync 해시) — 은닉 정보 게임엔 부적합, RTS/리플레이형 수요 시
-- 태그 계층의 데이터 정의 테이블(부모 관계 데이터화) — 코드/데이터 등록으로 충분해질 때까지
 - 저장소 계약 패키지(IItemStore류) — 두 번째 게임이 같은 매핑을 반복하면 그때
 - 채널링/지속 어빌리티 1급 지원 — v1은 즉발 발동 + Effect 조합으로 구현
 
@@ -49,7 +48,7 @@ Unit, World, 복제(gameplay.proto + 서버 글루), 코드 룰(CLAUDE.md).
 
 ```
 Bun3.Gameplay            (netstandard2.1, C#9 — Unity 로드 가능)
-  BigNum, GameplayTag/TagRegistry/TagSet, Attribute/AttributeSet,
+  BigNum, GameplayTag/TagCatalog/TagContainer/TagCountContainer, Attribute/AttributeSet,
   EffectSpec/EffectInstance, AbilityDef/AbilitySet, ItemDef/ItemInstance/Inventory,
   Unit, World, IRng, gameplay.proto (복제 메시지)
   의존: Google.Protobuf, Bun3.Common(풀드 컬렉션)
@@ -100,31 +99,31 @@ Bun3.Server.Gameplay     (netstandard2.1)
 
 ## 7. GameplayTag
 
-- **정체성 = 점 구분 계층 문자열**: `State.Dead.Ghost`, `Ability.Movement.Vent`,
-  `Effect.Debuff.Stun`, `Immune.Stun`, `Dispel.Magic`, `Item.Consumable` …
-  idlez Tags.proto의 enum들은 이식 시 계층 이름으로 옮겨 앉는다(사용 방식 계승, 표현 교체).
-- **런타임 인터닝**: 기동 시 등록(코드 상수 + 데이터 파일 양쪽) → `GameplayTag`는
-  `readonly struct { int Handle; }`. 비교는 정수, 부모 체인은 등록 시 연결. 심 핫패스에
-  문자열 비교/할당 없음. **미등록 태그는 동적 등록**(수신·로드 시 자동 추가).
-- **계층 매칭**: `Has("State.Dead")`는 `State.Dead.Ghost` 보유 시에도 true(언리얼 기본
-  시맨틱). Required/Blocked/Granted/면역/해제 쿼리 전부 계층 매칭.
-- **TagSet = 카운트 맵**: 같은 태그를 부여하는 소스 2개가 공존(하나 꺼져도 유지) +
-  `Count(tag)` 조회 제공(계층 매칭 시 하위 카운트 합산). 중첩 허용.
-- **직렬화는 문자열이 정본**: 데이터 정의·DB·와이어 모두 태그 이름. 버전 간 안정
-  (정수 인덱스는 재정렬에 깨짐), 태그 이벤트는 저빈도라 와이어 비용 무시 가능.
+이 절의 상세 결정은
+[`2026-08-12-gameplay-tag-catalog-design.md`](2026-08-12-gameplay-tag-catalog-design.md)가
+대체한다.
+
+- 작성·영속 정본은 점 구분 JSON 경로이며, 기동 후에는 불변 `ushort` 인덱스를 사용한다.
+- 미등록 태그의 런타임 동적 등록은 금지한다.
+- 일반 분류 집합 `TagContainer`와 여러 출처의 현재 상태를 세는 `TagCountContainer`를
+  분리한다.
+- fingerprint가 같은 네트워크 세션에서는 태그를 `ushort` 인덱스로 전송한다.
 
 ## 8. 게임플레이 개체 합성
 
 ```
-GameplayObject (베이스): TagSet 보유
-  ├─ Unit:          + AttributeSet + ActiveEffects + AbilitySet + (선택) Inventory + OwnerPlayerId
+GameplayObject (베이스): 공통 태그 저장소 강제 없음
+  ├─ Unit:          + TagCountContainer + AttributeSet + ActiveEffects + AbilitySet + (선택) Inventory + OwnerPlayerId
   ├─ ItemInstance:  + RolledModifiers + AbilityGrants  (아이템 태그 — idlez 50000대의 자리)
   ├─ AbilityDef:    태그로 분류 (예: Rooted가 "Ability.Movement.*" 일괄 차단)
   └─ EffectSpec/Instance: 태그로 분류 (면역/해제 쿼리 대상)
 ```
 
-- TagSet은 전원 보유. AttributeSet·능동 Effect 수용은 Unit만(살아있는 스탯이 필요한
-  특수 아이템이 나오면 그때 확장). AbilitySet은 Unit이 보유하되 아이템·Effect는 "부여자".
+- `TagCountContainer`는 여러 출처에서 동적 태그를 부여받는 Unit 같은 gameplay subject만
+  보유한다. 정의·분류는 `TagContainer`를 사용하고, 아이템 인스턴스의 가변 태그 스택은 실제
+  요구가 생길 때 선택적으로 추가한다. AttributeSet·능동 Effect 수용은 Unit만(살아있는
+  스탯이 필요한 특수 아이템이 나오면 그때 확장). AbilitySet은 Unit이 보유하되 아이템·Effect는
+  "부여자".
 - Skill = AbilityDef(데이터+코드 훅), Item = 부여자·수정자 운반체, Unit = 실행 주체.
 
 ### 8.1 Attribute / AttributeSet
@@ -203,7 +202,8 @@ GameplayObject (베이스): TagSet 보유
 ## 11. 코드 룰 (CLAUDE.md 명시)
 
 - **런타임 문자열 할당 최소화.** 프레임워크 코어는 문자열을 만들지 않는다:
-  포맷은 `TryFormat(Span<char>)` 패턴, 태그는 등록 시 1회 인터닝, 로그는 저빈도 경로만.
+  포맷은 `TryFormat(Span<char>)` 패턴, 태그 문자열은 카탈로그 로드·외부 데이터 해석 시에만
+  처리하고 simulation은 숫자 인덱스를 사용, 로그는 저빈도 경로만.
   Unity 계층은 ZString + TMP `SetText`를 적극 사용 — 최종 목표는 Unity에서 `.text`
   문자열 할당 제로.
 - 틱/패킷 핫패스 무할당 규율은 서버 리뷰 웨이브에서 확립한 기준을 그대로 적용.
@@ -211,13 +211,14 @@ GameplayObject (베이스): TagSet 보유
 ## 12. 테스트 전략
 
 - 심이 순수하므로 전부 결정론 유닛 테스트: 수동 Tick으로 Effect 수명/스택/집계/게이트/
-  부여 회수. BigNum 연산·정규화·포맷 라운드트립 + 비트 동일성. 태그 등록/계층 매칭/카운트.
+  부여 회수. BigNum 연산·정규화·포맷 라운드트립 + 비트 동일성. 태그 카탈로그 로드·결정적
+  인덱스·계층 매칭·카운트.
 - 복제: InMemoryDuplex로 권위→미러 왕복, 시야 필터 검증, 스냅샷 후참여.
 - 틱 경로 무할당 스모크(GC.GetAllocatedBytesForCurrentThread).
 
 ## 13. 구현 슬라이스 (플랜 분할 순서)
 
-1. BigNum + GameplayTag/TagRegistry/TagSet + TryFormat (기반, 의존 없음)
+1. BigNum + GameplayTag/TagCatalog/TagContainer/TagCountContainer + TryFormat (기반, 의존 없음)
 2. Attribute/AttributeSet + Effect (심 코어)
 3. Ability(게이트·부여 소스) + Unit/World/커맨드 큐
 4. Item/Inventory + proto 직렬화 + dirty 추적
@@ -229,4 +230,4 @@ GameplayObject (베이스): TagSet 보유
 
 - 이동 동기화 모듈(비신뢰 채널 + FixedMathSharp Fixed64 공간 수치 + Transport.Steam) — 다음 스펙
 - 락스텝 동기화 모듈(입력 복제, 틱 상태 해시 desync 감지) — 결정론 준비 코어 위에
-- 태그 계층 데이터 테이블, 저장소 계약 패키지, 예측(prediction) — 수요 발생 시
+- 저장소 계약 패키지, 예측(prediction) — 수요 발생 시
