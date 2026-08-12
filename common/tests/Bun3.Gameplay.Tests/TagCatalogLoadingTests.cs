@@ -67,6 +67,33 @@ public sealed class TagCatalogLoadingTests
     }
 
     [Test]
+    public void Load_reads_from_the_current_position_of_a_nonseekable_stream_and_leaves_it_open()
+    {
+        var prefix = System.Text.Encoding.UTF8.GetBytes("ignored-prefix");
+        var json = System.Text.Encoding.UTF8.GetBytes(TagCatalogTestData.CanonicalJson);
+        var source = new MemoryStream(prefix.Length + json.Length);
+        source.Write(prefix, 0, prefix.Length);
+        source.Write(json, 0, json.Length);
+        source.Position = prefix.Length;
+        using var stream = new NonSeekableReadStream(source);
+
+        Assert.That(TagCatalog.Load(stream).Count, Is.EqualTo(7));
+        Assert.That(stream.CanRead, Is.True);
+        Assert.That(stream.ReadByte(), Is.EqualTo(-1));
+    }
+
+    [Test]
+    public void Load_rejects_invalid_utf8_as_a_located_catalog_error()
+    {
+        using var stream = new MemoryStream(new byte[] { 0xFF });
+
+        var error = Assert.Throws<TagCatalogException>(() => TagCatalog.Load(stream));
+
+        Assert.That(error!.LineNumber, Is.EqualTo(1));
+        Assert.That(error.LinePosition, Is.EqualTo(1));
+    }
+
+    [Test]
     public void Unregistered_and_malformed_lookups_have_distinct_contracts()
     {
         var catalog = TagCatalogTestData.Load();
@@ -92,5 +119,23 @@ public sealed class TagCatalogLoadingTests
                 System.Threading.Interlocked.Increment(ref failures);
         });
         Assert.That(failures, Is.Zero);
+    }
+
+    private sealed class NonSeekableReadStream : Stream
+    {
+        private readonly Stream _inner;
+
+        internal NonSeekableReadStream(Stream inner) => _inner = inner;
+
+        public override bool CanRead => _inner.CanRead;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => throw new NotSupportedException();
+        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+        public override void Flush() { }
+        public override int Read(byte[] buffer, int offset, int count) => _inner.Read(buffer, offset, count);
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
     }
 }

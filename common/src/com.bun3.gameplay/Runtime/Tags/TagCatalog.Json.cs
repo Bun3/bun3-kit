@@ -72,7 +72,9 @@ namespace Bun3.Gameplay.Tags
             {
                 RequireAllowedProperties(root, "schemaVersion", "tags", "redirects");
                 var schemaVersion = RequireProperty(root, "schemaVersion");
-                if (schemaVersion.Type != JTokenType.Integer || schemaVersion.Value<long>() != 1)
+                if (schemaVersion.Type != JTokenType.Integer
+                    || schemaVersion is not JValue { Value: long schemaVersionValue }
+                    || schemaVersionValue != 1)
                 {
                     throw Error("schemaVersion은 정수 1이어야 합니다.", schemaVersion);
                 }
@@ -248,6 +250,8 @@ namespace Bun3.Gameplay.Tags
                 private int _cursor;
                 private int _line = 1;
                 private int _linePosition = 1;
+                private int _depth;
+                private bool _previousWasCarriageReturn;
 
                 internal Parser(string text) => _text = text;
 
@@ -279,37 +283,53 @@ namespace Bun3.Gameplay.Tags
 
                 internal void ParseObject()
                 {
-                    Read();
-                    SkipWhitespace();
-                    if (TryConsume('}')) return;
-                    while (true)
+                    EnterContainer();
+                    try
                     {
-                        if (End || Peek() != '"') Fail("객체 속성 이름은 큰따옴표 문자열이어야 합니다.");
-                        ParseString();
-                        SkipWhitespace();
-                        Expect(':');
-                        ParseValue();
+                        Read();
                         SkipWhitespace();
                         if (TryConsume('}')) return;
-                        Expect(',');
-                        SkipWhitespace();
-                        if (End || Peek() != '"') Fail("쉼표 뒤에는 객체 속성 이름이 필요합니다.");
+                        while (true)
+                        {
+                            if (End || Peek() != '"') Fail("객체 속성 이름은 큰따옴표 문자열이어야 합니다.");
+                            ParseString();
+                            SkipWhitespace();
+                            Expect(':');
+                            ParseValue();
+                            SkipWhitespace();
+                            if (TryConsume('}')) return;
+                            Expect(',');
+                            SkipWhitespace();
+                            if (End || Peek() != '"') Fail("쉼표 뒤에는 객체 속성 이름이 필요합니다.");
+                        }
+                    }
+                    finally
+                    {
+                        _depth--;
                     }
                 }
 
                 internal void ParseArray()
                 {
-                    Read();
-                    SkipWhitespace();
-                    if (TryConsume(']')) return;
-                    while (true)
+                    EnterContainer();
+                    try
                     {
-                        ParseValue();
+                        Read();
                         SkipWhitespace();
                         if (TryConsume(']')) return;
-                        Expect(',');
-                        SkipWhitespace();
-                        if (End || Peek() == ']') Fail("쉼표 뒤에는 배열 값이 필요합니다.");
+                        while (true)
+                        {
+                            ParseValue();
+                            SkipWhitespace();
+                            if (TryConsume(']')) return;
+                            Expect(',');
+                            SkipWhitespace();
+                            if (End || Peek() == ']') Fail("쉼표 뒤에는 배열 값이 필요합니다.");
+                        }
+                    }
+                    finally
+                    {
+                        _depth--;
                     }
                 }
 
@@ -388,19 +408,37 @@ namespace Bun3.Gameplay.Tags
 
                 internal void Fail(string message) => throw new TagCatalogException(message, string.Empty, _line, _linePosition);
 
+                private void EnterContainer()
+                {
+                    if (_depth >= 8) Fail("JSON 중첩 깊이는 8을 넘을 수 없습니다.");
+                    _depth++;
+                }
+
                 private char Peek() => _text[_cursor];
 
                 private char Read()
                 {
                     var value = _text[_cursor++];
-                    if (value == '\n')
+                    if (value == '\r')
                     {
                         _line++;
                         _linePosition = 1;
+                        _previousWasCarriageReturn = true;
+                    }
+                    else if (value == '\n')
+                    {
+                        if (!_previousWasCarriageReturn)
+                        {
+                            _line++;
+                            _linePosition = 1;
+                        }
+
+                        _previousWasCarriageReturn = false;
                     }
                     else
                     {
                         _linePosition++;
+                        _previousWasCarriageReturn = false;
                     }
 
                     return value;

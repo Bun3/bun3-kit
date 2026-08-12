@@ -114,6 +114,94 @@ public sealed class TagCatalogValidationTests
     }
 
     [Test]
+    public void Schema_version_beyond_int64_reports_its_token_location()
+    {
+        const string json = "{\n  \"schemaVersion\": 9223372036854775808,\n  \"tags\": []\n}";
+
+        var error = Assert.Throws<TagCatalogException>(() => TagCatalogTestData.Load(json));
+
+        Assert.That(error!.JsonPath, Is.EqualTo("schemaVersion"));
+        Assert.That(error.LineNumber, Is.EqualTo(2));
+    }
+
+    [Test]
+    public void Strict_scanner_rejects_nesting_beyond_eight_before_json_reader()
+    {
+        var json = "{\"schemaVersion\":1,\"tags\":"
+            + new string('[', 8) + new string(']', 8) + "}";
+
+        var error = Assert.Throws<TagCatalogException>(() => TagCatalogTestData.Load(json));
+
+        Assert.That(error!.Message, Does.StartWith("JSON 중첩 깊이는 8을 넘을 수 없습니다."));
+        Assert.That(error.LineNumber, Is.EqualTo(1));
+    }
+
+    [TestCase("\r")]
+    [TestCase("\n")]
+    [TestCase("\r\n")]
+    public void Strict_scanner_counts_each_newline_style_once(string newline)
+    {
+        var json = "{" + newline + "\"schemaVersion\":1," + newline
+            + "\"tags\":[]" + newline + "!}";
+
+        var error = Assert.Throws<TagCatalogException>(() => TagCatalogTestData.Load(json));
+
+        Assert.That(error!.LineNumber, Is.EqualTo(4));
+    }
+
+    [Test]
+    public void Strict_scanner_accepts_all_json_string_escapes()
+    {
+        const string json = """{"schemaVersion":1,"tags":[{"name":"\u0041","comment":"\"\\\/\b\f\n\r\t"}]}""";
+
+        var catalog = TagCatalogTestData.Load(json);
+
+        Assert.That(catalog.GetRequired("A").IsValid, Is.True);
+    }
+
+    [TestCase(@"\x")]
+    [TestCase(@"\u123")]
+    public void Strict_scanner_rejects_invalid_string_escapes(string escape)
+    {
+        var json = "{\"schemaVersion\":1,\"tags\":[{\"name\":\"A" + escape + "\"}]}";
+
+        var error = Assert.Throws<TagCatalogException>(() => TagCatalogTestData.Load(json));
+
+        Assert.That(error!.Message, Does.Not.StartWith("ASCII 영숫자 이외의 문자는 사용할 수 없습니다."));
+    }
+
+    [Test]
+    public void Strict_scanner_rejects_raw_string_controls()
+    {
+        var json = "{\"schemaVersion\":1,\"tags\":[{\"name\":\"A\u001F\"}]}";
+
+        Assert.Throws<TagCatalogException>(() => TagCatalogTestData.Load(json));
+    }
+
+    [TestCase("1e+2")]
+    [TestCase("-0.1E-2")]
+    public void Strict_scanner_accepts_json_number_and_exponent_grammar(string number)
+    {
+        var json = "{\"schemaVersion\":1,\"tags\":[],\"unknown\":" + number + "}";
+
+        var error = Assert.Throws<TagCatalogException>(() => TagCatalogTestData.Load(json));
+
+        Assert.That(error!.Message, Does.StartWith("허용되지 않은 필드입니다:"));
+    }
+
+    [TestCase("1.")]
+    [TestCase("1e")]
+    [TestCase("1e+")]
+    public void Strict_scanner_rejects_incomplete_number_and_exponent_grammar(string number)
+    {
+        var json = "{\"schemaVersion\":1,\"tags\":[],\"unknown\":" + number + "}";
+
+        var error = Assert.Throws<TagCatalogException>(() => TagCatalogTestData.Load(json));
+
+        Assert.That(error!.Message, Does.Not.StartWith("허용되지 않은 필드입니다:"));
+    }
+
+    [Test]
     public void Path_length_limit_is_inclusive_at_255_characters()
     {
         Assert.DoesNotThrow(() => TagCatalogTestData.Load(
