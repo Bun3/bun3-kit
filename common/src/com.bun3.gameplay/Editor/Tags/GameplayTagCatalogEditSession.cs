@@ -116,8 +116,8 @@ namespace Bun3.Gameplay.Editor.Tags
                     }
                 }
 
-                EnsureActive(path, canonical);
-                tags.Add(new EditableTagRow(path, comment ?? string.Empty));
+                var catalog = EnsureActive(path, canonical, out var tag);
+                tags.Add(new EditableTagRow(catalog.GetDisplayName(tag), comment ?? string.Empty));
             });
         }
 
@@ -127,7 +127,7 @@ namespace Bun3.Gameplay.Editor.Tags
             {
                 var oldCanonical = RequireCanonical(oldPath, nameof(oldPath));
                 var newCanonical = RequireCanonical(newPath, nameof(newPath));
-                var catalog = EnsureActive(oldPath, oldCanonical);
+                var catalog = EnsureActive(oldPath, oldCanonical, out _);
                 var activePaths = GetActiveSubtreePaths(catalog, oldCanonical);
 
                 if (oldCanonical == newCanonical)
@@ -160,7 +160,7 @@ namespace Bun3.Gameplay.Editor.Tags
             Apply((tags, redirects) =>
             {
                 var canonical = RequireCanonical(path, nameof(path));
-                var catalog = EnsureActive(path, canonical);
+                var catalog = EnsureActive(path, canonical, out _);
                 var activePaths = GetActiveSubtreePaths(catalog, canonical);
                 if (!includeDescendants && activePaths.Count > 1)
                 {
@@ -226,11 +226,11 @@ namespace Bun3.Gameplay.Editor.Tags
             TagCatalog.Load(stream);
         }
 
-        private TagCatalog EnsureActive(string path, string canonical)
+        private TagCatalog EnsureActive(string path, string canonical, out GameplayTag tag)
         {
             using var stream = new MemoryStream(new UTF8Encoding(false, true).GetBytes(_serialized));
             var catalog = TagCatalog.Load(stream);
-            if (!catalog.TryGet(path, out var tag)
+            if (!catalog.TryGet(path, out tag)
                 || Fold(catalog.GetDisplayName(tag)) != canonical)
             {
                 throw new InvalidOperationException("The path does not name an active tag.");
@@ -242,9 +242,9 @@ namespace Bun3.Gameplay.Editor.Tags
         private static List<string> GetActiveSubtreePaths(TagCatalog catalog, string canonical)
         {
             var paths = new List<string>();
-            for (ushort index = 1; index <= catalog.Count; index++)
+            for (var index = 1; index <= catalog.Count; index++)
             {
-                var path = catalog.GetDisplayName(catalog.GetRequiredByIndex(index));
+                var path = catalog.GetDisplayName(catalog.GetRequiredByIndex(checked((ushort)index)));
                 if (HasPrefix(Fold(path), canonical))
                 {
                     paths.Add(path);
