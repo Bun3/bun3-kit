@@ -1,42 +1,43 @@
 #nullable enable
 using System;
+using System.Runtime.InteropServices;
 
 namespace Bun3.Gameplay.Tags
 {
-    /// <summary>
-    /// 계층 태그의 무할당 핸들. 정체성은 점 구분 계층 문자열("State.Dead.Ghost")이며,
-    /// 등록한 <see cref="TagRegistry"/> 안에서만 유효하다 — 서로 다른 레지스트리의
-    /// 핸들을 섞지 말 것(프로세스당 레지스트리 1개가 표준).
-    /// </summary>
+    /// <summary>동결된 태그 카탈로그 안의 2바이트 태그 인덱스입니다.</summary>
+    [StructLayout(LayoutKind.Sequential, Pack = 1)]
     public readonly struct GameplayTag : IEquatable<GameplayTag>
     {
-        /// <summary>레지스트리 내부 핸들. 0 = None.</summary>
-        public readonly int Handle;
+        private readonly ushort _index;
 
-        internal GameplayTag(int handle)
-        {
-            Handle = handle;
-        }
+        internal GameplayTag(ushort index) => _index = index;
 
-        /// <summary>무효 태그(기본값).</summary>
+        // Task 6에서 TagRegistry/TagSet과 함께 제거하는 컴파일 전용 migration shim.
+        internal GameplayTag(int index) => _index = checked((ushort)index);
+        internal int Handle => _index;
+
+        /// <summary>태그가 없음을 나타내는 기본값입니다.</summary>
         public static readonly GameplayTag None = default;
 
-        /// <summary>등록된 태그인지 여부.</summary>
-        public bool IsValid => Handle != 0;
+        /// <summary>현재 카탈로그에서 사용하는 런타임 인덱스를 가져옵니다.</summary>
+        public ushort Index => _index;
 
-        /// <summary>핸들 동등성.</summary>
-        public bool Equals(GameplayTag other) => Handle == other.Handle;
+        /// <summary><see cref="None"/>이 아닌지 나타냅니다.</summary>
+        public bool IsValid => _index != 0;
+
+        /// <inheritdoc />
+        public bool Equals(GameplayTag other) => _index == other._index;
 
         /// <inheritdoc />
         public override bool Equals(object? obj) => obj is GameplayTag other && Equals(other);
 
         /// <inheritdoc />
-        public override int GetHashCode() => Handle;
+        public override int GetHashCode() => _index;
 
-        /// <summary>동등 비교.</summary>
-        public static bool operator ==(GameplayTag a, GameplayTag b) => a.Handle == b.Handle;
+        /// <summary>두 태그의 런타임 인덱스가 같은지 비교합니다.</summary>
+        public static bool operator ==(GameplayTag left, GameplayTag right) => left.Equals(right);
 
-        /// <summary>비동등 비교.</summary>
-        public static bool operator !=(GameplayTag a, GameplayTag b) => a.Handle != b.Handle;
+        /// <summary>두 태그의 런타임 인덱스가 다른지 비교합니다.</summary>
+        public static bool operator !=(GameplayTag left, GameplayTag right) => !left.Equals(right);
     }
 }
