@@ -57,6 +57,7 @@ if ($Mode -eq 'EditMode') {
     '-runTests', '-testPlatform', 'StandaloneWindows64',
     '-assemblyNames', 'Bun3.Gameplay.Runtime.Tests',
     '-testSettingsFile', (Resolve-Path $settingsPath).Path,
+    '-playerHeartbeatTimeout', '7200',
     '-buildPlayerPath', $buildPath,
     '-testResults', $resultPath, '-logFile', $logPath)
 }

@@ -20,6 +20,8 @@
   <ItemGroup>
     <Compile Include="..\..\src\com.bun3.gameplay\Tests\Editor\TagCatalogConformanceTests.cs"
              Link="TagCatalogConformanceTests.cs" />
+    <Compile Include="..\..\src\com.bun3.gameplay\Tests\Runtime\TagPerformanceFixture.cs"
+             Link="TagPerformanceFixture.cs" />
   </ItemGroup>
 
 </Project>

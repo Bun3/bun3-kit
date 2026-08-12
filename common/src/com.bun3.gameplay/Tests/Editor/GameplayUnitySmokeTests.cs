@@ -1,4 +1,8 @@
+#nullable enable
+using System.IO;
+using System.Text;
 using Bun3.Gameplay.Numerics;
+using Bun3.Gameplay.Tags;
 using NUnit.Framework;
 
 namespace Bun3.Gameplay.Unity.Tests
@@ -24,6 +28,20 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(
                 BigNum.MaxValue.ToDisplayString(scientific).Length,
                 Is.LessThanOrEqualTo(256));
+        }
+
+        [Test]
+        public void Tag_catalog_round_trips_public_wire_indices_in_unity()
+        {
+            const string json =
+                "{\"schemaVersion\":1,\"tags\":[" +
+                "{\"name\":\"State.Alive\"},{\"name\":\"State.Dead\"}]}";
+            using var stream = new MemoryStream(Encoding.UTF8.GetBytes(json));
+            var catalog = TagCatalog.Load(stream);
+
+            Assert.That(catalog.TryGetByIndex(catalog.GetRequired("State.Dead").Index, out var wire), Is.True);
+            Assert.That(wire, Is.EqualTo(catalog.GetRequired("state.dead")));
+            Assert.That(catalog.TryGetByIndex(checked((ushort)(catalog.Count + 1)), out _), Is.False);
         }
     }
 }
