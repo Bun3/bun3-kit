@@ -23,7 +23,8 @@ $lines += @(
 $pattern = 'TAGPERF backend=(\S+) N=(\d+) M=(\d+) D=(\d+) ' +
   'container=(TagContainer|TagCountContainer) kind=(ExactHit|ParentHit|Miss) ' +
   'new_p50_ticks=(\d+) new_p95_ticks=(\d+) new_p99_ticks=(\d+) ' +
-  'legacy_p50_ticks=(\d+) legacy_p95_ticks=(\d+) legacy_p99_ticks=(\d+) alloc_count=(\d+)$'
+  'legacy_p50_ticks=(\d+) legacy_p95_ticks=(\d+) legacy_p99_ticks=(\d+) ' +
+  'semantic_checksum=(\d+) alloc_count=(\d+)$'
 $rows = @($lines | Where-Object { $_ -like 'TAGPERF *' } |
   ForEach-Object { [regex]::Match($_, $pattern) })
 if ($rows.Count -ne 144 -or @($rows | Where-Object { -not $_.Success }).Count -ne 0) {
@@ -46,10 +47,13 @@ foreach ($row in $rows) {
   $new50 = [long]$row.Groups[7].Value; $new95 = [long]$row.Groups[8].Value
   $new99 = [long]$row.Groups[9].Value; $old50 = [long]$row.Groups[10].Value
   $old95 = [long]$row.Groups[11].Value; $old99 = [long]$row.Groups[12].Value
-  $allocated = [long]$row.Groups[13].Value
+  $semanticChecksum = [long]$row.Groups[13].Value
+  $expectedChecksum = if ($kind -eq 'Miss') { 0 } else { 100000 }
+  $allocated = [long]$row.Groups[14].Value
   if ($new50 -gt $new95 -or $new95 -gt $new99 `
     -or $old50 -gt $old95 -or $old95 -gt $old99 `
     -or $new50 -gt $old50 -or $new95 -gt $old95 -or $new99 -gt $old99 `
+    -or $semanticChecksum -ne $expectedChecksum `
     -or $allocated -ne 0) {
     throw "GameplayTag performance gate failed: $($row.Value)"
   }
@@ -59,7 +63,8 @@ if ($readKindCounts.ExactHit -ne 48 -or $readKindCounts.ParentHit -ne 48 `
 $mutationPattern = 'TAGMUT backend=(\S+) N=(\d+) M=(\d+) D=(\d+) ' +
   'container=(TagContainer|TagCountContainer) kind=(AddRemove|ReadWriteMixed) ' +
   'new_p50_ticks=(\d+) new_p95_ticks=(\d+) new_p99_ticks=(\d+) ' +
-  'legacy_p50_ticks=(\d+) legacy_p95_ticks=(\d+) legacy_p99_ticks=(\d+) alloc_count=(\d+)$'
+  'legacy_p50_ticks=(\d+) legacy_p95_ticks=(\d+) legacy_p99_ticks=(\d+) ' +
+  'semantic_checksum=(\d+) alloc_count=(\d+)$'
 $mutationRows = @($lines | Where-Object { $_ -like 'TAGMUT *' } |
   ForEach-Object { [regex]::Match($_, $mutationPattern) })
 if ($mutationRows.Count -ne 96 -or @($mutationRows | Where-Object { -not $_.Success }).Count -ne 0) {
@@ -82,9 +87,13 @@ foreach ($row in $mutationRows) {
   $new50 = [long]$row.Groups[7].Value; $new95 = [long]$row.Groups[8].Value
   $new99 = [long]$row.Groups[9].Value; $old50 = [long]$row.Groups[10].Value
   $old95 = [long]$row.Groups[11].Value; $old99 = [long]$row.Groups[12].Value
-  $allocated = [long]$row.Groups[13].Value
+  $semanticChecksum = [long]$row.Groups[13].Value
+  $expectedChecksum = if ($kind -eq 'AddRemove') { 93000 } `
+    elseif ($m -eq 8) { 1600 } elseif ($m -eq 32) { 4038 } else { 7244 }
+  $allocated = [long]$row.Groups[14].Value
   if ($new50 -gt $new95 -or $new95 -gt $new99 `
     -or $old50 -gt $old95 -or $old95 -gt $old99 `
+    -or $semanticChecksum -ne $expectedChecksum `
     -or $allocated -ne 0 `
     -or ($kind -eq 'ReadWriteMixed' -and `
       ($new50 -gt $old50 -or $new95 -gt $old95 -or $new99 -gt $old99))) {

@@ -35,13 +35,14 @@ namespace Bun3.Gameplay.Tests
             TagContainerKind containerKind, TagQueryKind queryKind,
             long newP50Ticks, long newP95Ticks, long newP99Ticks,
             long legacyP50Ticks, long legacyP95Ticks, long legacyP99Ticks,
-            long allocationCount)
+            int semanticChecksum, long allocationCount)
         {
             Backend = backend; CatalogSize = catalogSize; ExactKinds = exactKinds; Depth = depth;
             ContainerKind = containerKind; QueryKind = queryKind;
             NewP50Ticks = newP50Ticks; NewP95Ticks = newP95Ticks; NewP99Ticks = newP99Ticks;
             LegacyP50Ticks = legacyP50Ticks; LegacyP95Ticks = legacyP95Ticks;
-            LegacyP99Ticks = legacyP99Ticks; AllocationCount = allocationCount;
+            LegacyP99Ticks = legacyP99Ticks; SemanticChecksum = semanticChecksum;
+            AllocationCount = allocationCount;
         }
 
         internal string Backend { get; }
@@ -56,6 +57,7 @@ namespace Bun3.Gameplay.Tests
         internal long LegacyP50Ticks { get; }
         internal long LegacyP95Ticks { get; }
         internal long LegacyP99Ticks { get; }
+        internal int SemanticChecksum { get; }
         internal long AllocationCount { get; }
 
         internal string ToLogLine()
@@ -64,7 +66,8 @@ namespace Bun3.Gameplay.Tests
                 $"container={ContainerKind} kind={QueryKind} " +
                 $"new_p50_ticks={NewP50Ticks} new_p95_ticks={NewP95Ticks} new_p99_ticks={NewP99Ticks} " +
                 $"legacy_p50_ticks={LegacyP50Ticks} legacy_p95_ticks={LegacyP95Ticks} " +
-                $"legacy_p99_ticks={LegacyP99Ticks} alloc_count={AllocationCount}";
+                $"legacy_p99_ticks={LegacyP99Ticks} semantic_checksum={SemanticChecksum} " +
+                $"alloc_count={AllocationCount}";
         }
     }
 
@@ -75,13 +78,14 @@ namespace Bun3.Gameplay.Tests
             TagContainerKind containerKind, TagMutationKind mutationKind,
             long newP50Ticks, long newP95Ticks, long newP99Ticks,
             long legacyP50Ticks, long legacyP95Ticks, long legacyP99Ticks,
-            long allocationCount)
+            int semanticChecksum, long allocationCount)
         {
             Backend = backend; CatalogSize = catalogSize; ExactKinds = exactKinds; Depth = depth;
             ContainerKind = containerKind; MutationKind = mutationKind;
             NewP50Ticks = newP50Ticks; NewP95Ticks = newP95Ticks; NewP99Ticks = newP99Ticks;
             LegacyP50Ticks = legacyP50Ticks; LegacyP95Ticks = legacyP95Ticks;
-            LegacyP99Ticks = legacyP99Ticks; AllocationCount = allocationCount;
+            LegacyP99Ticks = legacyP99Ticks; SemanticChecksum = semanticChecksum;
+            AllocationCount = allocationCount;
         }
 
         internal string Backend { get; }
@@ -96,6 +100,7 @@ namespace Bun3.Gameplay.Tests
         internal long LegacyP50Ticks { get; }
         internal long LegacyP95Ticks { get; }
         internal long LegacyP99Ticks { get; }
+        internal int SemanticChecksum { get; }
         internal long AllocationCount { get; }
 
         internal string ToLogLine()
@@ -104,7 +109,7 @@ namespace Bun3.Gameplay.Tests
                 $"container={ContainerKind} kind={MutationKind} " +
                 $"new_p50_ticks={NewP50Ticks} new_p95_ticks={NewP95Ticks} new_p99_ticks={NewP99Ticks} " +
                 $"legacy_p50_ticks={LegacyP50Ticks} legacy_p95_ticks={LegacyP95Ticks} " +
-                $"legacy_p99_ticks={LegacyP99Ticks} " +
+                $"legacy_p99_ticks={LegacyP99Ticks} semantic_checksum={SemanticChecksum} " +
                 $"alloc_count={AllocationCount}";
         }
     }
@@ -263,16 +268,17 @@ namespace Bun3.Gameplay.Tests
             return checksum;
         }
 
-        internal void RunReservedAddRemoveCycles(int operations)
+        internal int RunReservedAddRemoveCycles(int operations)
         {
             var position = _newMutationPosition;
+            var checksum = 0;
             if (_containerKind == TagContainerKind.TagContainer)
             {
                 var tags = _tags!;
                 for (var operation = 0; operation < operations; operation++)
                 {
-                    tags.Add(_exactQueries[position]);
-                    tags.Remove(_exactQueries[position]);
+                    if (tags.Add(_exactQueries[position])) checksum++;
+                    if (tags.Remove(_exactQueries[position])) checksum += 2;
                     if (++position == _exactQueries.Length) position = 0;
                 }
             }
@@ -282,25 +288,39 @@ namespace Bun3.Gameplay.Tests
                 for (var operation = 0; operation < operations; operation++)
                 {
                     counts.Add(_exactQueries[position]);
-                    counts.Remove(_exactQueries[position]);
+                    checksum += counts.Remove(_exactQueries[position]) * 3;
                     if (++position == _exactQueries.Length) position = 0;
                 }
             }
 
             _newMutationPosition = position;
+            var exactKindCount = _containerKind == TagContainerKind.TagContainer
+                ? _tags!.ExactKindCount
+                : _counts!.ExactKindCount;
+            return checked(checksum * 31 + exactKindCount);
         }
 
-        internal void RunLegacyAddRemoveCycles(int operations)
+        internal int RunLegacyAddRemoveCycles(int operations)
         {
             var position = _legacyMutationPosition;
+            var checksum = 0;
             for (var operation = 0; operation < operations; operation++)
             {
-                _legacy.Add(_exactQueries[position]);
-                _legacy.Remove(_exactQueries[position]);
+                if (_containerKind == TagContainerKind.TagContainer)
+                {
+                    if (_legacy.Add(_exactQueries[position])) checksum++;
+                    if (_legacy.Remove(_exactQueries[position]) != 0) checksum += 2;
+                }
+                else
+                {
+                    _legacy.Add(_exactQueries[position]);
+                    checksum += _legacy.Remove(_exactQueries[position]) * 3;
+                }
                 if (++position == _exactQueries.Length) position = 0;
             }
 
             _legacyMutationPosition = position;
+            return checked(checksum * 31 + _legacy.ExactKindCount);
         }
 
         internal int RunNewReadWriteMixed(int operations)
@@ -428,21 +448,26 @@ namespace Bun3.Gameplay.Tests
 
         internal int ExactKindCount => _exactCounts.Count;
 
-        internal void Add(GameplayTag tag)
+        internal bool Add(GameplayTag tag)
         {
             if (_exactCounts.TryGetValue(tag.Index, out var count))
+            {
                 _exactCounts[tag.Index] = count + 1;
+                return false;
+            }
             else
                 _exactCounts.Add(tag.Index, 1);
+            return true;
         }
 
-        internal void Remove(GameplayTag tag)
+        internal int Remove(GameplayTag tag)
         {
-            if (!_exactCounts.TryGetValue(tag.Index, out var count)) return;
+            if (!_exactCounts.TryGetValue(tag.Index, out var count)) return 0;
             if (count == 1)
                 _exactCounts.Remove(tag.Index);
             else
                 _exactCounts[tag.Index] = count - 1;
+            return 1;
         }
 
         internal bool Has(GameplayTag query)
@@ -491,10 +516,13 @@ namespace Bun3.Gameplay.Tests
                 var newWorkload = new QueryWorkload(fixture, 100_000, queryKind, useLegacy: false);
                 var legacyWorkload = new QueryWorkload(fixture, 100_000, queryKind, useLegacy: true);
                 newWorkload.Run();
-                legacyWorkload.Run();
-                var allocationCount = MeasureAllocation(newWorkload.Run);
+                var semanticChecksum = newWorkload.Checksum;
                 legacyWorkload.Run();
                 var expectedChecksum = queryKind == TagQueryKind.Miss ? 0 : 100_000;
+                Assert.That(semanticChecksum, Is.EqualTo(expectedChecksum));
+                Assert.That(legacyWorkload.Checksum, Is.EqualTo(semanticChecksum));
+                var allocationCount = MeasureAllocation(newWorkload.Run);
+                legacyWorkload.Run();
                 Assert.That(newWorkload.Checksum, Is.EqualTo(expectedChecksum));
                 Assert.That(legacyWorkload.Checksum, Is.EqualTo(expectedChecksum));
                 Assert.That(allocationCount, Is.Zero);
@@ -525,7 +553,8 @@ namespace Bun3.Gameplay.Tests
                 results[resultIndex++] = new TagPerformanceResult(
                     backendName, catalogSize, exactKinds, depth, containerKind, queryKind,
                     newTicks[500], newTicks[950], newTicks[990],
-                    legacyTicks[500], legacyTicks[950], legacyTicks[990], allocationCount);
+                    legacyTicks[500], legacyTicks[950], legacyTicks[990],
+                    semanticChecksum, allocationCount);
             }
 
             return results;
@@ -548,7 +577,11 @@ namespace Bun3.Gameplay.Tests
                 var newWorkload = new MutationWorkload(fixture, 1_000, mutationKind, useLegacy: false);
                 var legacyWorkload = new MutationWorkload(fixture, 1_000, mutationKind, useLegacy: true);
                 newWorkload.Run();
+                var semanticChecksum = newWorkload.Checksum;
                 legacyWorkload.Run();
+                var expectedChecksum = GetExpectedMutationChecksum(mutationKind, exactKinds);
+                Assert.That(semanticChecksum, Is.EqualTo(expectedChecksum));
+                Assert.That(legacyWorkload.Checksum, Is.EqualTo(semanticChecksum));
                 var allocationCount = MeasureAllocation(newWorkload.Run);
                 legacyWorkload.Run();
                 Assert.That(allocationCount, Is.Zero);
@@ -586,10 +619,18 @@ namespace Bun3.Gameplay.Tests
                 results[resultIndex++] = new TagMutationPerformanceResult(
                     backendName, catalogSize, exactKinds, depth, containerKind, mutationKind,
                     newTicks[50], newTicks[95], newTicks[99],
-                    legacyTicks[50], legacyTicks[95], legacyTicks[99], allocationCount);
+                    legacyTicks[50], legacyTicks[95], legacyTicks[99],
+                    semanticChecksum, allocationCount);
             }
 
             return results;
+        }
+
+        private static int GetExpectedMutationChecksum(TagMutationKind mutationKind, int exactKinds)
+        {
+            if (mutationKind == TagMutationKind.AddRemove) return 93_000;
+            if (exactKinds == 8) return 1_600;
+            return exactKinds == 32 ? 4_038 : 7_244;
         }
 
         private static long MeasureAllocation(Action workload)
@@ -698,11 +739,9 @@ namespace Bun3.Gameplay.Tests
                     return;
                 }
 
-                if (_useLegacy)
-                    _fixture.RunLegacyAddRemoveCycles(_operations);
-                else
-                    _fixture.RunReservedAddRemoveCycles(_operations);
-                Checksum = 0;
+                Checksum = _useLegacy
+                    ? _fixture.RunLegacyAddRemoveCycles(_operations)
+                    : _fixture.RunReservedAddRemoveCycles(_operations);
             }
         }
     }

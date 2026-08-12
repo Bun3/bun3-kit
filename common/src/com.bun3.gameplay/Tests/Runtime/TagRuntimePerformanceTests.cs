@@ -54,9 +54,11 @@ namespace Bun3.Gameplay.Tests
                 containerKind: TagContainerKind.TagCountContainer,
                 startEmpty: true);
             fixture.WarmUpMutation();
+            var checksum = 0;
             Assert.That(
-                () => fixture.RunReservedAddRemoveCycles(1_000),
+                () => { checksum = fixture.RunReservedAddRemoveCycles(1_000); },
                 UnityEngine.TestTools.Constraints.Is.Not.AllocatingGCMemory());
+            Assert.That(checksum, Is.EqualTo(93_000));
         }
     }
 }
