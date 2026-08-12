@@ -30,6 +30,21 @@ public sealed class TagPerformanceContractTests
         }
     }
 
+    [Test]
+    public void Actual_tag_count_container_queries_use_one_bounded_search()
+    {
+        var catalog = TagCatalogTestData.Load(TagCatalogTestData.BuildChainCatalog(64, 16, true));
+        var counts = catalog.CreateCountContainer(64);
+        for (var i = 0; i < 64; i++)
+            counts.Add(catalog.GetRequired(TagCatalogTestData.ChainLeaf(i, 16)));
+
+        for (ushort i = 1; i <= catalog.Count; i++)
+        {
+            counts.GetCountsCore(catalog.GetRequiredByIndex(i), out _, out _, out var comparisons);
+            Assert.That(comparisons, Is.LessThanOrEqualTo(11));
+        }
+    }
+
     private static void AssertComparisonBound(int length, int expectedMaximum)
     {
         var values = new ushort[length];

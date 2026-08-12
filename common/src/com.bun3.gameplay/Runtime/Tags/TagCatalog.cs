@@ -115,6 +115,12 @@ namespace Bun3.Gameplay.Tags
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="expectedExactKinds"/>가 0부터 64 범위를 벗어난 경우입니다.</exception>
         public TagContainer CreateContainer(int expectedExactKinds = 0) => new TagContainer(this, expectedExactKinds);
 
+        /// <summary>이 카탈로그에 연결된 빈 누적 수 컨테이너를 만듭니다.</summary>
+        /// <param name="expectedExactKinds">예상하는 명시적 태그 종류 수이며 0부터 64까지 허용합니다.</param>
+        /// <returns>비어 있는 태그 수 컨테이너입니다.</returns>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="expectedExactKinds"/>가 0부터 64 범위를 벗어난 경우입니다.</exception>
+        public TagCountContainer CreateCountContainer(int expectedExactKinds = 0) => new TagCountContainer(this, expectedExactKinds);
+
         /// <summary>카탈로그의 canonical SHA-256 fingerprint를 가져옵니다.</summary>
         public ReadOnlySpan<byte> Fingerprint => _fingerprint;
 

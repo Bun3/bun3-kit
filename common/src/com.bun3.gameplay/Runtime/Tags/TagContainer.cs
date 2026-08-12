@@ -22,6 +22,10 @@ namespace Bun3.Gameplay.Tags
         /// <summary>명시적으로 저장된 태그 종류 수를 가져옵니다.</summary>
         public int ExactKindCount => _count;
 
+        internal TagCatalog Catalog => _catalog;
+
+        internal ushort GetExactIndexAt(int position) => _indices[position];
+
         /// <summary>아직 명시적으로 저장되지 않은 태그를 추가합니다.</summary>
         /// <param name="tag">추가할 카탈로그 태그입니다.</param>
         /// <returns>태그가 추가되면 <see langword="true"/>이고, 이미 저장되어 있으면 <see langword="false"/>입니다.</returns>
