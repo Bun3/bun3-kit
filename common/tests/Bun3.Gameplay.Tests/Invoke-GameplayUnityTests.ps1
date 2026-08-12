@@ -8,6 +8,7 @@ param(
   [string]$Backend = 'Mono'
 )
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'GameplayUnityTestSupport.ps1')
 $unityEditor = 'E:\Unitys\6000.3.14f1\Editor\Unity.exe'
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..\..')).Path
 $unityProject = (Resolve-Path (Join-Path $repoRoot 'unity')).Path
@@ -15,7 +16,12 @@ $stamp = [DateTime]::UtcNow.ToString('yyyyMMddHHmmssfff')
 $logPath = Join-Path $env:TEMP "bun3-gameplay-$($Mode.ToLowerInvariant())-$stamp.log"
 
 function Invoke-Unity([string[]]$Arguments) {
-  $unityProcess = Start-Process -FilePath $unityEditor -ArgumentList $Arguments -Wait -PassThru
+  $startInfo = New-Object System.Diagnostics.ProcessStartInfo
+  $startInfo.FileName = $unityEditor
+  $startInfo.Arguments = ConvertTo-WindowsCommandLine -Arguments $Arguments
+  $startInfo.UseShellExecute = $false
+  $unityProcess = [System.Diagnostics.Process]::Start($startInfo)
+  $unityProcess.WaitForExit()
   $unityExit = $unityProcess.ExitCode
   & git -C $repoRoot status --short
   if ($LASTEXITCODE -ne 0) { throw 'Unable to inspect repository state after Unity.' }
