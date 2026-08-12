@@ -97,5 +97,33 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(GameplayTagCatalogFileAdapter.TryToAssetPath(sibling, out _), Is.False);
             Assert.That(GameplayTagCatalogFileAdapter.TryToAssetPath(outside, out _), Is.False);
         }
+
+        [Test]
+        public void TryToAssetPath_applies_the_requested_platform_case_comparison()
+        {
+            var projectDirectory = Path.Combine(_temporaryDirectory, "Project");
+            var assetsDirectory = Path.Combine(projectDirectory, "Assets");
+            var caseChangedPath = Path.Combine(
+                projectDirectory,
+                "assets",
+                "Tags",
+                "GameplayTags.json");
+
+            Assert.That(
+                GameplayTagCatalogFileAdapter.TryToAssetPath(
+                    caseChangedPath,
+                    assetsDirectory,
+                    StringComparison.Ordinal,
+                    out _),
+                Is.False);
+            Assert.That(
+                GameplayTagCatalogFileAdapter.TryToAssetPath(
+                    caseChangedPath,
+                    assetsDirectory,
+                    StringComparison.OrdinalIgnoreCase,
+                    out var assetPath),
+                Is.True);
+            Assert.That(assetPath, Is.EqualTo("Assets/Tags/GameplayTags.json"));
+        }
     }
 }

@@ -65,6 +65,41 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(content.tooltip, Is.EqualTo("전투 불능"));
         }
 
+        /// <summary>leaf와 subtree 삭제가 서로 다른 확인 대화 상자를 한 번만 열고 취소를 전파하는지 검증합니다.</summary>
+        /// <param name="hasDescendants">자식 태그 존재 여부입니다.</param>
+        /// <param name="expectedTitle">예상하는 대화 상자 제목입니다.</param>
+        /// <param name="expectedMessage">예상하는 대화 상자 메시지입니다.</param>
+        /// <param name="expectedConfirm">예상하는 확인 버튼 문구입니다.</param>
+        [TestCase(false, "Delete Gameplay Tag", "Delete the selected gameplay tag?", "Delete Tag")]
+        [TestCase(
+            true,
+            "Delete Gameplay Tag Subtree",
+            "The selected tag has descendants. Delete the full subtree?",
+            "Delete Subtree")]
+        public void Delete_confirmation_invokes_the_matching_dialog_once_and_honors_cancel(
+            bool hasDescendants,
+            string expectedTitle,
+            string expectedMessage,
+            string expectedConfirm)
+        {
+            var invocationCount = 0;
+
+            var confirmed = GameplayTagCatalogWindow.ConfirmDelete(
+                hasDescendants,
+                (title, message, confirm, cancel) =>
+                {
+                    invocationCount++;
+                    Assert.That(title, Is.EqualTo(expectedTitle));
+                    Assert.That(message, Is.EqualTo(expectedMessage));
+                    Assert.That(confirm, Is.EqualTo(expectedConfirm));
+                    Assert.That(cancel, Is.EqualTo("Cancel"));
+                    return false;
+                });
+
+            Assert.That(confirmed, Is.False);
+            Assert.That(invocationCount, Is.EqualTo(1));
+        }
+
         /// <summary>컨트롤러가 세션을 우회하지 않고 파일 및 작성 작업을 수행하는지 검증합니다.</summary>
         [Test]
         public void Controller_executes_file_and_authoring_workflow_without_bypassing_the_session()
@@ -110,7 +145,52 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(controller.Session!.Serialize(), Is.EqualTo(before));
             var diagnostic = GameplayTagValidationWindow.FormatDiagnostic(path, error!);
             Assert.That(diagnostic, Does.Contain(path));
-            Assert.That(diagnostic, Does.Contain(error!.Message));
+            Assert.That(diagnostic, Does.Contain("JSON path: tags[1].name"));
+            Assert.That(diagnostic, Does.Contain("Line: 9, Position: 27"));
+            Assert.That(diagnostic, Does.Contain("대소문자를 제외하고 중복된 태그 이름입니다."));
+        }
+
+        /// <summary>카탈로그 예외가 없는 일반 예외는 최상위 메시지를 표시하는지 검증합니다.</summary>
+        [Test]
+        public void Validation_diagnostic_preserves_generic_top_level_error_message()
+        {
+            var diagnostic = GameplayTagValidationWindow.FormatDiagnostic(
+                "GameplayTags.json",
+                new InvalidOperationException("Generic editor failure."));
+
+            Assert.That(diagnostic, Is.EqualTo("GameplayTags.json\nGeneric editor failure."));
+        }
+
+        /// <summary>명령이 세션을 변경한 뒤 실패해도 직렬화된 상태와 컨트롤러 상태를 복원하는지 검증합니다.</summary>
+        [Test]
+        public void TryExecute_restores_a_fresh_session_after_a_partially_applied_command()
+        {
+            var path = Path.Combine(_temporaryDirectory, "GameplayTags.json");
+            var controller = new GameplayTagCatalogWindowController();
+            controller.New(path);
+            controller.Add("State.Dead");
+            controller.Save();
+            var sessionBefore = controller.Session;
+            var serializedBefore = sessionBefore!.Serialize();
+            var filePathBefore = controller.FilePath;
+            var selectedPathBefore = controller.SelectedPath;
+            var dirtyBefore = controller.IsDirty;
+
+            var succeeded = controller.TryExecute(
+                () =>
+                {
+                    controller.Add("State.Alive");
+                    throw new InvalidOperationException("Command failed after mutation.");
+                },
+                out var error);
+
+            Assert.That(succeeded, Is.False);
+            Assert.That(error, Is.TypeOf<InvalidOperationException>());
+            Assert.That(controller.Session, Is.Not.SameAs(sessionBefore));
+            Assert.That(controller.Session!.Serialize(), Is.EqualTo(serializedBefore));
+            Assert.That(controller.FilePath, Is.EqualTo(filePathBefore));
+            Assert.That(controller.SelectedPath, Is.EqualTo(selectedPathBefore));
+            Assert.That(controller.IsDirty, Is.EqualTo(dirtyBefore));
         }
 
         /// <summary>검증 진단에 JSON 경로, 줄, 위치가 포함되는지 검증합니다.</summary>

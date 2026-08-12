@@ -21,13 +21,18 @@ namespace Bun3.Gameplay.Tags
         /// <summary><see cref="None"/>이 아닌지 나타냅니다.</summary>
         public bool IsValid => _index != 0;
 
-        /// <inheritdoc />
+        /// <summary>다른 태그와 런타임 인덱스가 같은지 비교합니다.</summary>
+        /// <param name="other">비교할 태그입니다.</param>
+        /// <returns>런타임 인덱스가 같으면 true입니다.</returns>
         public bool Equals(GameplayTag other) => _index == other._index;
 
-        /// <inheritdoc />
+        /// <summary>지정한 객체가 같은 런타임 인덱스의 태그인지 비교합니다.</summary>
+        /// <param name="obj">비교할 객체입니다.</param>
+        /// <returns>같은 태그이면 true입니다.</returns>
         public override bool Equals(object? obj) => obj is GameplayTag other && Equals(other);
 
-        /// <inheritdoc />
+        /// <summary>런타임 인덱스를 기반으로 해시 코드를 만듭니다.</summary>
+        /// <returns>태그의 런타임 인덱스입니다.</returns>
         public override int GetHashCode() => _index;
 
         /// <summary>두 태그의 런타임 인덱스가 같은지 비교합니다.</summary>

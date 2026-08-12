@@ -203,17 +203,32 @@ namespace Bun3.Gameplay.Editor.Tags
 
         private void DeleteSelected(string selectedPath)
         {
-            if (HasDescendants(selectedPath)
-                && !EditorUtility.DisplayDialog(
-                    "Delete Gameplay Tag Subtree",
-                    "The selected tag has descendants. Delete the full subtree?",
-                    "Delete Subtree",
-                    "Cancel"))
+            var hasDescendants = HasDescendants(selectedPath);
+            if (!ConfirmDelete(hasDescendants, EditorUtility.DisplayDialog))
             {
                 return;
             }
 
-            Execute(() => _controller.Delete(selectedPath, HasDescendants(selectedPath)));
+            Execute(() => _controller.Delete(selectedPath, hasDescendants));
+        }
+
+        internal static bool ConfirmDelete(
+            bool hasDescendants,
+            Func<string, string, string, string, bool> displayDialog)
+        {
+            if (displayDialog is null) throw new ArgumentNullException(nameof(displayDialog));
+
+            return hasDescendants
+                ? displayDialog(
+                    "Delete Gameplay Tag Subtree",
+                    "The selected tag has descendants. Delete the full subtree?",
+                    "Delete Subtree",
+                    "Cancel")
+                : displayDialog(
+                    "Delete Gameplay Tag",
+                    "Delete the selected gameplay tag?",
+                    "Delete Tag",
+                    "Cancel");
         }
 
         private bool HasDescendants(string path)

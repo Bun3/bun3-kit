@@ -82,14 +82,26 @@ namespace Bun3.Gameplay.Editor.Tags
 
         internal static bool TryToAssetPath(string absolutePath, out string assetPath)
         {
-            assetPath = string.Empty;
-            if (absolutePath is null) return false;
+            var comparison = Application.platform == RuntimePlatform.WindowsEditor
+                ? StringComparison.OrdinalIgnoreCase
+                : StringComparison.Ordinal;
+            return TryToAssetPath(absolutePath, Application.dataPath, comparison, out assetPath);
+        }
 
-            var assetsDirectory = Path.GetFullPath(Application.dataPath)
+        internal static bool TryToAssetPath(
+            string absolutePath,
+            string assetsDirectory,
+            StringComparison comparison,
+            out string assetPath)
+        {
+            assetPath = string.Empty;
+            if (absolutePath is null || assetsDirectory is null) return false;
+
+            var fullAssetsDirectory = Path.GetFullPath(assetsDirectory)
                 .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
             var path = Path.GetFullPath(absolutePath);
-            var assetsPrefix = assetsDirectory + Path.DirectorySeparatorChar;
-            if (!path.StartsWith(assetsPrefix, StringComparison.OrdinalIgnoreCase))
+            var assetsPrefix = fullAssetsDirectory + Path.DirectorySeparatorChar;
+            if (!path.StartsWith(assetsPrefix, comparison))
             {
                 return false;
             }

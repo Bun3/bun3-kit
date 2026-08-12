@@ -25,12 +25,15 @@ namespace Bun3.Gameplay.Editor.Tags
             if (filePath is null) throw new ArgumentNullException(nameof(filePath));
             if (error is null) throw new ArgumentNullException(nameof(error));
 
-            if (error is TagCatalogException catalogError)
+            for (Exception? current = error; current is not null; current = current.InnerException)
             {
-                return filePath + "\nJSON path: " + catalogError.JsonPath
-                    + "\nLine: " + catalogError.LineNumber
-                    + ", Position: " + catalogError.LinePosition
-                    + "\n" + catalogError.Message;
+                if (current is TagCatalogException catalogError)
+                {
+                    return filePath + "\nJSON path: " + catalogError.JsonPath
+                        + "\nLine: " + catalogError.LineNumber
+                        + ", Position: " + catalogError.LinePosition
+                        + "\n" + catalogError.Message;
+                }
             }
 
             return filePath + "\n" + error.Message;

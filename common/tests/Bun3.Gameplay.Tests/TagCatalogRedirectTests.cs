@@ -34,6 +34,30 @@ namespace Bun3.Gameplay.Tests
             Assert.That(catalog.GetRequired("Old"), Is.EqualTo(catalog.GetRequired("A")));
         }
 
+        /// <summary>활성 태그가 아닌 redirect target 오류가 to token의 위치를 보고하는지 검증합니다.</summary>
+        [Test]
+        public void Inactive_redirect_target_reports_the_to_token_location()
+        {
+            const string json =
+                "{\n" +
+                "  \"schemaVersion\": 1,\n" +
+                "  \"tags\": [{\"name\":\"State.Active\"}],\n" +
+                "  \"redirects\": [\n" +
+                "    {\n" +
+                "      \"from\": \"State.Old\",\n" +
+                "      \"to\": \"State.Missing\"\n" +
+                "    }\n" +
+                "  ]\n" +
+                "}";
+
+            var error = Assert.Throws<TagCatalogException>(() => TagCatalogTestData.Load(json));
+
+            Assert.That(error!.JsonPath, Is.EqualTo("redirects[0].to"));
+            Assert.That(error.LineNumber, Is.EqualTo(7));
+            Assert.That(error.LinePosition, Is.EqualTo(27));
+            Assert.That(error.Message, Is.EqualTo("redirect target은 활성 태그여야 합니다."));
+        }
+
         /// <summary>활성 이름과 겹치는 redirect source가 거부되는지 검증합니다.</summary>
         [Test]
         public void Redirect_source_cannot_overlap_an_active_name()

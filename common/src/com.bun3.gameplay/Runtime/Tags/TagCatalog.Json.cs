@@ -155,7 +155,10 @@ namespace Bun3.Gameplay.Tags
                         canonicalTo,
                         from.Path,
                         from.LineNumber,
-                        from.LinePosition));
+                        from.LinePosition,
+                        to.Path,
+                        to.LineNumber,
+                        to.LinePosition));
                 }
 
                 return definitions;

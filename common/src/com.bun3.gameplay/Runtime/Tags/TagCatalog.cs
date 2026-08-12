@@ -74,17 +74,29 @@ namespace Bun3.Gameplay.Tags
             {
                 if (byCanonicalName.ContainsKey(definition.From))
                 {
-                    throw new TagCatalogException("redirect source는 활성 태그와 겹칠 수 없습니다.", definition.JsonPath, definition.LineNumber, definition.LinePosition);
+                    throw new TagCatalogException(
+                        "redirect source는 활성 태그와 겹칠 수 없습니다.",
+                        definition.FromJsonPath,
+                        definition.FromLineNumber,
+                        definition.FromLinePosition);
                 }
 
                 if (!byCanonicalName.TryGetValue(definition.To, out var target))
                 {
-                    throw new TagCatalogException("redirect target은 활성 태그여야 합니다.", definition.JsonPath, definition.LineNumber, definition.LinePosition);
+                    throw new TagCatalogException(
+                        "redirect target은 활성 태그여야 합니다.",
+                        definition.ToJsonPath,
+                        definition.ToLineNumber,
+                        definition.ToLinePosition);
                 }
 
                 if (!redirects.TryAdd(definition.From, target))
                 {
-                    throw new TagCatalogException("대소문자를 제외하고 중복된 redirect source입니다.", definition.JsonPath, definition.LineNumber, definition.LinePosition);
+                    throw new TagCatalogException(
+                        "대소문자를 제외하고 중복된 redirect source입니다.",
+                        definition.FromJsonPath,
+                        definition.FromLineNumber,
+                        definition.FromLinePosition);
                 }
 
                 entries.Add(new RedirectEntry(definition.From, definition.To));
@@ -248,20 +260,34 @@ namespace Bun3.Gameplay.Tags
 
         private readonly struct RedirectDefinition
         {
-            internal RedirectDefinition(string from, string to, string jsonPath, int lineNumber, int linePosition)
+            internal RedirectDefinition(
+                string from,
+                string to,
+                string fromJsonPath,
+                int fromLineNumber,
+                int fromLinePosition,
+                string toJsonPath,
+                int toLineNumber,
+                int toLinePosition)
             {
                 From = from;
                 To = to;
-                JsonPath = jsonPath;
-                LineNumber = lineNumber;
-                LinePosition = linePosition;
+                FromJsonPath = fromJsonPath;
+                FromLineNumber = fromLineNumber;
+                FromLinePosition = fromLinePosition;
+                ToJsonPath = toJsonPath;
+                ToLineNumber = toLineNumber;
+                ToLinePosition = toLinePosition;
             }
 
             internal string From { get; }
             internal string To { get; }
-            internal string JsonPath { get; }
-            internal int LineNumber { get; }
-            internal int LinePosition { get; }
+            internal string FromJsonPath { get; }
+            internal int FromLineNumber { get; }
+            internal int FromLinePosition { get; }
+            internal string ToJsonPath { get; }
+            internal int ToLineNumber { get; }
+            internal int ToLinePosition { get; }
         }
 
         private readonly struct RedirectEntry

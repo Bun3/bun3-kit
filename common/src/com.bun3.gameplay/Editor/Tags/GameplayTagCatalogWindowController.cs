@@ -90,7 +90,7 @@ namespace Bun3.Gameplay.Editor.Tags
             if (command is null) throw new ArgumentNullException(nameof(command));
 
             var filePath = FilePath;
-            var session = Session;
+            var serializedSession = Session?.Serialize();
             var selectedPath = SelectedPath;
             var isDirty = IsDirty;
             try
@@ -102,7 +102,9 @@ namespace Bun3.Gameplay.Editor.Tags
             catch (Exception exception)
             {
                 FilePath = filePath;
-                Session = session;
+                Session = serializedSession is null
+                    ? null
+                    : GameplayTagCatalogEditSession.Open(serializedSession);
                 SelectedPath = selectedPath;
                 IsDirty = isDirty;
                 error = exception;
