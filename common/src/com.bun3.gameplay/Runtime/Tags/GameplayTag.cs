@@ -12,10 +12,6 @@ namespace Bun3.Gameplay.Tags
 
         internal GameplayTag(ushort index) => _index = index;
 
-        // Task 6에서 TagRegistry/TagSet과 함께 제거하는 컴파일 전용 migration shim.
-        internal GameplayTag(int index) => _index = checked((ushort)index);
-        internal int Handle => _index;
-
         /// <summary>태그가 없음을 나타내는 기본값입니다.</summary>
         public static readonly GameplayTag None = default;
 

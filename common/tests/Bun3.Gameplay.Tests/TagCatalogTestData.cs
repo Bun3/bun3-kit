@@ -1,3 +1,4 @@
+using System;
 using System.IO;
 using System.Text;
 using Bun3.Gameplay.Tags;
@@ -79,6 +80,26 @@ internal static class TagCatalogTestData
             json.Append("{\"name\":\"ZMiss\"}");
         }
 
+        return json.Append("]}").ToString();
+    }
+
+    internal static string BuildPerformanceCatalog(int catalogSize, int exactKinds, int depth)
+    {
+        if (catalogSize < exactKinds * depth)
+            throw new ArgumentOutOfRangeException(nameof(catalogSize));
+        var json = new StringBuilder(catalogSize * 24);
+        json.Append("{\"schemaVersion\":1,\"tags\":[");
+        var written = 0;
+        for (var i = 0; i < exactKinds; i++)
+        {
+            if (written++ != 0) json.Append(',');
+            json.Append("{\"name\":\"").Append(ChainLeaf(i, depth)).Append("\"}");
+        }
+        for (var i = 0; i < catalogSize - exactKinds * depth; i++)
+        {
+            if (written++ != 0) json.Append(',');
+            json.Append("{\"name\":\"F").Append(i).Append("\"}");
+        }
         return json.Append("]}").ToString();
     }
 
