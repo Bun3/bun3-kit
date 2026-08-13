@@ -83,6 +83,92 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(content.tooltip, Is.EqualTo(content.text));
         }
 
+        /// <summary>선택한 후보만 제거하고 창이 dirty가 되는지 검증합니다.</summary>
+        [Test]
+        public void Bulk_cleanup_removes_only_selected_sources_and_marks_the_window_dirty()
+        {
+            var path = Path.Combine(_temporaryDirectory, "GameplayTags.json");
+            File.WriteAllText(path,
+                "{\"schemaVersion\":1,\"tags\":[{\"name\":\"State.Dead\"}]," +
+                "\"redirects\":[{\"from\":\"State.Killed\",\"to\":\"State.Dead\"}," +
+                "{\"from\":\"State.Gone\",\"to\":\"State.Dead\"}]}");
+            var window = EditorWindow.GetWindow<GameplayTagCatalogWindow>();
+            try
+            {
+                var controller = GetController(window);
+                controller.Open(path);
+                var result = GameplayTagReferenceSearchResult.Complete(
+                    Array.Empty<GameplayTagReferenceMatch>());
+
+                var applied = window.TryApplyBulkCleanup(
+                    result,
+                    candidates => new[] { candidates.Single(source => source == "State.Gone") });
+
+                Assert.That(applied, Is.True);
+                Assert.That(controller.IsDirty, Is.True);
+                Assert.That(controller.Session!.Serialize(), Does.Contain("State.Killed"));
+                Assert.That(controller.Session.Serialize(), Does.Not.Contain("State.Gone"));
+            }
+            finally
+            {
+                CloseWithoutSaving(window);
+            }
+        }
+
+        /// <summary>불완전한 검색이 정리 selector를 열지 않는지 검증합니다.</summary>
+        [Test]
+        public void Incomplete_bulk_scan_never_opens_the_cleanup_selector()
+        {
+            var window = EditorWindow.GetWindow<GameplayTagCatalogWindow>();
+            var selectorCalls = 0;
+            try
+            {
+                var applied = window.TryApplyBulkCleanup(
+                    GameplayTagReferenceSearchResult.Incomplete(true, Array.Empty<string>()),
+                    candidates =>
+                    {
+                        selectorCalls++;
+                        return candidates;
+                    });
+
+                Assert.That(applied, Is.False);
+                Assert.That(selectorCalls, Is.Zero);
+            }
+            finally
+            {
+                CloseWithoutSaving(window);
+            }
+        }
+
+        /// <summary>후보를 하나도 고르지 않으면 세션을 dirty로 만들지 않는지 검증합니다.</summary>
+        [Test]
+        public void Bulk_cleanup_without_a_selection_leaves_the_session_clean()
+        {
+            var path = Path.Combine(_temporaryDirectory, "GameplayTags.json");
+            File.WriteAllText(path,
+                "{\"schemaVersion\":1,\"tags\":[{\"name\":\"State.Dead\"}]," +
+                "\"redirects\":[{\"from\":\"State.Killed\",\"to\":\"State.Dead\"}]}");
+            var window = EditorWindow.GetWindow<GameplayTagCatalogWindow>();
+            try
+            {
+                var controller = GetController(window);
+                controller.Open(path);
+
+                var applied = window.TryApplyBulkCleanup(
+                    GameplayTagReferenceSearchResult.Complete(
+                        Array.Empty<GameplayTagReferenceMatch>()),
+                    _ => Array.Empty<string>());
+
+                Assert.That(applied, Is.False);
+                Assert.That(controller.IsDirty, Is.False);
+                Assert.That(controller.Session!.Serialize(), Does.Contain("State.Killed"));
+            }
+            finally
+            {
+                CloseWithoutSaving(window);
+            }
+        }
+
         /// <summary>검색 확장이 임시이고 일반 확장 상태와 스크롤 위치가 복원되는지 검증합니다.</summary>
         [Test]
         public void Search_expansion_is_temporary_and_normal_expansion_and_scroll_are_restored()

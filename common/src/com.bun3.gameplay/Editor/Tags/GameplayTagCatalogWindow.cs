@@ -1,6 +1,8 @@
 #nullable enable
 #pragma warning disable CS0618
 using System;
+using System.Collections.Generic;
+using System.IO;
 using UnityEditor;
 using UnityEditor.IMGUI.Controls;
 using UnityEngine;
@@ -170,16 +172,162 @@ namespace Bun3.Gameplay.Editor.Tags
             _showRedirects = EditorGUILayout.Foldout(_showRedirects, "Redirects (" + count + ")");
             if (!_showRedirects || count == 0) return;
 
+            EditorGUILayout.BeginHorizontal();
+            if (GUILayout.Button("Find All References", GUILayout.Width(140f)))
+            {
+                FindAllReferences();
+                GUIUtility.ExitGUI();
+            }
+
+            if (GUILayout.Button("Remove Obsolete Redirects", GUILayout.Width(180f)))
+            {
+                RemoveObsoleteRedirects();
+                GUIUtility.ExitGUI();
+            }
+
+            EditorGUILayout.EndHorizontal();
+
             _redirectScroll = EditorGUILayout.BeginScrollView(
                 _redirectScroll, true, true, GUILayout.MaxHeight(120f));
             for (var index = 0; index < count; index++)
             {
+                var source = redirects![index].From;
+                EditorGUILayout.BeginHorizontal();
                 GUILayout.Label(
-                    CreateRedirectContent(redirects![index]),
+                    CreateRedirectContent(redirects[index]),
                     GUILayout.ExpandWidth(false));
+                var find = GUILayout.Button("Find References", GUILayout.Width(120f));
+                var remove = GUILayout.Button("Remove Redirect", GUILayout.Width(120f));
+                EditorGUILayout.EndHorizontal();
+
+                if (find)
+                {
+                    GameplayTagReferenceResultsWindow.Show(SearchRedirectReferences(new[] { source }));
+                    GUIUtility.ExitGUI();
+                }
+
+                if (!remove) continue;
+
+                RemoveRedirect(source);
+                GUIUtility.ExitGUI();
             }
 
             EditorGUILayout.EndScrollView();
+        }
+
+        private void FindAllReferences() =>
+            GameplayTagReferenceResultsWindow.Show(
+                SearchRedirectReferences(CollectRedirectSources()));
+
+        /// <summary>단일 redirect를 참조 확인과 외부 데이터 경고를 거쳐 제거합니다.</summary>
+        private void RemoveRedirect(string source)
+        {
+            var result = SearchRedirectReferences(new[] { source });
+            if (!result.IsComplete)
+            {
+                // 검색이 불완전하면 override조차 제공하지 않고 결과만 보여 준다.
+                GameplayTagReferenceResultsWindow.Show(result);
+                return;
+            }
+
+            if (result.Matches.Count > 0)
+            {
+                var decision = GameplayTagRedirectMaintenance.MapReferencedDialogResult(
+                    EditorUtility.DisplayDialogComplex(
+                        "Remove Gameplay Tag Redirect",
+                        source + " still has " + result.Matches.Count
+                            + " text match(es) in this project.",
+                        "Open References", "Cancel", "Remove Anyway"));
+                if (decision == ReferencedRedirectDecision.OpenReferences)
+                {
+                    GameplayTagReferenceResultsWindow.Show(result);
+                    return;
+                }
+
+                if (decision == ReferencedRedirectDecision.Cancel) return;
+            }
+
+            if (!EditorUtility.DisplayDialog(
+                    "Remove Gameplay Tag Redirect",
+                    source + "\n\n" + (result.Matches.Count > 0
+                        ? GameplayTagRedirectMaintenance.ExternalDataScopeWarning
+                        : GameplayTagRedirectMaintenance.NoProjectReferencesWarning),
+                    "Remove", "Cancel"))
+            {
+                return;
+            }
+
+            Execute(() => _controller.RemoveRedirects(new[] { source }));
+        }
+
+        private void RemoveObsoleteRedirects()
+        {
+            var result = SearchRedirectReferences(CollectRedirectSources());
+            if (!result.IsComplete)
+            {
+                GameplayTagReferenceResultsWindow.Show(result);
+                return;
+            }
+
+            TryApplyBulkCleanup(result, candidates =>
+            {
+                if (candidates.Count == 0)
+                {
+                    GameplayTagReferenceResultsWindow.Show(result);
+                    return candidates;
+                }
+
+                return GameplayTagRedirectCleanupDialog.ShowModal(candidates);
+            });
+        }
+
+        /// <summary>완전한 검색 결과에서 사용자가 고른 redirect만 제거합니다.</summary>
+        /// <param name="result">참조 검색 결과입니다.</param>
+        /// <param name="selectSources">후보 중 제거할 old path를 고르는 선택기입니다.</param>
+        internal bool TryApplyBulkCleanup(
+            GameplayTagReferenceSearchResult result,
+            Func<IReadOnlyList<string>, IReadOnlyList<string>> selectSources)
+        {
+            if (selectSources is null) throw new ArgumentNullException(nameof(selectSources));
+            if (!result.IsComplete) return false;
+            var session = _controller.Session
+                ?? throw new InvalidOperationException("No gameplay tag catalog is open.");
+            var candidates = GameplayTagRedirectMaintenance.GetUnreferencedSources(
+                session.Redirects, result);
+            var selected = selectSources(candidates);
+            return selected.Count > 0 && Execute(() => _controller.RemoveRedirects(selected));
+        }
+
+        private string[] CollectRedirectSources()
+        {
+            var redirects = _controller.Session?.Redirects;
+            if (redirects is null) return Array.Empty<string>();
+
+            var sources = new string[redirects.Count];
+            for (var index = 0; index < redirects.Count; index++)
+            {
+                sources[index] = redirects[index].From;
+            }
+
+            return sources;
+        }
+
+        private GameplayTagReferenceSearchResult SearchRedirectReferences(IReadOnlyList<string> sources)
+        {
+            try
+            {
+                var files = GameplayTagProjectReferenceFiles.Enumerate();
+                return new GameplayTagTextReferenceScanner(File.OpenText).Search(
+                    files,
+                    sources,
+                    _controller.FilePath,
+                    progress => EditorUtility.DisplayCancelableProgressBar(
+                        "Find GameplayTag References", progress.DisplayPath, progress.Fraction));
+            }
+            finally
+            {
+                EditorUtility.ClearProgressBar();
+            }
         }
 
         /// <summary>redirect 행의 전체 표시 문구를 도구 설명까지 담은 content로 만듭니다.</summary>
