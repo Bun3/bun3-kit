@@ -1,5 +1,6 @@
 #nullable enable
 using System;
+using System.Collections.Generic;
 
 namespace Bun3.Gameplay.Editor.Tags
 {
@@ -70,6 +71,13 @@ namespace Bun3.Gameplay.Editor.Tags
         {
             SelectedPath = RequireSession().RenameSubtree(path, newSegment);
             IsDirty = true;
+        }
+
+        internal int RemoveRedirects(IReadOnlyCollection<string> sources)
+        {
+            var removed = RequireSession().RemoveRedirects(sources);
+            if (removed > 0) IsDirty = true;
+            return removed;
         }
 
         internal void Delete(string path, bool includeDescendants)

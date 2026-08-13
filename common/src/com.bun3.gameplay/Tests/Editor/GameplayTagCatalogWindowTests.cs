@@ -251,6 +251,30 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(controller.IsDirty, Is.True);
         }
 
+        /// <summary>컨트롤러가 redirect 제거 수에 따라 dirty 상태를 바꾸고 결과를 저장하는지 검증합니다.</summary>
+        [Test]
+        public void Controller_removes_redirects_marks_dirty_and_persists_the_result()
+        {
+            var path = Path.Combine(_temporaryDirectory, "GameplayTags.json");
+            File.WriteAllText(path,
+                "{\"schemaVersion\":1,\"tags\":[{\"name\":\"State.Dead\"}]," +
+                "\"redirects\":[{\"from\":\"State.Killed\",\"to\":\"State.Dead\"}]}",
+                new UTF8Encoding(false, true));
+            var controller = new GameplayTagCatalogWindowController();
+            controller.Open(path);
+            controller.Select("State.Dead");
+
+            Assert.That(controller.RemoveRedirects(Array.Empty<string>()), Is.Zero);
+            Assert.That(controller.IsDirty, Is.False);
+            Assert.That(controller.RemoveRedirects(new[] { "State.Killed" }), Is.EqualTo(1));
+            Assert.That(controller.IsDirty, Is.True);
+            Assert.That(controller.SelectedPath, Is.EqualTo("State.Dead"));
+            controller.Save();
+
+            Assert.That(controller.IsDirty, Is.False);
+            Assert.That(File.ReadAllText(path), Does.Not.Contain("State.Killed"));
+        }
+
         /// <summary>실패한 명령이 상태를 보존하고 검증 진단을 만드는지 검증합니다.</summary>
         [Test]
         public void Failed_command_preserves_state_and_produces_validation_diagnostics()

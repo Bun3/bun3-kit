@@ -176,6 +176,35 @@ namespace Bun3.Gameplay.Editor.Tags
             return renamedPath;
         }
 
+        internal int RemoveRedirects(IReadOnlyCollection<string> sources)
+        {
+            if (sources is null) throw new ArgumentNullException(nameof(sources));
+            if (sources.Count == 0) return 0;
+
+            var requested = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var source in sources)
+            {
+                requested.Add(RequireCanonical(source, nameof(sources)));
+            }
+
+            var removed = 0;
+            Apply((_, redirects) =>
+            {
+                for (var i = redirects.Count - 1; i >= 0; i--)
+                {
+                    if (!requested.Contains(Fold(redirects[i].From))) continue;
+                    redirects.RemoveAt(i);
+                    removed++;
+                }
+
+                if (removed != requested.Count)
+                {
+                    throw new InvalidOperationException("A redirect source is no longer present.");
+                }
+            });
+            return removed;
+        }
+
         internal void Delete(string path, bool includeDescendants)
         {
             Apply((tags, redirects) =>

@@ -167,6 +167,54 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(json, Does.Not.Contain("Old.Ghost"));
         }
 
+        /// <summary>여러 redirect source를 대소문자 무시로 한 트랜잭션에서 제거하는지 검증합니다.</summary>
+        [Test]
+        public void Remove_redirects_matches_sources_case_insensitively_in_one_transaction()
+        {
+            var session = GameplayTagCatalogEditSession.Open(
+                "{\"schemaVersion\":1,\"tags\":[{\"name\":\"State.Dead\"}]," +
+                "\"redirects\":[{\"from\":\"State.Killed\",\"to\":\"State.Dead\"}," +
+                "{\"from\":\"State.Gone\",\"to\":\"State.Dead\"}]}");
+
+            var removed = session.RemoveRedirects(new[] { "state.killed", "STATE.GONE" });
+
+            Assert.That(removed, Is.EqualTo(2));
+            Assert.That(session.Redirects, Is.Empty);
+        }
+
+        /// <summary>존재하지 않는 redirect source가 문서를 그대로 보존하는지 검증합니다.</summary>
+        [Test]
+        public void Removing_an_unknown_redirect_preserves_the_document()
+        {
+            var session = GameplayTagCatalogEditSession.Open(
+                "{\"schemaVersion\":1,\"tags\":[{\"name\":\"State.Dead\"}]," +
+                "\"redirects\":[{\"from\":\"State.Killed\",\"to\":\"State.Dead\"}]}");
+            var before = session.Serialize();
+
+            Assert.Throws<InvalidOperationException>(
+                () => session.RemoveRedirects(new[] { "State.Killed", "Missing.Old" }));
+            Assert.That(session.Serialize(), Is.EqualTo(before));
+        }
+
+        /// <summary>빈 입력이 no-op이고 중복 입력이 무해하며 null 항목이 거부되는지 검증합니다.</summary>
+        [Test]
+        public void Remove_redirects_tolerates_duplicates_and_rejects_null_sources()
+        {
+            var session = GameplayTagCatalogEditSession.Open(
+                "{\"schemaVersion\":1,\"tags\":[{\"name\":\"State.Dead\"}]," +
+                "\"redirects\":[{\"from\":\"State.Killed\",\"to\":\"State.Dead\"}]}");
+            var before = session.Serialize();
+
+            Assert.That(session.RemoveRedirects(Array.Empty<string>()), Is.Zero);
+            Assert.That(session.Serialize(), Is.EqualTo(before));
+            Assert.Throws<ArgumentNullException>(() => session.RemoveRedirects(null!));
+            Assert.Throws<ArgumentException>(() => session.RemoveRedirects(new string[] { null! }));
+            Assert.That(session.Serialize(), Is.EqualTo(before));
+
+            Assert.That(session.RemoveRedirects(new[] { "State.Killed", "state.killed" }), Is.EqualTo(1));
+            Assert.That(session.Redirects, Is.Empty);
+        }
+
         /// <summary>최대 크기 카탈로그에서도 마지막 활성 경로까지 direct redirect를 만드는지 검증합니다.</summary>
         [Test]
         [Timeout(600_000)]
