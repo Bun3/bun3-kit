@@ -24,8 +24,8 @@ bootstrap (`PlayerLoopSystemHelper` from `com.bun3.unity.core`).
 - Windows standalone player (Mono or IL2CPP). The whole API compiles everywhere and
   tracks requested state; native calls happen only where supported (see Editor behavior).
 - **Windowed** or borderless mode — exclusive fullscreen bypasses the desktop
-  compositor, so none of this applies there. Run **Bun3 → Window → Validate Overlay
-  Settings** to catch hostile player settings (flip-model swapchain, HDR, etc.).
+  compositor, so none of this applies there. Run **Window → Validate Overlay Settings**
+  to catch hostile player settings (flip-model swapchain, HDR, etc.).
 
 ## Quick start — full overlay
 
