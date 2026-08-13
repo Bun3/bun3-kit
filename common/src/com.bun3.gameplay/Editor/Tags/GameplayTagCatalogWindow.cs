@@ -169,7 +169,7 @@ namespace Bun3.Gameplay.Editor.Tags
                 _movePath = EditorGUILayout.TextField("Rename/Move", _movePath);
                 if (GUILayout.Button("Rename/Move") && _movePath.Length > 0)
                 {
-                    Execute(() => _controller.RelocateSubtree(selectedPath, _movePath));
+                    Execute(() => _controller.RenameSubtree(selectedPath, _movePath));
                 }
 
                 if (GUILayout.Button("Delete")) DeleteSelected(selectedPath);

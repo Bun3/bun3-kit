@@ -121,28 +121,41 @@ namespace Bun3.Gameplay.Editor.Tags
             });
         }
 
-        internal void RelocateSubtree(string oldPath, string newPath)
+        internal string RenameSubtree(string path, string newSegment)
         {
+            var renamedPath = string.Empty;
             Apply((tags, redirects) =>
             {
-                var oldCanonical = RequireCanonical(oldPath, nameof(oldPath));
-                var newCanonical = RequireCanonical(newPath, nameof(newPath));
-                var catalog = EnsureActive(oldPath, oldCanonical, out _);
+                if (newSegment is null || newSegment.IndexOf('.') >= 0)
+                {
+                    throw new ArgumentException(
+                        "The new name must be one gameplay tag segment.", nameof(newSegment));
+                }
+
+                _ = RequireCanonical(newSegment, nameof(newSegment));
+
+                var oldCanonical = RequireCanonical(path, nameof(path));
+                var catalog = EnsureActive(path, oldCanonical, out var tag);
+                var oldDisplayPath = catalog.GetDisplayName(tag);
+                var separator = oldDisplayPath.LastIndexOf('.');
+                renamedPath = separator < 0
+                    ? newSegment
+                    : oldDisplayPath.Substring(0, separator + 1) + newSegment;
+                var newCanonical = RequireCanonical(renamedPath, nameof(newSegment));
                 var activePaths = GetActiveSubtreePaths(catalog, oldCanonical);
 
+                RenameTagRows(tags, oldCanonical, oldDisplayPath, renamedPath);
                 if (oldCanonical == newCanonical)
                 {
-                    RenameTagRows(tags, oldCanonical, oldPath, newPath);
                     return;
                 }
 
-                RenameTagRows(tags, oldCanonical, oldPath, newPath);
                 for (var i = 0; i < redirects.Count; i++)
                 {
                     var redirect = redirects[i];
                     redirects[i] = new EditableRedirectRow(
                         redirect.From,
-                        RewritePrefix(redirect.To, oldCanonical, newPath));
+                        RewritePrefix(redirect.To, oldCanonical, renamedPath));
                 }
 
                 for (var i = 0; i < activePaths.Count; i++)
@@ -150,9 +163,10 @@ namespace Bun3.Gameplay.Editor.Tags
                     var activePath = activePaths[i];
                     redirects.Add(new EditableRedirectRow(
                         activePath,
-                        RewritePrefix(activePath, oldCanonical, newPath)));
+                        RewritePrefix(activePath, oldCanonical, renamedPath)));
                 }
             });
+            return renamedPath;
         }
 
         internal void Delete(string path, bool includeDescendants)

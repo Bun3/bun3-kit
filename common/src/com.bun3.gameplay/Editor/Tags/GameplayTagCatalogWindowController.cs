@@ -66,10 +66,9 @@ namespace Bun3.Gameplay.Editor.Tags
             IsDirty = true;
         }
 
-        internal void RelocateSubtree(string oldPath, string newPath)
+        internal void RenameSubtree(string path, string newSegment)
         {
-            RequireSession().RelocateSubtree(oldPath, newPath);
-            SelectedPath = newPath;
+            SelectedPath = RequireSession().RenameSubtree(path, newSegment);
             IsDirty = true;
         }
 

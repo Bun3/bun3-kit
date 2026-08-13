@@ -220,20 +220,35 @@ namespace Bun3.Gameplay.Unity.Tests
             controller.New(path);
             controller.Add("State.Dead", "사망");
             controller.SetComment("State.Dead", "전투 불능");
-            controller.RelocateSubtree("State.Dead", "Condition.Deceased");
+            controller.RenameSubtree("State.Dead", "Deceased");
             Assert.That(controller.IsDirty, Is.True);
-            Assert.That(controller.SelectedPath, Is.EqualTo("Condition.Deceased"));
+            Assert.That(controller.SelectedPath, Is.EqualTo("State.Deceased"));
             controller.Save();
             Assert.That(controller.IsDirty, Is.False);
-            Assert.That(File.ReadAllText(path), Does.Contain("Condition.Deceased"));
+            Assert.That(File.ReadAllText(path), Does.Contain("State.Deceased"));
 
-            controller.Add("Condition.Stunned");
+            controller.Add("State.Stunned");
             Assert.That(controller.Reload(discardDirty: false), Is.False);
-            Assert.That(controller.Session!.Serialize(), Does.Contain("Condition.Stunned"));
+            Assert.That(controller.Session!.Serialize(), Does.Contain("State.Stunned"));
             Assert.That(controller.Reload(discardDirty: true), Is.True);
-            Assert.That(controller.Session!.Serialize(), Does.Not.Contain("Condition.Stunned"));
-            controller.Delete("Condition.Deceased", includeDescendants: false);
-            Assert.That(controller.Session!.Serialize(), Does.Not.Contain("Condition.Deceased"));
+            Assert.That(controller.Session!.Serialize(), Does.Not.Contain("State.Stunned"));
+            controller.Delete("State.Deceased", includeDescendants: false);
+            Assert.That(controller.Session!.Serialize(), Does.Not.Contain("State.Deceased"));
+        }
+
+        /// <summary>컨트롤러가 세그먼트 rename의 전체 반환 경로를 선택하고 dirty 상태가 되는지 검증합니다.</summary>
+        [Test]
+        public void Controller_selects_the_full_path_returned_by_segment_rename()
+        {
+            var path = Path.Combine(_temporaryDirectory, "GameplayTags.json");
+            var controller = new GameplayTagCatalogWindowController();
+            controller.New(path);
+            controller.Add("State.Dead");
+
+            controller.RenameSubtree("State.Dead", "Deceased");
+
+            Assert.That(controller.SelectedPath, Is.EqualTo("State.Deceased"));
+            Assert.That(controller.IsDirty, Is.True);
         }
 
         /// <summary>실패한 명령이 상태를 보존하고 검증 진단을 만드는지 검증합니다.</summary>
@@ -249,7 +264,7 @@ namespace Bun3.Gameplay.Unity.Tests
             var before = controller.Session!.Serialize();
 
             var succeeded = controller.TryExecute(
-                () => controller.RelocateSubtree("State.Dead", "State.Alive"), out var error);
+                () => controller.RenameSubtree("State.Dead", "Alive"), out var error);
 
             Assert.That(succeeded, Is.False);
             Assert.That(error, Is.Not.Null);
@@ -323,7 +338,7 @@ namespace Bun3.Gameplay.Unity.Tests
 
         /// <summary>작성 명령 뒤 트리가 컨트롤러가 선택한 새 경로를 선택하는지 검증합니다.</summary>
         [Test]
-        public void Reload_tree_selects_controller_path_after_add_and_move()
+        public void Reload_tree_selects_controller_path_after_add_and_rename()
         {
             var path = Path.Combine(_temporaryDirectory, "GameplayTags.json");
             var window = EditorWindow.GetWindow<GameplayTagCatalogWindow>();
@@ -341,11 +356,11 @@ namespace Bun3.Gameplay.Unity.Tests
                 AssertTreeSelection(window, "State.Dead.Ghost");
                 Assert.That(controller.SelectedPath, Is.EqualTo("State.Dead.Ghost"));
 
-                controller.RelocateSubtree("State.Dead", "Condition.Deceased");
+                controller.RenameSubtree("State.Dead", "Deceased");
                 RefreshTree(window);
 
-                AssertTreeSelection(window, "Condition.Deceased");
-                Assert.That(controller.SelectedPath, Is.EqualTo("Condition.Deceased"));
+                AssertTreeSelection(window, "State.Deceased");
+                Assert.That(controller.SelectedPath, Is.EqualTo("State.Deceased"));
             }
             finally
             {
