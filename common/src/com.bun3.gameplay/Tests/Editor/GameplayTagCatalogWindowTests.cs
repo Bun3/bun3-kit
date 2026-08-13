@@ -100,6 +100,70 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(invocationCount, Is.EqualTo(1));
         }
 
+        [TestCase(0, UnsavedChangesDecision.Save)]
+        [TestCase(1, UnsavedChangesDecision.Cancel)]
+        [TestCase(2, UnsavedChangesDecision.Discard)]
+        public void Unsaved_dialog_result_maps_to_the_matching_decision(
+            int dialogResult, UnsavedChangesDecision expected)
+        {
+            Assert.That(GameplayTagCatalogWindow.MapUnsavedChangesDialogResult(dialogResult),
+                Is.EqualTo(expected));
+        }
+
+        [Test]
+        public void Save_decision_persists_the_real_dirty_session_before_replacement()
+        {
+            var path = Path.Combine(_temporaryDirectory, "GameplayTags.json");
+            var controller = new GameplayTagCatalogWindowController();
+            controller.New(path);
+            controller.Add("State.Dead");
+
+            var proceed = GameplayTagCatalogWindow.TryResolveUnsavedChanges(
+                UnsavedChangesDecision.Save,
+                () => controller.TryExecute(controller.Save, out _));
+
+            Assert.That(proceed, Is.True);
+            Assert.That(controller.IsDirty, Is.False);
+            Assert.That(File.ReadAllText(path), Does.Contain("State.Dead"));
+        }
+
+        [TestCase(UnsavedChangesDecision.Discard, true)]
+        [TestCase(UnsavedChangesDecision.Cancel, false)]
+        public void Discard_proceeds_and_cancel_preserves_the_dirty_session(
+            UnsavedChangesDecision decision, bool expectedProceed)
+        {
+            var path = Path.Combine(_temporaryDirectory, "GameplayTags.json");
+            var controller = new GameplayTagCatalogWindowController();
+            controller.New(path);
+            controller.Add("State.Dead");
+
+            var proceed = GameplayTagCatalogWindow.TryResolveUnsavedChanges(
+                decision, () => controller.TryExecute(controller.Save, out _));
+
+            Assert.That(proceed, Is.EqualTo(expectedProceed));
+            Assert.That(controller.IsDirty, Is.True);
+            Assert.That(File.ReadAllText(path), Does.Not.Contain("State.Dead"));
+            Assert.That(controller.Session!.Serialize(), Does.Contain("State.Dead"));
+        }
+
+        [Test]
+        public void Failed_save_does_not_allow_catalog_replacement()
+        {
+            var path = Path.Combine(_temporaryDirectory, "GameplayTags.json");
+            var controller = new GameplayTagCatalogWindowController();
+            controller.New(path);
+            controller.Add("State.Dead");
+            Directory.Delete(_temporaryDirectory, true);
+
+            var proceed = GameplayTagCatalogWindow.TryResolveUnsavedChanges(
+                UnsavedChangesDecision.Save,
+                () => controller.TryExecute(controller.Save, out _));
+
+            Assert.That(proceed, Is.False);
+            Assert.That(controller.IsDirty, Is.True);
+            Assert.That(controller.Session!.Serialize(), Does.Contain("State.Dead"));
+        }
+
         /// <summary>컨트롤러가 세션을 우회하지 않고 파일 및 작성 작업을 수행하는지 검증합니다.</summary>
         [Test]
         public void Controller_executes_file_and_authoring_workflow_without_bypassing_the_session()

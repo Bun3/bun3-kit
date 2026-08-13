@@ -7,6 +7,13 @@ using UnityEngine;
 
 namespace Bun3.Gameplay.Editor.Tags
 {
+    internal enum UnsavedChangesDecision
+    {
+        Save,
+        Discard,
+        Cancel
+    }
+
     internal sealed class GameplayTagCatalogWindow : EditorWindow
     {
         [SerializeField] private TreeViewState _treeViewState = null!;
@@ -167,36 +174,28 @@ namespace Bun3.Gameplay.Editor.Tags
         private void CreateNew()
         {
             var path = EditorUtility.SaveFilePanel("Create Gameplay Tag Catalog", "", "GameplayTags", "json");
-            if (path.Length == 0) return;
+            if (path.Length == 0 ||
+                !TryPrepareForCatalogReplacement("Create Gameplay Tag Catalog")) return;
             Execute(() => _controller.New(path));
         }
 
         private void Open()
         {
             var path = EditorUtility.OpenFilePanel("Open Gameplay Tag Catalog", "", "json");
-            if (path.Length == 0) return;
+            if (path.Length == 0 ||
+                !TryPrepareForCatalogReplacement("Open Gameplay Tag Catalog")) return;
             Execute(() => _controller.Open(path));
         }
 
         private void Reload()
         {
-            var discardDirty = false;
-            if (_controller.IsDirty)
-            {
-                discardDirty = EditorUtility.DisplayDialogComplex(
-                    "Reload Gameplay Tags",
-                    "Discard unsaved gameplay tag edits?",
-                    "Discard and Reload",
-                    "Cancel",
-                    string.Empty) == 0;
-                if (!discardDirty) return;
-            }
+            if (!TryPrepareForCatalogReplacement("Reload Gameplay Tags")) return;
 
             Execute(() =>
             {
-                if (!_controller.Reload(discardDirty))
+                if (!_controller.Reload(discardDirty: true))
                 {
-                    throw new InvalidOperationException("Unsaved gameplay tag edits were not discarded.");
+                    throw new InvalidOperationException("Gameplay tag reload was not allowed.");
                 }
             });
         }
@@ -231,6 +230,39 @@ namespace Bun3.Gameplay.Editor.Tags
                     "Cancel");
         }
 
+        internal static UnsavedChangesDecision MapUnsavedChangesDialogResult(int result) => result switch
+        {
+            0 => UnsavedChangesDecision.Save,
+            1 => UnsavedChangesDecision.Cancel,
+            2 => UnsavedChangesDecision.Discard,
+            _ => throw new ArgumentOutOfRangeException(nameof(result))
+        };
+
+        internal static bool TryResolveUnsavedChanges(
+            UnsavedChangesDecision decision, Func<bool> save)
+        {
+            if (save is null) throw new ArgumentNullException(nameof(save));
+            return decision switch
+            {
+                UnsavedChangesDecision.Save => save(),
+                UnsavedChangesDecision.Discard => true,
+                UnsavedChangesDecision.Cancel => false,
+                _ => throw new ArgumentOutOfRangeException(nameof(decision))
+            };
+        }
+
+        private bool TryPrepareForCatalogReplacement(string title)
+        {
+            if (!_controller.IsDirty) return true;
+            var result = EditorUtility.DisplayDialogComplex(
+                title,
+                "Save changes to the current gameplay tag catalog?",
+                "Save", "Cancel", "Discard");
+            return TryResolveUnsavedChanges(
+                MapUnsavedChangesDialogResult(result),
+                () => Execute(_controller.Save));
+        }
+
         private bool HasDescendants(string path)
         {
             if (_model is null) return false;
@@ -249,18 +281,23 @@ namespace Bun3.Gameplay.Editor.Tags
             return false;
         }
 
-        private void Execute(Action action)
+        private bool Execute(Action action)
         {
             if (_controller.TryExecute(action, out var error))
             {
                 ReloadTree();
-                return;
+                SynchronizeUnsavedChanges();
+                return true;
             }
 
+            SynchronizeUnsavedChanges();
             GameplayTagValidationWindow.Show(
                 _controller.FilePath.Length == 0 ? "GameplayTags.json" : _controller.FilePath,
                 error!);
+            return false;
         }
+
+        private void SynchronizeUnsavedChanges() => hasUnsavedChanges = _controller.IsDirty;
 
         private void ReloadTree()
         {
