@@ -6,7 +6,7 @@ namespace Bun3.Gameplay.Tags
 {
     public sealed partial class TagCatalog
     {
-        private static TagCatalog Build(List<ExplicitTag> explicitTags)
+        private static BuildData Build(List<ExplicitTag> explicitTags)
         {
             explicitTags.Sort((left, right) => StringComparer.Ordinal.Compare(left.CanonicalName, right.CanonicalName));
             var nodes = new Dictionary<string, BuildNode>(StringComparer.Ordinal);
@@ -41,7 +41,27 @@ namespace Bun3.Gameplay.Tags
             var byCanonicalName = new Dictionary<string, ushort>(count, StringComparer.Ordinal);
             var nextIndex = 1;
             FillPreorder(root, 0, displayNames, parents, subtreeEnds, byCanonicalName, ref nextIndex);
-            return new TagCatalog(byCanonicalName, displayNames, parents, subtreeEnds);
+            return new BuildData(byCanonicalName, displayNames, parents, subtreeEnds);
+        }
+
+        private readonly struct BuildData
+        {
+            internal BuildData(
+                Dictionary<string, ushort> byCanonicalName,
+                string[] displayNames,
+                ushort[] parents,
+                ushort[] subtreeEnds)
+            {
+                ByCanonicalName = byCanonicalName;
+                DisplayNames = displayNames;
+                Parents = parents;
+                SubtreeEnds = subtreeEnds;
+            }
+
+            internal Dictionary<string, ushort> ByCanonicalName { get; }
+            internal string[] DisplayNames { get; }
+            internal ushort[] Parents { get; }
+            internal ushort[] SubtreeEnds { get; }
         }
 
         private static void AddPath(Dictionary<string, BuildNode> nodes, ExplicitTag explicitTag)

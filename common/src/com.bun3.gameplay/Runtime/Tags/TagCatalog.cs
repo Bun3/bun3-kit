@@ -19,21 +19,6 @@ namespace Bun3.Gameplay.Tags
 
         private TagCatalog(
             Dictionary<string, ushort> byCanonicalName,
-            string[] displayNames,
-            ushort[] parents,
-            ushort[] subtreeEnds)
-            : this(
-                byCanonicalName,
-                new Dictionary<string, ushort>(StringComparer.Ordinal),
-                displayNames,
-                parents,
-                subtreeEnds,
-                ComputeFingerprint(1, CreateCanonicalNames(byCanonicalName, displayNames.Length), Array.Empty<RedirectEntry>()))
-        {
-        }
-
-        private TagCatalog(
-            Dictionary<string, ushort> byCanonicalName,
             Dictionary<string, ushort> redirects,
             string[] displayNames,
             ushort[] parents,
@@ -51,16 +36,17 @@ namespace Bun3.Gameplay.Tags
 
         private static TagCatalog Create(List<ExplicitTag> explicitTags, List<RedirectDefinition> definitions)
         {
-            var catalog = Build(explicitTags);
-            var redirects = BuildRedirects(definitions, catalog._byCanonicalName, out var fingerprintRedirects);
-            var canonicalNames = CreateCanonicalNames(catalog._byCanonicalName, catalog._displayNames.Length);
+            var build = Build(explicitTags);
+            var redirects = BuildRedirects(definitions, build.ByCanonicalName, out var fingerprintRedirects);
+            var canonicalNames = CreateCanonicalNames(build.ByCanonicalName, build.DisplayNames.Length);
+            var fingerprint = ComputeFingerprint(1, canonicalNames, fingerprintRedirects);
             return new TagCatalog(
-                catalog._byCanonicalName,
+                build.ByCanonicalName,
                 redirects,
-                catalog._displayNames,
-                catalog._parents,
-                catalog._subtreeEnds,
-                ComputeFingerprint(1, canonicalNames, fingerprintRedirects));
+                build.DisplayNames,
+                build.Parents,
+                build.SubtreeEnds,
+                fingerprint);
         }
 
         private static Dictionary<string, ushort> BuildRedirects(
