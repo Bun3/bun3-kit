@@ -50,6 +50,8 @@ namespace Bun3.Gameplay.Editor.Tags
             IsDirty = false;
         }
 
+        internal void DiscardChanges() => IsDirty = false;
+
         internal void Add(string path, string comment = "")
         {
             RequireSession().Add(path, comment);

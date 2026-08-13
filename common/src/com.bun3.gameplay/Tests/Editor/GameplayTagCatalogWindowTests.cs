@@ -48,7 +48,7 @@ namespace Bun3.Gameplay.Unity.Tests
             }
             finally
             {
-                window.Close();
+                CloseWithoutSaving(window);
             }
         }
 
@@ -163,6 +163,51 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(proceed, Is.False);
             Assert.That(controller.IsDirty, Is.True);
             Assert.That(controller.Session!.Serialize(), Does.Contain("State.Dead"));
+        }
+
+        [Test]
+        public void Synchronizing_a_dirty_controller_marks_the_window_unsaved()
+        {
+            var path = Path.Combine(_temporaryDirectory, "GameplayTags.json");
+            var window = EditorWindow.GetWindow<GameplayTagCatalogWindow>();
+            try
+            {
+                var controller = GetController(window);
+                controller.New(path);
+                controller.Add("State.Dead");
+                SynchronizeUnsavedChanges(window);
+
+                Assert.That(window.hasUnsavedChanges, Is.True);
+                Assert.That(window.saveChangesMessage, Does.Contain("gameplay tag catalog"));
+            }
+            finally
+            {
+                CloseWithoutSaving(window);
+            }
+        }
+
+        [TestCase(0, true)]
+        [TestCase(1, false)]
+        public void Assembly_reload_resolves_the_real_dirty_session(
+            int decisionValue, bool expectedSaved)
+        {
+            var path = Path.Combine(_temporaryDirectory, "GameplayTags.json");
+            var window = EditorWindow.GetWindow<GameplayTagCatalogWindow>();
+            try
+            {
+                var controller = GetController(window);
+                controller.New(path);
+                controller.Add("State.Dead");
+                window.HandleBeforeAssemblyReload((UnsavedChangesDecision)decisionValue);
+
+                Assert.That(File.ReadAllText(path).Contains("State.Dead"), Is.EqualTo(expectedSaved));
+                Assert.That(controller.IsDirty, Is.False);
+                Assert.That(window.hasUnsavedChanges, Is.False);
+            }
+            finally
+            {
+                CloseWithoutSaving(window);
+            }
         }
 
         /// <summary>컨트롤러가 세션을 우회하지 않고 파일 및 작성 작업을 수행하는지 검증합니다.</summary>
@@ -303,7 +348,7 @@ namespace Bun3.Gameplay.Unity.Tests
             }
             finally
             {
-                window.Close();
+                CloseWithoutSaving(window);
             }
         }
 
@@ -352,8 +397,22 @@ namespace Bun3.Gameplay.Unity.Tests
             }
             finally
             {
-                window.Close();
+                CloseWithoutSaving(window);
             }
+        }
+
+        private static void CloseWithoutSaving(GameplayTagCatalogWindow window)
+        {
+            if (window.hasUnsavedChanges) window.DiscardChanges();
+            else window.Close();
+        }
+
+        private static void SynchronizeUnsavedChanges(GameplayTagCatalogWindow window)
+        {
+            var method = typeof(GameplayTagCatalogWindow).GetMethod(
+                "SynchronizeUnsavedChanges", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("The unsaved state synchronizer is missing.");
+            method.Invoke(window, null);
         }
 
         private static GameplayTagCatalogWindowController GetController(GameplayTagCatalogWindow window)

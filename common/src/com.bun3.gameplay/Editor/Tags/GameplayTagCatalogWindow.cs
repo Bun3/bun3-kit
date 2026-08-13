@@ -42,7 +42,27 @@ namespace Bun3.Gameplay.Editor.Tags
         {
             titleContent = new GUIContent("Gameplay Tags");
             minSize = new Vector2(640f, 420f);
+            saveChangesMessage = "Save changes to the current gameplay tag catalog?";
+            AssemblyReloadEvents.beforeAssemblyReload -= BeforeAssemblyReload;
+            AssemblyReloadEvents.beforeAssemblyReload += BeforeAssemblyReload;
             EnsureTreeViewState();
+            SynchronizeUnsavedChanges();
+        }
+
+        private void OnDisable() =>
+            AssemblyReloadEvents.beforeAssemblyReload -= BeforeAssemblyReload;
+
+        public override void SaveChanges()
+        {
+            if (!Execute(_controller.Save)) return;
+            base.SaveChanges();
+        }
+
+        public override void DiscardChanges()
+        {
+            _controller.DiscardChanges();
+            SynchronizeUnsavedChanges();
+            base.DiscardChanges();
         }
 
         private void OnGUI()
@@ -261,6 +281,33 @@ namespace Bun3.Gameplay.Editor.Tags
             return TryResolveUnsavedChanges(
                 MapUnsavedChangesDialogResult(result),
                 () => Execute(_controller.Save));
+        }
+
+        private void BeforeAssemblyReload()
+        {
+            if (!_controller.IsDirty) return;
+            var save = EditorUtility.DisplayDialog(
+                "Reload Scripts",
+                "Save changes to the current gameplay tag catalog before scripts reload?",
+                "Save", "Discard");
+            HandleBeforeAssemblyReload(save
+                ? UnsavedChangesDecision.Save
+                : UnsavedChangesDecision.Discard);
+        }
+
+        internal void HandleBeforeAssemblyReload(UnsavedChangesDecision decision)
+        {
+            if (!_controller.IsDirty) return;
+            if (decision == UnsavedChangesDecision.Save)
+            {
+                _ = Execute(_controller.Save);
+                return;
+            }
+
+            if (decision != UnsavedChangesDecision.Discard)
+                throw new ArgumentException("Assembly reload cannot be cancelled.", nameof(decision));
+            _controller.DiscardChanges();
+            SynchronizeUnsavedChanges();
         }
 
         private bool HasDescendants(string path)
