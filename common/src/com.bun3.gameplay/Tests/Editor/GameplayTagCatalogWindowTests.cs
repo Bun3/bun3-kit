@@ -100,14 +100,14 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(invocationCount, Is.EqualTo(1));
         }
 
-        [TestCase(0, UnsavedChangesDecision.Save)]
-        [TestCase(1, UnsavedChangesDecision.Cancel)]
-        [TestCase(2, UnsavedChangesDecision.Discard)]
+        [TestCase(0, 0)]
+        [TestCase(1, 2)]
+        [TestCase(2, 1)]
         public void Unsaved_dialog_result_maps_to_the_matching_decision(
-            int dialogResult, UnsavedChangesDecision expected)
+            int dialogResult, int expectedDecision)
         {
-            Assert.That(GameplayTagCatalogWindow.MapUnsavedChangesDialogResult(dialogResult),
-                Is.EqualTo(expected));
+            Assert.That((int)GameplayTagCatalogWindow.MapUnsavedChangesDialogResult(dialogResult),
+                Is.EqualTo(expectedDecision));
         }
 
         [Test]
@@ -127,10 +127,10 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(File.ReadAllText(path), Does.Contain("State.Dead"));
         }
 
-        [TestCase(UnsavedChangesDecision.Discard, true)]
-        [TestCase(UnsavedChangesDecision.Cancel, false)]
+        [TestCase(1, true)]
+        [TestCase(2, false)]
         public void Discard_proceeds_and_cancel_preserves_the_dirty_session(
-            UnsavedChangesDecision decision, bool expectedProceed)
+            int decisionValue, bool expectedProceed)
         {
             var path = Path.Combine(_temporaryDirectory, "GameplayTags.json");
             var controller = new GameplayTagCatalogWindowController();
@@ -138,7 +138,8 @@ namespace Bun3.Gameplay.Unity.Tests
             controller.Add("State.Dead");
 
             var proceed = GameplayTagCatalogWindow.TryResolveUnsavedChanges(
-                decision, () => controller.TryExecute(controller.Save, out _));
+                (UnsavedChangesDecision)decisionValue,
+                () => controller.TryExecute(controller.Save, out _));
 
             Assert.That(proceed, Is.EqualTo(expectedProceed));
             Assert.That(controller.IsDirty, Is.True);
