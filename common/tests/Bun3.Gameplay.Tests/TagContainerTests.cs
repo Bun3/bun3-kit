@@ -99,4 +99,33 @@ public sealed class TagContainerTests
         Assert.That(full.ExactKindCount, Is.EqualTo(64));
         Assert.That(full.HasExact(flat.GetRequiredByIndex(65)), Is.False);
     }
+
+    [Test]
+    public void Copy_exact_tags_returns_catalog_order_and_empty_is_zero()
+    {
+        var tags = _catalog.CreateContainer();
+        Span<GameplayTag> empty = stackalloc GameplayTag[0];
+        Assert.That(tags.CopyExactTags(empty), Is.Zero);
+
+        tags.Add(_rooted);
+        tags.Add(_ghost);
+        Span<GameplayTag> destination = stackalloc GameplayTag[2];
+        var copied = tags.CopyExactTags(destination);
+
+        Assert.That(copied, Is.EqualTo(2));
+        Assert.That(destination[0], Is.EqualTo(_ghost));
+        Assert.That(destination[1], Is.EqualTo(_rooted));
+    }
+
+    [Test]
+    public void Copy_exact_tags_rejects_a_short_destination_before_writing()
+    {
+        var tags = _catalog.CreateContainer();
+        tags.Add(_ghost);
+        tags.Add(_rooted);
+        var destination = new[] { _state };
+
+        Assert.Throws<ArgumentException>(() => tags.CopyExactTags(destination.AsSpan()));
+        Assert.That(destination[0], Is.EqualTo(_state));
+    }
 }

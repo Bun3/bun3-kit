@@ -1,4 +1,5 @@
 #nullable enable
+using System;
 using System.IO;
 using System.Text;
 using Bun3.Gameplay.Numerics;
@@ -42,6 +43,12 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(catalog.TryGetByIndex(catalog.GetRequired("State.Dead").Index, out var wire), Is.True);
             Assert.That(wire, Is.EqualTo(catalog.GetRequired("state.dead")));
             Assert.That(catalog.TryGetByIndex(checked((ushort)(catalog.Count + 1)), out _), Is.False);
+
+            var tags = catalog.CreateContainer(1);
+            tags.Add(catalog.GetRequired("State.Dead"));
+            Span<GameplayTag> copiedTags = stackalloc GameplayTag[1];
+            Assert.That(tags.CopyExactTags(copiedTags), Is.EqualTo(1));
+            Assert.That(copiedTags[0], Is.EqualTo(catalog.GetRequired("State.Dead")));
         }
     }
 }

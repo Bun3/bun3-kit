@@ -22,6 +22,23 @@ namespace Bun3.Gameplay.Tags
         /// <summary>명시적으로 저장된 태그 종류 수를 가져옵니다.</summary>
         public int ExactKindCount => _count;
 
+        /// <summary>명시적으로 저장된 태그를 카탈로그 인덱스 오름차순으로 복사합니다.</summary>
+        /// <param name="destination">명시 태그를 받을 버퍼입니다.</param>
+        /// <returns>복사한 태그 수입니다.</returns>
+        /// <exception cref="ArgumentException">버퍼 길이가 명시 태그 종류 수보다 작은 경우입니다.</exception>
+        public int CopyExactTags(Span<GameplayTag> destination)
+        {
+            if (destination.Length < _count)
+            {
+                throw new ArgumentException(
+                    "The destination is too small for the exact tags.", nameof(destination));
+            }
+
+            for (var i = 0; i < _count; i++)
+                destination[i] = new GameplayTag(_indices[i]);
+            return _count;
+        }
+
         internal TagCatalog Catalog => _catalog;
 
         internal ushort GetExactIndexAt(int position) => _indices[position];
