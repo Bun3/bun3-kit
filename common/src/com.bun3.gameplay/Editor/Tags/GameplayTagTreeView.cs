@@ -125,6 +125,15 @@ namespace Bun3.Gameplay.Editor.Tags
             return new GUIContent(row.Path.Substring(segmentOffset), row.Comment);
         }
 
+        /// <summary>foldout과 계층 들여쓰기를 제외한 트리 행 레이블 영역을 계산합니다.</summary>
+        internal Rect CalculateLabelRect(TreeViewItem item, Rect rowRect)
+        {
+            if (item is null) throw new ArgumentNullException(nameof(item));
+
+            rowRect.xMin += GetContentIndent(item);
+            return rowRect;
+        }
+
         protected override TreeViewItem BuildRoot()
         {
             _rowsById.Clear();
@@ -159,7 +168,7 @@ namespace Bun3.Gameplay.Editor.Tags
         {
             if (_rowsById.TryGetValue(args.item.id, out var row))
             {
-                GUI.Label(args.rowRect, CreateLabelContent(row));
+                GUI.Label(CalculateLabelRect(args.item, args.rowRect), CreateLabelContent(row));
                 return;
             }
 

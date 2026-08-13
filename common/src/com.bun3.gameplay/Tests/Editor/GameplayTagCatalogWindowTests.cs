@@ -71,6 +71,20 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(content.tooltip, Is.EqualTo("전투 불능"));
         }
 
+        /// <summary>트리 행 레이블이 foldout과 계층 들여쓰기 뒤에서 시작하는지 검증합니다.</summary>
+        [Test]
+        public void Tree_row_label_starts_after_the_foldout_indent()
+        {
+            var tree = new GameplayTagTreeView(new TreeViewState());
+            var item = new TreeViewItem(id: 2, depth: 2, displayName: "Dead");
+            var rowRect = new UnityEngine.Rect(12f, 8f, 240f, 18f);
+
+            var labelRect = tree.CalculateLabelRect(item, rowRect);
+
+            Assert.That(labelRect.xMin, Is.GreaterThan(rowRect.xMin));
+            Assert.That(labelRect.xMax, Is.EqualTo(rowRect.xMax));
+        }
+
         /// <summary>redirect 행이 전체 경로를 잘림 없이 표시하고 도구 설명으로도 노출하는지 검증합니다.</summary>
         [Test]
         public void Redirect_row_shows_the_full_path_pair_as_text_and_tooltip()
