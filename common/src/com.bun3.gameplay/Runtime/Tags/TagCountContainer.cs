@@ -32,6 +32,29 @@ namespace Bun3.Gameplay.Tags
         /// <summary>명시적 수가 0보다 큰 태그 종류 수를 가져옵니다.</summary>
         public int ExactKindCount => _exactKindCount;
 
+        /// <summary>명시적으로 저장된 태그와 count를 카탈로그 인덱스 오름차순으로 복사합니다.</summary>
+        /// <param name="destination">명시 태그와 count를 받을 버퍼입니다.</param>
+        /// <returns>복사한 entry 수입니다.</returns>
+        /// <exception cref="ArgumentException">버퍼 길이가 명시 태그 종류 수보다 작은 경우입니다.</exception>
+        public int CopyExactEntries(Span<TagCountEntry> destination)
+        {
+            if (destination.Length < _exactKindCount)
+                throw new ArgumentException(
+                    "The destination is too small for the exact entries.", nameof(destination));
+
+            var copied = 0;
+            for (var i = 0; i < _entryCount; i++)
+            {
+                if (_exactCounts[i] == 0)
+                    continue;
+
+                destination[copied++] = new TagCountEntry(
+                    new GameplayTag(_indices[i]), _exactCounts[i]);
+            }
+
+            return copied;
+        }
+
         /// <summary>마지막으로 성공한 변경이 사용한 병합 또는 압축 통과 수를 가져옵니다.</summary>
         internal int LastMutationPassCount { get; private set; }
 

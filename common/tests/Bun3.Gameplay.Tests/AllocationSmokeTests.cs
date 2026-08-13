@@ -70,6 +70,43 @@ public class AllocationSmokeTests
     }
 
     [Test]
+    public void Exact_state_copy_does_not_allocate()
+    {
+        var catalog = TagCatalogTestData.Load();
+        var ghost = catalog.GetRequired("State.Dead.Ghost");
+        var rooted = catalog.GetRequired("State.Rooted");
+        var tags = catalog.CreateContainer(2);
+        var counts = catalog.CreateCountContainer(2);
+        tags.Add(rooted);
+        tags.Add(ghost);
+        counts.Add(rooted, 4);
+        counts.Add(ghost, 2);
+
+        _ = MeasureExactCopies(tags, counts, 1, out _);
+        var allocated = MeasureExactCopies(tags, counts, 100_000, out var copied);
+
+        Assert.That(allocated, Is.Zero);
+        Assert.That(copied, Is.EqualTo(400_000));
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static long MeasureExactCopies(
+        TagContainer tags, TagCountContainer counts, int iterations, out int copied)
+    {
+        Span<GameplayTag> tagBuffer = stackalloc GameplayTag[64];
+        Span<TagCountEntry> countBuffer = stackalloc TagCountEntry[64];
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        copied = 0;
+        for (var i = 0; i < iterations; i++)
+        {
+            copied += tags.CopyExactTags(tagBuffer);
+            copied += counts.CopyExactEntries(countBuffer);
+        }
+
+        return GC.GetAllocatedBytesForCurrentThread() - before;
+    }
+
+    [Test]
     public void Reserved_tag_mutations_do_not_allocate()
     {
         var catalog = TagCatalogTestData.Load(TagCatalogTestData.BuildChainCatalog(8, 16, false));

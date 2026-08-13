@@ -49,6 +49,13 @@ namespace Bun3.Gameplay.Unity.Tests
             Span<GameplayTag> copiedTags = stackalloc GameplayTag[1];
             Assert.That(tags.CopyExactTags(copiedTags), Is.EqualTo(1));
             Assert.That(copiedTags[0], Is.EqualTo(catalog.GetRequired("State.Dead")));
+
+            var counts = catalog.CreateCountContainer(1);
+            counts.Add(catalog.GetRequired("State.Dead"), 3);
+            Span<TagCountEntry> copiedCounts = stackalloc TagCountEntry[1];
+            Assert.That(counts.CopyExactEntries(copiedCounts), Is.EqualTo(1));
+            Assert.That(copiedCounts[0].Tag, Is.EqualTo(catalog.GetRequired("State.Dead")));
+            Assert.That(copiedCounts[0].Count, Is.EqualTo(3));
         }
     }
 }

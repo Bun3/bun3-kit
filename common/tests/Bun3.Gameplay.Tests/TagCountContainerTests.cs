@@ -189,4 +189,35 @@ public sealed class TagCountContainerTests
         Assert.That(counts.ExactKindCount, Is.EqualTo(64));
         Assert.That(counts.Count(catalog.GetRequired(TagCatalogTestData.ChainLeaf(63, 16))), Is.EqualTo(1));
     }
+
+    [Test]
+    public void Copy_exact_entries_excludes_aggregate_only_parents_and_preserves_counts()
+    {
+        _counts.Add(_rooted, 4);
+        _counts.Add(_ghost, 2);
+        Span<TagCountEntry> destination = stackalloc TagCountEntry[2];
+        var copied = _counts.CopyExactEntries(destination);
+
+        Assert.That(copied, Is.EqualTo(2));
+        Assert.That(destination[0], Is.EqualTo(new TagCountEntry(_ghost, 2)));
+        Assert.That(destination[1], Is.EqualTo(new TagCountEntry(_rooted, 4)));
+        Assert.That(destination[0] == new TagCountEntry(_ghost, 2), Is.True);
+        Assert.That(destination[0] != destination[1], Is.True);
+    }
+
+    [Test]
+    public void Copy_exact_entries_handles_empty_and_rejects_short_destination_atomically()
+    {
+        Span<TagCountEntry> empty = stackalloc TagCountEntry[0];
+        Assert.That(_counts.CopyExactEntries(empty), Is.Zero);
+        _counts.Add(_ghost);
+        _counts.Add(_rooted);
+        var sentinel = new TagCountEntry(_state, 7);
+        var destination = new[] { sentinel };
+
+        Assert.Throws<ArgumentException>(() => _counts.CopyExactEntries(destination.AsSpan()));
+        Assert.That(destination[0], Is.EqualTo(sentinel));
+        Assert.That(default(TagCountEntry).Tag, Is.EqualTo(GameplayTag.None));
+        Assert.That(default(TagCountEntry).Count, Is.Zero);
+    }
 }
