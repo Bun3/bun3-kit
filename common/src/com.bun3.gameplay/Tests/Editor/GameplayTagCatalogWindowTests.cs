@@ -57,7 +57,12 @@ namespace Bun3.Gameplay.Unity.Tests
         public void Tree_row_label_exposes_the_comment_as_a_tooltip()
         {
             var row = new GameplayTagTreeRowModel(
-                index: 2, parentIndex: 1, path: "State.Dead", comment: "전투 불능", directMatch: true);
+                index: 2,
+                parentIndex: 1,
+                path: "State.Dead",
+                comment: "전투 불능",
+                isExplicit: true,
+                directMatch: true);
 
             var content = GameplayTagTreeView.CreateLabelContent(row);
 
@@ -484,7 +489,7 @@ namespace Bun3.Gameplay.Unity.Tests
             GameplayTagCatalogWindowController controller,
             string path)
         {
-            var row = new GameplayTagCatalogViewModel(controller.Session!).Filter(string.Empty)
+            var row = new GameplayTagTreeModel(controller.Session!).Filter(string.Empty)
                 .Single(candidate => string.Equals(candidate.Path, path, StringComparison.OrdinalIgnoreCase));
             GetTree(window).SetSelection(new[] { (int)row.Index }, TreeViewSelectionOptions.None);
             controller.Select(path);

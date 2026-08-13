@@ -22,7 +22,7 @@ namespace Bun3.Gameplay.Editor.Tags
             new GameplayTagCatalogWindowController();
         private SearchField? _searchField;
         private GameplayTagTreeView _treeView = null!;
-        private GameplayTagCatalogViewModel? _model;
+        private GameplayTagTreeModel? _model;
         private string _search = string.Empty;
         private string _newRootPath = string.Empty;
         private string _newRootComment = string.Empty;
@@ -358,7 +358,7 @@ namespace Bun3.Gameplay.Editor.Tags
                 return;
             }
 
-            _model = new GameplayTagCatalogViewModel(_controller.Session);
+            _model = new GameplayTagTreeModel(_controller.Session);
             _treeView.SetRows(_model.Filter(_search));
             _treeView.SynchronizeSelection(_controller.SelectedPath);
             if (_controller.SelectedPath.Length > 0)

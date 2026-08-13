@@ -10,12 +10,18 @@ namespace Bun3.Gameplay.Editor.Tags
     internal readonly struct GameplayTagTreeRowModel
     {
         internal GameplayTagTreeRowModel(
-            ushort index, ushort parentIndex, string path, string comment, bool directMatch)
+            ushort index,
+            ushort parentIndex,
+            string path,
+            string comment,
+            bool isExplicit,
+            bool directMatch)
         {
             Index = index;
             ParentIndex = parentIndex;
             Path = path;
             Comment = comment;
+            IsExplicit = isExplicit;
             IsDirectMatch = directMatch;
         }
 
@@ -23,22 +29,22 @@ namespace Bun3.Gameplay.Editor.Tags
         internal ushort ParentIndex { get; }
         internal string Path { get; }
         internal string Comment { get; }
+        internal bool IsExplicit { get; }
         internal bool IsDirectMatch { get; }
     }
 
-    internal sealed class GameplayTagCatalogViewModel
+    internal sealed class GameplayTagTreeModel
     {
         private readonly GameplayTagTreeRowModel[] _rows;
 
-        internal GameplayTagCatalogViewModel(GameplayTagCatalogEditSession session)
+        internal GameplayTagTreeModel(GameplayTagCatalogEditSession session)
         {
             if (session is null) throw new ArgumentNullException(nameof(session));
 
-            var comments = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var metadata = new Dictionary<string, EditableTagRow>(StringComparer.OrdinalIgnoreCase);
             for (var i = 0; i < session.Tags.Count; i++)
             {
-                var row = session.Tags[i];
-                comments[row.Name] = row.Comment;
+                metadata[session.Tags[i].Name] = session.Tags[i];
             }
 
             using var stream = new MemoryStream(new UTF8Encoding(false, true).GetBytes(session.Serialize()));
@@ -49,14 +55,21 @@ namespace Bun3.Gameplay.Editor.Tags
                 var tag = catalog.GetRequiredByIndex(checked((ushort)index));
                 var path = catalog.GetDisplayName(tag);
                 var parent = catalog.GetParent(tag);
-                comments.TryGetValue(path, out var comment);
+                var isExplicit = metadata.TryGetValue(path, out var authored);
                 _rows[index - 1] = new GameplayTagTreeRowModel(
-                    checked((ushort)index), parent.Index, path, comment ?? string.Empty, directMatch: false);
+                    checked((ushort)index),
+                    parent.Index,
+                    path,
+                    isExplicit ? authored.Comment : string.Empty,
+                    isExplicit,
+                    directMatch: false);
             }
 
             ActiveCount = catalog.Count;
             FingerprintPrefix = FormatFingerprintPrefix(catalog.Fingerprint);
         }
+
+        internal IReadOnlyList<GameplayTagTreeRowModel> Rows => _rows;
 
         internal int ActiveCount { get; }
 
@@ -72,11 +85,7 @@ namespace Bun3.Gameplay.Editor.Tags
             for (var rowIndex = 0; rowIndex < _rows.Length; rowIndex++)
             {
                 var row = _rows[rowIndex];
-                if (row.Path.IndexOf(search, StringComparison.OrdinalIgnoreCase) < 0
-                    && row.Comment.IndexOf(search, StringComparison.OrdinalIgnoreCase) < 0)
-                {
-                    continue;
-                }
+                if (row.Path.IndexOf(search, StringComparison.OrdinalIgnoreCase) < 0) continue;
 
                 directMatches[rowIndex] = true;
                 var current = row.Index;
@@ -94,7 +103,12 @@ namespace Bun3.Gameplay.Editor.Tags
                 if (included[row.Index])
                 {
                     results.Add(new GameplayTagTreeRowModel(
-                        row.Index, row.ParentIndex, row.Path, row.Comment, directMatches[rowIndex]));
+                        row.Index,
+                        row.ParentIndex,
+                        row.Path,
+                        row.Comment,
+                        row.IsExplicit,
+                        directMatches[rowIndex]));
                 }
             }
 
