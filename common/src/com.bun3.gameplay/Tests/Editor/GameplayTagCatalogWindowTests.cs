@@ -405,7 +405,7 @@ namespace Bun3.Gameplay.Unity.Tests
         private static void CloseWithoutSaving(GameplayTagCatalogWindow window)
         {
             if (window.hasUnsavedChanges) window.DiscardChanges();
-            else window.Close();
+            window.Close();
         }
 
         private static void SynchronizeUnsavedChanges(GameplayTagCatalogWindow window)

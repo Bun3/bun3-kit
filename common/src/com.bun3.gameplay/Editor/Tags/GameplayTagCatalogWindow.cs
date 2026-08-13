@@ -52,12 +52,14 @@ namespace Bun3.Gameplay.Editor.Tags
         private void OnDisable() =>
             AssemblyReloadEvents.beforeAssemblyReload -= BeforeAssemblyReload;
 
+        /// <summary>현재 게임플레이 태그 카탈로그의 변경 사항을 저장합니다.</summary>
         public override void SaveChanges()
         {
             if (!Execute(_controller.Save)) return;
             base.SaveChanges();
         }
 
+        /// <summary>현재 게임플레이 태그 카탈로그의 저장하지 않은 변경 사항을 버립니다.</summary>
         public override void DiscardChanges()
         {
             _controller.DiscardChanges();
