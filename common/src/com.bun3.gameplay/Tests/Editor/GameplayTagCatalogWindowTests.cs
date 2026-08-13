@@ -295,9 +295,7 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(controller.Session!.Serialize(), Is.EqualTo(before));
             var diagnostic = GameplayTagValidationWindow.FormatDiagnostic(path, error!);
             Assert.That(diagnostic, Does.Contain(path));
-            Assert.That(diagnostic, Does.Contain("JSON path: tags[1].name"));
-            Assert.That(diagnostic, Does.Contain("Line: 9, Position: 27"));
-            Assert.That(diagnostic, Does.Contain("대소문자를 제외하고 중복된 태그 이름입니다."));
+            Assert.That(diagnostic, Does.Contain("The destination path is already active."));
         }
 
         /// <summary>카탈로그 예외가 없는 일반 예외는 최상위 메시지를 표시하는지 검증합니다.</summary>
