@@ -71,6 +71,18 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(content.tooltip, Is.EqualTo("전투 불능"));
         }
 
+        /// <summary>redirect 행이 전체 경로를 잘림 없이 표시하고 도구 설명으로도 노출하는지 검증합니다.</summary>
+        [Test]
+        public void Redirect_row_shows_the_full_path_pair_as_text_and_tooltip()
+        {
+            var content = GameplayTagCatalogWindow.CreateRedirectContent(
+                new EditableRedirectRow("State.Movement.Sprinting", "State.Movement.Running"));
+
+            Assert.That(content.text,
+                Is.EqualTo("State.Movement.Sprinting  →  State.Movement.Running"));
+            Assert.That(content.tooltip, Is.EqualTo(content.text));
+        }
+
         /// <summary>검색 확장이 임시이고 일반 확장 상태와 스크롤 위치가 복원되는지 검증합니다.</summary>
         [Test]
         public void Search_expansion_is_temporary_and_normal_expansion_and_scroll_are_restored()

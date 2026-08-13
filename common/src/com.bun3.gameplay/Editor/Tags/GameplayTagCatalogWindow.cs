@@ -174,13 +174,19 @@ namespace Bun3.Gameplay.Editor.Tags
                 _redirectScroll, true, true, GUILayout.MaxHeight(120f));
             for (var index = 0; index < count; index++)
             {
-                var redirect = redirects![index];
-                EditorGUILayout.LabelField(
-                    redirect.From + "  →  " + redirect.To,
+                GUILayout.Label(
+                    CreateRedirectContent(redirects![index]),
                     GUILayout.ExpandWidth(false));
             }
 
             EditorGUILayout.EndScrollView();
+        }
+
+        /// <summary>redirect 행의 전체 표시 문구를 도구 설명까지 담은 content로 만듭니다.</summary>
+        internal static GUIContent CreateRedirectContent(EditableRedirectRow redirect)
+        {
+            var text = redirect.From + "  →  " + redirect.To;
+            return new GUIContent(text, text);
         }
 
         private void DrawStatus()
