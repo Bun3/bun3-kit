@@ -2,33 +2,82 @@
 #pragma warning disable CS0618
 using System;
 using System.Collections.Generic;
+using UnityEditor;
 using UnityEditor.IMGUI.Controls;
 using UnityEngine;
 
 namespace Bun3.Gameplay.Editor.Tags
 {
+    internal enum GameplayTagTreeAction
+    {
+        Rename,
+        EditComment,
+        AddSubTag,
+        Copy,
+        Delete
+    }
+
     internal sealed class GameplayTagTreeView : TreeView
     {
+        private readonly TreeViewState _state;
         private IReadOnlyList<GameplayTagTreeRowModel> _rows = Array.Empty<GameplayTagTreeRowModel>();
         private readonly Dictionary<int, GameplayTagTreeRowModel> _rowsById =
             new Dictionary<int, GameplayTagTreeRowModel>();
+        private List<int>? _expandedBeforeFilter;
+        private bool _isFiltering;
 
         internal event Action<string>? PathSelected;
+        internal event Action<string>? RenameRequested;
+        internal event Action<string>? CommentEditRequested;
+        internal event Action<string>? SubTagRequested;
+        internal event Action<string>? CopyRequested;
+        internal event Action<string>? DeleteRequested;
 
         internal GameplayTagTreeView(TreeViewState state)
             : base(state)
         {
+            _state = state ?? throw new ArgumentNullException(nameof(state));
             showBorder = true;
+            useScrollView = true;
             Reload();
         }
 
-        internal void SetRows(IReadOnlyList<GameplayTagTreeRowModel> rows)
+        internal void SetRows(IReadOnlyList<GameplayTagTreeRowModel> rows) => SetRows(rows, false);
+
+        internal void SetRows(IReadOnlyList<GameplayTagTreeRowModel> rows, bool isFiltering)
         {
-            _rows = rows ?? throw new ArgumentNullException(nameof(rows));
+            if (rows is null) throw new ArgumentNullException(nameof(rows));
+            if (isFiltering && !_isFiltering)
+            {
+                _expandedBeforeFilter = new List<int>(_state.expandedIDs);
+            }
+
+            if (!isFiltering && _isFiltering && _expandedBeforeFilter is not null)
+            {
+                _state.expandedIDs = new List<int>(_expandedBeforeFilter);
+            }
+
+            _rows = rows;
+            _isFiltering = isFiltering;
             Reload();
+            if (!isFiltering) return;
             for (var index = 0; index < _rows.Count; index++)
             {
                 SetExpanded(_rows[index].Index, true);
+            }
+        }
+
+        internal void RequestAction(GameplayTagTreeAction action, int id)
+        {
+            if (!TryGetPath(id, out var path)) throw new ArgumentOutOfRangeException(nameof(id));
+            switch (action)
+            {
+                case GameplayTagTreeAction.Rename: RenameRequested?.Invoke(path); break;
+                case GameplayTagTreeAction.EditComment: CommentEditRequested?.Invoke(path); break;
+                case GameplayTagTreeAction.AddSubTag: SubTagRequested?.Invoke(path); break;
+                case GameplayTagTreeAction.Copy: CopyRequested?.Invoke(path); break;
+                case GameplayTagTreeAction.Delete: DeleteRequested?.Invoke(path); break;
+                default: throw new ArgumentOutOfRangeException(nameof(action));
             }
         }
 
@@ -108,6 +157,25 @@ namespace Bun3.Gameplay.Editor.Tags
             }
 
             base.RowGUI(args);
+        }
+
+        protected override void ContextClickedItem(int id)
+        {
+            if (!TryGetPath(id, out _)) return;
+
+            var menu = new GenericMenu();
+            AddActionItem(menu, "Rename", GameplayTagTreeAction.Rename, id);
+            AddActionItem(menu, "Edit Comment", GameplayTagTreeAction.EditComment, id);
+            AddActionItem(menu, "Add Sub-Tag", GameplayTagTreeAction.AddSubTag, id);
+            AddActionItem(menu, "Copy Tag", GameplayTagTreeAction.Copy, id);
+            AddActionItem(menu, "Delete Tag", GameplayTagTreeAction.Delete, id);
+            menu.ShowAsContext();
+            Event.current.Use();
+        }
+
+        private void AddActionItem(GenericMenu menu, string label, GameplayTagTreeAction action, int id)
+        {
+            menu.AddItem(new GUIContent(label), false, () => RequestAction(action, id));
         }
 
         protected override void SelectionChanged(IList<int> selectedIds)

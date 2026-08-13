@@ -1,4 +1,5 @@
 #nullable enable
+#pragma warning disable CS0618
 using System;
 using System.IO;
 using System.Linq;
@@ -13,7 +14,7 @@ namespace Bun3.Gameplay.Unity.Tests
 {
     /// <summary>게임플레이 태그 카탈로그 편집기 창의 동작을 검증합니다.</summary>
     [TestFixture]
-    public sealed class GameplayTagCatalogWindowTests
+    internal sealed class GameplayTagCatalogWindowTests
     {
         private string _temporaryDirectory = null!;
 
@@ -68,6 +69,71 @@ namespace Bun3.Gameplay.Unity.Tests
 
             Assert.That(content.text, Is.EqualTo("Dead"));
             Assert.That(content.tooltip, Is.EqualTo("전투 불능"));
+        }
+
+        /// <summary>검색 확장이 임시이고 일반 확장 상태와 스크롤 위치가 복원되는지 검증합니다.</summary>
+        [Test]
+        public void Search_expansion_is_temporary_and_normal_expansion_and_scroll_are_restored()
+        {
+            var state = new TreeViewState { scrollPos = new UnityEngine.Vector2(23f, 47f) };
+            var tree = new GameplayTagTreeView(state);
+            var session = GameplayTagCatalogEditSession.Open(
+                "{\"schemaVersion\":1,\"tags\":[{\"name\":\"State.Dead.Ghost\"},{\"name\":\"Ability.Jump\"}]}");
+            var model = new GameplayTagTreeModel(session);
+            var abilityId = model.Rows.Single(row => row.Path == "Ability").Index;
+            var stateId = model.Rows.Single(row => row.Path == "State").Index;
+            var deadId = model.Rows.Single(row => row.Path == "State.Dead").Index;
+            tree.SetRows(model.Rows, isFiltering: false);
+            tree.SetExpanded(abilityId, true);
+            tree.SetExpanded(stateId, false);
+
+            tree.SetRows(model.Filter("Ghost"), isFiltering: true);
+            Assert.That(tree.IsExpanded(stateId), Is.True);
+            Assert.That(tree.IsExpanded(deadId), Is.True);
+
+            tree.SetRows(model.Rows, isFiltering: false);
+            Assert.That(tree.IsExpanded(abilityId), Is.True);
+            Assert.That(tree.IsExpanded(stateId), Is.False);
+            Assert.That(state.scrollPos, Is.EqualTo(new UnityEngine.Vector2(23f, 47f)));
+        }
+
+        /// <summary>암시 행과 명시 행 모두가 요청한 context action을 전달하는지 검증합니다.</summary>
+        /// <param name="action">요청할 트리 context action입니다.</param>
+        [TestCase(GameplayTagTreeAction.Rename)]
+        [TestCase(GameplayTagTreeAction.EditComment)]
+        [TestCase(GameplayTagTreeAction.AddSubTag)]
+        [TestCase(GameplayTagTreeAction.Copy)]
+        [TestCase(GameplayTagTreeAction.Delete)]
+        public void Every_tree_row_dispatches_the_requested_context_action(GameplayTagTreeAction action)
+        {
+            foreach (var isExplicit in new[] { false, true })
+            {
+                var tree = new GameplayTagTreeView(new TreeViewState());
+                var row = new GameplayTagTreeRowModel(1, 0, "State", "", isExplicit, false);
+                tree.SetRows(new[] { row }, isFiltering: false);
+                string? received = null;
+                Subscribe(tree, action, path => received = path);
+
+                tree.RequestAction(action, row.Index);
+
+                Assert.That(received, Is.EqualTo("State"));
+            }
+        }
+
+        private static void Subscribe(
+            GameplayTagTreeView tree,
+            GameplayTagTreeAction action,
+            Action<string> handler)
+        {
+            switch (action)
+            {
+                case GameplayTagTreeAction.Rename: tree.RenameRequested += handler; break;
+                case GameplayTagTreeAction.EditComment: tree.CommentEditRequested += handler; break;
+                case GameplayTagTreeAction.AddSubTag: tree.SubTagRequested += handler; break;
+                case GameplayTagTreeAction.Copy: tree.CopyRequested += handler; break;
+                case GameplayTagTreeAction.Delete: tree.DeleteRequested += handler; break;
+                default: throw new ArgumentOutOfRangeException(nameof(action));
+            }
         }
 
         /// <summary>leaf와 subtree 삭제가 서로 다른 확인 대화 상자를 한 번만 열고 취소를 전파하는지 검증합니다.</summary>
@@ -505,3 +571,4 @@ namespace Bun3.Gameplay.Unity.Tests
         }
     }
 }
+#pragma warning restore CS0618
