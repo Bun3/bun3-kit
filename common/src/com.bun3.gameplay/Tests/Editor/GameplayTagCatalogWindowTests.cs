@@ -154,7 +154,8 @@ namespace Bun3.Gameplay.Unity.Tests
             var controller = new GameplayTagCatalogWindowController();
             controller.New(path);
             controller.Add("State.Dead");
-            Directory.Delete(_temporaryDirectory, true);
+            File.Delete(path);
+            Directory.CreateDirectory(path);
 
             var proceed = GameplayTagCatalogWindow.TryResolveUnsavedChanges(
                 UnsavedChangesDecision.Save,
