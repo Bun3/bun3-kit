@@ -144,6 +144,13 @@ namespace Bun3.Gameplay.Editor.Tags
                 var newCanonical = RequireCanonical(renamedPath, nameof(newSegment));
                 var activePaths = GetActiveSubtreePaths(catalog, oldCanonical);
 
+                if (oldCanonical != newCanonical
+                    && catalog.TryGet(renamedPath, out var existingTag)
+                    && Fold(catalog.GetDisplayName(existingTag)) == newCanonical)
+                {
+                    throw new InvalidOperationException("The destination path is already active.");
+                }
+
                 RenameTagRows(tags, oldCanonical, oldDisplayPath, renamedPath);
                 if (oldCanonical == newCanonical)
                 {

@@ -127,6 +127,20 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(session.Serialize(), Is.EqualTo(before));
         }
 
+        /// <summary>명시 자손이 만든 암시 목적 경로와 충돌하면 문서를 보존하는지 검증합니다.</summary>
+        [Test]
+        public void Rename_rejects_an_implicit_destination_collision_and_preserves_the_document()
+        {
+            var session = GameplayTagCatalogEditSession.Open(
+                "{\"schemaVersion\":1,\"tags\":[" +
+                "{\"name\":\"State.Dead\"},{\"name\":\"State.Alive.Child\"}]}");
+            var before = session.Serialize();
+
+            Assert.Throws<InvalidOperationException>(
+                () => session.RenameSubtree("State.Dead", "Alive"));
+            Assert.That(session.Serialize(), Is.EqualTo(before));
+        }
+
         /// <summary>대소문자만 바꾼 이름 변경이 redirect 없이 표시 casing만 갱신하는지 검증합니다.</summary>
         [Test]
         public void Case_only_rename_changes_display_case_without_a_redirect()
