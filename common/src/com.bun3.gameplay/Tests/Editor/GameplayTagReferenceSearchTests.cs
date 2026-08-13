@@ -1,5 +1,6 @@
 #nullable enable
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -86,6 +87,34 @@ namespace Bun3.Gameplay.Unity.Tests
         }
 
         [Test]
+        public void Scanner_never_opens_the_catalog_while_the_other_files_scan_successfully()
+        {
+            var catalog = WriteText("GameplayTags.json", "State.Killed");
+            var other = WriteText("Other.asset", "State.Killed");
+            var opened = new List<string>();
+            var scanner = new GameplayTagTextReferenceScanner(path =>
+            {
+                opened.Add(path);
+                return File.OpenText(path);
+            });
+
+            var result = scanner.Search(
+                new[]
+                {
+                    new GameplayTagReferenceFile(catalog, "Assets/GameplayTags.json"),
+                    new GameplayTagReferenceFile(other, "Assets/Other.asset")
+                },
+                new[] { "State.Killed" },
+                catalog,
+                isCancelled: null);
+
+            Assert.That(result.IsComplete, Is.True);
+            Assert.That(opened, Is.EqualTo(new[] { other }));
+            Assert.That(result.Matches.Select(match => match.DisplayPath),
+                Is.EqualTo(new[] { "Assets/Other.asset" }));
+        }
+
+        [Test]
         public void Scanner_skips_binary_content_even_when_the_extension_is_text_capable()
         {
             var path = Path.Combine(_temporaryDirectory, "Binary.asset");
@@ -127,6 +156,39 @@ namespace Bun3.Gameplay.Unity.Tests
                 Path.Combine(localPackage, "TagCode.cs")
             }));
         }
+
+        [Test]
+        public void Enumerator_skips_only_the_unreadable_directory_and_keeps_walking_the_rest()
+        {
+            var assets = Directory.CreateDirectory(Path.Combine(_temporaryDirectory, "Assets")).FullName;
+            var blocked = Directory.CreateDirectory(Path.Combine(assets, "Blocked")).FullName;
+            var opaque = Directory.CreateDirectory(Path.Combine(assets, "Opaque")).FullName;
+            var settings = Directory.CreateDirectory(Path.Combine(_temporaryDirectory, "ProjectSettings")).FullName;
+            File.WriteAllText(Path.Combine(assets, "Scene.unity"), "State.Killed");
+            File.WriteAllText(Path.Combine(blocked, "Hidden.cs"), "State.Killed");
+            File.WriteAllText(Path.Combine(opaque, "Visible.cs"), "State.Killed");
+            File.WriteAllText(Path.Combine(settings, "Tags.json"), "State.Killed");
+
+            var files = GameplayTagProjectReferenceFiles.EnumerateOwnedTextFiles(
+                _temporaryDirectory,
+                Array.Empty<string>(),
+                directory => Same(directory, blocked)
+                    ? throw new UnauthorizedAccessException(directory)
+                    : Directory.GetFiles(directory),
+                directory => Same(directory, opaque)
+                    ? throw new IOException(directory)
+                    : Directory.GetDirectories(directory));
+
+            Assert.That(files.Select(file => file.AbsolutePath), Is.EqualTo(new[]
+            {
+                Path.Combine(opaque, "Visible.cs"),
+                Path.Combine(assets, "Scene.unity"),
+                Path.Combine(settings, "Tags.json")
+            }));
+        }
+
+        private static bool Same(string left, string right) =>
+            string.Equals(left, right, StringComparison.OrdinalIgnoreCase);
 
         [Test]
         public void Cancellation_marks_the_scan_incomplete_without_opening_more_files()

@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Security;
 using UnityEditor.PackageManager;
 using UnityEngine;
 using PackageInfo = UnityEditor.PackageManager.PackageInfo;
@@ -46,9 +47,13 @@ namespace Bun3.Gameplay.Editor.Tags
             return EnumerateOwnedTextFiles(projectRoot, localPackagePaths);
         }
 
+        /// <param name="getFiles">디렉터리 파일 열거 seam. 기본값은 <see cref="Directory.GetFiles(string)"/>다.</param>
+        /// <param name="getDirectories">하위 디렉터리 열거 seam. 기본값은 <see cref="Directory.GetDirectories(string)"/>다.</param>
         internal static IReadOnlyList<GameplayTagReferenceFile> EnumerateOwnedTextFiles(
             string projectRoot,
-            IReadOnlyList<string> localPackagePaths)
+            IReadOnlyList<string> localPackagePaths,
+            Func<string, string[]>? getFiles = null,
+            Func<string, string[]>? getDirectories = null)
         {
             if (projectRoot is null) throw new ArgumentNullException(nameof(projectRoot));
             if (localPackagePaths is null) throw new ArgumentNullException(nameof(localPackagePaths));
@@ -68,9 +73,11 @@ namespace Bun3.Gameplay.Editor.Tags
             var comparer = PathComparer;
             var seen = new HashSet<string>(comparer);
             var files = new List<GameplayTagReferenceFile>();
+            var readFiles = getFiles ?? new Func<string, string[]>(Directory.GetFiles);
+            var readDirectories = getDirectories ?? new Func<string, string[]>(Directory.GetDirectories);
             for (var index = 0; index < roots.Count; index++)
             {
-                Collect(roots[index], root, seen, files);
+                Collect(roots[index], root, seen, files, readFiles, readDirectories);
             }
 
             files.Sort((left, right) => comparer.Compare(left.AbsolutePath, right.AbsolutePath));
@@ -81,7 +88,9 @@ namespace Bun3.Gameplay.Editor.Tags
             string directory,
             string projectRoot,
             HashSet<string> seen,
-            List<GameplayTagReferenceFile> files)
+            List<GameplayTagReferenceFile> files,
+            Func<string, string[]> getFiles,
+            Func<string, string[]> getDirectories)
         {
             if (!Directory.Exists(directory)) return;
 
@@ -90,7 +99,18 @@ namespace Bun3.Gameplay.Editor.Tags
             while (pending.Count > 0)
             {
                 var current = pending.Pop();
-                foreach (var file in Directory.GetFiles(current))
+                string[] found;
+                try
+                {
+                    found = getFiles(current);
+                }
+                catch (Exception exception) when (IsInaccessible(exception))
+                {
+                    // 권한이 없거나 스캔 도중 사라진 디렉터리는 그 디렉터리만 건너뛴다.
+                    found = Array.Empty<string>();
+                }
+
+                foreach (var file in found)
                 {
                     if (!TextExtensions.Contains(Path.GetExtension(file))) continue;
 
@@ -101,14 +121,40 @@ namespace Bun3.Gameplay.Editor.Tags
                         absolutePath, ToDisplayPath(absolutePath, projectRoot)));
                 }
 
-                foreach (var child in Directory.GetDirectories(current))
+                string[] children;
+                try
                 {
+                    children = getDirectories(current);
+                }
+                catch (Exception exception) when (IsInaccessible(exception))
+                {
+                    continue;
+                }
+
+                foreach (var child in children)
+                {
+                    FileAttributes attributes;
+                    try
+                    {
+                        attributes = new DirectoryInfo(child).Attributes;
+                    }
+                    catch (Exception exception) when (IsInaccessible(exception))
+                    {
+                        continue;
+                    }
+
                     // symlink/junction을 따라가면 같은 트리를 무한히 다시 훑을 수 있다.
-                    if ((new DirectoryInfo(child).Attributes & FileAttributes.ReparsePoint) != 0) continue;
+                    if ((attributes & FileAttributes.ReparsePoint) != 0) continue;
                     pending.Push(child);
                 }
             }
         }
+
+        // DirectoryNotFoundException·PathTooLongException은 IOException 파생이라 함께 걸린다.
+        private static bool IsInaccessible(Exception exception) =>
+            exception is UnauthorizedAccessException ||
+            exception is IOException ||
+            exception is SecurityException;
 
         private static string ToDisplayPath(string absolutePath, string projectRoot)
         {
