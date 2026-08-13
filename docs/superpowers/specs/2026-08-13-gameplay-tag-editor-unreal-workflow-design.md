@@ -1,6 +1,6 @@
 # GameplayTag 에디터 Unreal 워크플로 설계
 
-- 상태: 검토 요청
+- 상태: 승인됨
 - 작성일: 2026-08-13
 - 적용 패키지: `Bun3.Gameplay`, `com.bun3.unity.window`
 - 기반 명세: [`2026-08-12-gameplay-tag-catalog-design.md`](2026-08-12-gameplay-tag-catalog-design.md)
