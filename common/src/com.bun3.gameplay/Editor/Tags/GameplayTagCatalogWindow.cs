@@ -85,7 +85,8 @@ namespace Bun3.Gameplay.Editor.Tags
 
         private void HandleSaveShortcut(Event currentEvent)
         {
-            if (currentEvent.type != EventType.KeyDown
+            if (EditorWindow.focusedWindow != this
+                || currentEvent.type != EventType.KeyDown
                 || currentEvent.keyCode != KeyCode.S
                 || (!currentEvent.control && !currentEvent.command)
                 || currentEvent.shift
