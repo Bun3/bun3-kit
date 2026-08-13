@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using Bun3.Gameplay.Numerics;
 using Bun3.Gameplay.Tags;
 using NUnit.Framework;
@@ -41,22 +42,31 @@ public class AllocationSmokeTests
         set.Add(ghost);
         counts.Add(ghost, 2);
 
-        _ = set.Has(dead);
-        _ = counts.Has(dead);
-        _ = counts.Count(dead);
+        _ = MeasureTagQueries(set, counts, dead, 1, out _);
+        var allocated = MeasureTagQueries(set, counts, dead, 100_000, out var hits);
 
+        Assert.That(allocated, Is.Zero);
+        Assert.That(hits, Is.EqualTo(400_000));
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static long MeasureTagQueries(
+        TagContainer tags,
+        TagCountContainer counts,
+        GameplayTag query,
+        int iterations,
+        out int hits)
+    {
         var before = GC.GetAllocatedBytesForCurrentThread();
-        var hits = 0;
-        for (var i = 0; i < 100_000; i++)
+        hits = 0;
+        for (var i = 0; i < iterations; i++)
         {
-            if (set.Has(dead)) hits++;
-            if (counts.Has(dead)) hits++;
-            hits += counts.Count(dead);
+            if (tags.Has(query)) hits++;
+            if (counts.Has(query)) hits++;
+            hits += counts.Count(query);
         }
 
-        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
-        Assert.That(hits, Is.EqualTo(400_000));
-        Assert.That(allocated, Is.Zero);
+        return GC.GetAllocatedBytesForCurrentThread() - before;
     }
 
     [Test]
