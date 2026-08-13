@@ -136,6 +136,160 @@ namespace Bun3.Gameplay.Unity.Tests
             }
         }
 
+        /// <summary>태그 편집기가 새 Gameplay 메뉴 경로를 사용하는지 검증합니다.</summary>
+        [Test]
+        public void Tag_editor_uses_the_gameplay_menu_path()
+        {
+            var method = typeof(GameplayTagCatalogWindow).GetMethod(
+                nameof(GameplayTagCatalogWindow.OpenWindow), BindingFlags.Public | BindingFlags.Static)!;
+            var menu = method.GetCustomAttribute<MenuItem>()!;
+            Assert.That(menu.menuItem, Is.EqualTo("Gameplay/Tag Editor"));
+        }
+
+        /// <summary>이름 변경 요청이 읽기 전용 부모와 편집 가능한 세그먼트를 분리하는지 검증합니다.</summary>
+        /// <param name="path">이름을 바꿀 전체 태그 경로입니다.</param>
+        /// <param name="expectedParent">예상하는 읽기 전용 부모 경로입니다.</param>
+        /// <param name="expectedSegment">예상하는 편집 가능한 마지막 세그먼트입니다.</param>
+        [TestCase("State", "", "State")]
+        [TestCase("State.Movement.Run", "State.Movement", "Run")]
+        public void Rename_dialog_request_separates_the_readonly_parent_and_editable_segment(
+            string path, string expectedParent, string expectedSegment)
+        {
+            var request = GameplayTagEditDialog.CreateRenameRequest(path);
+            Assert.That(request.ParentPath, Is.EqualTo(expectedParent));
+            Assert.That(request.InitialValue, Is.EqualTo(expectedSegment));
+        }
+
+        /// <summary>Add Sub-Tag가 입력만 채우고 Copy Tag가 전체 경로를 복사하는지 검증합니다.</summary>
+        [Test]
+        public void Add_sub_tag_only_prefills_the_add_form_and_copy_uses_the_full_path()
+        {
+            var window = EditorWindow.GetWindow<GameplayTagCatalogWindow>();
+            var previousClipboard = EditorGUIUtility.systemCopyBuffer;
+            try
+            {
+                window.PrepareSubTag("State.Movement");
+                Assert.That(GetPrivateString(window, "_newTagName"), Is.EqualTo("State.Movement."));
+                Assert.That(GetController(window).Session, Is.Null);
+
+                window.CopyTag("State.Movement");
+                Assert.That(EditorGUIUtility.systemCopyBuffer, Is.EqualTo("State.Movement"));
+            }
+            finally
+            {
+                EditorGUIUtility.systemCopyBuffer = previousClipboard;
+                CloseWithoutSaving(window);
+            }
+        }
+
+        /// <summary>승인된 comment 편집이 암시 부모를 명시 작성 행으로 승격하는지 검증합니다.</summary>
+        /// <param name="comment">적용할 comment 값입니다.</param>
+        [TestCase("")]
+        [TestCase("상태 루트")]
+        public void Accepted_comment_edit_promotes_an_implicit_parent(string comment)
+        {
+            var path = Path.Combine(_temporaryDirectory, "GameplayTags.json");
+            var window = EditorWindow.GetWindow<GameplayTagCatalogWindow>();
+            try
+            {
+                var controller = GetController(window);
+                controller.New(path);
+                controller.Add("State.Dead");
+
+                window.ApplyComment("State", GameplayTagTextEditResult.Accept(comment));
+
+                Assert.That(controller.Session!.Tags.Any(row => row.Name == "State"), Is.True);
+                Assert.That(controller.Session.Tags.Single(row => row.Name == "State").Comment,
+                    Is.EqualTo(comment));
+            }
+            finally
+            {
+                CloseWithoutSaving(window);
+            }
+        }
+
+        /// <summary>거부된 편집 결과가 세션을 전혀 바꾸지 않는지 검증합니다.</summary>
+        [Test]
+        public void Cancelled_edit_results_leave_the_session_untouched()
+        {
+            var path = Path.Combine(_temporaryDirectory, "GameplayTags.json");
+            var window = EditorWindow.GetWindow<GameplayTagCatalogWindow>();
+            try
+            {
+                var controller = GetController(window);
+                controller.New(path);
+                controller.Add("State.Dead");
+                var before = controller.Session!.Serialize();
+
+                window.ApplyComment("State", GameplayTagTextEditResult.Cancelled);
+                window.ApplyRename("State.Dead", GameplayTagTextEditResult.Cancelled);
+
+                Assert.That(controller.Session!.Serialize(), Is.EqualTo(before));
+            }
+            finally
+            {
+                CloseWithoutSaving(window);
+            }
+        }
+
+        /// <summary>승인된 이름 변경이 마지막 세그먼트만 바꾸고 선택을 새 경로로 옮기는지 검증합니다.</summary>
+        [Test]
+        public void Accepted_rename_changes_only_the_last_segment()
+        {
+            var path = Path.Combine(_temporaryDirectory, "GameplayTags.json");
+            var window = EditorWindow.GetWindow<GameplayTagCatalogWindow>();
+            try
+            {
+                var controller = GetController(window);
+                controller.New(path);
+                controller.Add("State.Movement.Run");
+
+                window.ApplyRename("State.Movement", GameplayTagTextEditResult.Accept("Motion"));
+
+                Assert.That(controller.Session!.Serialize(), Does.Contain("State.Motion.Run"));
+                Assert.That(controller.SelectedPath, Is.EqualTo("State.Motion"));
+            }
+            finally
+            {
+                CloseWithoutSaving(window);
+            }
+        }
+
+        /// <summary>트리 context action event가 창에 정확히 한 번만 연결되는지 검증합니다.</summary>
+        [Test]
+        public void Tree_context_actions_are_wired_to_the_window_exactly_once()
+        {
+            var window = EditorWindow.GetWindow<GameplayTagCatalogWindow>();
+            try
+            {
+                var previousClipboard = EditorGUIUtility.systemCopyBuffer;
+                try
+                {
+                    var controller = GetController(window);
+                    controller.New(Path.Combine(_temporaryDirectory, "GameplayTags.json"));
+                    controller.Add("State.Dead");
+                    RefreshTree(window);
+                    var tree = GetTree(window);
+                    var row = new GameplayTagTreeModel(controller.Session!).Filter(string.Empty)
+                        .Single(candidate => candidate.Path == "State.Dead");
+
+                    tree.RequestAction(GameplayTagTreeAction.AddSubTag, row.Index);
+                    Assert.That(GetPrivateString(window, "_newTagName"), Is.EqualTo("State.Dead."));
+
+                    tree.RequestAction(GameplayTagTreeAction.Copy, row.Index);
+                    Assert.That(EditorGUIUtility.systemCopyBuffer, Is.EqualTo("State.Dead"));
+                }
+                finally
+                {
+                    EditorGUIUtility.systemCopyBuffer = previousClipboard;
+                }
+            }
+            finally
+            {
+                CloseWithoutSaving(window);
+            }
+        }
+
         /// <summary>leaf와 subtree 삭제가 서로 다른 확인 대화 상자를 한 번만 열고 취소를 전파하는지 검증합니다.</summary>
         /// <param name="hasDescendants">자식 태그 존재 여부입니다.</param>
         /// <param name="expectedTitle">예상하는 대화 상자 제목입니다.</param>
@@ -508,6 +662,15 @@ namespace Bun3.Gameplay.Unity.Tests
             {
                 CloseWithoutSaving(window);
             }
+        }
+
+        private static string GetPrivateString(GameplayTagCatalogWindow window, string fieldName)
+        {
+            var field = typeof(GameplayTagCatalogWindow).GetField(
+                fieldName, BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("The expected Window field is missing.");
+            return (string)(field.GetValue(window)
+                ?? throw new InvalidOperationException("The expected Window value is missing."));
         }
 
         private static void CloseWithoutSaving(GameplayTagCatalogWindow window)

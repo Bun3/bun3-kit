@@ -16,6 +16,8 @@ namespace Bun3.Gameplay.Editor.Tags
 
     internal sealed class GameplayTagCatalogWindow : EditorWindow
     {
+        private const string NewTagNameControl = "GameplayTag.NewTagName";
+
         [SerializeField] private TreeViewState _treeViewState = null!;
 
         private readonly GameplayTagCatalogWindowController _controller =
@@ -24,14 +26,14 @@ namespace Bun3.Gameplay.Editor.Tags
         private GameplayTagTreeView _treeView = null!;
         private GameplayTagTreeModel? _model;
         private string _search = string.Empty;
-        private string _newRootPath = string.Empty;
-        private string _newRootComment = string.Empty;
-        private string _newChildSegment = string.Empty;
-        private string _comment = string.Empty;
-        private string _movePath = string.Empty;
+        private string _newTagName = string.Empty;
+        private string _newTagComment = string.Empty;
+        private bool _focusNewTagName;
+        private bool _showRedirects = true;
+        private Vector2 _redirectScroll;
 
         /// <summary>게임플레이 태그 카탈로그 창을 엽니다.</summary>
-        [MenuItem("Bun3/Gameplay Tags")]
+        [MenuItem("Gameplay/Tag Editor")]
         public static void OpenWindow()
         {
             var window = GetWindow<GameplayTagCatalogWindow>();
@@ -71,7 +73,10 @@ namespace Bun3.Gameplay.Editor.Tags
         {
             EnsureTreeViewState();
             DrawToolbar();
-            DrawContent();
+            DrawSearch();
+            DrawAddTag();
+            DrawTagTree();
+            DrawRedirects();
             DrawStatus();
         }
 
@@ -82,11 +87,15 @@ namespace Bun3.Gameplay.Editor.Tags
                 _treeViewState = new TreeViewState();
             }
 
-            if (_treeView is null)
-            {
-                _treeView = new GameplayTagTreeView(_treeViewState);
-                _treeView.PathSelected += SelectPath;
-            }
+            if (_treeView is not null) return;
+
+            _treeView = new GameplayTagTreeView(_treeViewState);
+            _treeView.PathSelected += SelectPath;
+            _treeView.RenameRequested += RequestRename;
+            _treeView.CommentEditRequested += RequestComment;
+            _treeView.SubTagRequested += PrepareSubTag;
+            _treeView.CopyRequested += CopyTag;
+            _treeView.DeleteRequested += DeleteSelected;
         }
 
         private void DrawToolbar()
@@ -104,76 +113,74 @@ namespace Bun3.Gameplay.Editor.Tags
                 if (GUILayout.Button("Save", EditorStyles.toolbarButton)) Execute(_controller.Save);
             }
 
-            var updatedSearch = (_searchField ??= new SearchField()).OnToolbarGUI(_search);
-            if (!string.Equals(updatedSearch, _search, StringComparison.Ordinal))
-            {
-                _search = updatedSearch;
-                ReloadTree();
-            }
-
             EditorGUILayout.EndHorizontal();
         }
 
-        private void DrawContent()
+        private void DrawSearch()
         {
-            EditorGUILayout.BeginHorizontal();
-            EditorGUILayout.BeginVertical(GUILayout.Width(Mathf.Max(300f, position.width * 0.56f)));
+            EditorGUILayout.BeginHorizontal(EditorStyles.toolbar);
+            var updatedSearch = (_searchField ??= new SearchField()).OnToolbarGUI(_search);
+            EditorGUILayout.EndHorizontal();
+            if (string.Equals(updatedSearch, _search, StringComparison.Ordinal)) return;
+
+            _search = updatedSearch;
+            ReloadTree();
+        }
+
+        private void DrawAddTag()
+        {
+            EditorGUILayout.LabelField("Add New Gameplay Tag", EditorStyles.boldLabel);
+            GUI.SetNextControlName(NewTagNameControl);
+            _newTagName = EditorGUILayout.TextField("Tag Name", _newTagName);
+            _newTagComment = EditorGUILayout.TextField("Comment", _newTagComment);
+            using (new EditorGUI.DisabledScope(_controller.Session is null || _newTagName.Length == 0))
+            {
+                if (GUILayout.Button("Add"))
+                {
+                    var added = _newTagName;
+                    var comment = _newTagComment;
+                    if (Execute(() => _controller.Add(added, comment)))
+                    {
+                        _newTagName = string.Empty;
+                        _newTagComment = string.Empty;
+                    }
+                }
+            }
+
+            if (!_focusNewTagName || Event.current.type != EventType.Repaint) return;
+
+            EditorGUI.FocusTextInControl(NewTagNameControl);
+            _focusNewTagName = false;
+        }
+
+        private void DrawTagTree()
+        {
             var treeRect = GUILayoutUtility.GetRect(
                 GUIContent.none,
                 GUIStyle.none,
                 GUILayout.ExpandWidth(true),
                 GUILayout.ExpandHeight(true));
             _treeView.OnGUI(treeRect);
-            EditorGUILayout.EndVertical();
-
-            EditorGUILayout.BeginVertical(GUILayout.MinWidth(250f));
-            DrawDetail();
-            EditorGUILayout.EndVertical();
-            EditorGUILayout.EndHorizontal();
         }
 
-        private void DrawDetail()
+        private void DrawRedirects()
         {
-            EditorGUILayout.LabelField("Details", EditorStyles.boldLabel);
-            var selectedPath = _controller.SelectedPath;
-            EditorGUILayout.LabelField("Path", selectedPath.Length == 0 ? "(none)" : selectedPath);
+            var redirects = _controller.Session?.Redirects;
+            var count = redirects is null ? 0 : redirects.Count;
+            _showRedirects = EditorGUILayout.Foldout(_showRedirects, "Redirects (" + count + ")");
+            if (!_showRedirects || count == 0) return;
 
-            EditorGUILayout.Space();
-            EditorGUILayout.LabelField("Add Root", EditorStyles.boldLabel);
-            _newRootPath = EditorGUILayout.TextField("Path", _newRootPath);
-            _newRootComment = EditorGUILayout.TextField("Comment", _newRootComment);
-            using (new EditorGUI.DisabledScope(_controller.Session is null || _newRootPath.Length == 0))
+            _redirectScroll = EditorGUILayout.BeginScrollView(
+                _redirectScroll, true, true, GUILayout.MaxHeight(120f));
+            for (var index = 0; index < count; index++)
             {
-                if (GUILayout.Button("Add Root"))
-                {
-                    Execute(() => _controller.Add(_newRootPath, _newRootComment));
-                }
+                var redirect = redirects![index];
+                EditorGUILayout.LabelField(
+                    redirect.From + "  →  " + redirect.To,
+                    GUILayout.ExpandWidth(false));
             }
 
-            EditorGUILayout.Space();
-            EditorGUILayout.LabelField("Selected Tag", EditorStyles.boldLabel);
-            using (new EditorGUI.DisabledScope(_controller.Session is null || selectedPath.Length == 0))
-            {
-                _comment = EditorGUILayout.TextField("Comment", _comment);
-                if (GUILayout.Button("Set Comment"))
-                {
-                    Execute(() => _controller.SetComment(selectedPath, _comment));
-                }
-
-                _newChildSegment = EditorGUILayout.TextField("Child", _newChildSegment);
-                if (GUILayout.Button("Add Child") && _newChildSegment.Length > 0)
-                {
-                    Execute(() => _controller.Add(selectedPath + "." + _newChildSegment));
-                }
-
-                _movePath = EditorGUILayout.TextField("Rename/Move", _movePath);
-                if (GUILayout.Button("Rename/Move") && _movePath.Length > 0)
-                {
-                    Execute(() => _controller.RenameSubtree(selectedPath, _movePath));
-                }
-
-                if (GUILayout.Button("Delete")) DeleteSelected(selectedPath);
-            }
+            EditorGUILayout.EndScrollView();
         }
 
         private void DrawStatus()
@@ -220,6 +227,38 @@ namespace Bun3.Gameplay.Editor.Tags
                     throw new InvalidOperationException("Gameplay tag reload was not allowed.");
                 }
             });
+        }
+
+        private void RequestRename(string path) =>
+            ApplyRename(path, GameplayTagEditDialog.ShowRename(path));
+
+        private void RequestComment(string path) =>
+            ApplyComment(path, GameplayTagEditDialog.ShowComment(path, FindComment(path)));
+
+        /// <summary>선택한 경로 뒤에 구분자를 붙여 추가 입력을 준비하고 focus합니다.</summary>
+        internal void PrepareSubTag(string path)
+        {
+            if (path is null) throw new ArgumentNullException(nameof(path));
+
+            _newTagName = path + ".";
+            _focusNewTagName = true;
+            Repaint();
+        }
+
+        /// <summary>표시용 전체 경로를 시스템 clipboard에 복사합니다.</summary>
+        internal void CopyTag(string path) =>
+            EditorGUIUtility.systemCopyBuffer = path ?? throw new ArgumentNullException(nameof(path));
+
+        /// <summary>승인된 이름 변경 결과를 마지막 세그먼트 rename으로 적용합니다.</summary>
+        internal void ApplyRename(string path, GameplayTagTextEditResult result)
+        {
+            if (result.Accepted) Execute(() => _controller.RenameSubtree(path, result.Value));
+        }
+
+        /// <summary>승인된 comment 결과를 적용하고 암시 부모를 명시 행으로 승격합니다.</summary>
+        internal void ApplyComment(string path, GameplayTagTextEditResult result)
+        {
+            if (result.Accepted) Execute(() => _controller.SetComment(path, result.Value));
         }
 
         private void DeleteSelected(string selectedPath)
@@ -353,26 +392,19 @@ namespace Bun3.Gameplay.Editor.Tags
             if (_controller.Session is null)
             {
                 _model = null;
-                _treeView.SetRows(Array.Empty<GameplayTagTreeRowModel>());
+                _treeView.SetRows(Array.Empty<GameplayTagTreeRowModel>(), isFiltering: false);
                 _treeView.SynchronizeSelection(string.Empty);
                 return;
             }
 
             _model = new GameplayTagTreeModel(_controller.Session);
-            _treeView.SetRows(_model.Filter(_search));
+            _treeView.SetRows(_model.Filter(_search), _search.Length > 0);
             _treeView.SynchronizeSelection(_controller.SelectedPath);
-            if (_controller.SelectedPath.Length > 0)
-            {
-                _comment = FindComment(_controller.SelectedPath);
-                _movePath = _controller.SelectedPath;
-            }
         }
 
         private void SelectPath(string path)
         {
             _controller.Select(path);
-            _comment = FindComment(path);
-            _movePath = path;
             Repaint();
         }
 
