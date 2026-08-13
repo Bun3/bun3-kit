@@ -61,7 +61,7 @@ namespace Bun3.Unity.Window.Editor
             return warnings;
         }
 
-        [MenuItem("Bun3/Window/Validate Overlay Settings")]
+        [MenuItem("Window/Validate Overlay Settings")]
         public static void Validate()
         {
             var warnings = CollectWarnings(Capture());

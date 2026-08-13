@@ -57,6 +57,18 @@ namespace Bun3.Unity.Window.Editor.Tests
             Assert.That(OverlaySettingsValidator.CollectWarnings(snapshot), Has.Count.EqualTo(6));
         }
 
+        [Test]
+        public void Validate_command_uses_the_window_menu_path()
+        {
+            var method = typeof(OverlaySettingsValidator).GetMethod(
+                nameof(OverlaySettingsValidator.Validate),
+                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)!;
+            var menu = (UnityEditor.MenuItem)System.Attribute.GetCustomAttribute(
+                method, typeof(UnityEditor.MenuItem))!;
+
+            Assert.That(menu.menuItem, Is.EqualTo("Window/Validate Overlay Settings"));
+        }
+
         private static void AssertSingleWarning(in OverlaySettingsValidator.Snapshot snapshot, string expectedSubstring)
         {
             List<string> warnings = OverlaySettingsValidator.CollectWarnings(snapshot);
