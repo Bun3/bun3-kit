@@ -73,6 +73,7 @@ namespace Bun3.Gameplay.Editor.Tags
 
         private void OnGUI()
         {
+            HandleSaveShortcut(Event.current);
             EnsureTreeViewState();
             DrawToolbar();
             DrawSearch();
@@ -80,6 +81,24 @@ namespace Bun3.Gameplay.Editor.Tags
             DrawTagTree();
             DrawRedirects();
             DrawStatus();
+        }
+
+        private void HandleSaveShortcut(Event currentEvent)
+        {
+            if (currentEvent.type != EventType.KeyDown
+                || currentEvent.keyCode != KeyCode.S
+                || (!currentEvent.control && !currentEvent.command)
+                || currentEvent.shift
+                || currentEvent.alt)
+            {
+                return;
+            }
+
+            currentEvent.Use();
+            if (_controller.Session is not null && _controller.IsDirty)
+            {
+                SaveChanges();
+            }
         }
 
         private void EnsureTreeViewState()
