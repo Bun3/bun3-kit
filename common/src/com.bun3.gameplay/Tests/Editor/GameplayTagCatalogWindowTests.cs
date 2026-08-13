@@ -195,6 +195,29 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(state.scrollPos, Is.EqualTo(new UnityEngine.Vector2(23f, 47f)));
         }
 
+        /// <summary>선택 동기화가 접힌 조상만 펼쳐 선택 행을 드러내는지 검증합니다.</summary>
+        [Test]
+        public void Synchronize_selection_expands_the_collapsed_ancestors_of_the_selected_tag()
+        {
+            var tree = new GameplayTagTreeView(new TreeViewState());
+            var session = GameplayTagCatalogEditSession.Open(
+                "{\"schemaVersion\":1,\"tags\":[{\"name\":\"State.Dead.Ghost\"},{\"name\":\"Ability.Jump\"}]}");
+            var model = new GameplayTagTreeModel(session);
+            var abilityId = model.Rows.Single(row => row.Path == "Ability").Index;
+            var stateId = model.Rows.Single(row => row.Path == "State").Index;
+            var deadId = model.Rows.Single(row => row.Path == "State.Dead").Index;
+            tree.SetRows(model.Rows, isFiltering: false);
+            tree.SetExpanded(abilityId, false);
+            tree.SetExpanded(stateId, false);
+            tree.SetExpanded(deadId, false);
+
+            tree.SynchronizeSelection("state.dead.ghost");
+
+            Assert.That(tree.IsExpanded(stateId), Is.True);
+            Assert.That(tree.IsExpanded(deadId), Is.True);
+            Assert.That(tree.IsExpanded(abilityId), Is.False);
+        }
+
         /// <summary>암시 행과 명시 행 모두가 요청한 context action을 전달하는지 검증합니다.</summary>
         /// <param name="action">요청할 트리 context action입니다.</param>
         [TestCase(GameplayTagTreeAction.Rename)]

@@ -92,6 +92,21 @@ namespace Bun3.Gameplay.Editor.Tags
                 cancelled,
                 Array.Empty<GameplayTagReferenceMatch>(),
                 errors ?? throw new ArgumentNullException(nameof(errors)));
+
+        /// <summary>파일 열거 실패를 합쳐 불완전한 증거로 정리 판정을 내리지 못하게 합니다.</summary>
+        /// <param name="enumerationErrors">접근할 수 없어 훑지 못한 디렉터리 진단입니다.</param>
+        /// <returns>열거 실패가 없으면 이 결과 그대로, 있으면 불완전 결과입니다.</returns>
+        internal GameplayTagReferenceSearchResult WithEnumerationErrors(
+            IReadOnlyList<string> enumerationErrors)
+        {
+            if (enumerationErrors is null) throw new ArgumentNullException(nameof(enumerationErrors));
+            if (enumerationErrors.Count == 0) return this;
+
+            var errors = new List<string>(enumerationErrors.Count + Errors.Count);
+            errors.AddRange(enumerationErrors);
+            errors.AddRange(Errors);
+            return Incomplete(IsCancelled, errors);
+        }
     }
 
     internal sealed class GameplayTagTextReferenceScanner

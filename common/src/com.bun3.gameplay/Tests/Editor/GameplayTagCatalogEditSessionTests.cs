@@ -167,6 +167,21 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(json, Does.Not.Contain("Old.Ghost"));
         }
 
+        /// <summary>암시 부모 rename 뒤 유일한 leaf를 지우면 조상 redirect까지 사라지는지 검증합니다.</summary>
+        [Test]
+        public void Delete_removes_every_redirect_whose_target_is_no_longer_active()
+        {
+            var session = GameplayTagCatalogEditSession.Open(
+                "{\"schemaVersion\":1,\"tags\":[{\"name\":\"State.Movement.Run\"}]}");
+            Assert.That(session.RenameSubtree("State.Movement", "Motion"), Is.EqualTo("State.Motion"));
+            Assert.That(session.Redirects, Has.Count.EqualTo(2));
+
+            session.Delete("State.Motion.Run", false);
+
+            Assert.That(session.Redirects, Is.Empty);
+            Assert.That(session.Serialize(), Does.Not.Contain("State.Movement"));
+        }
+
         /// <summary>여러 redirect source를 대소문자 무시로 한 트랜잭션에서 제거하는지 검증합니다.</summary>
         [Test]
         public void Remove_redirects_matches_sources_case_insensitively_in_one_transaction()

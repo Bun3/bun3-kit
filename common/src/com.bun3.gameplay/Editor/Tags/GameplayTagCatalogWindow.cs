@@ -317,12 +317,14 @@ namespace Bun3.Gameplay.Editor.Tags
             try
             {
                 var files = GameplayTagProjectReferenceFiles.Enumerate();
+                // 훑지 못한 디렉터리가 있으면 검색 자체가 성공해도 증거가 불완전하다.
                 return new GameplayTagTextReferenceScanner(File.OpenText).Search(
-                    files,
+                    files.Files,
                     sources,
                     _controller.FilePath,
                     progress => EditorUtility.DisplayCancelableProgressBar(
-                        "Find GameplayTag References", progress.DisplayPath, progress.Fraction));
+                        "Find GameplayTag References", progress.DisplayPath, progress.Fraction))
+                    .WithEnumerationErrors(files.Errors);
             }
             finally
             {

@@ -225,14 +225,36 @@ namespace Bun3.Gameplay.Editor.Tags
                     }
                 }
 
+                // 삭제로 암시 부모까지 사라질 수 있으므로 남은 활성 경로를 다시 만들어
+                // target이 더 이상 활성이 아닌 redirect를 모두 같은 트랜잭션에서 지운다.
+                var survivors = CollectActivePaths(tags);
                 for (var i = redirects.Count - 1; i >= 0; i--)
                 {
-                    if (HasPrefix(Fold(redirects[i].To), canonical))
+                    if (!survivors.Contains(Fold(redirects[i].To)))
                     {
                         redirects.RemoveAt(i);
                     }
                 }
             });
+        }
+
+        /// <summary>남은 작성 행에서 암시 부모를 포함한 활성 canonical 경로를 모읍니다.</summary>
+        private static HashSet<string> CollectActivePaths(List<EditableTagRow> tags)
+        {
+            var active = new HashSet<string>(StringComparer.Ordinal);
+            for (var i = 0; i < tags.Count; i++)
+            {
+                var canonical = Fold(tags[i].Name);
+                active.Add(canonical);
+                for (var separator = canonical.LastIndexOf('.');
+                    separator > 0;
+                    separator = canonical.LastIndexOf('.', separator - 1))
+                {
+                    active.Add(canonical.Substring(0, separator));
+                }
+            }
+
+            return active;
         }
 
         internal string Serialize() => _serialized;

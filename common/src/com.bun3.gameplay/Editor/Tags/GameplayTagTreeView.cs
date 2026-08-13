@@ -101,11 +101,18 @@ namespace Bun3.Gameplay.Editor.Tags
             {
                 foreach (var pair in _rowsById)
                 {
-                    if (string.Equals(pair.Value.Path, path, StringComparison.OrdinalIgnoreCase))
+                    if (!string.Equals(pair.Value.Path, path, StringComparison.OrdinalIgnoreCase)) continue;
+
+                    // 선택 행이 접힌 조상 아래 숨지 않도록 조상만 펼치고 다른 확장 상태는 둔다.
+                    for (int parent = pair.Value.ParentIndex;
+                        _rowsById.TryGetValue(parent, out var ancestor);
+                        parent = ancestor.ParentIndex)
                     {
-                        SetSelection(new[] { pair.Key }, TreeViewSelectionOptions.None);
-                        return;
+                        SetExpanded(ancestor.Index, true);
                     }
+
+                    SetSelection(new[] { pair.Key }, TreeViewSelectionOptions.RevealAndFrame);
+                    return;
                 }
             }
 

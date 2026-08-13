@@ -149,7 +149,8 @@ namespace Bun3.Gameplay.Unity.Tests
                 _temporaryDirectory,
                 new[] { localPackage, localPackage });
 
-            Assert.That(files.Select(file => file.AbsolutePath), Is.EquivalentTo(new[]
+            Assert.That(files.Errors, Is.Empty);
+            Assert.That(files.Files.Select(file => file.AbsolutePath), Is.EquivalentTo(new[]
             {
                 Path.Combine(assets, "Scene.unity"),
                 Path.Combine(settings, "Tags.json"),
@@ -179,12 +180,38 @@ namespace Bun3.Gameplay.Unity.Tests
                     ? throw new IOException(directory)
                     : Directory.GetDirectories(directory));
 
-            Assert.That(files.Select(file => file.AbsolutePath), Is.EqualTo(new[]
+            Assert.That(files.Files.Select(file => file.AbsolutePath), Is.EqualTo(new[]
             {
                 Path.Combine(opaque, "Visible.cs"),
                 Path.Combine(assets, "Scene.unity"),
                 Path.Combine(settings, "Tags.json")
             }));
+            Assert.That(files.Errors, Has.Count.EqualTo(2));
+            Assert.That(
+                files.Errors.Any(error => error.StartsWith("Assets/Blocked:", StringComparison.Ordinal)),
+                Is.True);
+            Assert.That(
+                files.Errors.Any(error => error.StartsWith("Assets/Opaque:", StringComparison.Ordinal)),
+                Is.True);
+        }
+
+        /// <summary>열거 실패가 완전한 검색 결과를 불완전으로 낮춰 일괄 정리를 막는지 검증합니다.</summary>
+        [Test]
+        public void Enumeration_errors_make_a_complete_search_incomplete_and_block_cleanup()
+        {
+            var complete = GameplayTagReferenceSearchResult.Complete(new[]
+            {
+                new GameplayTagReferenceMatch("State.Killed", "a", "Assets/A.cs", 1, "State.Killed")
+            });
+
+            Assert.That(complete.WithEnumerationErrors(Array.Empty<string>()).IsComplete, Is.True);
+
+            var blocked = complete.WithEnumerationErrors(new[] { "Assets/Blocked: denied" });
+
+            Assert.That(blocked.IsComplete, Is.False);
+            Assert.That(blocked.IsCancelled, Is.False);
+            Assert.That(blocked.Matches, Is.Empty);
+            Assert.That(blocked.Errors, Does.Contain("Assets/Blocked: denied"));
         }
 
         private static bool Same(string left, string right) =>
