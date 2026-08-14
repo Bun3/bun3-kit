@@ -28,7 +28,7 @@ namespace Bun3.Gameplay.Tests
                 """);
 
             Assert.That(ToHex(catalog.Fingerprint),
-                Is.EqualTo("feef3116e20f93b5383d8061ffc20ff189fc939a3291d6fa9f09ff3d16ff5f0e"));
+                Is.EqualTo("f41c48acaf18fc8d239fd042554f07a67a46e8a4170b792bbc5aeee0fd344ce5"));
         }
 
         /// <summary>표현상 차이가 catalog identity를 바꾸지 않는지 검증합니다.</summary>

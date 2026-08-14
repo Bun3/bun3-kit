@@ -47,7 +47,7 @@ namespace Bun3.Gameplay.Tests
             Assert.That(catalog.GetRequired("STATE.KILLED"),
                 Is.EqualTo(catalog.GetRequired("state.dead")));
             Assert.That(ToHex(catalog.Fingerprint),
-                Is.EqualTo("feef3116e20f93b5383d8061ffc20ff189fc939a3291d6fa9f09ff3d16ff5f0e"));
+                Is.EqualTo("f41c48acaf18fc8d239fd042554f07a67a46e8a4170b792bbc5aeee0fd344ce5"));
         }
 
         [Test]

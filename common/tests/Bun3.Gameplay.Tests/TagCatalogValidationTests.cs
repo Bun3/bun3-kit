@@ -36,7 +36,7 @@ public sealed class TagCatalogValidationTests
     }
 
     [Test]
-    public void Display_case_is_preserved_and_implicit_parent_case_is_order_independent()
+    public void Display_name_is_canonical_lowercase_and_order_independent()
     {
         var first = TagCatalogTestData.Load(
             """{"schemaVersion":1,"tags":[{"name":"state.Dead.Ghost"},{"name":"State.Alive"}]}""");
@@ -44,9 +44,9 @@ public sealed class TagCatalogValidationTests
             """{"schemaVersion":1,"tags":[{"name":"State.Alive"},{"name":"state.Dead.Ghost"}]}""");
 
         Assert.That(first.GetDisplayName(first.GetRequired("state.dead.ghost")),
-            Is.EqualTo("state.Dead.Ghost"));
-        Assert.That(first.GetDisplayName(first.GetRequired("state")), Is.EqualTo("State"));
-        Assert.That(first.GetDisplayName(first.GetRequired("state.dead")), Is.EqualTo("state.Dead"));
+            Is.EqualTo("state.dead.ghost"));
+        Assert.That(first.GetDisplayName(first.GetRequired("state")), Is.EqualTo("state"));
+        Assert.That(first.GetDisplayName(first.GetRequired("state.dead")), Is.EqualTo("state.dead"));
         Assert.That(first.GetDisplayName(first.GetRequired("state")),
             Is.EqualTo(reversed.GetDisplayName(reversed.GetRequired("STATE"))));
     }

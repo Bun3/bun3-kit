@@ -58,10 +58,10 @@ namespace Bun3.Gameplay.Unity.Tests
 
             using var stream = new MemoryStream(new UTF8Encoding(false, true).GetBytes(json));
             var catalog = TagCatalog.Load(stream);
-            Assert.That(catalog.GetDisplayName(catalog.GetRequired("State")), Is.EqualTo("State"));
-            Assert.That(catalog.GetDisplayName(catalog.GetRequired("State.Dead")), Is.EqualTo("State.Dead"));
+            Assert.That(catalog.GetDisplayName(catalog.GetRequired("State")), Is.EqualTo("state"));
+            Assert.That(catalog.GetDisplayName(catalog.GetRequired("State.Dead")), Is.EqualTo("state.dead"));
             Assert.That(catalog.GetDisplayName(catalog.GetRequired("State.Dead.Ghost")),
-                Is.EqualTo("State.Dead.Ghost"));
+                Is.EqualTo("state.dead.ghost"));
         }
 
         /// <summary>마지막 세그먼트만 바꾸고 기존 활성 경로와 redirect target을 함께 갱신하는지 검증합니다.</summary>

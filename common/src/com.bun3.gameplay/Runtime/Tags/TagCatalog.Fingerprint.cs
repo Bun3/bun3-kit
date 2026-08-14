@@ -8,7 +8,12 @@ namespace Bun3.Gameplay.Tags
 {
     public sealed partial class TagCatalog
     {
-        private static byte[] ComputeFingerprint(int schemaVersion, string[] canonicalNames, RedirectEntry[] redirects)
+        private static byte[] ComputeFingerprint(
+            int schemaVersion,
+            string[] canonicalNames,
+            ushort[] parents,
+            ushort[] subtreeEnds,
+            RedirectEntry[] redirects)
         {
             var writer = new CanonicalWriter();
             writer.WriteAscii("BTAG");
@@ -17,6 +22,8 @@ namespace Bun3.Gameplay.Tags
             for (var i = 1; i < canonicalNames.Length; i++)
             {
                 writer.WriteUtf8(canonicalNames[i]);
+                writer.WriteUInt16(parents[i]);
+                writer.WriteUInt16(subtreeEnds[i]);
             }
 
             writer.WriteUInt32(checked((uint)redirects.Length));
@@ -50,6 +57,13 @@ namespace Bun3.Gameplay.Tags
                 EnsureCapacity(4);
                 BinaryPrimitives.WriteUInt32BigEndian(_buffer.AsSpan(_length, 4), value);
                 _length += 4;
+            }
+
+            internal void WriteUInt16(ushort value)
+            {
+                EnsureCapacity(2);
+                BinaryPrimitives.WriteUInt16BigEndian(_buffer.AsSpan(_length, 2), value);
+                _length += 2;
             }
 
             internal void WriteUtf8(string value)

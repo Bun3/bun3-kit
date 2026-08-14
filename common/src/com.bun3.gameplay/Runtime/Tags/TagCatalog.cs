@@ -16,6 +16,8 @@ namespace Bun3.Gameplay.Tags
         private readonly ushort[] _parents;
         private readonly ushort[] _subtreeEnds;
         private readonly byte[] _fingerprint;
+        private readonly string _catalogId;
+        private readonly string _catalogVersion;
 
         private TagCatalog(
             Dictionary<string, ushort> byCanonicalName,
@@ -23,7 +25,9 @@ namespace Bun3.Gameplay.Tags
             string[] displayNames,
             ushort[] parents,
             ushort[] subtreeEnds,
-            byte[] fingerprint)
+            byte[] fingerprint,
+            string catalogId,
+            string catalogVersion)
         {
             _byCanonicalName = byCanonicalName;
             _redirects = redirects;
@@ -31,6 +35,8 @@ namespace Bun3.Gameplay.Tags
             _parents = parents;
             _subtreeEnds = subtreeEnds;
             _fingerprint = fingerprint;
+            _catalogId = catalogId;
+            _catalogVersion = catalogVersion;
             Count = displayNames.Length - 1;
         }
 
@@ -39,14 +45,80 @@ namespace Bun3.Gameplay.Tags
             var build = Build(explicitTags);
             var redirects = BuildRedirects(definitions, build.ByCanonicalName, out var fingerprintRedirects);
             var canonicalNames = CreateCanonicalNames(build.ByCanonicalName, build.DisplayNames.Length);
-            var fingerprint = ComputeFingerprint(1, canonicalNames, fingerprintRedirects);
+            var fingerprint = ComputeFingerprint(
+                2,
+                canonicalNames,
+                build.Parents,
+                build.SubtreeEnds,
+                fingerprintRedirects);
             return new TagCatalog(
                 build.ByCanonicalName,
                 redirects,
-                build.DisplayNames,
+                canonicalNames,
                 build.Parents,
                 build.SubtreeEnds,
-                fingerprint);
+                fingerprint,
+                string.Empty,
+                string.Empty);
+        }
+
+        internal static TagCatalog CreateCompiled(
+            TagCatalogIdentity identity,
+            string[] canonicalNames,
+            ushort[] parents,
+            ushort[] subtreeEnds,
+            IReadOnlyList<CompiledRedirect> compiledRedirects)
+        {
+            if (identity is null) throw new ArgumentNullException(nameof(identity));
+            if (canonicalNames is null) throw new ArgumentNullException(nameof(canonicalNames));
+            if (parents is null) throw new ArgumentNullException(nameof(parents));
+            if (subtreeEnds is null) throw new ArgumentNullException(nameof(subtreeEnds));
+            if (compiledRedirects is null) throw new ArgumentNullException(nameof(compiledRedirects));
+            if (canonicalNames.Length != parents.Length || canonicalNames.Length != subtreeEnds.Length)
+            {
+                throw new ArgumentException("컴파일된 태그 배열의 길이가 서로 다릅니다.", nameof(canonicalNames));
+            }
+
+            var names = (string[])canonicalNames.Clone();
+            var parentCopy = (ushort[])parents.Clone();
+            var subtreeEndCopy = (ushort[])subtreeEnds.Clone();
+            var byCanonicalName = new Dictionary<string, ushort>(names.Length - 1, StringComparer.Ordinal);
+            for (var index = 1; index < names.Length; index++)
+            {
+                byCanonicalName.Add(names[index], checked((ushort)index));
+            }
+
+            var redirectEntries = new RedirectEntry[compiledRedirects.Count];
+            for (var index = 0; index < redirectEntries.Length; index++)
+            {
+                var redirect = compiledRedirects[index];
+                redirectEntries[index] = new RedirectEntry(redirect.From, redirect.To);
+            }
+
+            Array.Sort(
+                redirectEntries,
+                (left, right) => StringComparer.Ordinal.Compare(left.From, right.From));
+            var redirects = new Dictionary<string, ushort>(redirectEntries.Length, StringComparer.Ordinal);
+            for (var index = 0; index < redirectEntries.Length; index++)
+            {
+                redirects.Add(redirectEntries[index].From, byCanonicalName[redirectEntries[index].To]);
+            }
+
+            var fingerprint = ComputeFingerprint(
+                2,
+                names,
+                parentCopy,
+                subtreeEndCopy,
+                redirectEntries);
+            return new TagCatalog(
+                byCanonicalName,
+                redirects,
+                names,
+                parentCopy,
+                subtreeEndCopy,
+                fingerprint,
+                identity.CatalogId,
+                identity.CatalogVersion);
         }
 
         private static Dictionary<string, ushort> BuildRedirects(
@@ -106,6 +178,12 @@ namespace Bun3.Gameplay.Tags
 
         /// <summary>카탈로그에 있는 태그 수이며 None은 포함하지 않습니다.</summary>
         public int Count { get; }
+
+        /// <summary>컴파일된 Catalog의 게임 제품 ID이며 레거시 JSON Catalog이면 빈 문자열입니다.</summary>
+        public string CatalogId => _catalogId;
+
+        /// <summary>컴파일된 Catalog의 Version이며 레거시 JSON Catalog이면 빈 문자열입니다.</summary>
+        public string CatalogVersion => _catalogVersion;
 
         /// <summary>이 카탈로그에 연결된 빈 컨테이너를 만듭니다.</summary>
         /// <param name="expectedExactKinds">예상하는 명시적 태그 종류 수이며 0부터 64까지 허용합니다.</param>
@@ -215,9 +293,9 @@ namespace Bun3.Gameplay.Tags
             throw new ArgumentOutOfRangeException(nameof(index));
         }
 
-        /// <summary>태그의 표시용 대소문자 보존 이름을 가져옵니다.</summary>
+        /// <summary>태그의 canonical 소문자 이름을 가져옵니다.</summary>
         /// <param name="tag">조회할 태그입니다.</param>
-        /// <returns>등록된 표시 이름 또는 빈 문자열입니다.</returns>
+        /// <returns>등록된 canonical 소문자 이름 또는 빈 문자열입니다.</returns>
         public string GetDisplayName(GameplayTag tag) =>
             tag.IsValid && tag.Index <= Count ? _displayNames[tag.Index] : string.Empty;
 
