@@ -747,6 +747,30 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(controller.IsDirty, Is.True);
         }
 
+        [Test]
+        public void Controller_case_only_rename_does_not_compile_install_or_mark_dirty()
+        {
+            var path = Path.Combine(_temporaryDirectory, "GameplayTags.json");
+            File.WriteAllText(
+                path,
+                "{\"schemaVersion\":1,\"tags\":[{\"name\":\"State.Dead\",\"comment\":\"\"}],"
+                + "\"redirects\":[]}",
+                new UTF8Encoding(false));
+            var controller = CreateController(path);
+            var workspaceBefore = controller.Workspace;
+            var sessionBefore = controller.Session;
+
+            var result = controller.RenameSubtree("STATE.DEAD", "DEAD");
+
+            Assert.That(result.NewPath, Is.EqualTo("state.dead"));
+            Assert.That(result.ShadowedOldPaths, Is.Empty);
+            Assert.That(controller.Workspace, Is.SameAs(workspaceBefore));
+            Assert.That(controller.Session, Is.SameAs(sessionBefore));
+            Assert.That(controller.SelectedSourceId, Is.EqualTo("game"));
+            Assert.That(controller.SelectedPath, Is.EqualTo("state.dead"));
+            Assert.That(controller.IsDirty, Is.False);
+        }
+
         /// <summary>컨트롤러가 redirect 제거 수에 따라 dirty 상태를 바꾸고 결과를 저장하는지 검증합니다.</summary>
         [Test]
         public void Controller_removes_redirects_marks_dirty_and_persists_the_result()

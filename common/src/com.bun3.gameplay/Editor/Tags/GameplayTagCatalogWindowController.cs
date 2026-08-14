@@ -118,10 +118,16 @@ namespace Bun3.Gameplay.Editor.Tags
             string newSegment)
         {
             var session = RequireEditableSession(sourceId);
+            var canonicalPath = GameplayTagCatalogEditSession.Canonicalize(path, nameof(path));
             var result = session.RenameSubtree(path, newSegment);
-            CommitMutation(session);
             SelectedSourceId = "game";
             SelectedPath = result.NewPath;
+            if (result.NewPath == canonicalPath)
+            {
+                return result;
+            }
+
+            CommitMutation(session);
             IsDirty = true;
             return result;
         }

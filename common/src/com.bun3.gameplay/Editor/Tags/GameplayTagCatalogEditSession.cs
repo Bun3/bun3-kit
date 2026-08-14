@@ -172,6 +172,9 @@ namespace Bun3.Gameplay.Editor.Tags
             }
 
             renamedActivePaths.Sort(StringComparer.Ordinal);
+            var renamedActivePathSet = new HashSet<string>(
+                renamedActivePaths,
+                StringComparer.Ordinal);
             var compilation = Apply((tags, redirects) =>
             {
                 for (var index = 0; index < tags.Count; index++)
@@ -186,6 +189,7 @@ namespace Bun3.Gameplay.Editor.Tags
                 for (var index = 0; index < redirects.Count; index++)
                 {
                     var redirect = redirects[index];
+                    if (!renamedActivePathSet.Contains(redirect.To)) continue;
                     redirects[index] = new TagSourceRedirect(
                         redirect.From,
                         RewritePrefix(redirect.To, oldCanonical, newCanonical));
@@ -194,26 +198,22 @@ namespace Bun3.Gameplay.Editor.Tags
                 UpsertRenameRedirects(redirects, renamedActivePaths, oldCanonical, newCanonical);
             });
 
-            var shadowed = new List<string>();
+            var warningPaths = new List<string>();
             for (var diagnosticIndex = 0;
                 diagnosticIndex < compilation.Diagnostics.Count;
                 diagnosticIndex++)
             {
                 var diagnostic = compilation.Diagnostics[diagnosticIndex];
                 if (diagnostic.Severity != TagCatalogDiagnosticSeverity.Warning
-                    || diagnostic.Code != "B3TAG2001"
-                    || !renamedActivePaths.Contains(diagnostic.CanonicalPath))
+                    || diagnostic.Code != "B3TAG2001")
                 {
                     continue;
                 }
 
-                if (!shadowed.Contains(diagnostic.CanonicalPath))
-                {
-                    shadowed.Add(diagnostic.CanonicalPath);
-                }
+                warningPaths.Add(diagnostic.CanonicalPath);
             }
 
-            shadowed.Sort(StringComparer.Ordinal);
+            var shadowed = ExtractShadowedOldPaths(renamedActivePaths, warningPaths);
             return new GameplayTagRenameResult(newCanonical, shadowed);
         }
 
@@ -280,6 +280,26 @@ namespace Bun3.Gameplay.Editor.Tags
 
         internal static string Canonicalize(string path, string parameterName) =>
             RequireCanonical(path, parameterName);
+
+        internal static IReadOnlyList<string> ExtractShadowedOldPaths(
+            IReadOnlyCollection<string> renamedActivePaths,
+            IReadOnlyList<string> warningPaths)
+        {
+            if (renamedActivePaths is null) throw new ArgumentNullException(nameof(renamedActivePaths));
+            if (warningPaths is null) throw new ArgumentNullException(nameof(warningPaths));
+            var renamed = new HashSet<string>(renamedActivePaths, StringComparer.Ordinal);
+            var shadowed = new HashSet<string>(StringComparer.Ordinal);
+            for (var index = 0; index < warningPaths.Count; index++)
+            {
+                var path = warningPaths[index];
+                if (renamed.Contains(path)) shadowed.Add(path);
+            }
+
+            var result = new string[shadowed.Count];
+            shadowed.CopyTo(result);
+            Array.Sort(result, StringComparer.Ordinal);
+            return Array.AsReadOnly(result);
+        }
 
         private TagCatalogCompilation Apply(
             Action<List<TagSourceTag>, List<TagSourceRedirect>> mutation)

@@ -134,6 +134,25 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(GetRedirectTarget(session, "ability.jump"), Is.EqualTo("skill.jump"));
         }
 
+        [Test]
+        public void Rename_rewrites_only_redirect_targets_owned_by_the_game_subtree()
+        {
+            var package = Package("bun3.gameplay", "ability.other", "skill.other");
+            var session = OpenGame(
+                "{\"schemaVersion\":1,\"tags\":[{\"name\":\"ability.jump\",\"comment\":\"jump\"}],"
+                + "\"redirects\":[{\"from\":\"legacy.other\",\"to\":\"ability.other\"}]}",
+                package);
+
+            var result = session.RenameSubtree("ability", "skill");
+
+            Assert.That(result.NewPath, Is.EqualTo("skill"));
+            Assert.That(GetRedirectTarget(session, "legacy.other"), Is.EqualTo("ability.other"));
+            Assert.That(GetRedirectTarget(session, "ability"), Is.EqualTo("skill"));
+            Assert.That(GetRedirectTarget(session, "ability.jump"), Is.EqualTo("skill.jump"));
+            Assert.That(session.LastCompilation!.Catalog!.TryGet("ability.other", out _), Is.True);
+            Assert.That(session.LastCompilation.Catalog.TryGet("skill.other", out _), Is.True);
+        }
+
         [TestCase("Other.Parent")]
         [TestCase("Bad_Name")]
         [TestCase("")]
@@ -190,6 +209,48 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.Throws<InvalidOperationException>(() => session.DeleteExact("ability"));
 
             Assert.That(session.Serialize(), Is.EqualTo(before));
+        }
+
+        [Test]
+        public void Delete_exact_rejects_a_dangling_redirect_without_rewriting_or_removing_it()
+        {
+            var session = OpenGame(
+                "{\"schemaVersion\":1,\"tags\":[{\"name\":\"ability.jump\",\"comment\":\"\"}],"
+                + "\"redirects\":[{\"from\":\"legacy.jump\",\"to\":\"ability.jump\"}]}");
+            var before = session.Serialize();
+
+            var error = Assert.Throws<InvalidOperationException>(
+                () => session.DeleteExact("ability.jump"));
+
+            Assert.That(error!.Message, Does.Contain("B3TAG2004"));
+            Assert.That(session.Serialize(), Is.EqualTo(before));
+            Assert.That(session.Redirects, Has.Count.EqualTo(1));
+            Assert.That(GetRedirectTarget(session, "legacy.jump"), Is.EqualTo("ability.jump"));
+        }
+
+        [Test]
+        [Timeout(600_000)]
+        public void Shadow_extraction_deduplicates_and_orders_the_maximum_path_count()
+        {
+            const int count = 65_535;
+            var renamedPaths = new string[count];
+            var warningPaths = new string[count + 1];
+            for (var index = 0; index < count; index++)
+            {
+                var path = "state.x" + (count - index - 1).ToString("D5", CultureInfo.InvariantCulture);
+                renamedPaths[index] = path;
+                warningPaths[index] = path;
+            }
+
+            warningPaths[count] = "state.x65534";
+
+            var shadowed = GameplayTagCatalogEditSession.ExtractShadowedOldPaths(
+                renamedPaths,
+                warningPaths);
+
+            Assert.That(shadowed.Count, Is.EqualTo(count));
+            Assert.That(shadowed[0], Is.EqualTo("state.x00000"));
+            Assert.That(shadowed[count - 1], Is.EqualTo("state.x65534"));
         }
 
         [Test]
