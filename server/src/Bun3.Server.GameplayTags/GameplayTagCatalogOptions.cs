@@ -23,9 +23,9 @@ public sealed class GameplayTagCatalogOptions
 
     internal string? LocalApplicationDataOverride { get; set; }
 
-    internal static bool IsFingerprintHex(string value)
+    internal static bool IsFingerprintHex(string? value)
     {
-        if (value.Length != 64)
+        if (value is null || value.Length != 64)
         {
             return false;
         }

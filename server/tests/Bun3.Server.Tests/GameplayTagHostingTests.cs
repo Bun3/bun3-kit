@@ -198,6 +198,24 @@ public sealed class GameplayTagHostingTests
     }
 
     [Test]
+    public void Packaged_mode_rejects_null_fingerprint_before_gameplay_starts()
+    {
+        using var fixture = CatalogFixture.CreatePublished("server-game", "2026.8.14");
+        var starts = 0;
+        using var host = BuildHost(fixture.LocalApplicationData, options =>
+        {
+            options.Mode = GameplayTagCatalogMode.Packaged;
+            options.CatalogId = "server-game";
+            options.CatalogVersion = "2026.8.14";
+            options.ExpectedFingerprint = null!;
+            options.PackagedPath = fixture.CatalogPath;
+        }, () => starts++);
+
+        Assert.ThrowsAsync<OptionsValidationException>(async () => await host.StartAsync());
+        Assert.That(starts, Is.Zero);
+    }
+
+    [Test]
     public async Task Configuration_section_binds_packaged_options()
     {
         using var fixture = CatalogFixture.CreatePublished("server-game", "2026.8.14");
