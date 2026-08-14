@@ -51,11 +51,27 @@ namespace Bun3.Gameplay.Editor.Tags
 
         internal static void ImportExisting(string sourcePath, string destinationPath)
         {
+            ImportExisting(PrepareImport(sourcePath, destinationPath), destinationPath);
+        }
+
+        internal static TagSourceDocument PrepareImport(string sourcePath, string destinationPath)
+        {
             if (sourcePath is null) throw new ArgumentNullException(nameof(sourcePath));
             if (destinationPath is null) throw new ArgumentNullException(nameof(destinationPath));
 
             var document = LoadGameSourceDocument(sourcePath);
-            SaveBytes(destinationPath, Serialize(document));
+            return LoadGameSourceDocument(
+                Serialize(document),
+                Path.GetFullPath(destinationPath));
+        }
+
+        internal static void ImportExisting(
+            TagSourceDocument candidate,
+            string destinationPath)
+        {
+            if (candidate is null) throw new ArgumentNullException(nameof(candidate));
+            if (destinationPath is null) throw new ArgumentNullException(nameof(destinationPath));
+            SaveBytes(destinationPath, Serialize(candidate));
         }
 
         internal static TagSourceDocument LoadGameSourceDocument(string absolutePath)

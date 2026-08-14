@@ -1,6 +1,7 @@
 #nullable enable
 #pragma warning disable CS0618
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -26,12 +27,14 @@ namespace Bun3.Gameplay.Unity.Tests
                 Path.GetTempPath(),
                 "bun3-tag-window-tests-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(_temporaryDirectory);
+            ImportConflictProvider.ExternalSourceMetadataPathsValue = Array.Empty<string>();
         }
 
         /// <summary>테스트가 만든 임시 카탈로그 디렉터리를 정리합니다.</summary>
         [TearDown]
         public void TearDown()
         {
+            ImportConflictProvider.ExternalSourceMetadataPathsValue = Array.Empty<string>();
             if (Directory.Exists(_temporaryDirectory))
             {
                 Directory.Delete(_temporaryDirectory, true);
@@ -613,6 +616,56 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(File.ReadAllText(fixedPath), Does.Contain("ability.run"));
         }
 
+        [Test]
+        public void Conflicting_import_preserves_existing_destination_and_controller_state_without_temp_residue()
+        {
+            var fixedPath = Path.Combine(_temporaryDirectory, "ProjectSettings", "GameplayTags.json");
+            var sourcePath = WriteConflictingImportSources(fixedPath);
+            var destinationBefore = File.ReadAllBytes(fixedPath);
+            var sourceBefore = File.ReadAllBytes(sourcePath);
+            var controller = new GameplayTagCatalogWindowController(
+                fixedPath,
+                ResolveWithImportConflictProvider);
+            controller.Add("game.unsaved");
+            var workspaceBefore = controller.Workspace;
+            var sessionBefore = controller.Session!.Serialize();
+            var selectedBefore = controller.SelectedPath;
+            var dirtyBefore = controller.IsDirty;
+
+            Assert.Throws<InvalidOperationException>(() => controller.ImportExisting(sourcePath));
+
+            Assert.That(File.ReadAllBytes(fixedPath), Is.EqualTo(destinationBefore));
+            Assert.That(File.ReadAllBytes(sourcePath), Is.EqualTo(sourceBefore));
+            Assert.That(controller.Workspace, Is.SameAs(workspaceBefore));
+            Assert.That(controller.Session!.Serialize(), Is.EqualTo(sessionBefore));
+            Assert.That(controller.SelectedPath, Is.EqualTo(selectedBefore));
+            Assert.That(controller.IsDirty, Is.EqualTo(dirtyBefore));
+            Assert.That(FindImportTemporaryFiles(fixedPath), Is.Empty);
+        }
+
+        [Test]
+        public void Conflicting_import_leaves_missing_destination_absent_and_source_unchanged()
+        {
+            var fixedPath = Path.Combine(_temporaryDirectory, "ProjectSettings", "GameplayTags.json");
+            var sourcePath = WriteConflictingImportSources(destinationPath: null);
+            var sourceBefore = File.ReadAllBytes(sourcePath);
+            var controller = new GameplayTagCatalogWindowController(
+                fixedPath,
+                ResolveWithImportConflictProvider);
+            var workspaceBefore = controller.Workspace;
+
+            Assert.Throws<InvalidOperationException>(() => controller.ImportExisting(sourcePath));
+
+            Assert.That(File.Exists(fixedPath), Is.False);
+            Assert.That(File.ReadAllBytes(sourcePath), Is.EqualTo(sourceBefore));
+            Assert.That(controller.Workspace, Is.SameAs(workspaceBefore));
+            Assert.That(controller.Session, Is.Null);
+            Assert.That(controller.CanCreateGameSource, Is.True);
+            Assert.That(controller.IsDirty, Is.False);
+            Assert.That(controller.SelectedPath, Is.Empty);
+            Assert.That(FindImportTemporaryFiles(fixedPath), Is.Empty);
+        }
+
         /// <summary>컨트롤러가 세그먼트 rename의 전체 반환 경로를 선택하고 dirty 상태가 되는지 검증합니다.</summary>
         [Test]
         public void Controller_selects_the_full_path_returned_by_segment_rename()
@@ -855,6 +908,66 @@ namespace Bun3.Gameplay.Unity.Tests
                 path,
                 Array.Empty<Type>(),
                 Array.Empty<string>());
+
+        private string WriteConflictingImportSources(string? destinationPath)
+        {
+            var externalPath = Path.Combine(_temporaryDirectory, "ExternalTagSource.json");
+            File.WriteAllText(
+                externalPath,
+                "{\"schemaVersion\":1,\"source\":{\"id\":\"framework.external\","
+                + "\"displayName\":\"External\",\"kind\":\"packageJson\"},"
+                + "\"tags\":[{\"name\":\"external.target\",\"comment\":\"\"}],"
+                + "\"redirects\":[{\"from\":\"legacy.path\",\"to\":\"external.target\"}]}",
+                new UTF8Encoding(false));
+            ImportConflictProvider.ExternalSourceMetadataPathsValue = new[] { externalPath };
+
+            if (destinationPath is not null)
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
+                File.WriteAllText(
+                    destinationPath,
+                    "{\"schemaVersion\":1,\"tags\":[{\"name\":\"game.keep\",\"comment\":\"\"}],"
+                    + "\"redirects\":[]}",
+                    new UTF8Encoding(false));
+            }
+
+            var sourcePath = Path.Combine(_temporaryDirectory, "LegacyGameplayTags.json");
+            File.WriteAllText(
+                sourcePath,
+                "{\"schemaVersion\":1,\"tags\":[{\"name\":\"game.target\",\"comment\":\"\"}],"
+                + "\"redirects\":[{\"from\":\"legacy.path\",\"to\":\"game.target\"}]}",
+                new UTF8Encoding(false));
+            return sourcePath;
+        }
+
+        private static GameplayTagBuildContextResolution ResolveWithImportConflictProvider(string path) =>
+            GameplayTagBuildContextResolver.ResolveDevelopment(
+                path,
+                new[] { typeof(ImportConflictProvider) },
+                Array.Empty<string>());
+
+        private static string[] FindImportTemporaryFiles(string destinationPath)
+        {
+            var directory = Path.GetDirectoryName(destinationPath)!;
+            return Directory.Exists(directory)
+                ? Directory.GetFiles(
+                    directory,
+                    "." + Path.GetFileName(destinationPath) + ".*.tmp")
+                : Array.Empty<string>();
+        }
+
+        public sealed class ImportConflictProvider : IGameplayTagBuildContextProvider
+        {
+            public static IReadOnlyList<string> ExternalSourceMetadataPathsValue { get; set; } =
+                Array.Empty<string>();
+
+            public string CatalogId => "import-conflict-test";
+            public IReadOnlyList<string> ExternalSourceMetadataPaths =>
+                ExternalSourceMetadataPathsValue;
+            public GameplayTagPublishedCatalogContext GetPublishedCatalog() =>
+                new GameplayTagPublishedCatalogContext(
+                    "published.catalog", CatalogId, "1.0.0", new byte[32]);
+        }
 
         private static GameplayTagTreeView GetTree(GameplayTagCatalogWindow window)
         {

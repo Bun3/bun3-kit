@@ -51,8 +51,21 @@ namespace Bun3.Gameplay.Editor.Tags
         internal void ImportExisting(string sourcePath)
         {
             if (sourcePath is null) throw new ArgumentNullException(nameof(sourcePath));
-            GameplayTagCatalogFileAdapter.ImportExisting(sourcePath, GameSourcePath);
-            ReplaceWorkspace();
+            var candidate = GameplayTagCatalogFileAdapter.PrepareImport(
+                sourcePath,
+                GameSourcePath);
+            var candidateWorkspace = GameplayTagEditorWorkspace.Open(
+                _resolveContext(sourcePath),
+                candidate);
+            if (!candidateWorkspace.CanEditGameSource)
+            {
+                throw new InvalidOperationException(
+                    "The imported Game Source is invalid in the resolved Workspace: "
+                    + string.Join(Environment.NewLine, candidateWorkspace.Diagnostics));
+            }
+
+            GameplayTagCatalogFileAdapter.ImportExisting(candidate, GameSourcePath);
+            ReplaceWorkspace(candidateWorkspace);
         }
 
         internal bool Reload(bool discardDirty)
@@ -164,7 +177,13 @@ namespace Bun3.Gameplay.Editor.Tags
 
         private void ReplaceWorkspace()
         {
-            _workspace = OpenWorkspace();
+            ReplaceWorkspace(OpenWorkspace());
+        }
+
+        private void ReplaceWorkspace(GameplayTagEditorWorkspace workspace)
+        {
+            _workspace = workspace;
+            Session = workspace.GameSession;
             SelectedPath = string.Empty;
             IsDirty = false;
         }

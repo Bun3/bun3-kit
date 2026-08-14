@@ -86,6 +86,28 @@ namespace Bun3.Gameplay.Editor.Tags
                     canCreateGameSource: false);
             }
 
+            return Open(resolution, gameSource, gameSession);
+        }
+
+        internal static GameplayTagEditorWorkspace Open(
+            GameplayTagBuildContextResolution resolution,
+            TagSourceDocument gameSource)
+        {
+            if (resolution is null) throw new ArgumentNullException(nameof(resolution));
+            if (gameSource is null) throw new ArgumentNullException(nameof(gameSource));
+            return Open(
+                resolution,
+                gameSource,
+                GameplayTagCatalogFileAdapter.CreateSession(gameSource));
+        }
+
+        private static GameplayTagEditorWorkspace Open(
+            GameplayTagBuildContextResolution resolution,
+            TagSourceDocument gameSource,
+            GameplayTagCatalogEditSession gameSession)
+        {
+            var diagnostics = new List<string>(resolution.Diagnostics);
+
             if (!resolution.HasCompleteContext)
             {
                 if (!resolution.PermitsGameOnlyValidation)
