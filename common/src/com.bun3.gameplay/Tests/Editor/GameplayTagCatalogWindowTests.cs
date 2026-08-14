@@ -125,20 +125,15 @@ namespace Bun3.Gameplay.Unity.Tests
         [Test]
         public void Tree_row_label_starts_after_the_foldout_indent()
         {
-            var tree = new GameplayTagTreeView(new TreeViewState());
-            var item = new TreeViewItem(id: 2, depth: 2, displayName: "Dead")
-            {
-                children = new List<TreeViewItem>
-                {
-                    new TreeViewItem(id: 3, depth: 3, displayName: "Ghost")
-                }
-            };
             var rowRect = new UnityEngine.Rect(12f, 8f, 240f, 18f);
+            const float childBearingRowContentIndent = 46f;
 
-            var labelRect = tree.CalculateLabelRect(item, rowRect);
+            var labelRect = GameplayTagTreeRowGeometry.CalculateLabelRect(
+                rowRect,
+                childBearingRowContentIndent);
 
-            Assert.That(item.hasChildren, Is.True);
-            Assert.That(labelRect.xMin, Is.GreaterThan(rowRect.xMin));
+            Assert.That(labelRect.xMin,
+                Is.EqualTo(rowRect.xMin + childBearingRowContentIndent));
             Assert.That(labelRect.xMax, Is.EqualTo(rowRect.xMax));
         }
 
@@ -1200,7 +1195,51 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(controller.Workspace.Diagnostics.Single(), Does.Contain("B3TAG3003"));
         }
 
-        /// <summary>검증 진단에 JSON 경로, 줄, 위치가 포함되는지 검증합니다.</summary>
+        /// <summary>동일한 진단 문자열이라도 외부 Source origin이 바뀌면 refresh와 열기 대상이 갱신되는지 검증합니다.</summary>
+        [Test]
+        public void Live_source_refresh_replaces_equal_message_diagnostic_origin()
+        {
+            var gamePath = Path.Combine(_temporaryDirectory, "GameplayTags.json");
+            GameplayTagCatalogFileAdapter.CreateGameSource(gamePath);
+            var externalA = Path.Combine(_temporaryDirectory, "ExternalA.json");
+            var externalB = Path.Combine(_temporaryDirectory, "ExternalB.json");
+            const string malformed = "{ identical malformed";
+            File.WriteAllText(externalA, malformed, new UTF8Encoding(false));
+            File.WriteAllText(externalB, malformed, new UTF8Encoding(false));
+            ImportConflictProvider.ExternalSourceMetadataPathsValue = new[] { externalA };
+            var controller = new GameplayTagCatalogWindowController(
+                gamePath,
+                ResolveWithImportConflictProvider,
+                _ => { });
+            var messageA = controller.Workspace.Diagnostics.Single();
+            Assert.That(messageA, Does.Contain("B3TAG3003"));
+            Assert.That(controller.Workspace.DiagnosticEntries.Single().LocalSourcePath,
+                Is.EqualTo(Path.GetFullPath(externalA)));
+
+            ImportConflictProvider.ExternalSourceMetadataPathsValue = new[] { externalB };
+            var workspaceB = GameplayTagEditorWorkspace.Open(
+                ResolveWithImportConflictProvider(gamePath),
+                gamePath);
+            Assert.That(string.Equals(
+                workspaceB.Diagnostics.Single(),
+                messageA,
+                StringComparison.Ordinal), Is.True);
+            Assert.That(workspaceB.DiagnosticEntries.Single().LocalSourcePath,
+                Is.EqualTo(Path.GetFullPath(externalB)));
+            var changed = controller.RefreshWorkspace();
+            string? openedPath = null;
+            var diagnostic = controller.Workspace.DiagnosticEntries.Single();
+            var opened = GameplayTagDiagnosticsPanel.OpenSource(
+                diagnostic,
+                path => openedPath = path);
+
+            Assert.That(changed, Is.True);
+            Assert.That(controller.Workspace.Diagnostics.Single(), Does.Contain("B3TAG3003"));
+            Assert.That(opened, Is.True);
+            Assert.That(openedPath, Is.EqualTo(Path.GetFullPath(externalB)));
+        }
+
+        /// <summary>검증 진단이 JSON 경로와 줄·위치를 포함하는지 검증합니다.</summary>
         [Test]
         public void Validation_diagnostic_includes_json_path_line_and_position()
         {

@@ -8,6 +8,15 @@ using UnityEngine;
 
 namespace Bun3.Gameplay.Editor.Tags
 {
+    internal static class GameplayTagTreeRowGeometry
+    {
+        internal static Rect CalculateLabelRect(Rect rowRect, float contentIndent)
+        {
+            rowRect.xMin += contentIndent;
+            return rowRect;
+        }
+    }
+
     internal interface IGameplayTagProjectionRow
     {
         int Id { get; }
@@ -88,8 +97,9 @@ namespace Bun3.Gameplay.Editor.Tags
         internal Rect CalculateLabelRect(TreeViewItem item, Rect rowRect)
         {
             if (item is null) throw new ArgumentNullException(nameof(item));
-            rowRect.xMin += GetContentIndent(item);
-            return rowRect;
+            return GameplayTagTreeRowGeometry.CalculateLabelRect(
+                rowRect,
+                GetContentIndent(item));
         }
 
         protected override TreeViewItem BuildRoot()

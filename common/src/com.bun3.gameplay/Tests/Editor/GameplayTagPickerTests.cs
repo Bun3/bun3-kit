@@ -119,7 +119,6 @@ namespace Bun3.Gameplay.Unity.Tests
         [Test]
         public void Picker_label_uses_the_shared_disclosure_geometry_and_keeps_the_full_path_in_tooltip()
         {
-            var tree = new GameplayTagPickerTreeView(new TreeViewState());
             var row = new GameplayTagPickerRow(
                 id: 3,
                 parentId: 2,
@@ -128,23 +127,19 @@ namespace Bun3.Gameplay.Unity.Tests
                 sourceCount: 1,
                 sourceDetails: "game (Game): player jump",
                 isDirectMatch: false);
-            var item = new TreeViewItem(id: 3, depth: 2, displayName: "jump")
-            {
-                children = new List<TreeViewItem>
-                {
-                    new TreeViewItem(id: 4, depth: 3, displayName: "charged")
-                }
-            };
             var rowRect = new Rect(12f, 8f, 240f, 18f);
+            const float childBearingRowContentIndent = 46f;
 
             var content = GameplayTagPickerTreeView.CreateLabelContent(row);
-            var labelRect = tree.CalculateLabelRect(item, rowRect);
+            var labelRect = GameplayTagTreeRowGeometry.CalculateLabelRect(
+                rowRect,
+                childBearingRowContentIndent);
 
             Assert.That(content.text, Is.EqualTo("jump  1 source"));
             Assert.That(content.tooltip,
                 Does.Contain("ability.movement.jump").And.Contain("game (Game): player jump"));
-            Assert.That(item.hasChildren, Is.True);
-            Assert.That(labelRect.xMin, Is.GreaterThan(rowRect.xMin));
+            Assert.That(labelRect.xMin,
+                Is.EqualTo(rowRect.xMin + childBearingRowContentIndent));
             Assert.That(labelRect.xMax, Is.EqualTo(rowRect.xMax));
         }
 

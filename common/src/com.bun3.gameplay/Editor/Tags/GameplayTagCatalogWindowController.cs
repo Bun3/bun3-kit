@@ -317,7 +317,7 @@ namespace Bun3.Gameplay.Editor.Tags
             if (left.CanCreateGameSource != right.CanCreateGameSource
                 || left.CanEditGameSource != right.CanEditGameSource
                 || left.CanBuildCatalog != right.CanBuildCatalog
-                || !EqualStrings(left.Diagnostics, right.Diagnostics))
+                || !EqualDiagnostics(left.DiagnosticEntries, right.DiagnosticEntries))
             {
                 return false;
             }
@@ -378,17 +378,45 @@ namespace Bun3.Gameplay.Editor.Tags
             return true;
         }
 
-        private static bool EqualStrings(
-            IReadOnlyList<string> left,
-            IReadOnlyList<string> right)
+        private static bool EqualDiagnostics(
+            IReadOnlyList<GameplayTagWorkspaceDiagnostic> left,
+            IReadOnlyList<GameplayTagWorkspaceDiagnostic> right)
         {
             if (left.Count != right.Count) return false;
+            var pathComparison = Environment.OSVersion.Platform == PlatformID.Win32NT
+                ? StringComparison.OrdinalIgnoreCase
+                : StringComparison.Ordinal;
             for (var index = 0; index < left.Count; index++)
             {
-                if (!string.Equals(left[index], right[index], StringComparison.Ordinal)) return false;
+                if (!string.Equals(
+                        left[index].Message,
+                        right[index].Message,
+                        StringComparison.Ordinal)
+                    || !string.Equals(
+                        NormalizeDiagnosticPath(left[index].LocalSourcePath),
+                        NormalizeDiagnosticPath(right[index].LocalSourcePath),
+                        pathComparison))
+                {
+                    return false;
+                }
             }
 
             return true;
+        }
+
+        private static string? NormalizeDiagnosticPath(string? path)
+        {
+            if (string.IsNullOrWhiteSpace(path)) return null;
+            try
+            {
+                return Path.GetFullPath(path);
+            }
+            catch (Exception exception) when (exception is ArgumentException
+                || exception is NotSupportedException
+                || exception is IOException)
+            {
+                return path;
+            }
         }
     }
 }
