@@ -28,6 +28,7 @@
 
   <PropertyGroup>
     <TargetsForTfmSpecificBuildOutput>$(TargetsForTfmSpecificBuildOutput);IncludeCatalogBuildOutput</TargetsForTfmSpecificBuildOutput>
+    <TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);IncludeTagSourceAnalyzerBuildOutput</TargetsForTfmSpecificContentInPackage>
     <AllowedOutputExtensionsInPackageBuildOutputFolder>$(AllowedOutputExtensionsInPackageBuildOutputFolder);.pdb</AllowedOutputExtensionsInPackageBuildOutputFolder>
   </PropertyGroup>
 
@@ -48,6 +49,23 @@
       <BuildOutputInPackage Include="$(ArtifactsPath)\bin\Bun3.Gameplay.Catalog\$([System.String]::Copy('$(Configuration)').ToLowerInvariant())\Bun3.Gameplay.Catalog.xml">
         <TargetPath>Bun3.Gameplay.Catalog.xml</TargetPath>
       </BuildOutputInPackage>
+    </ItemGroup>
+  </Target>
+
+  <Target Name="BuildTagSourceAnalyzerForPackage">
+    <MSBuild Projects="$(MSBuildProjectDirectory)\..\Bun3.Gameplay.TagSourceAnalyzer\Bun3.Gameplay.TagSourceAnalyzer.csproj"
+             Targets="Build"
+             Properties="Configuration=$(Configuration);TargetFramework=netstandard2.0;BuildProjectReferences=false" />
+  </Target>
+
+  <Target Name="IncludeTagSourceAnalyzerBuildOutput" DependsOnTargets="BuildTagSourceAnalyzerForPackage">
+    <ItemGroup>
+      <TfmSpecificPackageFile Include="$(ArtifactsPath)\bin\Bun3.Gameplay.TagSourceAnalyzer\$([System.String]::Copy('$(Configuration)').ToLowerInvariant())\Bun3.Gameplay.TagSourceAnalyzer.dll">
+        <PackagePath>analyzers/dotnet/cs</PackagePath>
+      </TfmSpecificPackageFile>
+      <TfmSpecificPackageFile Include="$(ArtifactsPath)\bin\Bun3.Gameplay.TagSourceAnalyzer\$([System.String]::Copy('$(Configuration)').ToLowerInvariant())\Bun3.Gameplay.TagSourceAnalyzer.pdb">
+        <PackagePath>analyzers/dotnet/cs</PackagePath>
+      </TfmSpecificPackageFile>
     </ItemGroup>
   </Target>
 
