@@ -161,6 +161,30 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(error.Message, Does.Not.Contain("must not be opened"));
         }
 
+        /// <summary>Published Provider ID가 canonical 형식이 아니면 artifact를 열기 전에 거부하는지 검증합니다.</summary>
+        [Test]
+        public void Published_noncanonical_provider_catalog_id_is_rejected_before_opening_the_artifact()
+        {
+            var error = Assert.Throws<BuildFailedException>(() =>
+                GameplayTagPublishedCatalogValidator.ResolveAndValidate(
+                    new[] { typeof(NoncanonicalProvider) }, "release-game"));
+
+            Assert.That(error!.Message, Does.Contain("canonical lowercase ASCII-hyphen"));
+            Assert.That(error.Message, Does.Not.Contain("must not be opened"));
+        }
+
+        /// <summary>Published Provider와 Project Settings ID는 정규화 결과가 아니라 원문 ordinal 값으로 일치해야 하는지 검증합니다.</summary>
+        [Test]
+        public void Published_provider_requires_a_raw_ordinal_catalog_id_match_with_project_settings()
+        {
+            var error = Assert.Throws<BuildFailedException>(() =>
+                GameplayTagPublishedCatalogValidator.ResolveAndValidate(
+                    new[] { typeof(ValidProvider) }, "release--game"));
+
+            Assert.That(error!.Message, Does.Contain("Project Settings"));
+            Assert.That(error.Message, Does.Not.Contain("must not be opened"));
+        }
+
         /// <summary>provider의 제품 ID와 게시 context의 ID가 다르면 중복 설정을 stale 상태로 거부하는지 검증합니다.</summary>
         [Test]
         public void Provider_catalog_id_must_match_the_published_context_catalog_id()
@@ -296,6 +320,19 @@ namespace Bun3.Gameplay.Unity.Tests
             /// <inheritdoc />
             public GameplayTagPublishedCatalogContext GetPublishedCatalog() =>
                 throw new InvalidOperationException("This provider must not be opened in the count test.");
+        }
+
+        private sealed class NoncanonicalProvider : IGameplayTagBuildContextProvider
+        {
+            /// <inheritdoc />
+            public string CatalogId => "RELEASE GAME";
+
+            /// <inheritdoc />
+            public IReadOnlyList<string> ExternalSourceMetadataPaths => Array.Empty<string>();
+
+            /// <inheritdoc />
+            public GameplayTagPublishedCatalogContext GetPublishedCatalog() =>
+                throw new InvalidOperationException("This provider must not be opened.");
         }
 
         private sealed class MismatchedProvider : IGameplayTagBuildContextProvider

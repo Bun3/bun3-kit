@@ -106,15 +106,22 @@ namespace Bun3.Gameplay.Editor.Tags
 
                 try
                 {
-                    catalogId = GameplayTagCatalogId.Require(provider.CatalogId, nameof(provider.CatalogId));
+                    catalogId = provider.CatalogId;
+                    if (!string.Equals(
+                            catalogId,
+                            GameplayTagCatalogId.Require(catalogId, nameof(provider.CatalogId)),
+                            StringComparison.Ordinal))
+                    {
+                        throw new InvalidOperationException(
+                            "Catalog ID must use its canonical lowercase ASCII-hyphen form.");
+                    }
+
                     externalPaths = provider.ExternalSourceMetadataPaths
                         ?? throw new InvalidOperationException("External Source Metadata path list is null.");
                     if (configuredCatalogId is not null
                         && !string.Equals(
                             catalogId,
-                            GameplayTagCatalogId.Require(
-                                configuredCatalogId,
-                                nameof(configuredCatalogId)),
+                            configuredCatalogId,
                             StringComparison.Ordinal))
                     {
                         return Failure(

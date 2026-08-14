@@ -58,13 +58,20 @@ namespace Bun3.Gameplay.Editor.Tags
 
             var provider = (IGameplayTagBuildContextProvider)Activator.CreateInstance(
                 candidates[0], nonPublic: true)!;
-            var providerCatalogId = GameplayTagCatalogId.Require(
-                provider.CatalogId,
-                nameof(provider.CatalogId));
+            var providerCatalogId = provider.CatalogId;
+            if (!string.Equals(
+                    providerCatalogId,
+                    GameplayTagCatalogId.Require(providerCatalogId, nameof(provider.CatalogId)),
+                    StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    "Catalog ID must use its canonical lowercase ASCII-hyphen form.");
+            }
+
             if (configuredCatalogId is not null
                 && !string.Equals(
                     providerCatalogId,
-                    GameplayTagCatalogId.Require(configuredCatalogId, nameof(configuredCatalogId)),
+                    configuredCatalogId,
                     StringComparison.Ordinal))
             {
                 throw new InvalidOperationException(

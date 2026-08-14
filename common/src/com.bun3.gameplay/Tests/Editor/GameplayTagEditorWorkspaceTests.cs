@@ -130,6 +130,46 @@ namespace Bun3.Gameplay.Unity.Tests
             }));
         }
 
+        /// <summary>Provider Catalog ID가 canonical 형식이 아니면 같은 설정 ID로 정규화되더라도 거부하는지 검증합니다.</summary>
+        [Test]
+        public void Resolver_rejects_a_noncanonical_provider_catalog_id_before_matching_project_settings()
+        {
+            var gameSourcePath = WriteGameSource("game.json", "ability.jump");
+            FakeProvider.CatalogIdValue = "TEST GAME";
+
+            var resolution = GameplayTagBuildContextResolver.ResolveDevelopment(
+                gameSourcePath,
+                new[] { typeof(FakeProvider) },
+                Array.Empty<string>(),
+                "test-game");
+
+            Assert.That(resolution.HasCompleteContext, Is.False);
+            Assert.That(resolution.Diagnostics, Is.EqualTo(new[]
+            {
+                "B3TAG3002: Invalid gameplay tag build context provider: "
+                + "Catalog ID must use its canonical lowercase ASCII-hyphen form."
+            }));
+        }
+
+        /// <summary>Provider와 Project Settings ID는 정규화 결과가 아니라 원문 ordinal 값으로 일치해야 하는지 검증합니다.</summary>
+        [Test]
+        public void Resolver_requires_a_raw_ordinal_catalog_id_match_with_project_settings()
+        {
+            var gameSourcePath = WriteGameSource("game.json", "ability.jump");
+
+            var resolution = GameplayTagBuildContextResolver.ResolveDevelopment(
+                gameSourcePath,
+                new[] { typeof(FakeProvider) },
+                Array.Empty<string>(),
+                "test--game");
+
+            Assert.That(resolution.HasCompleteContext, Is.False);
+            Assert.That(resolution.Diagnostics, Is.EqualTo(new[]
+            {
+                "B3TAG3002: GameplayTag Catalog ID does not match Project Settings."
+            }));
+        }
+
         /// <summary>전역 Provider 탐색이 현재 Unity 테스트 어셈블리의 더블을 반환하지 않는지 검증합니다.</summary>
         [Test]
         public void Global_discovery_excludes_providers_from_test_assemblies()
