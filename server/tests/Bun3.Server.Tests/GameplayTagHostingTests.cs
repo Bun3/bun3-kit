@@ -138,6 +138,34 @@ public sealed class GameplayTagHostingTests
     }
 
     [Test]
+    public async Task Runtime_and_server_adapter_load_the_same_binary_contract()
+    {
+        using var fixture = CatalogFixture.CreatePublished("server-game", "2026.8.14");
+        using var directInput = File.OpenRead(fixture.CatalogPath);
+        var direct = TagCatalogBinary.Load(
+            directInput,
+            TagCatalogExpectations.ForPublished(
+                "server-game",
+                "2026.8.14",
+                Convert.FromHexString(fixture.Fingerprint)));
+        using var host = BuildHost(fixture.LocalApplicationData, options =>
+        {
+            options.Mode = GameplayTagCatalogMode.Packaged;
+            options.CatalogId = "server-game";
+            options.CatalogVersion = "2026.8.14";
+            options.ExpectedFingerprint = fixture.Fingerprint;
+            options.PackagedPath = fixture.CatalogPath;
+        });
+
+        await host.StartAsync();
+        var adapted = host.Services.GetRequiredService<TagCatalog>();
+
+        AssertCatalogsMatch(direct, adapted);
+        Assert.That(adapted.GetRequired("state.killed"), Is.EqualTo(direct.GetRequired("state.killed")));
+        await host.StopAsync();
+    }
+
+    [Test]
     public void Packaged_mode_rejects_wrong_version_before_gameplay_starts()
     {
         using var fixture = CatalogFixture.CreatePublished("server-game", "2026.8.14");
@@ -256,6 +284,32 @@ public sealed class GameplayTagHostingTests
         return builder.Build();
     }
 
+    private static void AssertCatalogsMatch(TagCatalog expected, TagCatalog actual)
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.That(actual.CatalogId, Is.EqualTo(expected.CatalogId));
+            Assert.That(actual.CatalogVersion, Is.EqualTo(expected.CatalogVersion));
+            Assert.That(actual.Count, Is.EqualTo(expected.Count));
+            Assert.That(actual.Fingerprint.ToArray(), Is.EqualTo(expected.Fingerprint.ToArray()));
+            for (var index = 0; index <= expected.Count; index++)
+            {
+                var expectedTag = expected.GetRequiredByIndex(checked((ushort)index));
+                var actualTag = actual.GetRequiredByIndex(checked((ushort)index));
+                Assert.That(actual.GetDisplayName(actualTag), Is.EqualTo(expected.GetDisplayName(expectedTag)));
+                Assert.That(actual.GetParent(actualTag), Is.EqualTo(expected.GetParent(expectedTag)));
+                for (var descendantIndex = 0; descendantIndex <= expected.Count; descendantIndex++)
+                {
+                    var expectedDescendant = expected.GetRequiredByIndex(checked((ushort)descendantIndex));
+                    var actualDescendant = actual.GetRequiredByIndex(checked((ushort)descendantIndex));
+                    Assert.That(
+                        actual.IsAncestorOrSelf(actualTag, actualDescendant),
+                        Is.EqualTo(expected.IsAncestorOrSelf(expectedTag, expectedDescendant)));
+                }
+            }
+        });
+    }
+
     private sealed class GameplayHostedService : IHostedService
     {
         private readonly Action _onStart;
@@ -321,8 +375,13 @@ public sealed class GameplayTagHostingTests
             var source = new TagSourceDocument(
                 new TagSourceDescriptor("server-tests", "Server Tests", TagSourceKind.PackageJson, true),
                 "server-tests.json",
-                new[] { new TagSourceTag("server.ready", "fixture") },
-                Array.Empty<TagSourceRedirect>());
+                new[]
+                {
+                    new TagSourceTag("state.rooted", "rooted"),
+                    new TagSourceTag("ability.movement.jump", "jump"),
+                    new TagSourceTag("state.dead.ghost", "ghost"),
+                },
+                new[] { new TagSourceRedirect("state.killed", "state.dead") });
             var compilation = TagCatalogCompiler.Compile(
                 new[] { source },
                 new TagCatalogIdentity(catalogId, catalogVersion));

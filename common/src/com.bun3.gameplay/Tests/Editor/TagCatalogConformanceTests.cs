@@ -3,6 +3,7 @@ using System;
 using System.IO;
 using System.Text;
 using Bun3.Gameplay.Tags;
+using Bun3.Gameplay.Tags.Catalog;
 using NUnit.Framework;
 
 namespace Bun3.Gameplay.Tests
@@ -93,11 +94,46 @@ namespace Bun3.Gameplay.Tests
             var simulationStarts = 0;
             Action onSimulationStart = () => simulationStarts++;
 
-            Assert.That(TryStartSimulation(local, peer.Fingerprint, onSimulationStart), Is.False);
+            Assert.Throws<TagCatalogCompatibilityException>(
+                () => StartSimulation(local, peer.Fingerprint, onSimulationStart));
             Assert.That(simulationStarts, Is.Zero);
             var matchingFingerprint = local.Fingerprint.ToArray();
-            Assert.That(TryStartSimulation(local, matchingFingerprint, onSimulationStart), Is.True);
+            StartSimulation(local, matchingFingerprint, onSimulationStart);
             Assert.That(simulationStarts, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void Compiled_catalog_and_runtime_binary_reader_match_every_runtime_field()
+        {
+            var source = new TagSourceDocument(
+                new TagSourceDescriptor("conformance", "Conformance", TagSourceKind.PackageJson, true),
+                "conformance.json",
+                new[]
+                {
+                    new TagSourceTag("state.rooted", "rooted"),
+                    new TagSourceTag("ability.movement.jump", "jump"),
+                    new TagSourceTag("state.dead.ghost", "ghost"),
+                },
+                new[] { new TagSourceRedirect("state.killed", "state.dead") });
+            var compilation = TagCatalogCompiler.Compile(
+                new[] { source },
+                new TagCatalogIdentity("conformance-game", "2026.8.14"));
+            var compiled = compilation.Catalog!;
+            using var binary = new MemoryStream();
+            TagCatalogBinaryWriter.Write(binary, compiled);
+            binary.Position = 0;
+
+            var loaded = TagCatalogBinary.Load(
+                binary,
+                TagCatalogExpectations.ForPublished(
+                    "conformance-game",
+                    "2026.8.14",
+                    compiled.Fingerprint));
+
+            AssertCatalogsMatch(compiled, loaded);
+            Assert.That(
+                loaded.GetRequired("state.killed"),
+                Is.EqualTo(compiled.GetRequired("state.killed")));
         }
 
         [Test]
@@ -134,15 +170,29 @@ namespace Bun3.Gameplay.Tests
             Assert.That(subject.Has(state), Is.False);
         }
 
-        private static bool TryStartSimulation(
+        private static void StartSimulation(
             TagCatalog local,
             System.ReadOnlySpan<byte> peerFingerprint,
             Action onSimulationStart)
         {
-            if (!local.MatchesFingerprint(peerFingerprint))
-                return false;
+            TagCatalogCompatibility.RequirePeerFingerprint(local, peerFingerprint);
             onSimulationStart();
-            return true;
+        }
+
+        private static void AssertCatalogsMatch(TagCatalog expected, TagCatalog actual)
+        {
+            Assert.That(actual.CatalogId, Is.EqualTo(expected.CatalogId));
+            Assert.That(actual.CatalogVersion, Is.EqualTo(expected.CatalogVersion));
+            Assert.That(actual.Count, Is.EqualTo(expected.Count));
+            Assert.That(actual.Fingerprint.ToArray(), Is.EqualTo(expected.Fingerprint.ToArray()));
+            for (var index = 0; index <= expected.Count; index++)
+            {
+                var expectedTag = expected.GetRequiredByIndex(checked((ushort)index));
+                var actualTag = actual.GetRequiredByIndex(checked((ushort)index));
+                Assert.That(actual.GetDisplayName(actualTag), Is.EqualTo(expected.GetDisplayName(expectedTag)));
+                Assert.That(actual.GetParent(actualTag), Is.EqualTo(expected.GetParent(expectedTag)));
+                Assert.That(actual.GetSubtreeEnd(actualTag), Is.EqualTo(expected.GetSubtreeEnd(expectedTag)));
+            }
         }
 
         private static string ToHex(System.ReadOnlySpan<byte> bytes)
