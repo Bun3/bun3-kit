@@ -7,7 +7,7 @@
     <RootNamespace>Bun3.Gameplay</RootNamespace>
     <AssemblyName>Bun3.Gameplay</AssemblyName>
     <PackageId>Bun3.Gameplay</PackageId>
-    <Version>0.9.0</Version>
+    <Version>0.10.0</Version>
     <Authors>Bun3</Authors>
     <RepositoryUrl>https://github.com/Bun3/bun3-kit</RepositoryUrl>
   </PropertyGroup>

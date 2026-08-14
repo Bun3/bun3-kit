@@ -12,7 +12,7 @@ namespace Bun3.Gameplay.Editor.Tags
 
         internal static string? ReadConfiguredCatalogId()
         {
-            var result = GameplayTagCatalogId.Normalize(instance._catalogId ?? string.Empty);
+            var result = instance._catalogId ?? string.Empty;
             return result.Length == 0 ? null : result;
         }
 
@@ -29,10 +29,25 @@ namespace Bun3.Gameplay.Editor.Tags
         }
 
         internal static string SaveCatalogId(string value) =>
-            ApplyCatalogId(value, result =>
+            SaveCatalogId(value, () => instance.Save(true));
+
+        internal static string SaveCatalogId(string value, Action persist)
+        {
+            if (persist is null) throw new ArgumentNullException(nameof(persist));
+            return ApplyCatalogId(value, result =>
             {
+                var previous = instance._catalogId;
                 instance._catalogId = result;
-                instance.Save(true);
+                try
+                {
+                    persist();
+                }
+                catch
+                {
+                    instance._catalogId = previous;
+                    throw;
+                }
             });
+        }
     }
 }

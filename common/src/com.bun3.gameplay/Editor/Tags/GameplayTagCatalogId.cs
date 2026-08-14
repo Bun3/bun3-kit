@@ -41,5 +41,18 @@ namespace Bun3.Gameplay.Editor.Tags
 
             return result;
         }
+
+        internal static string RequireCanonical(string value, string parameterName)
+        {
+            var normalized = Require(value, parameterName);
+            if (!string.Equals(value, normalized, StringComparison.Ordinal))
+            {
+                throw new ArgumentException(
+                    "Catalog ID must use its canonical lowercase ASCII-hyphen form.",
+                    parameterName);
+            }
+
+            return value;
+        }
     }
 }

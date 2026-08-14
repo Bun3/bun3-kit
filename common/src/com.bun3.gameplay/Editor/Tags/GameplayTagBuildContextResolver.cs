@@ -59,6 +59,23 @@ namespace Bun3.Gameplay.Editor.Tags
                     permitsGameOnlyValidation: true);
             }
 
+            if (configuredCatalogId is not null)
+            {
+                try
+                {
+                    _ = GameplayTagCatalogId.RequireCanonical(
+                        configuredCatalogId,
+                        nameof(configuredCatalogId));
+                }
+                catch (ArgumentException exception)
+                {
+                    return Failure(
+                        ProviderConfigurationCode + ": Invalid GameplayTag Project Settings: "
+                        + exception.Message,
+                        permitsGameOnlyValidation: true);
+                }
+            }
+
             IReadOnlyList<string> externalPaths;
             string catalogId;
             if (candidates.Count == 0)
@@ -72,20 +89,7 @@ namespace Bun3.Gameplay.Editor.Tags
                         requiresCatalogConfiguration: true);
                 }
 
-                try
-                {
-                    catalogId = GameplayTagCatalogId.Require(
-                        configuredCatalogId,
-                        nameof(configuredCatalogId));
-                }
-                catch (Exception exception) when (exception is ArgumentException)
-                {
-                    return Failure(
-                        ProviderConfigurationCode + ": Invalid GameplayTag Catalog settings: "
-                        + exception.Message,
-                        permitsGameOnlyValidation: true);
-                }
-
+                catalogId = configuredCatalogId;
                 externalPaths = Array.Empty<string>();
             }
             else

@@ -40,6 +40,22 @@ namespace Bun3.Gameplay.Editor.Tags
             IReadOnlyList<Type> providerTypes,
             string? configuredCatalogId)
         {
+            if (configuredCatalogId is not null)
+            {
+                try
+                {
+                    _ = GameplayTagCatalogId.RequireCanonical(
+                        configuredCatalogId,
+                        nameof(configuredCatalogId));
+                }
+                catch (ArgumentException exception)
+                {
+                    throw new InvalidOperationException(
+                        "Invalid GameplayTag Project Settings: " + exception.Message,
+                        exception);
+                }
+            }
+
             var candidates = GameplayTagBuildContextProviderDiscovery.SelectCandidates(providerTypes);
 
             if (candidates.Count != 1)

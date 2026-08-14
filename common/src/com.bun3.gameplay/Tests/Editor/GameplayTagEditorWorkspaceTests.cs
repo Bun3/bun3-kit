@@ -151,7 +151,7 @@ namespace Bun3.Gameplay.Unity.Tests
             }));
         }
 
-        /// <summary>Provider와 Project Settings ID는 정규화 결과가 아니라 원문 ordinal 값으로 일치해야 하는지 검증합니다.</summary>
+        /// <summary>비정규형 Project Settings ID를 Provider와 비교하기 전에 거부하는지 검증합니다.</summary>
         [Test]
         public void Resolver_requires_a_raw_ordinal_catalog_id_match_with_project_settings()
         {
@@ -164,10 +164,11 @@ namespace Bun3.Gameplay.Unity.Tests
                 "test--game");
 
             Assert.That(resolution.HasCompleteContext, Is.False);
-            Assert.That(resolution.Diagnostics, Is.EqualTo(new[]
-            {
-                "B3TAG3002: GameplayTag Catalog ID does not match Project Settings."
-            }));
+            Assert.That(resolution.Diagnostics, Has.Count.EqualTo(1));
+            Assert.That(resolution.Diagnostics[0], Does.StartWith(
+                "B3TAG3002: Invalid GameplayTag Project Settings:"));
+            Assert.That(resolution.Diagnostics[0], Does.Contain(
+                "canonical lowercase ASCII-hyphen form"));
         }
 
         /// <summary>전역 Provider 탐색이 현재 Unity 테스트 어셈블리의 더블을 반환하지 않는지 검증합니다.</summary>
