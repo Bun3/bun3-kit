@@ -10,8 +10,7 @@ namespace Bun3.Gameplay.Editor.Tags
     internal static class GameplayTagDiagnosticsPanel
     {
         internal static void Draw(
-            IReadOnlyList<string> diagnostics,
-            string? localSourcePath)
+            IReadOnlyList<GameplayTagWorkspaceDiagnostic> diagnostics)
         {
             if (diagnostics is null) throw new ArgumentNullException(nameof(diagnostics));
             if (diagnostics.Count == 0) return;
@@ -20,20 +19,28 @@ namespace Bun3.Gameplay.Editor.Tags
             EditorGUILayout.LabelField("GameplayTag Workspace is invalid", EditorStyles.boldLabel);
             for (var index = 0; index < diagnostics.Count; index++)
             {
-                EditorGUILayout.HelpBox(diagnostics[index], MessageType.Error);
+                var diagnostic = diagnostics[index];
+                EditorGUILayout.HelpBox(diagnostic.Message, MessageType.Error);
+                if (CanOpenSource(diagnostic)
+                    && GUILayout.Button("Open Source", GUILayout.Width(100f)))
+                {
+                    OpenSource(
+                        diagnostic,
+                        path => UnityEditorInternal.InternalEditorUtility.OpenFileAtLineExternal(
+                            path, 1));
+                }
             }
 
             EditorGUILayout.BeginHorizontal();
-            if (CanOpenSource(localSourcePath)
-                && GUILayout.Button("Open Source", GUILayout.Width(100f)))
-            {
-                UnityEditorInternal.InternalEditorUtility.OpenFileAtLineExternal(
-                    Path.GetFullPath(localSourcePath!), 1);
-            }
-
             if (GUILayout.Button("Copy Details", GUILayout.Width(100f)))
             {
-                CopyDetails(diagnostics);
+                var messages = new string[diagnostics.Count];
+                for (var index = 0; index < messages.Length; index++)
+                {
+                    messages[index] = diagnostics[index].Message;
+                }
+
+                CopyDetails(messages);
             }
 
             EditorGUILayout.EndHorizontal();
@@ -42,6 +49,23 @@ namespace Bun3.Gameplay.Editor.Tags
 
         internal static bool CanOpenSource(string? localSourcePath) =>
             !string.IsNullOrWhiteSpace(localSourcePath) && File.Exists(localSourcePath);
+
+        internal static bool CanOpenSource(GameplayTagWorkspaceDiagnostic diagnostic)
+        {
+            if (diagnostic is null) throw new ArgumentNullException(nameof(diagnostic));
+            return CanOpenSource(diagnostic.LocalSourcePath);
+        }
+
+        internal static bool OpenSource(
+            GameplayTagWorkspaceDiagnostic diagnostic,
+            Action<string> open)
+        {
+            if (diagnostic is null) throw new ArgumentNullException(nameof(diagnostic));
+            if (open is null) throw new ArgumentNullException(nameof(open));
+            if (!CanOpenSource(diagnostic)) return false;
+            open(Path.GetFullPath(diagnostic.LocalSourcePath!));
+            return true;
+        }
 
         internal static void CopyDetails(IReadOnlyList<string> diagnostics)
         {

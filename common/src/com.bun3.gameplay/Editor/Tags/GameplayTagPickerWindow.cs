@@ -70,6 +70,8 @@ namespace Bun3.Gameplay.Editor.Tags
         private GameplayTagPickerModel? _model;
         private Action<string>? _onSelected;
         private IReadOnlyList<string> _persistentDiagnostics = Array.Empty<string>();
+        private IReadOnlyList<GameplayTagWorkspaceDiagnostic> _diagnosticEntries =
+            Array.Empty<GameplayTagWorkspaceDiagnostic>();
         private Func<GameplayTagEditorWorkspace>? _workspaceProvider;
         private string _search = string.Empty;
         private string _currentRawValue = string.Empty;
@@ -126,7 +128,12 @@ namespace Bun3.Gameplay.Editor.Tags
             Action<string> onSelected)
         {
             if (snapshot is null) throw new ArgumentNullException(nameof(snapshot));
-            Configure(snapshot, selectedPath, onSelected, canSelect: true, Array.Empty<string>());
+            Configure(
+                snapshot,
+                selectedPath,
+                onSelected,
+                canSelect: true,
+                Array.Empty<GameplayTagWorkspaceDiagnostic>());
         }
 
         internal void Initialize(
@@ -140,7 +147,7 @@ namespace Bun3.Gameplay.Editor.Tags
                 selectedPath,
                 onSelected,
                 workspace.CanBuildCatalog,
-                workspace.Diagnostics);
+                workspace.DiagnosticEntries);
         }
 
         internal void Initialize(
@@ -160,7 +167,10 @@ namespace Bun3.Gameplay.Editor.Tags
         internal void RefreshWorkspace(GameplayTagEditorWorkspace workspace)
         {
             if (workspace is null) throw new ArgumentNullException(nameof(workspace));
-            ApplyWorkspace(workspace.Snapshot, workspace.CanBuildCatalog, workspace.Diagnostics);
+            ApplyWorkspace(
+                workspace.Snapshot,
+                workspace.CanBuildCatalog,
+                workspace.DiagnosticEntries);
         }
 
         internal bool TrySelect(int rowId)
@@ -191,7 +201,7 @@ namespace Bun3.Gameplay.Editor.Tags
                 EditorStyles.textField,
                 GUILayout.Height(EditorGUIUtility.singleLineHeight));
 
-            GameplayTagDiagnosticsPanel.Draw(_persistentDiagnostics, localSourcePath: null);
+            GameplayTagDiagnosticsPanel.Draw(_diagnosticEntries);
 
             EditorGUI.BeginChangeCheck();
             var search = EditorGUILayout.TextField("Search", _search);
@@ -218,7 +228,7 @@ namespace Bun3.Gameplay.Editor.Tags
             string selectedPath,
             Action<string> onSelected,
             bool canSelect,
-            IReadOnlyList<string> diagnostics)
+            IReadOnlyList<GameplayTagWorkspaceDiagnostic> diagnostics)
         {
             if (selectedPath is null) throw new ArgumentNullException(nameof(selectedPath));
             _onSelected = onSelected ?? throw new ArgumentNullException(nameof(onSelected));
@@ -231,17 +241,20 @@ namespace Bun3.Gameplay.Editor.Tags
         private void ApplyWorkspace(
             GameplayTagWorkspaceSnapshot? snapshot,
             bool canSelect,
-            IReadOnlyList<string> diagnostics)
+            IReadOnlyList<GameplayTagWorkspaceDiagnostic> diagnostics)
         {
             if (diagnostics is null) throw new ArgumentNullException(nameof(diagnostics));
 
-            var diagnosticCopy = new string[diagnostics.Count];
-            for (var index = 0; index < diagnosticCopy.Length; index++)
+            var entries = new GameplayTagWorkspaceDiagnostic[diagnostics.Count];
+            var messages = new string[diagnostics.Count];
+            for (var index = 0; index < entries.Length; index++)
             {
-                diagnosticCopy[index] = diagnostics[index];
+                entries[index] = diagnostics[index];
+                messages[index] = diagnostics[index].Message;
             }
 
-            _persistentDiagnostics = Array.AsReadOnly(diagnosticCopy);
+            _diagnosticEntries = Array.AsReadOnly(entries);
+            _persistentDiagnostics = Array.AsReadOnly(messages);
             _canSelect = canSelect && snapshot is not null;
             _model = snapshot is null ? null : new GameplayTagPickerModel(snapshot);
             EnsureTree();

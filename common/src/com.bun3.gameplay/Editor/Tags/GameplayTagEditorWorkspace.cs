@@ -11,13 +11,14 @@ namespace Bun3.Gameplay.Editor.Tags
     public sealed class GameplayTagEditorWorkspace
     {
         private readonly IReadOnlyList<string> _diagnostics;
+        private readonly IReadOnlyList<GameplayTagWorkspaceDiagnostic> _diagnosticEntries;
         private readonly GameplayTagBuildContextResolution _resolution;
 
         private GameplayTagEditorWorkspace(
             GameplayTagBuildContextResolution resolution,
             GameplayTagWorkspaceSnapshot? snapshot,
             GameplayTagCatalogEditSession? gameSession,
-            string[] diagnostics,
+            GameplayTagWorkspaceDiagnostic[] diagnostics,
             bool canCreateGameSource,
             bool canEditGameSource,
             bool canBuildCatalog)
@@ -25,7 +26,15 @@ namespace Bun3.Gameplay.Editor.Tags
             _resolution = resolution ?? throw new ArgumentNullException(nameof(resolution));
             Snapshot = snapshot;
             GameSession = gameSession;
-            _diagnostics = Array.AsReadOnly((string[])diagnostics.Clone());
+            var entries = (GameplayTagWorkspaceDiagnostic[])diagnostics.Clone();
+            _diagnosticEntries = Array.AsReadOnly(entries);
+            var messages = new string[entries.Length];
+            for (var index = 0; index < entries.Length; index++)
+            {
+                messages[index] = entries[index].Message;
+            }
+
+            _diagnostics = Array.AsReadOnly(messages);
             CanCreateGameSource = canCreateGameSource;
             CanEditGameSource = canEditGameSource;
             CanBuildCatalog = canBuildCatalog;
@@ -39,6 +48,9 @@ namespace Bun3.Gameplay.Editor.Tags
 
         /// <summary>Workspace를 불완전하거나 잘못되게 만든 설정과 Source 진단입니다.</summary>
         public IReadOnlyList<string> Diagnostics => _diagnostics;
+
+        internal IReadOnlyList<GameplayTagWorkspaceDiagnostic> DiagnosticEntries =>
+            _diagnosticEntries;
 
         /// <summary>고정 Game Source가 없어 새 빈 Source를 만들 수 있는지 나타냅니다.</summary>
         public bool CanCreateGameSource { get; }
@@ -60,10 +72,12 @@ namespace Bun3.Gameplay.Editor.Tags
             if (resolution is null) throw new ArgumentNullException(nameof(resolution));
             if (gameSourcePath is null) throw new ArgumentNullException(nameof(gameSourcePath));
 
-            var diagnostics = new List<string>(resolution.Diagnostics);
+            var diagnostics = new List<GameplayTagWorkspaceDiagnostic>(resolution.DiagnosticEntries);
             if (!File.Exists(gameSourcePath))
             {
-                diagnostics.Add("B3TAG3101: Game Source is missing: " + gameSourcePath);
+                diagnostics.Add(new GameplayTagWorkspaceDiagnostic(
+                    "B3TAG3101: Game Source is missing: " + gameSourcePath,
+                    gameSourcePath));
                 return Invalid(
                     resolution,
                     diagnostics,
@@ -80,8 +94,10 @@ namespace Bun3.Gameplay.Editor.Tags
                 || exception is UnauthorizedAccessException
                 || exception is TagCatalogException)
             {
-                diagnostics.Add("B3TAG3102: Invalid Game Source '" + gameSourcePath
-                    + "': " + exception.Message);
+                diagnostics.Add(new GameplayTagWorkspaceDiagnostic(
+                    "B3TAG3102: Invalid Game Source '" + gameSourcePath
+                    + "': " + exception.Message,
+                    gameSourcePath));
                 return Invalid(
                     resolution,
                     diagnostics,
@@ -117,7 +133,7 @@ namespace Bun3.Gameplay.Editor.Tags
             TagSourceDocument gameSource,
             GameplayTagCatalogEditSession gameSession)
         {
-            var diagnostics = new List<string>(resolution.Diagnostics);
+            var diagnostics = new List<GameplayTagWorkspaceDiagnostic>(resolution.DiagnosticEntries);
 
             if (!resolution.HasCompleteContext)
             {
@@ -214,19 +230,37 @@ namespace Bun3.Gameplay.Editor.Tags
 
         private static void AddCompilationDiagnostics(
             IReadOnlyList<TagCatalogDiagnostic> source,
-            List<string> destination)
+            List<GameplayTagWorkspaceDiagnostic> destination)
         {
             for (var index = 0; index < source.Count; index++)
             {
                 var diagnostic = source[index];
-                destination.Add(diagnostic.Code + ": " + diagnostic.Message
-                    + (diagnostic.Origin.Length == 0 ? string.Empty : " [" + diagnostic.Origin + "]"));
+                var message = diagnostic.Code + ": " + diagnostic.Message
+                    + (diagnostic.Origin.Length == 0 ? string.Empty : " [" + diagnostic.Origin + "]");
+                destination.Add(new GameplayTagWorkspaceDiagnostic(
+                    message,
+                    GetKnownLocalSourcePath(diagnostic.Origin)));
+            }
+        }
+
+        private static string? GetKnownLocalSourcePath(string origin)
+        {
+            if (string.IsNullOrWhiteSpace(origin) || !Path.IsPathFullyQualified(origin)) return null;
+            try
+            {
+                return Path.GetFullPath(origin);
+            }
+            catch (Exception exception) when (exception is ArgumentException
+                || exception is NotSupportedException
+                || exception is IOException)
+            {
+                return null;
             }
         }
 
         private static GameplayTagEditorWorkspace Invalid(
             GameplayTagBuildContextResolution resolution,
-            List<string> diagnostics,
+            List<GameplayTagWorkspaceDiagnostic> diagnostics,
             GameplayTagCatalogEditSession? gameSession,
             bool canCreateGameSource) =>
             new GameplayTagEditorWorkspace(

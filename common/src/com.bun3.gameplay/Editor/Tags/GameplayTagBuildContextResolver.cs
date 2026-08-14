@@ -120,13 +120,6 @@ namespace Bun3.Gameplay.Editor.Tags
                 {
                     sources.Add(TagSourceJson.LoadGame(gameStream, gameSourcePath));
                 }
-
-                for (var index = 0; index < metadataPaths.Length; index++)
-                {
-                    var path = metadataPaths[index];
-                    using var metadataStream = File.OpenRead(path);
-                    sources.Add(TagSourceJson.LoadMetadata(metadataStream, path));
-                }
             }
             catch (Exception exception) when (exception is IOException
                 || exception is UnauthorizedAccessException
@@ -134,7 +127,27 @@ namespace Bun3.Gameplay.Editor.Tags
             {
                 return Failure(
                     SourceLoadCode + ": Failed to load gameplay tag source: " + exception.Message,
-                    permitsGameOnlyValidation: false);
+                    permitsGameOnlyValidation: false,
+                    localSourcePath: gameSourcePath);
+            }
+
+            for (var index = 0; index < metadataPaths.Length; index++)
+            {
+                var path = metadataPaths[index];
+                try
+                {
+                    using var metadataStream = File.OpenRead(path);
+                    sources.Add(TagSourceJson.LoadMetadata(metadataStream, path));
+                }
+                catch (Exception exception) when (exception is IOException
+                    || exception is UnauthorizedAccessException
+                    || exception is TagCatalogException)
+                {
+                    return Failure(
+                        SourceLoadCode + ": Failed to load gameplay tag source: " + exception.Message,
+                        permitsGameOnlyValidation: false,
+                        localSourcePath: path);
+                }
             }
 
             try
@@ -210,10 +223,11 @@ namespace Bun3.Gameplay.Editor.Tags
 
         private static GameplayTagBuildContextResolution Failure(
             string diagnostic,
-            bool permitsGameOnlyValidation) =>
+            bool permitsGameOnlyValidation,
+            string? localSourcePath = null) =>
             new GameplayTagBuildContextResolution(
                 null,
-                new[] { diagnostic },
+                new[] { new GameplayTagWorkspaceDiagnostic(diagnostic, localSourcePath) },
                 permitsGameOnlyValidation);
     }
 }

@@ -15,6 +15,7 @@ namespace Bun3.Gameplay.Unity.Tests
     {
         private string _temporaryDirectory = null!;
 
+        /// <summary>각 테스트의 임시 Catalog 경로와 Play 세션 상태를 초기화합니다.</summary>
         [SetUp]
         public void SetUp()
         {
@@ -25,6 +26,7 @@ namespace Bun3.Gameplay.Unity.Tests
             GameplayTagPlaySessionCatalog.Clear();
         }
 
+        /// <summary>테스트가 생성한 Play 세션 상태와 임시 파일을 정리합니다.</summary>
         [TearDown]
         public void TearDown()
         {
@@ -32,6 +34,103 @@ namespace Bun3.Gameplay.Unity.Tests
             if (Directory.Exists(_temporaryDirectory)) Directory.Delete(_temporaryDirectory, true);
         }
 
+        /// <summary>잘못된 길이의 fingerprint marker가 예외 없이 폐쇄적으로 정리되는지 검증합니다.</summary>
+        [Test]
+        public void Wrong_length_fingerprint_marker_fails_closed_and_is_forgotten()
+        {
+            var workspace = GameplayTagDevelopmentCatalogTests.CreateValidWorkspace(
+                "play-marker-fingerprint", "state.ready");
+            var catalog = GameplayTagDevelopmentCatalogBuilder.Build(workspace, _temporaryDirectory);
+            var path = TagCatalogDevelopmentPath.Get(catalog.CatalogId, _temporaryDirectory);
+            SetRawPreparedMarker(
+                path,
+                catalog.CatalogId,
+                Convert.ToBase64String(new byte[31]));
+
+            Assert.That(GameplayTagPlaySessionCatalog.TryRestorePrepared(out var diagnostic), Is.False);
+            Assert.That(diagnostic, Does.Contain("could not be restored"));
+            Assert.That(GameplayTagPlaySessionCatalog.Current, Is.Null);
+            Assert.That(GameplayTagPlaySessionCatalog.TryRestorePrepared(out _), Is.False);
+        }
+
+        /// <summary>비어 있거나 identity 규칙에 맞지 않는 Catalog ID marker를 폐쇄적으로 거부합니다.</summary>
+        [TestCase(" ")]
+        [TestCase("Invalid Catalog")]
+        public void Invalid_catalog_id_marker_fails_closed_and_is_forgotten(string catalogId)
+        {
+            var workspace = GameplayTagDevelopmentCatalogTests.CreateValidWorkspace(
+                "play-marker-id", "state.ready");
+            var catalog = GameplayTagDevelopmentCatalogBuilder.Build(workspace, _temporaryDirectory);
+            var path = TagCatalogDevelopmentPath.Get(catalog.CatalogId, _temporaryDirectory);
+            SetRawPreparedMarker(
+                path,
+                catalogId,
+                Convert.ToBase64String(catalog.Fingerprint.ToArray()));
+
+            Assert.That(GameplayTagPlaySessionCatalog.TryRestorePrepared(out var diagnostic), Is.False);
+            Assert.That(diagnostic, Does.Contain("could not be restored"));
+            Assert.That(GameplayTagPlaySessionCatalog.Current, Is.Null);
+            Assert.That(GameplayTagPlaySessionCatalog.TryRestorePrepared(out _), Is.False);
+        }
+
+        /// <summary>비어 있거나 완전한 기존 파일이 아닌 binary 경로 marker를 폐쇄적으로 거부합니다.</summary>
+        [TestCase(" ")]
+        [TestCase("missing/GameplayTags.catalog")]
+        public void Invalid_binary_path_marker_fails_closed_and_is_forgotten(string path)
+        {
+            var workspace = GameplayTagDevelopmentCatalogTests.CreateValidWorkspace(
+                "play-marker-path", "state.ready");
+            var catalog = GameplayTagDevelopmentCatalogBuilder.Build(workspace, _temporaryDirectory);
+            SetRawPreparedMarker(
+                path,
+                catalog.CatalogId,
+                Convert.ToBase64String(catalog.Fingerprint.ToArray()));
+
+            Assert.That(GameplayTagPlaySessionCatalog.TryRestorePrepared(out var diagnostic), Is.False);
+            Assert.That(diagnostic, Does.Contain("could not be restored"));
+            Assert.That(GameplayTagPlaySessionCatalog.Current, Is.Null);
+            Assert.That(GameplayTagPlaySessionCatalog.TryRestorePrepared(out _), Is.False);
+        }
+
+        /// <summary>존재하지 않는 완전한 binary 경로 marker를 폐쇄적으로 거부하고 정리합니다.</summary>
+        [Test]
+        public void Missing_absolute_binary_path_marker_fails_closed_and_is_forgotten()
+        {
+            var workspace = GameplayTagDevelopmentCatalogTests.CreateValidWorkspace(
+                "play-marker-missing-path", "state.ready");
+            var catalog = GameplayTagDevelopmentCatalogBuilder.Build(workspace, _temporaryDirectory);
+            var missingPath = Path.Combine(_temporaryDirectory, "missing", "GameplayTags.catalog");
+            SetRawPreparedMarker(
+                missingPath,
+                catalog.CatalogId,
+                Convert.ToBase64String(catalog.Fingerprint.ToArray()));
+
+            Assert.That(GameplayTagPlaySessionCatalog.TryRestorePrepared(out var diagnostic), Is.False);
+            Assert.That(diagnostic, Does.Contain("could not be restored"));
+            Assert.That(GameplayTagPlaySessionCatalog.Current, Is.Null);
+            Assert.That(GameplayTagPlaySessionCatalog.TryRestorePrepared(out _), Is.False);
+        }
+
+        /// <summary>잘못된 marker로 EnteredPlayMode 복원이 실패하면 전환 취소와 경고가 각각 한 번만 발생함을 검증합니다.</summary>
+        [Test]
+        public void Entered_play_mode_malformed_marker_cancels_once_and_warns_once()
+        {
+            SetRawPreparedMarker(" ", " ", "not-base64");
+            var cancelCount = 0;
+            var warningCount = 0;
+
+            Assert.That(() => GameplayTagPlayModeGate.HandlePlayModeStateChanged(
+                PlayModeStateChange.EnteredPlayMode,
+                () => throw new AssertionException("EnteredPlayMode restore must not resolve Sources."),
+                _ => warningCount++,
+                () => cancelCount++), Throws.Nothing);
+
+            Assert.That(cancelCount, Is.EqualTo(1));
+            Assert.That(warningCount, Is.EqualTo(1));
+            Assert.That(GameplayTagPlaySessionCatalog.Current, Is.Null);
+        }
+
+        /// <summary>provider context가 없으면 preview와 last-good binary를 고정하지 않고 Play 준비를 차단합니다.</summary>
         [Test]
         public void Missing_provider_context_blocks_prepare_and_never_freezes_preview_or_last_good_binary()
         {
@@ -58,6 +157,7 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(GameplayTagPlaySessionCatalog.Current, Is.Null);
         }
 
+        /// <summary>누락된 Game Source와 잘못된 해석 Source가 경로 진단으로 Play 준비를 차단함을 검증합니다.</summary>
         [Test]
         public void Missing_game_source_and_malformed_resolved_source_each_block_prepare_with_their_path_diagnostic()
         {
@@ -88,6 +188,7 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(GameplayTagPlaySessionCatalog.Current, Is.Null);
         }
 
+        /// <summary>성공한 준비가 binary round-trip instance를 Edit Mode 복귀 전까지 고정함을 검증합니다.</summary>
         [Test]
         public void Successful_prepare_round_trips_binary_and_freezes_the_same_instance_until_edit_mode_returns()
         {
@@ -119,6 +220,7 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(GameplayTagPlaySessionCatalog.Current, Is.Null);
         }
 
+        /// <summary>ExitingEditMode 준비 실패가 Play 전환과 경고를 각각 한 번만 발생시키는지 검증합니다.</summary>
         [Test]
         public void Exiting_edit_mode_failure_cancels_the_transition_and_shows_exactly_one_diagnostic_popup()
         {
@@ -152,6 +254,7 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(GameplayTagPlaySessionCatalog.Current, Is.Null);
         }
 
+        /// <summary>Play gate 등록과 Edit Mode 정리가 멱등임을 검증합니다.</summary>
         [Test]
         public void Initialization_and_cleanup_are_idempotent()
         {
@@ -173,6 +276,7 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(GameplayTagPlaySessionCatalog.Current, Is.Null);
         }
 
+        /// <summary>domain reload 후 준비된 binary를 딱 한 번 복원하고 hot reload하지 않음을 검증합니다.</summary>
         [Test]
         public void Domain_reload_restores_only_the_exact_prepared_binary_once_and_never_hot_reloads_it()
         {
@@ -199,6 +303,7 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(GameplayTagPlaySessionCatalog.Current, Is.Null);
         }
 
+        /// <summary>활성 Play 세션 Catalog가 두 번째 준비로 교체되지 않음을 검증합니다.</summary>
         [Test]
         public void Active_play_session_catalog_cannot_be_replaced_by_a_second_prepare()
         {
@@ -235,6 +340,16 @@ namespace Bun3.Gameplay.Unity.Tests
                 BindingFlags.Public | BindingFlags.Static)
                 ?? throw new InvalidOperationException("Play session Current property is missing.");
             property.SetValue(null, null);
+        }
+
+        private static void SetRawPreparedMarker(
+            string path,
+            string catalogId,
+            string fingerprint)
+        {
+            SessionState.SetString("Bun3.Gameplay.Tags.PlaySession.Path", path);
+            SessionState.SetString("Bun3.Gameplay.Tags.PlaySession.CatalogId", catalogId);
+            SessionState.SetString("Bun3.Gameplay.Tags.PlaySession.Fingerprint", fingerprint);
         }
     }
 }

@@ -7,6 +7,7 @@ using System.Linq;
 using System.Reflection;
 using System.Text;
 using Bun3.Gameplay.Editor.Tags;
+using Bun3.Gameplay.Tags;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEditor.IMGUI.Controls;
@@ -325,6 +326,7 @@ namespace Bun3.Gameplay.Unity.Tests
                 Is.EqualTo(GameplayTagTreeAction.None));
         }
 
+        /// <summary>잘못된 Workspace에서 쓰기 동작만 비활성화되는지 검증합니다.</summary>
         [Test]
         public void Invalid_workspace_removes_mutations_from_writable_rows_but_keeps_copy_and_reference_actions()
         {
@@ -348,20 +350,61 @@ namespace Bun3.Gameplay.Unity.Tests
                 Is.EqualTo(GameplayTagTreeAction.Copy | GameplayTagTreeAction.FindReferences));
         }
 
+        /// <summary>각 진단이 자신의 알려진 로컬 Source만 열고 provider 오류에서는 열기를 제공하지 않음을 검증합니다.</summary>
         [Test]
-        public void Diagnostics_panel_only_opens_a_known_local_source_and_always_copies_details()
+        public void Diagnostics_panel_opens_each_exact_known_local_source_and_suppresses_provider_errors()
         {
-            var existing = Path.Combine(_temporaryDirectory, "source.json");
-            File.WriteAllText(existing, "{}");
+            var gamePath = Path.Combine(_temporaryDirectory, "GameplayTags.json");
+            File.WriteAllText(gamePath, "{ malformed", new UTF8Encoding(false));
+            var malformedGame = GameplayTagEditorWorkspace.Open(
+                ResolveWithImportConflictProvider(gamePath),
+                gamePath);
+            var gameDiagnostic = malformedGame.DiagnosticEntries.First(
+                diagnostic => diagnostic.Message.Contains("B3TAG3003"));
+            string? openedPath = null;
 
-            Assert.That(GameplayTagDiagnosticsPanel.CanOpenSource(null), Is.False);
-            Assert.That(GameplayTagDiagnosticsPanel.CanOpenSource(
-                Path.Combine(_temporaryDirectory, "missing.json")), Is.False);
-            Assert.That(GameplayTagDiagnosticsPanel.CanOpenSource(existing), Is.True);
+            Assert.That(GameplayTagDiagnosticsPanel.OpenSource(
+                gameDiagnostic,
+                path => openedPath = path), Is.True);
+            Assert.That(openedPath, Is.EqualTo(Path.GetFullPath(gamePath)));
 
-            GameplayTagDiagnosticsPanel.CopyDetails(new[] { "first", "second" });
+            File.WriteAllText(
+                gamePath,
+                "{\"schemaVersion\":1,\"tags\":[],\"redirects\":[]}",
+                new UTF8Encoding(false));
+            WriteExternalSource("ability.jump");
+            var externalPath = ImportConflictProvider.ExternalSourceMetadataPathsValue.Single();
+            File.WriteAllText(externalPath, "{ malformed", new UTF8Encoding(false));
+            var malformedExternal = GameplayTagEditorWorkspace.Open(
+                ResolveWithImportConflictProvider(gamePath),
+                gamePath);
+            var externalDiagnostic = malformedExternal.DiagnosticEntries.Single(
+                diagnostic => diagnostic.Message.Contains("B3TAG3003"));
+
+            openedPath = null;
+            Assert.That(GameplayTagDiagnosticsPanel.OpenSource(
+                externalDiagnostic,
+                path => openedPath = path), Is.True);
+            Assert.That(openedPath, Is.EqualTo(Path.GetFullPath(externalPath)));
+
+            var providerError = GameplayTagEditorWorkspace.Open(
+                new GameplayTagBuildContextResolution(
+                    null,
+                    new[] { "B3TAG3001: provider missing" },
+                    permitsGameOnlyValidation: true),
+                gamePath);
+            var providerDiagnostic = providerError.DiagnosticEntries.Single();
+            var providerOpenCount = 0;
+
+            Assert.That(GameplayTagDiagnosticsPanel.CanOpenSource(providerDiagnostic), Is.False);
+            Assert.That(GameplayTagDiagnosticsPanel.OpenSource(
+                providerDiagnostic,
+                _ => providerOpenCount++), Is.False);
+            Assert.That(providerOpenCount, Is.Zero);
+
+            GameplayTagDiagnosticsPanel.CopyDetails(providerError.Diagnostics);
             Assert.That(EditorGUIUtility.systemCopyBuffer,
-                Is.EqualTo("first" + Environment.NewLine + "second"));
+                Is.EqualTo("B3TAG3001: provider missing"));
         }
 
         /// <summary>같은 canonical 경로가 여러 Source에 있어도 선택 key가 정확한 행을 복원하는지 검증합니다.</summary>
@@ -1039,6 +1082,7 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(File.ReadAllText(path), Does.Contain("state.dead"));
         }
 
+        /// <summary>포커스된 편집기의 저장 단축키가 JSON 저장과 로컬 Catalog build를 한 번씩 수행함을 검증합니다.</summary>
         [Test]
         public void Focused_save_shortcut_is_consumed_and_saves_then_builds_without_invoking_a_general_save()
         {
@@ -1075,28 +1119,62 @@ namespace Bun3.Gameplay.Unity.Tests
             }
         }
 
+        /// <summary>저장 후 binary readback 실패가 실제 창 경고를 한 번 보이고 JSON과 기존 cache를 계약대로 유지함을 검증합니다.</summary>
         [Test]
         public void Save_build_failure_keeps_the_written_source_clean_and_reports_one_warning()
         {
             var path = Path.Combine(_temporaryDirectory, "GameplayTags.json");
             GameplayTagCatalogFileAdapter.CreateGameSource(path);
+            var cachePath = TagCatalogDevelopmentPath.Get(
+                "import-conflict-test",
+                _temporaryDirectory);
+            Directory.CreateDirectory(Path.GetDirectoryName(cachePath)!);
+            var lastGoodBytes = new byte[] { 31, 41, 59, 26 };
+            File.WriteAllBytes(cachePath, lastGoodBytes);
             var controller = new GameplayTagCatalogWindowController(
                 path,
                 ResolveWithImportConflictProvider,
-                _ => throw new InvalidOperationException("forced local compile failure"));
+                workspace => GameplayTagDevelopmentCatalogBuilder.Build(
+                    workspace,
+                    _temporaryDirectory,
+                    (_, _) => throw new TagCatalogFormatException(
+                        "forced local binary readback failure")));
             controller.Add("State.Ready");
             var warningCount = 0;
+            Exception? shownError = null;
+            var window = EditorWindow.GetWindow<GameplayTagCatalogWindow>();
+            try
+            {
+                AttachController(window, controller);
+                window.SetValidationErrorHandler((shownPath, error) =>
+                {
+                    Assert.That(shownPath, Is.EqualTo(path));
+                    warningCount++;
+                    shownError = error;
+                });
+                var save = new Event
+                {
+                    type = EventType.KeyDown,
+                    keyCode = KeyCode.S,
+                    control = true
+                };
 
-            var succeeded = controller.TryExecute(controller.Save, out var error);
-            if (!succeeded) warningCount++;
+                Assert.That(window.HandleSaveShortcut(save, isFocused: true), Is.True);
 
-            Assert.That(succeeded, Is.False);
-            Assert.That(error!.Message, Does.Contain("forced local compile failure"));
-            Assert.That(warningCount, Is.EqualTo(1));
-            Assert.That(controller.IsDirty, Is.False);
-            Assert.That(File.ReadAllText(path), Does.Contain("state.ready"));
+                Assert.That(warningCount, Is.EqualTo(1));
+                Assert.That(shownError!.Message,
+                    Does.Contain("forced local binary readback failure"));
+                Assert.That(controller.IsDirty, Is.False);
+                Assert.That(File.ReadAllText(path), Does.Contain("state.ready"));
+                Assert.That(File.ReadAllBytes(cachePath), Is.EqualTo(lastGoodBytes));
+            }
+            finally
+            {
+                CloseWithoutSaving(window);
+            }
         }
 
+        /// <summary>외부 Source가 무효해지면 live refresh가 build와 편집을 차단하고 미저장 Game 문자열은 유지함을 검증합니다.</summary>
         [Test]
         public void Live_source_refresh_disables_build_and_mutation_but_keeps_the_loaded_game_text()
         {

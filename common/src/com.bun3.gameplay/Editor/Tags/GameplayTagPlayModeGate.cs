@@ -94,10 +94,20 @@ namespace Bun3.Gameplay.Editor.Tags
 
             if (state == PlayModeStateChange.EnteredPlayMode)
             {
-                if (GameplayTagPlaySessionCatalog.Current is not null
-                    || GameplayTagPlaySessionCatalog.TryRestorePrepared(out var restoreDiagnostic))
+                string restoreDiagnostic;
+                try
                 {
-                    return;
+                    if (GameplayTagPlaySessionCatalog.Current is not null
+                        || GameplayTagPlaySessionCatalog.TryRestorePrepared(out restoreDiagnostic))
+                    {
+                        return;
+                    }
+                }
+                catch (Exception exception)
+                {
+                    GameplayTagPlaySessionCatalog.Clear();
+                    restoreDiagnostic =
+                        "Prepared GameplayTag Catalog could not be restored: " + exception.Message;
                 }
 
                 cancelPlay();

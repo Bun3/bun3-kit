@@ -1,6 +1,7 @@
 #nullable enable
 using System;
 using System.IO;
+using System.Security;
 using Bun3.Gameplay.Tags;
 using UnityEditor;
 
@@ -46,18 +47,42 @@ namespace Bun3.Gameplay.Editor.Tags
                 return true;
             }
 
-            var path = SessionState.GetString(PathKey, string.Empty);
-            var catalogId = SessionState.GetString(CatalogIdKey, string.Empty);
-            var fingerprintText = SessionState.GetString(FingerprintKey, string.Empty);
-            if (path.Length == 0 || catalogId.Length == 0 || fingerprintText.Length == 0)
-            {
-                diagnostic = "No prepared GameplayTag Catalog exists for this Play transition.";
-                return false;
-            }
-
             try
             {
+                var path = SessionState.GetString(PathKey, string.Empty);
+                var catalogId = SessionState.GetString(CatalogIdKey, string.Empty);
+                var fingerprintText = SessionState.GetString(FingerprintKey, string.Empty);
+                if (path.Length == 0 && catalogId.Length == 0 && fingerprintText.Length == 0)
+                {
+                    diagnostic = "No prepared GameplayTag Catalog exists for this Play transition.";
+                    return false;
+                }
+
+                _ = TagCatalogDevelopmentPath.Get(catalogId, Path.GetTempPath());
+
                 var fingerprint = Convert.FromBase64String(fingerprintText);
+                if (fingerprint.Length != 32)
+                {
+                    throw new ArgumentException(
+                        "Prepared Catalog fingerprint must contain exactly 32 bytes.",
+                        nameof(fingerprintText));
+                }
+
+                if (string.IsNullOrWhiteSpace(path) || !Path.IsPathFullyQualified(path))
+                {
+                    throw new ArgumentException(
+                        "Prepared Catalog path must be a non-blank full path.",
+                        nameof(path));
+                }
+
+                path = Path.GetFullPath(path);
+                if (!File.Exists(path))
+                {
+                    throw new FileNotFoundException(
+                        "Prepared Catalog binary does not exist.",
+                        path);
+                }
+
                 using var input = File.OpenRead(path);
                 var catalog = TagCatalogBinary.Load(
                     input,
@@ -69,6 +94,9 @@ namespace Bun3.Gameplay.Editor.Tags
             }
             catch (Exception exception) when (exception is IOException
                 || exception is UnauthorizedAccessException
+                || exception is SecurityException
+                || exception is ArgumentException
+                || exception is NotSupportedException
                 || exception is FormatException
                 || exception is TagCatalogFormatException
                 || exception is TagCatalogCompatibilityException)

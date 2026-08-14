@@ -33,6 +33,7 @@ namespace Bun3.Gameplay.Editor.Tags
         private bool _showRedirects = true;
         private Vector2 _redirectScroll;
         private double _nextWorkspaceRefresh;
+        private Action<string, Exception>? _showValidationError;
         private IReadOnlyList<GameplayTagRedirectRowModel> _redirectRows =
             Array.Empty<GameplayTagRedirectRowModel>();
 
@@ -87,9 +88,7 @@ namespace Bun3.Gameplay.Editor.Tags
         {
             HandleSaveShortcut(Event.current, EditorWindow.focusedWindow == this);
             EnsureTreeViewState();
-            GameplayTagDiagnosticsPanel.Draw(
-                _controller.Workspace.Diagnostics,
-                File.Exists(_controller.GameSourcePath) ? _controller.GameSourcePath : null);
+            GameplayTagDiagnosticsPanel.Draw(_controller.Workspace.DiagnosticEntries);
             DrawToolbar();
             DrawSearch();
             DrawAddTag();
@@ -118,6 +117,10 @@ namespace Bun3.Gameplay.Editor.Tags
 
             return true;
         }
+
+        internal void SetValidationErrorHandler(Action<string, Exception> showValidationError) =>
+            _showValidationError = showValidationError
+                ?? throw new ArgumentNullException(nameof(showValidationError));
 
         private void EnsureTreeViewState()
         {
@@ -673,9 +676,7 @@ namespace Bun3.Gameplay.Editor.Tags
             }
 
             SynchronizeUnsavedChanges();
-            GameplayTagValidationWindow.Show(
-                _controller.GameSourcePath,
-                error!);
+            ShowValidationError(error!);
             return false;
         }
 
@@ -700,9 +701,14 @@ namespace Bun3.Gameplay.Editor.Tags
             }
             catch (Exception exception)
             {
-                GameplayTagValidationWindow.Show(_controller.GameSourcePath, exception);
+                ShowValidationError(exception);
             }
         }
+
+        private void ShowValidationError(Exception error) =>
+            (_showValidationError ?? GameplayTagValidationWindow.Show)(
+                _controller.GameSourcePath,
+                error);
 
         private void ReloadTree()
         {

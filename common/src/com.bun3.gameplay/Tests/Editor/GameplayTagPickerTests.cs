@@ -209,6 +209,7 @@ namespace Bun3.Gameplay.Unity.Tests
             }
         }
 
+        /// <summary>live Workspace가 무효해지면 열린 Picker의 raw 값은 유지하고 선택만 차단함을 검증합니다.</summary>
         [Test]
         public void Live_workspace_refresh_invalidates_an_open_picker_without_replacing_the_raw_value()
         {
