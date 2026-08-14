@@ -32,6 +32,7 @@ namespace Bun3.Gameplay.Editor.Tags
         private bool _focusNewTagName;
         private bool _showRedirects = true;
         private Vector2 _redirectScroll;
+        private double _nextWorkspaceRefresh;
         private IReadOnlyList<GameplayTagRedirectRowModel> _redirectRows =
             Array.Empty<GameplayTagRedirectRowModel>();
 
@@ -54,12 +55,18 @@ namespace Bun3.Gameplay.Editor.Tags
             saveChangesMessage = "Save changes to the current gameplay tag catalog?";
             AssemblyReloadEvents.beforeAssemblyReload -= BeforeAssemblyReload;
             AssemblyReloadEvents.beforeAssemblyReload += BeforeAssemblyReload;
+            EditorApplication.update -= RefreshWorkspaceOnEditorUpdate;
+            EditorApplication.update += RefreshWorkspaceOnEditorUpdate;
             EnsureTreeViewState();
+            ReloadTree();
             SynchronizeUnsavedChanges();
         }
 
-        private void OnDisable() =>
+        private void OnDisable()
+        {
             AssemblyReloadEvents.beforeAssemblyReload -= BeforeAssemblyReload;
+            EditorApplication.update -= RefreshWorkspaceOnEditorUpdate;
+        }
 
         /// <summary>현재 게임플레이 태그 카탈로그의 변경 사항을 저장합니다.</summary>
         public override void SaveChanges()
@@ -78,8 +85,11 @@ namespace Bun3.Gameplay.Editor.Tags
 
         private void OnGUI()
         {
-            HandleSaveShortcut(Event.current);
+            HandleSaveShortcut(Event.current, EditorWindow.focusedWindow == this);
             EnsureTreeViewState();
+            GameplayTagDiagnosticsPanel.Draw(
+                _controller.Workspace.Diagnostics,
+                File.Exists(_controller.GameSourcePath) ? _controller.GameSourcePath : null);
             DrawToolbar();
             DrawSearch();
             DrawAddTag();
@@ -88,23 +98,25 @@ namespace Bun3.Gameplay.Editor.Tags
             DrawStatus();
         }
 
-        private void HandleSaveShortcut(Event currentEvent)
+        internal bool HandleSaveShortcut(Event currentEvent, bool isFocused)
         {
-            if (EditorWindow.focusedWindow != this
+            if (!isFocused
                 || currentEvent.type != EventType.KeyDown
                 || currentEvent.keyCode != KeyCode.S
                 || (!currentEvent.control && !currentEvent.command)
                 || currentEvent.shift
                 || currentEvent.alt)
             {
-                return;
+                return false;
             }
 
             currentEvent.Use();
-            if (_controller.Session is not null && _controller.IsDirty)
+            if (_controller.Session is not null)
             {
                 SaveChanges();
             }
+
+            return true;
         }
 
         private void EnsureTreeViewState()
@@ -124,6 +136,7 @@ namespace Bun3.Gameplay.Editor.Tags
             _treeView.CopyRequested += selection => CopyTag(selection.CanonicalPath);
             _treeView.FindReferencesRequested += FindTagReferences;
             _treeView.DeleteRequested += DeleteSelected;
+            _treeView.CanEditGameSource = _controller.CanEditGameSource;
         }
 
         private void DrawToolbar()
@@ -668,8 +681,32 @@ namespace Bun3.Gameplay.Editor.Tags
 
         private void SynchronizeUnsavedChanges() => hasUnsavedChanges = _controller.IsDirty;
 
+        private void RefreshWorkspaceOnEditorUpdate()
+        {
+            if (EditorApplication.isPlayingOrWillChangePlaymode
+                || EditorApplication.isCompiling
+                || EditorApplication.timeSinceStartup < _nextWorkspaceRefresh)
+            {
+                return;
+            }
+
+            _nextWorkspaceRefresh = EditorApplication.timeSinceStartup + 0.75d;
+            try
+            {
+                if (!_controller.RefreshWorkspace()) return;
+                ReloadTree();
+                SynchronizeUnsavedChanges();
+                Repaint();
+            }
+            catch (Exception exception)
+            {
+                GameplayTagValidationWindow.Show(_controller.GameSourcePath, exception);
+            }
+        }
+
         private void ReloadTree()
         {
+            _treeView.CanEditGameSource = _controller.CanEditGameSource;
             if (_controller.Session is null)
             {
                 _model = null;

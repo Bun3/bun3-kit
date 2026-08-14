@@ -177,6 +177,8 @@ namespace Bun3.Gameplay.Editor.Tags
         internal event Action<GameplayTagTreeSelectionKey>? FindReferencesRequested;
         internal event Action<GameplayTagTreeSelectionKey>? DeleteRequested;
 
+        internal bool CanEditGameSource { get; set; } = true;
+
         internal GameplayTagTreeView(TreeViewState state)
             : base(state)
         {
@@ -190,7 +192,8 @@ namespace Bun3.Gameplay.Editor.Tags
         internal void RequestAction(GameplayTagTreeAction action, int id)
         {
             if (!TryGetRow(id, out var row)) throw new ArgumentOutOfRangeException(nameof(id));
-            if ((GetAvailableActions(row) & action) != action || !IsSingleAction(action))
+            if ((GetAvailableActions(row, CanEditGameSource) & action) != action
+                || !IsSingleAction(action))
             {
                 throw new InvalidOperationException("The selected Source row does not permit this action.");
             }
@@ -209,9 +212,14 @@ namespace Bun3.Gameplay.Editor.Tags
         }
 
         internal static GameplayTagTreeAction GetAvailableActions(GameplayTagTreeRowModel row)
+            => GetAvailableActions(row, canEditGameSource: true);
+
+        internal static GameplayTagTreeAction GetAvailableActions(
+            GameplayTagTreeRowModel row,
+            bool canEditGameSource)
         {
             if (row.IsSourceRoot) return GameplayTagTreeAction.None;
-            if (row.IsReadOnly)
+            if (row.IsReadOnly || !canEditGameSource)
             {
                 return GameplayTagTreeAction.Copy | GameplayTagTreeAction.FindReferences;
             }
@@ -277,7 +285,7 @@ namespace Bun3.Gameplay.Editor.Tags
         protected override void ContextClickedItem(int id)
         {
             if (!TryGetRow(id, out var row)) return;
-            var actions = GetAvailableActions(row);
+            var actions = GetAvailableActions(row, CanEditGameSource);
             if (actions == GameplayTagTreeAction.None) return;
 
             var menu = new GenericMenu();

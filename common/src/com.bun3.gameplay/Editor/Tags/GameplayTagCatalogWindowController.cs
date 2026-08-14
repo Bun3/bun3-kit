@@ -9,21 +9,27 @@ namespace Bun3.Gameplay.Editor.Tags
     internal sealed class GameplayTagCatalogWindowController
     {
         private readonly Func<string, GameplayTagBuildContextResolution> _resolveContext;
+        private readonly Action<GameplayTagEditorWorkspace> _buildDevelopmentCatalog;
         private GameplayTagEditorWorkspace _workspace;
+        private long _saveRevision;
 
         internal GameplayTagCatalogWindowController()
             : this(
                 GameplayTagGameSourcePath.Get(Application.dataPath),
-                GameplayTagBuildContextResolver.ResolveDevelopment)
+                GameplayTagBuildContextResolver.ResolveDevelopment,
+                workspace => _ = GameplayTagDevelopmentCatalogBuilder.Build(workspace))
         {
         }
 
         internal GameplayTagCatalogWindowController(
             string gameSourcePath,
-            Func<string, GameplayTagBuildContextResolution> resolveContext)
+            Func<string, GameplayTagBuildContextResolution> resolveContext,
+            Action<GameplayTagEditorWorkspace> buildDevelopmentCatalog)
         {
             if (gameSourcePath is null) throw new ArgumentNullException(nameof(gameSourcePath));
             _resolveContext = resolveContext ?? throw new ArgumentNullException(nameof(resolveContext));
+            _buildDevelopmentCatalog = buildDevelopmentCatalog
+                ?? throw new ArgumentNullException(nameof(buildDevelopmentCatalog));
             GameSourcePath = Path.GetFullPath(gameSourcePath);
             _workspace = OpenWorkspace();
         }
@@ -80,6 +86,17 @@ namespace Bun3.Gameplay.Editor.Tags
         {
             GameplayTagCatalogFileAdapter.Save(GameSourcePath, RequireEditableSession("game"));
             IsDirty = false;
+            _saveRevision++;
+            InstallRefreshedWorkspace(CreateRefreshedWorkspace());
+            _buildDevelopmentCatalog(_workspace);
+        }
+
+        internal bool RefreshWorkspace()
+        {
+            var candidate = CreateRefreshedWorkspace();
+            if (HasSameState(_workspace, candidate)) return false;
+            InstallRefreshedWorkspace(candidate);
+            return true;
         }
 
         internal void DiscardChanges() => IsDirty = false;
@@ -196,6 +213,7 @@ namespace Bun3.Gameplay.Editor.Tags
             var selectedSourceId = SelectedSourceId;
             var selectedPath = SelectedPath;
             var isDirty = IsDirty;
+            var saveRevision = _saveRevision;
             try
             {
                 command();
@@ -204,7 +222,7 @@ namespace Bun3.Gameplay.Editor.Tags
             }
             catch (Exception exception)
             {
-                if (isDirty && !IsDirty)
+                if (_saveRevision != saveRevision)
                 {
                     error = exception;
                     return false;
@@ -222,6 +240,7 @@ namespace Bun3.Gameplay.Editor.Tags
                 SelectedSourceId = selectedSourceId;
                 SelectedPath = selectedPath;
                 IsDirty = isDirty;
+                _saveRevision = saveRevision;
                 error = exception;
                 return false;
             }
@@ -257,6 +276,20 @@ namespace Bun3.Gameplay.Editor.Tags
             return workspace;
         }
 
+        private GameplayTagEditorWorkspace CreateRefreshedWorkspace()
+        {
+            var resolution = _resolveContext(GameSourcePath);
+            return IsDirty && Session is not null
+                ? GameplayTagEditorWorkspace.Open(resolution, Session.GameSource)
+                : GameplayTagEditorWorkspace.Open(resolution, GameSourcePath);
+        }
+
+        private void InstallRefreshedWorkspace(GameplayTagEditorWorkspace workspace)
+        {
+            _workspace = workspace ?? throw new ArgumentNullException(nameof(workspace));
+            Session = workspace.GameSession;
+        }
+
         private void ReplaceWorkspace()
         {
             ReplaceWorkspace(OpenWorkspace());
@@ -275,6 +308,87 @@ namespace Bun3.Gameplay.Editor.Tags
         {
             _workspace = _workspace.WithGameSession(session);
             Session = _workspace.GameSession;
+        }
+
+        private static bool HasSameState(
+            GameplayTagEditorWorkspace left,
+            GameplayTagEditorWorkspace right)
+        {
+            if (left.CanCreateGameSource != right.CanCreateGameSource
+                || left.CanEditGameSource != right.CanEditGameSource
+                || left.CanBuildCatalog != right.CanBuildCatalog
+                || !EqualStrings(left.Diagnostics, right.Diagnostics))
+            {
+                return false;
+            }
+
+            if (!string.Equals(
+                    left.GameSession?.Serialize(),
+                    right.GameSession?.Serialize(),
+                    StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            var leftSources = left.Snapshot?.Sources;
+            var rightSources = right.Snapshot?.Sources;
+            if (leftSources is null || rightSources is null) return leftSources is null && rightSources is null;
+            if (leftSources.Count != rightSources.Count) return false;
+            for (var index = 0; index < leftSources.Count; index++)
+            {
+                if (!EqualSource(leftSources[index], rightSources[index])) return false;
+            }
+
+            return true;
+        }
+
+        private static bool EqualSource(
+            Bun3.Gameplay.Tags.Catalog.TagSourceDocument left,
+            Bun3.Gameplay.Tags.Catalog.TagSourceDocument right)
+        {
+            if (!string.Equals(left.Descriptor.SourceId, right.Descriptor.SourceId, StringComparison.Ordinal)
+                || !string.Equals(left.Descriptor.DisplayName, right.Descriptor.DisplayName, StringComparison.Ordinal)
+                || left.Descriptor.Kind != right.Descriptor.Kind
+                || left.Descriptor.IsReadOnly != right.Descriptor.IsReadOnly
+                || !string.Equals(left.Origin, right.Origin, StringComparison.Ordinal)
+                || left.Tags.Count != right.Tags.Count
+                || left.Redirects.Count != right.Redirects.Count)
+            {
+                return false;
+            }
+
+            for (var index = 0; index < left.Tags.Count; index++)
+            {
+                if (!string.Equals(left.Tags[index].Name, right.Tags[index].Name, StringComparison.Ordinal)
+                    || !string.Equals(left.Tags[index].Comment, right.Tags[index].Comment, StringComparison.Ordinal))
+                {
+                    return false;
+                }
+            }
+
+            for (var index = 0; index < left.Redirects.Count; index++)
+            {
+                if (!string.Equals(left.Redirects[index].From, right.Redirects[index].From, StringComparison.Ordinal)
+                    || !string.Equals(left.Redirects[index].To, right.Redirects[index].To, StringComparison.Ordinal))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private static bool EqualStrings(
+            IReadOnlyList<string> left,
+            IReadOnlyList<string> right)
+        {
+            if (left.Count != right.Count) return false;
+            for (var index = 0; index < left.Count; index++)
+            {
+                if (!string.Equals(left[index], right[index], StringComparison.Ordinal)) return false;
+            }
+
+            return true;
         }
     }
 }

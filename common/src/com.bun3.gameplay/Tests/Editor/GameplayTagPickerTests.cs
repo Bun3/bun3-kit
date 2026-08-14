@@ -209,6 +209,38 @@ namespace Bun3.Gameplay.Unity.Tests
             }
         }
 
+        [Test]
+        public void Live_workspace_refresh_invalidates_an_open_picker_without_replacing_the_raw_value()
+        {
+            var valid = GameplayTagDevelopmentCatalogTests.CreateValidWorkspace(
+                "picker-live-game", "ability.jump");
+            var invalid = GameplayTagEditorWorkspace.Open(
+                new GameplayTagBuildContextResolution(
+                    null,
+                    new[] { "B3TAG3003: package Source became malformed" },
+                    permitsGameOnlyValidation: false),
+                valid.Snapshot!.Sources.Single(source => source.Descriptor.SourceId == "game"));
+            var callbackCount = 0;
+            var window = ScriptableObject.CreateInstance<GameplayTagPickerWindow>();
+            try
+            {
+                window.Initialize(valid, "Legacy.Raw.Value", _ => callbackCount++);
+                Assert.That(window.CanSelect, Is.True);
+
+                window.RefreshWorkspace(invalid);
+
+                Assert.That(window.CanSelect, Is.False);
+                Assert.That(window.CurrentRawValue, Is.EqualTo("Legacy.Raw.Value"));
+                Assert.That(window.PersistentDiagnostics.Single(), Does.Contain("B3TAG3003"));
+                Assert.That(window.TrySelect(1), Is.False);
+                Assert.That(callbackCount, Is.Zero);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(window);
+            }
+        }
+
         private static GameplayTagWorkspaceSnapshot CreateSnapshot(params TagSourceDocument[] sources)
         {
             var compilation = TagCatalogCompiler.Compile(

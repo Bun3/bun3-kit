@@ -10,6 +10,7 @@ using Bun3.Gameplay.Editor.Tags;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEditor.IMGUI.Controls;
+using UnityEngine;
 
 namespace Bun3.Gameplay.Unity.Tests
 {
@@ -322,6 +323,45 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(GameplayTagTreeView.GetAvailableActions(
                 CreateTreeRow("game", "", isSourceRoot: true, isExplicit: false, isReadOnly: false)),
                 Is.EqualTo(GameplayTagTreeAction.None));
+        }
+
+        [Test]
+        public void Invalid_workspace_removes_mutations_from_writable_rows_but_keeps_copy_and_reference_actions()
+        {
+            var writable = new GameplayTagTreeRowModel(
+                id: 2,
+                parentId: 1,
+                runtimeIndex: 1,
+                sourceId: "game",
+                displayName: "jump",
+                path: "ability.jump",
+                comment: string.Empty,
+                isSourceRoot: false,
+                isExplicit: true,
+                isReadOnly: false,
+                directMatch: false);
+
+            var actions = GameplayTagTreeView.GetAvailableActions(
+                writable, canEditGameSource: false);
+
+            Assert.That(actions,
+                Is.EqualTo(GameplayTagTreeAction.Copy | GameplayTagTreeAction.FindReferences));
+        }
+
+        [Test]
+        public void Diagnostics_panel_only_opens_a_known_local_source_and_always_copies_details()
+        {
+            var existing = Path.Combine(_temporaryDirectory, "source.json");
+            File.WriteAllText(existing, "{}");
+
+            Assert.That(GameplayTagDiagnosticsPanel.CanOpenSource(null), Is.False);
+            Assert.That(GameplayTagDiagnosticsPanel.CanOpenSource(
+                Path.Combine(_temporaryDirectory, "missing.json")), Is.False);
+            Assert.That(GameplayTagDiagnosticsPanel.CanOpenSource(existing), Is.True);
+
+            GameplayTagDiagnosticsPanel.CopyDetails(new[] { "first", "second" });
+            Assert.That(EditorGUIUtility.systemCopyBuffer,
+                Is.EqualTo("first" + Environment.NewLine + "second"));
         }
 
         /// <summary>같은 canonical 경로가 여러 Source에 있어도 선택 key가 정확한 행을 복원하는지 검증합니다.</summary>
@@ -699,7 +739,8 @@ namespace Bun3.Gameplay.Unity.Tests
             var path = Path.Combine(_temporaryDirectory, "GameplayTags.json");
             var controller = new GameplayTagCatalogWindowController(
                 path,
-                ResolveWithoutProvider);
+                ResolveWithoutProvider,
+                _ => { });
             Assert.That(controller.CanCreateGameSource, Is.True);
             controller.CreateGameSource();
             Assert.That(controller.CanCreateGameSource, Is.False);
@@ -732,7 +773,8 @@ namespace Bun3.Gameplay.Unity.Tests
             File.WriteAllText(sourcePath, original, new UTF8Encoding(false));
             var controller = new GameplayTagCatalogWindowController(
                 fixedPath,
-                ResolveWithoutProvider);
+                ResolveWithoutProvider,
+                _ => { });
 
             controller.ImportExisting(sourcePath);
             controller.Add("ability.run");
@@ -753,7 +795,8 @@ namespace Bun3.Gameplay.Unity.Tests
             var sourceBefore = File.ReadAllBytes(sourcePath);
             var controller = new GameplayTagCatalogWindowController(
                 fixedPath,
-                ResolveWithImportConflictProvider);
+                ResolveWithImportConflictProvider,
+                _ => { });
             controller.Add("game.unsaved");
             var workspaceBefore = controller.Workspace;
             var sessionBefore = controller.Session!.Serialize();
@@ -779,7 +822,8 @@ namespace Bun3.Gameplay.Unity.Tests
             var sourceBefore = File.ReadAllBytes(sourcePath);
             var controller = new GameplayTagCatalogWindowController(
                 fixedPath,
-                ResolveWithImportConflictProvider);
+                ResolveWithImportConflictProvider,
+                _ => { });
             var workspaceBefore = controller.Workspace;
 
             Assert.Throws<InvalidOperationException>(() => controller.ImportExisting(sourcePath));
@@ -807,7 +851,8 @@ namespace Bun3.Gameplay.Unity.Tests
             WriteExternalSource("ability.jump");
             var controller = new GameplayTagCatalogWindowController(
                 fixedPath,
-                ResolveWithImportConflictProvider);
+                ResolveWithImportConflictProvider,
+                _ => { });
 
             var result = controller.RenameSubtree("game", "ABILITY.JUMP", "Leap");
 
@@ -832,7 +877,8 @@ namespace Bun3.Gameplay.Unity.Tests
             WriteExternalSource("ability.jump");
             var controller = new GameplayTagCatalogWindowController(
                 fixedPath,
-                ResolveWithImportConflictProvider);
+                ResolveWithImportConflictProvider,
+                _ => { });
             controller.Select("framework.external", "ABILITY.JUMP");
             var before = controller.Session!.Serialize();
 
@@ -993,6 +1039,89 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(File.ReadAllText(path), Does.Contain("state.dead"));
         }
 
+        [Test]
+        public void Focused_save_shortcut_is_consumed_and_saves_then_builds_without_invoking_a_general_save()
+        {
+            var path = Path.Combine(_temporaryDirectory, "GameplayTags.json");
+            GameplayTagCatalogFileAdapter.CreateGameSource(path);
+            var buildCount = 0;
+            var controller = new GameplayTagCatalogWindowController(
+                path,
+                ResolveWithImportConflictProvider,
+                _ => buildCount++);
+            controller.Add("State.Ready");
+            var window = EditorWindow.GetWindow<GameplayTagCatalogWindow>();
+            try
+            {
+                AttachController(window, controller);
+                var save = new Event
+                {
+                    type = EventType.KeyDown,
+                    keyCode = KeyCode.S,
+                    control = true
+                };
+
+                var handled = window.HandleSaveShortcut(save, isFocused: true);
+
+                Assert.That(handled, Is.True);
+                Assert.That(save.type, Is.EqualTo(EventType.Used));
+                Assert.That(File.ReadAllText(path), Does.Contain("state.ready"));
+                Assert.That(controller.IsDirty, Is.False);
+                Assert.That(buildCount, Is.EqualTo(1));
+            }
+            finally
+            {
+                CloseWithoutSaving(window);
+            }
+        }
+
+        [Test]
+        public void Save_build_failure_keeps_the_written_source_clean_and_reports_one_warning()
+        {
+            var path = Path.Combine(_temporaryDirectory, "GameplayTags.json");
+            GameplayTagCatalogFileAdapter.CreateGameSource(path);
+            var controller = new GameplayTagCatalogWindowController(
+                path,
+                ResolveWithImportConflictProvider,
+                _ => throw new InvalidOperationException("forced local compile failure"));
+            controller.Add("State.Ready");
+            var warningCount = 0;
+
+            var succeeded = controller.TryExecute(controller.Save, out var error);
+            if (!succeeded) warningCount++;
+
+            Assert.That(succeeded, Is.False);
+            Assert.That(error!.Message, Does.Contain("forced local compile failure"));
+            Assert.That(warningCount, Is.EqualTo(1));
+            Assert.That(controller.IsDirty, Is.False);
+            Assert.That(File.ReadAllText(path), Does.Contain("state.ready"));
+        }
+
+        [Test]
+        public void Live_source_refresh_disables_build_and_mutation_but_keeps_the_loaded_game_text()
+        {
+            var path = Path.Combine(_temporaryDirectory, "GameplayTags.json");
+            GameplayTagCatalogFileAdapter.CreateGameSource(path);
+            WriteExternalSource("ability.jump");
+            var controller = new GameplayTagCatalogWindowController(
+                path,
+                ResolveWithImportConflictProvider,
+                _ => { });
+            controller.Add("state.unsaved");
+            var externalPath = ImportConflictProvider.ExternalSourceMetadataPathsValue.Single();
+            File.WriteAllText(externalPath, "{ malformed", new UTF8Encoding(false));
+
+            var changed = controller.RefreshWorkspace();
+
+            Assert.That(changed, Is.True);
+            Assert.That(controller.CanBuildCatalog, Is.False);
+            Assert.That(controller.CanEditGameSource, Is.False);
+            Assert.That(controller.Session, Is.Not.Null);
+            Assert.That(controller.Session!.Serialize(), Does.Contain("state.unsaved"));
+            Assert.That(controller.IsDirty, Is.True);
+            Assert.That(controller.Workspace.Diagnostics.Single(), Does.Contain("B3TAG3003"));
+        }
+
         /// <summary>검증 진단에 JSON 경로, 줄, 위치가 포함되는지 검증합니다.</summary>
         [Test]
         public void Validation_diagnostic_includes_json_path_line_and_position()
@@ -1115,6 +1244,17 @@ namespace Bun3.Gameplay.Unity.Tests
             return controller;
         }
 
+        private static void AttachController(
+            GameplayTagCatalogWindow window,
+            GameplayTagCatalogWindowController controller)
+        {
+            var field = typeof(GameplayTagCatalogWindow).GetField(
+                "_controller", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("The catalog window controller field is missing.");
+            field.SetValue(window, controller);
+            RefreshTree(window);
+        }
+
         private static GameplayTagCatalogWindowController CreateController(string path)
         {
             if (File.Exists(path))
@@ -1128,7 +1268,7 @@ namespace Bun3.Gameplay.Unity.Tests
                 GameplayTagCatalogFileAdapter.CreateGameSource(path);
             }
 
-            return new GameplayTagCatalogWindowController(path, ResolveWithoutProvider);
+            return new GameplayTagCatalogWindowController(path, ResolveWithoutProvider, _ => { });
         }
 
         private static GameplayTagBuildContextResolution ResolveWithoutProvider(string path) =>

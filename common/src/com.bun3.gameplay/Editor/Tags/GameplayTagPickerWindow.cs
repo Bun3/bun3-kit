@@ -70,9 +70,11 @@ namespace Bun3.Gameplay.Editor.Tags
         private GameplayTagPickerModel? _model;
         private Action<string>? _onSelected;
         private IReadOnlyList<string> _persistentDiagnostics = Array.Empty<string>();
+        private Func<GameplayTagEditorWorkspace>? _workspaceProvider;
         private string _search = string.Empty;
         private string _currentRawValue = string.Empty;
         private bool _canSelect;
+        private double _nextWorkspaceRefresh;
 
         internal GameplayTagPickerModel? Model => _model;
         internal string CurrentRawValue => _currentRawValue;
@@ -105,6 +107,19 @@ namespace Bun3.Gameplay.Editor.Tags
             return window;
         }
 
+        internal static GameplayTagPickerWindow ShowLive(
+            Func<GameplayTagEditorWorkspace> workspaceProvider,
+            string selectedPath,
+            Action<string> onSelected)
+        {
+            if (workspaceProvider is null) throw new ArgumentNullException(nameof(workspaceProvider));
+            var window = CreateInstance<GameplayTagPickerWindow>();
+            window.Initialize(workspaceProvider, selectedPath, onSelected);
+            window.ShowUtility();
+            window.Focus();
+            return window;
+        }
+
         internal void Initialize(
             GameplayTagWorkspaceSnapshot snapshot,
             string selectedPath,
@@ -128,6 +143,26 @@ namespace Bun3.Gameplay.Editor.Tags
                 workspace.Diagnostics);
         }
 
+        internal void Initialize(
+            Func<GameplayTagEditorWorkspace> workspaceProvider,
+            string selectedPath,
+            Action<string> onSelected)
+        {
+            _workspaceProvider = workspaceProvider
+                ?? throw new ArgumentNullException(nameof(workspaceProvider));
+            if (selectedPath is null) throw new ArgumentNullException(nameof(selectedPath));
+            _currentRawValue = selectedPath;
+            _onSelected = onSelected ?? throw new ArgumentNullException(nameof(onSelected));
+            _search = string.Empty;
+            RefreshWorkspace(_workspaceProvider());
+        }
+
+        internal void RefreshWorkspace(GameplayTagEditorWorkspace workspace)
+        {
+            if (workspace is null) throw new ArgumentNullException(nameof(workspace));
+            ApplyWorkspace(workspace.Snapshot, workspace.CanBuildCatalog, workspace.Diagnostics);
+        }
+
         internal bool TrySelect(int rowId)
         {
             EnsureTree();
@@ -141,7 +176,12 @@ namespace Bun3.Gameplay.Editor.Tags
             titleContent = new GUIContent("GameplayTag Picker");
             minSize = new Vector2(360f, 280f);
             EnsureTree();
+            EditorApplication.update -= RefreshWorkspaceOnEditorUpdate;
+            EditorApplication.update += RefreshWorkspaceOnEditorUpdate;
         }
+
+        private void OnDisable() =>
+            EditorApplication.update -= RefreshWorkspaceOnEditorUpdate;
 
         private void OnGUI()
         {
@@ -151,12 +191,7 @@ namespace Bun3.Gameplay.Editor.Tags
                 EditorStyles.textField,
                 GUILayout.Height(EditorGUIUtility.singleLineHeight));
 
-            for (var index = 0; index < _persistentDiagnostics.Count; index++)
-            {
-                EditorGUILayout.HelpBox(
-                    _persistentDiagnostics[index],
-                    _canSelect ? MessageType.Warning : MessageType.Error);
-            }
+            GameplayTagDiagnosticsPanel.Draw(_persistentDiagnostics, localSourcePath: null);
 
             EditorGUI.BeginChangeCheck();
             var search = EditorGUILayout.TextField("Search", _search);
@@ -187,6 +222,17 @@ namespace Bun3.Gameplay.Editor.Tags
         {
             if (selectedPath is null) throw new ArgumentNullException(nameof(selectedPath));
             _onSelected = onSelected ?? throw new ArgumentNullException(nameof(onSelected));
+            _workspaceProvider = null;
+            _currentRawValue = selectedPath;
+            _search = string.Empty;
+            ApplyWorkspace(snapshot, canSelect, diagnostics);
+        }
+
+        private void ApplyWorkspace(
+            GameplayTagWorkspaceSnapshot? snapshot,
+            bool canSelect,
+            IReadOnlyList<string> diagnostics)
+        {
             if (diagnostics is null) throw new ArgumentNullException(nameof(diagnostics));
 
             var diagnosticCopy = new string[diagnostics.Count];
@@ -196,13 +242,26 @@ namespace Bun3.Gameplay.Editor.Tags
             }
 
             _persistentDiagnostics = Array.AsReadOnly(diagnosticCopy);
-            _currentRawValue = selectedPath;
             _canSelect = canSelect && snapshot is not null;
             _model = snapshot is null ? null : new GameplayTagPickerModel(snapshot);
-            _search = string.Empty;
             EnsureTree();
             ReloadRows();
-            _treeView!.SynchronizeSelection(selectedPath);
+            _treeView!.SynchronizeSelection(_currentRawValue);
+        }
+
+        private void RefreshWorkspaceOnEditorUpdate()
+        {
+            if (_workspaceProvider is null
+                || EditorApplication.isPlayingOrWillChangePlaymode
+                || EditorApplication.isCompiling
+                || EditorApplication.timeSinceStartup < _nextWorkspaceRefresh)
+            {
+                return;
+            }
+
+            _nextWorkspaceRefresh = EditorApplication.timeSinceStartup + 0.75d;
+            RefreshWorkspace(_workspaceProvider());
+            Repaint();
         }
 
         private void EnsureTree()
