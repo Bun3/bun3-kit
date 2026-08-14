@@ -1,72 +1,139 @@
 #nullable enable
+using System;
 using System.Linq;
 using Bun3.Gameplay.Editor.Tags;
+using Bun3.Gameplay.Tags;
+using Bun3.Gameplay.Tags.Catalog;
 using NUnit.Framework;
 
 namespace Bun3.Gameplay.Unity.Tests
 {
-    /// <summary>게임플레이 태그 공용 트리 모델의 행 구성과 검색 동작을 검증합니다.</summary>
+    /// <summary>Source 단위 태그 트리 projection의 행 구성과 검색 동작을 검증합니다.</summary>
     [TestFixture]
     public sealed class GameplayTagTreeModelTests
     {
-        /// <summary>명시 태그와 암시 부모가 행에서 구분되는지 검증합니다.</summary>
+        /// <summary>Source root와 Source별 중복 태그가 결정적인 전위 순서로 표시되는지 검증합니다.</summary>
         [Test]
-        public void Rows_distinguish_explicit_tags_from_implicit_parents()
+        public void Source_roots_and_duplicate_tags_use_deterministic_preorder_and_unique_editor_ids()
         {
-            var session = GameplayTagCatalogEditSession.Open(
-                "{\"schemaVersion\":1,\"tags\":[{\"name\":\"State.Dead\",\"comment\":\"사망\"}]}");
-            var model = new GameplayTagTreeModel(session);
+            var model = new GameplayTagTreeModel(CreateSnapshot(
+                CreateSource(
+                    "game", "Game", TagSourceKind.GameJson, false,
+                    new TagSourceTag("ability.jump", "game comment")),
+                CreateSource(
+                    "bun3.gameplay", "Bun3.Gameplay", TagSourceKind.PackageJson, true,
+                    new TagSourceTag("ability.jump", "framework comment"))));
 
-            Assert.That(model.Rows.Single(row => row.Path == "State").IsExplicit, Is.False);
-            var dead = model.Rows.Single(row => row.Path == "State.Dead");
-            Assert.That(dead.IsExplicit, Is.True);
-            Assert.That(dead.Comment, Is.EqualTo("사망"));
+            Assert.That(model.Rows.Select(row => (row.SourceId, row.Path)), Is.EqualTo(new[]
+            {
+                ("bun3.gameplay", ""),
+                ("bun3.gameplay", "ability"),
+                ("bun3.gameplay", "ability.jump"),
+                ("game", ""),
+                ("game", "ability"),
+                ("game", "ability.jump")
+            }));
+            Assert.That(model.Rows.Select(row => row.Id), Is.EqualTo(new[] { 1, 2, 3, 4, 5, 6 }));
+            Assert.That(model.Rows[2].RuntimeIndex, Is.EqualTo(model.Rows[5].RuntimeIndex));
+            Assert.That(model.Rows[2].Id, Is.Not.EqualTo(model.Rows[5].Id));
         }
 
-        /// <summary>검색이 전체 경로만 대상으로 하고 조상 문맥을 유지하는지 검증합니다.</summary>
+        /// <summary>Source root와 implicit/explicit 행이 Source 소유권과 권한을 보존하는지 검증합니다.</summary>
         [Test]
-        public void Search_matches_full_path_only_and_keeps_ancestor_context()
+        public void Rows_preserve_source_comment_explicit_and_readonly_metadata()
         {
-            var session = GameplayTagCatalogEditSession.Open(
-                "{\"schemaVersion\":1,\"tags\":[" +
-                "{\"name\":\"State.Dead.Ghost\",\"comment\":\"spectral marker\"}," +
-                "{\"name\":\"Ability.GhostWalk\"}]}");
-            var model = new GameplayTagTreeModel(session);
+            var model = new GameplayTagTreeModel(CreateSnapshot(
+                CreateSource(
+                    "game", "Game", TagSourceKind.GameJson, false,
+                    new TagSourceTag("ability.jump", "game comment")),
+                CreateSource(
+                    "bun3.gameplay", "Bun3.Gameplay", TagSourceKind.PackageJson, true,
+                    new TagSourceTag("ability.jump", "framework comment"))));
 
-            Assert.That(model.Filter("gHoSt").Select(row => row.Path),
-                Is.EqualTo(new[] { "Ability", "Ability.GhostWalk", "State", "State.Dead", "State.Dead.Ghost" }));
-            Assert.That(model.Filter("spectral"), Is.Empty);
+            var packageRoot = model.Rows.Single(row => row.SourceId == "bun3.gameplay" && row.IsSourceRoot);
+            Assert.That(packageRoot.Path, Is.Empty);
+            Assert.That(packageRoot.DisplayName, Is.EqualTo("Bun3.Gameplay"));
+            Assert.That(packageRoot.IsReadOnly, Is.True);
+
+            var packageParent = model.Rows.Single(
+                row => row.SourceId == "bun3.gameplay" && row.Path == "ability");
+            Assert.That(packageParent.IsExplicit, Is.False);
+            Assert.That(packageParent.Comment, Is.Empty);
+
+            var packageLeaf = model.Rows.Single(
+                row => row.SourceId == "bun3.gameplay" && row.Path == "ability.jump");
+            Assert.That(packageLeaf.IsExplicit, Is.True);
+            Assert.That(packageLeaf.Comment, Is.EqualTo("framework comment"));
+            Assert.That(packageLeaf.IsReadOnly, Is.True);
+
+            var gameLeaf = model.Rows.Single(row => row.SourceId == "game" && row.Path == "ability.jump");
+            Assert.That(gameLeaf.Comment, Is.EqualTo("game comment"));
+            Assert.That(gameLeaf.IsReadOnly, Is.False);
         }
 
-        /// <summary>검색 일치 행과 그 조상 행이 함께 유지되는지 검증합니다.</summary>
+        /// <summary>검색이 canonical 전체 경로만 검색하고 Source root와 조상 문맥을 유지하는지 검증합니다.</summary>
         [Test]
-        public void Search_keeps_matching_rows_and_their_ancestor_context()
+        public void Search_keeps_the_matching_source_root_and_ancestors_and_marks_only_direct_matches()
         {
-            var session = GameplayTagCatalogEditSession.Open(
-                "{\"schemaVersion\":1,\"tags\":[" +
-                "{\"name\":\"State.Dead.Ghost\",\"comment\":\"유령 상태\"}," +
-                "{\"name\":\"State.Alive\"},{\"name\":\"Ability.Jump\"}]}");
-            var model = new GameplayTagTreeModel(session);
+            var model = new GameplayTagTreeModel(CreateSnapshot(
+                CreateSource(
+                    "game", "Game", TagSourceKind.GameJson, false,
+                    new TagSourceTag("state.dead", "jump appears only in this comment")),
+                CreateSource(
+                    "bun3.gameplay", "Bun3.Gameplay", TagSourceKind.PackageJson, true,
+                    new TagSourceTag("ability.movement.jump", "framework"))));
 
-            var rows = model.Filter("gHoSt");
+            var rows = model.Filter("JUMP");
 
-            Assert.That(rows.Select(row => row.Path),
-                Is.EqualTo(new[] { "State", "State.Dead", "State.Dead.Ghost" }));
-            Assert.That(rows[2].Comment, Is.EqualTo("유령 상태"));
-            Assert.That(rows[2].IsDirectMatch, Is.True);
-            Assert.That(rows[0].IsDirectMatch, Is.False);
+            Assert.That(rows.Select(row => (row.SourceId, row.Path)), Is.EqualTo(new[]
+            {
+                ("bun3.gameplay", ""),
+                ("bun3.gameplay", "ability"),
+                ("bun3.gameplay", "ability.movement"),
+                ("bun3.gameplay", "ability.movement.jump")
+            }));
+            Assert.That(rows.Select(row => row.IsDirectMatch),
+                Is.EqualTo(new[] { false, false, false, true }));
         }
 
-        /// <summary>빈 검색이 결정적인 전위 순회 행을 반환하는지 검증합니다.</summary>
+        /// <summary>태그가 없는 Source도 작성 단위인 root 행으로 남는지 검증합니다.</summary>
         [Test]
-        public void Empty_search_returns_deterministic_preorder()
+        public void Empty_sources_still_render_non_tag_source_roots()
         {
-            var session = GameplayTagCatalogEditSession.Open(
-                "{\"schemaVersion\":1,\"tags\":[{\"name\":\"State.Dead\"},{\"name\":\"Ability.Jump\"}]}");
-            var model = new GameplayTagTreeModel(session);
+            var model = new GameplayTagTreeModel(CreateSnapshot(
+                CreateSource("game", "Game", TagSourceKind.GameJson, false),
+                CreateSource("bun3.gameplay", "Bun3.Gameplay", TagSourceKind.Native, true)));
 
-            Assert.That(model.Filter("").Select(row => row.Path),
-                Is.EqualTo(new[] { "Ability", "Ability.Jump", "State", "State.Dead" }));
+            Assert.That(model.Rows.Select(row => (row.SourceId, row.DisplayName, row.Path)),
+                Is.EqualTo(new[]
+                {
+                    ("bun3.gameplay", "Bun3.Gameplay", ""),
+                    ("game", "Game", "")
+                }));
+            Assert.That(model.Rows.All(row => row.IsSourceRoot && row.RuntimeIndex == 0), Is.True);
         }
+
+        private static GameplayTagWorkspaceSnapshot CreateSnapshot(params TagSourceDocument[] sources)
+        {
+            var compilation = TagCatalogCompiler.Compile(
+                sources,
+                new TagCatalogIdentity("tree-tests", "0.0.0-dev"));
+            Assert.That(compilation.Succeeded, Is.True,
+                string.Join(Environment.NewLine, compilation.Diagnostics.Select(diagnostic => diagnostic.Message)));
+            return new GameplayTagWorkspaceSnapshot(
+                compilation.Catalog!, compilation.Provenance!, sources);
+        }
+
+        private static TagSourceDocument CreateSource(
+            string sourceId,
+            string displayName,
+            TagSourceKind kind,
+            bool isReadOnly,
+            params TagSourceTag[] tags) =>
+            new TagSourceDocument(
+                new TagSourceDescriptor(sourceId, displayName, kind, isReadOnly),
+                sourceId + ".json",
+                tags,
+                Array.Empty<TagSourceRedirect>());
     }
 }

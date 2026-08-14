@@ -1,6 +1,9 @@
 #nullable enable
 using System;
+using System.Linq;
 using Bun3.Gameplay.Editor.Tags;
+using Bun3.Gameplay.Tags;
+using Bun3.Gameplay.Tags.Catalog;
 using NUnit.Framework;
 
 namespace Bun3.Gameplay.Unity.Tests
@@ -15,8 +18,12 @@ namespace Bun3.Gameplay.Unity.Tests
         {
             var redirects = new[]
             {
-                new EditableRedirectRow("State.Killed", "State.Dead"),
-                new EditableRedirectRow("Ability.Old", "Ability.New")
+                new GameplayTagRedirectRowModel(
+                    "game", "Game", "State.Killed", "State.Dead", false, false),
+                new GameplayTagRedirectRowModel(
+                    "game", "Game", "Ability.Old", "Ability.New", false, false),
+                new GameplayTagRedirectRowModel(
+                    "bun3.gameplay", "Bun3.Gameplay", "Framework.Old", "Ability.New", true, false)
             };
             var result = GameplayTagReferenceSearchResult.Complete(new[]
             {
@@ -26,6 +33,51 @@ namespace Bun3.Gameplay.Unity.Tests
 
             Assert.That(GameplayTagRedirectMaintenance.GetUnreferencedSources(redirects, result),
                 Is.EqualTo(new[] { "Ability.Old" }));
+        }
+
+        /// <summary>Source별 redirect projection이 Source ID와 old path 순서로 결정되고 shadow 상태를 보존하는지 검증합니다.</summary>
+        [Test]
+        public void Redirect_rows_are_grouped_by_source_and_mark_active_old_names_as_shadowed()
+        {
+            var sources = new[]
+            {
+                new TagSourceDocument(
+                    new TagSourceDescriptor("game", "Game", TagSourceKind.GameJson, false),
+                    "GameplayTags.json",
+                    Array.Empty<TagSourceTag>(),
+                    new[] { new TagSourceRedirect("z.old", "active.tag") }),
+                new TagSourceDocument(
+                    new TagSourceDescriptor(
+                        "bun3.gameplay", "Bun3.Gameplay", TagSourceKind.PackageJson, true),
+                    "Bun3.Gameplay.tags.json",
+                    new[]
+                    {
+                        new TagSourceTag("active.tag", ""),
+                        new TagSourceTag("active.tag.child", "")
+                    },
+                    new[]
+                    {
+                        new TagSourceRedirect("active.tag", "active.tag.child"),
+                        new TagSourceRedirect("a.old", "active.tag")
+                    })
+            };
+            var compilation = TagCatalogCompiler.Compile(
+                sources, new TagCatalogIdentity("redirect-tests", "0.0.0-dev"));
+            Assert.That(compilation.Succeeded, Is.True);
+            var snapshot = new GameplayTagWorkspaceSnapshot(
+                compilation.Catalog!, compilation.Provenance!, sources);
+
+            var rows = GameplayTagRedirectMaintenance.CreateRows(snapshot);
+
+            Assert.That(rows.Select(row => (row.SourceId, row.From)), Is.EqualTo(new[]
+            {
+                ("bun3.gameplay", "a.old"),
+                ("bun3.gameplay", "active.tag"),
+                ("game", "z.old")
+            }));
+            Assert.That(rows[1].IsReadOnly, Is.True);
+            Assert.That(rows[1].IsShadowed, Is.True);
+            Assert.That(rows[0].IsShadowed, Is.False);
         }
 
         /// <summary>대소문자만 다른 match도 후보에서 제외하고 redirect 순서를 유지하는지 검증합니다.</summary>

@@ -1,80 +1,109 @@
 #nullable enable
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Text;
 using Bun3.Gameplay.Tags;
+using Bun3.Gameplay.Tags.Catalog;
 
 namespace Bun3.Gameplay.Editor.Tags
 {
+    internal readonly struct GameplayTagTreeSelectionKey : IEquatable<GameplayTagTreeSelectionKey>
+    {
+        internal GameplayTagTreeSelectionKey(string sourceId, string canonicalPath)
+        {
+            SourceId = sourceId ?? throw new ArgumentNullException(nameof(sourceId));
+            CanonicalPath = canonicalPath ?? throw new ArgumentNullException(nameof(canonicalPath));
+        }
+
+        internal string SourceId { get; }
+        internal string CanonicalPath { get; }
+
+        public bool Equals(GameplayTagTreeSelectionKey other) =>
+            string.Equals(SourceId, other.SourceId, StringComparison.Ordinal)
+            && string.Equals(CanonicalPath, other.CanonicalPath, StringComparison.Ordinal);
+
+        public override bool Equals(object? obj) =>
+            obj is GameplayTagTreeSelectionKey other && Equals(other);
+
+        public override int GetHashCode()
+        {
+            unchecked
+            {
+                return (StringComparer.Ordinal.GetHashCode(SourceId) * 397)
+                    ^ StringComparer.Ordinal.GetHashCode(CanonicalPath);
+            }
+        }
+    }
+
     internal readonly struct GameplayTagTreeRowModel
     {
         internal GameplayTagTreeRowModel(
-            ushort index,
-            ushort parentIndex,
+            int id,
+            int parentId,
+            ushort runtimeIndex,
+            string sourceId,
+            string displayName,
             string path,
             string comment,
+            bool isSourceRoot,
             bool isExplicit,
+            bool isReadOnly,
             bool directMatch)
         {
-            Index = index;
-            ParentIndex = parentIndex;
-            Path = path;
-            Comment = comment;
+            Id = id;
+            ParentId = parentId;
+            RuntimeIndex = runtimeIndex;
+            SourceId = sourceId ?? throw new ArgumentNullException(nameof(sourceId));
+            DisplayName = displayName ?? throw new ArgumentNullException(nameof(displayName));
+            Path = path ?? throw new ArgumentNullException(nameof(path));
+            Comment = comment ?? throw new ArgumentNullException(nameof(comment));
+            IsSourceRoot = isSourceRoot;
             IsExplicit = isExplicit;
+            IsReadOnly = isReadOnly;
             IsDirectMatch = directMatch;
         }
 
-        internal ushort Index { get; }
-        internal ushort ParentIndex { get; }
+        internal int Id { get; }
+        internal int ParentId { get; }
+        internal ushort RuntimeIndex { get; }
+        internal string SourceId { get; }
+        internal string DisplayName { get; }
         internal string Path { get; }
         internal string Comment { get; }
+        internal bool IsSourceRoot { get; }
         internal bool IsExplicit { get; }
+        internal bool IsReadOnly { get; }
         internal bool IsDirectMatch { get; }
+        internal GameplayTagTreeSelectionKey SelectionKey =>
+            new GameplayTagTreeSelectionKey(SourceId, Path);
+
+        // Task 10의 shared TreeView renderer가 Source projection과 merged projection에 같은 shape를 쓸 수 있게 둔다.
+        internal int Index => Id;
+        internal int ParentIndex => ParentId;
     }
 
     internal sealed class GameplayTagTreeModel
     {
         private readonly GameplayTagTreeRowModel[] _rows;
 
-        internal GameplayTagTreeModel(GameplayTagCatalogEditSession session)
+        internal GameplayTagTreeModel(GameplayTagWorkspaceSnapshot snapshot)
         {
-            if (session is null) throw new ArgumentNullException(nameof(session));
+            if (snapshot is null) throw new ArgumentNullException(nameof(snapshot));
 
-            var metadata = new Dictionary<string, EditableTagRow>(StringComparer.OrdinalIgnoreCase);
-            for (var i = 0; i < session.Tags.Count; i++)
-            {
-                metadata[session.Tags[i].Name] = session.Tags[i];
-            }
+            Snapshot = snapshot;
+            _rows = CreateRows(snapshot);
+            ActiveCount = snapshot.Catalog.Count;
+            FingerprintPrefix = FormatFingerprintPrefix(snapshot.Catalog.Fingerprint);
+        }
 
-            using var stream = new MemoryStream(new UTF8Encoding(false, true).GetBytes(session.Serialize()));
-#pragma warning disable CS0618 // Editor authoring JSON tree preview 경로입니다.
-            var catalog = TagCatalog.Load(stream);
-#pragma warning restore CS0618
-            _rows = new GameplayTagTreeRowModel[catalog.Count];
-            for (var index = 1; index <= catalog.Count; index++)
-            {
-                var tag = catalog.GetRequiredByIndex(checked((ushort)index));
-                var path = catalog.GetDisplayName(tag);
-                var parent = catalog.GetParent(tag);
-                var isExplicit = metadata.TryGetValue(path, out var authored);
-                _rows[index - 1] = new GameplayTagTreeRowModel(
-                    checked((ushort)index),
-                    parent.Index,
-                    path,
-                    isExplicit ? authored.Comment : string.Empty,
-                    isExplicit,
-                    directMatch: false);
-            }
-
-            ActiveCount = catalog.Count;
-            FingerprintPrefix = FormatFingerprintPrefix(catalog.Fingerprint);
+        internal GameplayTagTreeModel(GameplayTagCatalogEditSession session)
+            : this(CreateGameOnlySnapshot(session))
+        {
         }
 
         internal IReadOnlyList<GameplayTagTreeRowModel> Rows => _rows;
-
+        internal GameplayTagWorkspaceSnapshot Snapshot { get; }
         internal int ActiveCount { get; }
-
         internal string FingerprintPrefix { get; }
 
         internal IReadOnlyList<GameplayTagTreeRowModel> Filter(string search)
@@ -83,18 +112,22 @@ namespace Bun3.Gameplay.Editor.Tags
             if (search.Length == 0) return _rows;
 
             var included = new bool[_rows.Length + 1];
-            var directMatches = new bool[_rows.Length];
+            var directMatches = new bool[_rows.Length + 1];
             for (var rowIndex = 0; rowIndex < _rows.Length; rowIndex++)
             {
                 var row = _rows[rowIndex];
-                if (row.Path.IndexOf(search, StringComparison.OrdinalIgnoreCase) < 0) continue;
+                if (row.IsSourceRoot
+                    || row.Path.IndexOf(search, StringComparison.OrdinalIgnoreCase) < 0)
+                {
+                    continue;
+                }
 
-                directMatches[rowIndex] = true;
-                var current = row.Index;
+                directMatches[row.Id] = true;
+                var current = row.Id;
                 while (current != 0)
                 {
                     included[current] = true;
-                    current = _rows[current - 1].ParentIndex;
+                    current = _rows[current - 1].ParentId;
                 }
             }
 
@@ -102,19 +135,113 @@ namespace Bun3.Gameplay.Editor.Tags
             for (var rowIndex = 0; rowIndex < _rows.Length; rowIndex++)
             {
                 var row = _rows[rowIndex];
-                if (included[row.Index])
-                {
-                    results.Add(new GameplayTagTreeRowModel(
-                        row.Index,
-                        row.ParentIndex,
-                        row.Path,
-                        row.Comment,
-                        row.IsExplicit,
-                        directMatches[rowIndex]));
-                }
+                if (!included[row.Id]) continue;
+                results.Add(new GameplayTagTreeRowModel(
+                    row.Id,
+                    row.ParentId,
+                    row.RuntimeIndex,
+                    row.SourceId,
+                    row.DisplayName,
+                    row.Path,
+                    row.Comment,
+                    row.IsSourceRoot,
+                    row.IsExplicit,
+                    row.IsReadOnly,
+                    directMatches[row.Id]));
             }
 
             return results;
+        }
+
+        private static GameplayTagTreeRowModel[] CreateRows(GameplayTagWorkspaceSnapshot snapshot)
+        {
+            var sources = new TagSourceDocument[snapshot.Sources.Count];
+            for (var index = 0; index < sources.Length; index++) sources[index] = snapshot.Sources[index];
+            Array.Sort(
+                sources,
+                (left, right) => StringComparer.Ordinal.Compare(
+                    left.Descriptor.SourceId,
+                    right.Descriptor.SourceId));
+
+            var rows = new List<GameplayTagTreeRowModel>(snapshot.Catalog.Count + sources.Length);
+            for (var sourceIndex = 0; sourceIndex < sources.Length; sourceIndex++)
+            {
+                var descriptor = sources[sourceIndex].Descriptor;
+                var rootId = rows.Count + 1;
+                rows.Add(new GameplayTagTreeRowModel(
+                    rootId,
+                    parentId: 0,
+                    runtimeIndex: 0,
+                    descriptor.SourceId,
+                    descriptor.DisplayName,
+                    path: string.Empty,
+                    comment: string.Empty,
+                    isSourceRoot: true,
+                    isExplicit: false,
+                    descriptor.IsReadOnly,
+                    directMatch: false));
+
+                var idsByPath = new Dictionary<string, int>(StringComparer.Ordinal);
+                for (var runtimeIndex = 1; runtimeIndex <= snapshot.Catalog.Count; runtimeIndex++)
+                {
+                    var tag = snapshot.Catalog.GetRequiredByIndex(checked((ushort)runtimeIndex));
+                    var path = snapshot.Catalog.GetDisplayName(tag);
+                    var contributions = snapshot.Provenance.GetContributions(path);
+                    TagSourceContribution? contribution = null;
+                    for (var contributionIndex = 0;
+                        contributionIndex < contributions.Count;
+                        contributionIndex++)
+                    {
+                        if (string.Equals(
+                                contributions[contributionIndex].SourceId,
+                                descriptor.SourceId,
+                                StringComparison.Ordinal))
+                        {
+                            contribution = contributions[contributionIndex];
+                            break;
+                        }
+                    }
+
+                    if (contribution is null) continue;
+                    var lastDot = path.LastIndexOf('.');
+                    var parentId = lastDot < 0
+                        ? rootId
+                        : idsByPath[path.Substring(0, lastDot)];
+                    var id = rows.Count + 1;
+                    idsByPath.Add(path, id);
+                    rows.Add(new GameplayTagTreeRowModel(
+                        id,
+                        parentId,
+                        tag.Index,
+                        descriptor.SourceId,
+                        path.Substring(lastDot + 1),
+                        path,
+                        contribution.Comment,
+                        isSourceRoot: false,
+                        contribution.IsExplicit,
+                        contribution.IsReadOnly,
+                        directMatch: false));
+                }
+            }
+
+            return rows.ToArray();
+        }
+
+        private static GameplayTagWorkspaceSnapshot CreateGameOnlySnapshot(
+            GameplayTagCatalogEditSession session)
+        {
+            if (session is null) throw new ArgumentNullException(nameof(session));
+            var sources = new[] { session.GameSource };
+            var compilation = TagCatalogCompiler.Compile(
+                sources,
+                new TagCatalogIdentity("game", "0.0.0-dev"));
+            if (!compilation.Succeeded)
+            {
+                throw new InvalidOperationException("The Game Source cannot be projected as a tree.");
+            }
+
+            return new GameplayTagWorkspaceSnapshot(
+                compilation.Catalog!, compilation.Provenance!, sources);
         }
 
         private static string FormatFingerprintPrefix(ReadOnlySpan<byte> fingerprint)

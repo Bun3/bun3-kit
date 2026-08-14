@@ -32,6 +32,8 @@ namespace Bun3.Gameplay.Editor.Tags
         private bool _focusNewTagName;
         private bool _showRedirects = true;
         private Vector2 _redirectScroll;
+        private IReadOnlyList<GameplayTagRedirectRowModel> _redirectRows =
+            Array.Empty<GameplayTagRedirectRowModel>();
 
         /// <summary>게임플레이 태그 카탈로그 창을 엽니다.</summary>
         [MenuItem("Gameplay/Tag Editor")]
@@ -115,11 +117,12 @@ namespace Bun3.Gameplay.Editor.Tags
             if (_treeView is not null) return;
 
             _treeView = new GameplayTagTreeView(_treeViewState);
-            _treeView.PathSelected += SelectPath;
+            _treeView.TagSelected += SelectTag;
             _treeView.RenameRequested += RequestRename;
             _treeView.CommentEditRequested += RequestComment;
-            _treeView.SubTagRequested += PrepareSubTag;
-            _treeView.CopyRequested += CopyTag;
+            _treeView.SubTagRequested += selection => PrepareSubTag(selection.CanonicalPath);
+            _treeView.CopyRequested += selection => CopyTag(selection.CanonicalPath);
+            _treeView.FindReferencesRequested += FindTagReferences;
             _treeView.DeleteRequested += DeleteSelected;
         }
 
@@ -195,8 +198,8 @@ namespace Bun3.Gameplay.Editor.Tags
 
         private void DrawRedirects()
         {
-            var redirects = _controller.Session?.Redirects;
-            var count = redirects is null ? 0 : redirects.Count;
+            var redirects = _redirectRows;
+            var count = redirects.Count;
             _showRedirects = EditorGUILayout.Foldout(_showRedirects, "Redirects (" + count + ")");
             if (!_showRedirects || count == 0) return;
 
@@ -207,25 +210,43 @@ namespace Bun3.Gameplay.Editor.Tags
                 GUIUtility.ExitGUI();
             }
 
-            if (GUILayout.Button("Remove Obsolete Redirects", GUILayout.Width(180f)))
+            using (new EditorGUI.DisabledScope(!HasEditableRedirects(redirects)))
             {
-                RemoveObsoleteRedirects();
-                GUIUtility.ExitGUI();
+                if (GUILayout.Button("Remove Obsolete Redirects", GUILayout.Width(180f)))
+                {
+                    RemoveObsoleteRedirects();
+                    GUIUtility.ExitGUI();
+                }
             }
 
             EditorGUILayout.EndHorizontal();
 
             _redirectScroll = EditorGUILayout.BeginScrollView(
                 _redirectScroll, true, true, GUILayout.MaxHeight(120f));
+            string? previousSourceId = null;
             for (var index = 0; index < count; index++)
             {
-                var source = redirects![index].From;
+                var redirect = redirects[index];
+                if (!string.Equals(previousSourceId, redirect.SourceId, StringComparison.Ordinal))
+                {
+                    previousSourceId = redirect.SourceId;
+                    EditorGUILayout.LabelField(
+                        redirect.SourceDisplayName + " (" + redirect.SourceId + ")"
+                        + (redirect.IsReadOnly ? " — Read Only" : string.Empty),
+                        EditorStyles.boldLabel);
+                }
+
+                var source = redirect.From;
                 EditorGUILayout.BeginHorizontal();
                 GUILayout.Label(
-                    CreateRedirectContent(redirects[index]),
+                    CreateRedirectContent(redirect),
                     GUILayout.ExpandWidth(false));
                 var find = GUILayout.Button("Find References", GUILayout.Width(120f));
-                var remove = GUILayout.Button("Remove Redirect", GUILayout.Width(120f));
+                bool remove;
+                using (new EditorGUI.DisabledScope(redirect.IsReadOnly))
+                {
+                    remove = GUILayout.Button("Remove Redirect", GUILayout.Width(120f));
+                }
                 EditorGUILayout.EndHorizontal();
 
                 if (find)
@@ -236,7 +257,7 @@ namespace Bun3.Gameplay.Editor.Tags
 
                 if (!remove) continue;
 
-                RemoveRedirect(source);
+                RemoveRedirect(redirect.SourceId, source);
                 GUIUtility.ExitGUI();
             }
 
@@ -248,7 +269,7 @@ namespace Bun3.Gameplay.Editor.Tags
                 SearchRedirectReferences(CollectRedirectSources()));
 
         /// <summary>단일 redirect를 참조 확인과 외부 데이터 경고를 거쳐 제거합니다.</summary>
-        private void RemoveRedirect(string source)
+        private void RemoveRedirect(string sourceId, string source)
         {
             var result = SearchRedirectReferences(new[] { source });
             if (!result.IsComplete)
@@ -285,7 +306,7 @@ namespace Bun3.Gameplay.Editor.Tags
                 return;
             }
 
-            Execute(() => _controller.RemoveRedirects(new[] { source }));
+            Execute(() => _controller.RemoveRedirects(sourceId, new[] { source }));
         }
 
         private void RemoveObsoleteRedirects()
@@ -318,18 +339,15 @@ namespace Bun3.Gameplay.Editor.Tags
         {
             if (selectSources is null) throw new ArgumentNullException(nameof(selectSources));
             if (!result.IsComplete) return false;
-            var session = _controller.Session
-                ?? throw new InvalidOperationException("No gameplay tag catalog is open.");
             var candidates = GameplayTagRedirectMaintenance.GetUnreferencedSources(
-                session.Redirects, result);
+                _redirectRows, result);
             var selected = selectSources(candidates);
-            return selected.Count > 0 && Execute(() => _controller.RemoveRedirects(selected));
+            return selected.Count > 0 && Execute(() => _controller.RemoveRedirects("game", selected));
         }
 
         private string[] CollectRedirectSources()
         {
-            var redirects = _controller.Session?.Redirects;
-            if (redirects is null) return Array.Empty<string>();
+            var redirects = _redirectRows;
 
             var sources = new string[redirects.Count];
             for (var index = 0; index < redirects.Count; index++)
@@ -360,7 +378,44 @@ namespace Bun3.Gameplay.Editor.Tags
             }
         }
 
+        private GameplayTagReferenceSearchResult SearchTagReferences(string canonicalPath)
+        {
+            try
+            {
+                var files = GameplayTagProjectReferenceFiles.Enumerate();
+                return new GameplayTagTextReferenceScanner(File.OpenText).SearchExact(
+                    files.Files,
+                    canonicalPath,
+                    _controller.GameSourcePath,
+                    progress => EditorUtility.DisplayCancelableProgressBar(
+                        "Find GameplayTag References", progress.DisplayPath, progress.Fraction))
+                    .WithEnumerationErrors(files.Errors);
+            }
+            finally
+            {
+                EditorUtility.ClearProgressBar();
+            }
+        }
+
         /// <summary>redirect 행의 전체 표시 문구를 도구 설명까지 담은 content로 만듭니다.</summary>
+        internal static GUIContent CreateRedirectContent(GameplayTagRedirectRowModel redirect)
+        {
+            var text = redirect.From + "  →  " + redirect.To;
+            var tooltip = redirect.SourceDisplayName + " (" + redirect.SourceId + ")\n" + text;
+            if (redirect.IsShadowed)
+            {
+                tooltip += "\n" + GameplayTagRedirectMaintenance.ShadowedRedirectWarning;
+            }
+
+            var content = new GUIContent(text, tooltip);
+            if (redirect.IsShadowed)
+            {
+                content.image = EditorGUIUtility.IconContent("console.warnicon.sml").image;
+            }
+
+            return content;
+        }
+
         internal static GUIContent CreateRedirectContent(EditableRedirectRow redirect)
         {
             var text = redirect.From + "  →  " + redirect.To;
@@ -411,11 +466,21 @@ namespace Bun3.Gameplay.Editor.Tags
             });
         }
 
-        private void RequestRename(string path) =>
-            ApplyRename(path, GameplayTagEditDialog.ShowRename(path));
+        private void RequestRename(GameplayTagTreeSelectionKey selection) =>
+            ApplyRename(
+                selection,
+                GameplayTagEditDialog.ShowRename(selection.CanonicalPath));
 
-        private void RequestComment(string path) =>
-            ApplyComment(path, GameplayTagEditDialog.ShowComment(path, FindComment(path)));
+        private void RequestComment(GameplayTagTreeSelectionKey selection) =>
+            ApplyComment(
+                selection,
+                GameplayTagEditDialog.ShowComment(
+                    selection.CanonicalPath,
+                    FindComment(selection)));
+
+        private void FindTagReferences(GameplayTagTreeSelectionKey selection) =>
+            GameplayTagReferenceResultsWindow.Show(
+                SearchTagReferences(selection.CanonicalPath));
 
         /// <summary>선택한 경로 뒤에 구분자를 붙여 추가 입력을 준비하고 focus합니다.</summary>
         internal void PrepareSubTag(string path)
@@ -434,9 +499,19 @@ namespace Bun3.Gameplay.Editor.Tags
         /// <summary>승인된 이름 변경 결과를 마지막 세그먼트 rename으로 적용합니다.</summary>
         internal void ApplyRename(string path, GameplayTagTextEditResult result)
         {
+            ApplyRename(new GameplayTagTreeSelectionKey("game", path), result);
+        }
+
+        private void ApplyRename(
+            GameplayTagTreeSelectionKey selection,
+            GameplayTagTextEditResult result)
+        {
             if (!result.Accepted) return;
             GameplayTagRenameResult? rename = null;
-            if (Execute(() => rename = _controller.RenameSubtree(path, result.Value)))
+            if (Execute(() => rename = _controller.RenameSubtree(
+                    selection.SourceId,
+                    selection.CanonicalPath,
+                    result.Value)))
             {
                 GameplayTagEditDialog.ShowShadowedRenameWarning(rename!);
             }
@@ -445,18 +520,55 @@ namespace Bun3.Gameplay.Editor.Tags
         /// <summary>승인된 comment 결과를 적용하고 암시 부모를 명시 행으로 승격합니다.</summary>
         internal void ApplyComment(string path, GameplayTagTextEditResult result)
         {
-            if (result.Accepted) Execute(() => _controller.SetComment(path, result.Value));
+            ApplyComment(new GameplayTagTreeSelectionKey("game", path), result);
         }
 
-        private void DeleteSelected(string selectedPath)
+        private void ApplyComment(
+            GameplayTagTreeSelectionKey selection,
+            GameplayTagTextEditResult result)
         {
-            var hasDescendants = HasDescendants(selectedPath);
-            if (!ConfirmDelete(hasDescendants, EditorUtility.DisplayDialog))
+            if (result.Accepted)
             {
-                return;
+                Execute(() => _controller.SetComment(
+                    selection.SourceId,
+                    selection.CanonicalPath,
+                    result.Value));
+            }
+        }
+
+        private void DeleteSelected(GameplayTagTreeSelectionKey selection)
+        {
+            var result = SearchTagReferences(selection.CanonicalPath);
+            TryDeleteSelected(
+                selection,
+                result,
+                () => EditorUtility.DisplayDialog(
+                    "Delete Gameplay Tag",
+                    "Delete the exact declaration '" + selection.CanonicalPath + "'?",
+                    "Delete Tag",
+                    "Cancel"),
+                GameplayTagReferenceResultsWindow.Show);
+        }
+
+        /// <summary>완전한 무참조 증거와 확인이 있을 때만 exact Source 선언을 삭제합니다.</summary>
+        internal bool TryDeleteSelected(
+            GameplayTagTreeSelectionKey selection,
+            GameplayTagReferenceSearchResult result,
+            Func<bool> confirmDelete,
+            Action<GameplayTagReferenceSearchResult> showResults)
+        {
+            if (confirmDelete is null) throw new ArgumentNullException(nameof(confirmDelete));
+            if (showResults is null) throw new ArgumentNullException(nameof(showResults));
+            if (!result.IsComplete || result.Matches.Count > 0)
+            {
+                showResults(result);
+                return false;
             }
 
-            Execute(() => _controller.Delete(selectedPath, hasDescendants));
+            return confirmDelete()
+                && Execute(() => _controller.DeleteExact(
+                    selection.SourceId,
+                    selection.CanonicalPath));
         }
 
         internal static bool ConfirmDelete(
@@ -538,24 +650,6 @@ namespace Bun3.Gameplay.Editor.Tags
             SynchronizeUnsavedChanges();
         }
 
-        private bool HasDescendants(string path)
-        {
-            if (_model is null) return false;
-            var rows = _model.Filter(string.Empty);
-            for (var index = 0; index < rows.Count; index++)
-            {
-                var candidate = rows[index].Path;
-                if (candidate.Length > path.Length
-                    && candidate.StartsWith(path, StringComparison.OrdinalIgnoreCase)
-                    && candidate[path.Length] == '.')
-                {
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
         private bool Execute(Action action)
         {
             if (_controller.TryExecute(action, out var error))
@@ -579,35 +673,52 @@ namespace Bun3.Gameplay.Editor.Tags
             if (_controller.Session is null)
             {
                 _model = null;
+                _redirectRows = Array.Empty<GameplayTagRedirectRowModel>();
                 _treeView.SetRows(Array.Empty<GameplayTagTreeRowModel>(), isFiltering: false);
-                _treeView.SynchronizeSelection(string.Empty);
+                _treeView.SynchronizeSelection(new GameplayTagTreeSelectionKey(string.Empty, string.Empty));
                 return;
             }
 
-            _model = new GameplayTagTreeModel(_controller.Session);
+            _model = _controller.Workspace.Snapshot is null
+                ? new GameplayTagTreeModel(_controller.Session)
+                : new GameplayTagTreeModel(_controller.Workspace.Snapshot);
+            _redirectRows = GameplayTagRedirectMaintenance.CreateRows(_model.Snapshot);
             _treeView.SetRows(_model.Filter(_search), _search.Length > 0);
-            _treeView.SynchronizeSelection(_controller.SelectedPath);
+            _treeView.SynchronizeSelection(new GameplayTagTreeSelectionKey(
+                _controller.SelectedSourceId,
+                _controller.SelectedPath));
         }
 
-        private void SelectPath(string path)
+        private void SelectTag(GameplayTagTreeSelectionKey selection)
         {
-            _controller.Select(path);
+            _controller.Select(selection.SourceId, selection.CanonicalPath);
             Repaint();
         }
 
-        private string FindComment(string path)
+        private string FindComment(GameplayTagTreeSelectionKey selection)
         {
             if (_model is null) return string.Empty;
             var rows = _model.Filter(string.Empty);
             for (var index = 0; index < rows.Count; index++)
             {
-                if (string.Equals(rows[index].Path, path, StringComparison.OrdinalIgnoreCase))
+                if (rows[index].SelectionKey.Equals(selection))
                 {
                     return rows[index].Comment;
                 }
             }
 
             return string.Empty;
+        }
+
+        private static bool HasEditableRedirects(
+            IReadOnlyList<GameplayTagRedirectRowModel> redirects)
+        {
+            for (var index = 0; index < redirects.Count; index++)
+            {
+                if (!redirects[index].IsReadOnly) return true;
+            }
+
+            return false;
         }
     }
 }

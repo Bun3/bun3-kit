@@ -191,6 +191,20 @@ namespace Bun3.Gameplay.Editor.Tags
                 : GameplayTagReferenceSearchResult.Complete(matches);
         }
 
+        /// <summary>하나의 canonical 태그 경로와 정확히 같은 토큰만 검색합니다.</summary>
+        internal GameplayTagReferenceSearchResult SearchExact(
+            IReadOnlyList<GameplayTagReferenceFile> files,
+            string canonicalPath,
+            string excludedCatalogPath,
+            Func<GameplayTagReferenceProgress, bool>? isCancelled)
+        {
+            if (canonicalPath is null) throw new ArgumentNullException(nameof(canonicalPath));
+            var canonical = GameplayTagCatalogEditSession.Canonicalize(
+                canonicalPath,
+                nameof(canonicalPath));
+            return Search(files, new[] { canonical }, excludedCatalogPath, isCancelled);
+        }
+
         private static void Scan(
             TextReader reader,
             GameplayTagReferenceFile file,

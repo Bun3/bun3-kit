@@ -61,11 +61,16 @@ namespace Bun3.Gameplay.Unity.Tests
         public void Tree_row_label_exposes_the_comment_as_a_tooltip()
         {
             var row = new GameplayTagTreeRowModel(
-                index: 2,
-                parentIndex: 1,
+                id: 3,
+                parentId: 2,
+                runtimeIndex: 2,
+                sourceId: "game",
+                displayName: "",
                 path: "State.Dead",
                 comment: "전투 불능",
+                isSourceRoot: false,
                 isExplicit: true,
+                isReadOnly: false,
                 directMatch: true);
 
             var content = GameplayTagTreeView.CreateLabelContent(row);
@@ -93,11 +98,20 @@ namespace Bun3.Gameplay.Unity.Tests
         public void Redirect_row_shows_the_full_path_pair_as_text_and_tooltip()
         {
             var content = GameplayTagCatalogWindow.CreateRedirectContent(
-                new EditableRedirectRow("State.Movement.Sprinting", "State.Movement.Running"));
+                new GameplayTagRedirectRowModel(
+                    "bun3.gameplay",
+                    "Bun3.Gameplay",
+                    "State.Movement.Sprinting",
+                    "State.Movement.Running",
+                    isReadOnly: true,
+                    isShadowed: true));
 
             Assert.That(content.text,
                 Is.EqualTo("State.Movement.Sprinting  →  State.Movement.Running"));
-            Assert.That(content.tooltip, Is.EqualTo(content.text));
+            Assert.That(content.tooltip,
+                Does.Contain("Bun3.Gameplay").And.Contain("bun3.gameplay")
+                    .And.Contain("active tag takes priority"));
+            Assert.That(content.image, Is.Not.Null);
         }
 
         /// <summary>선택한 후보만 제거하고 창이 dirty가 되는지 검증합니다.</summary>
@@ -235,43 +249,48 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(tree.IsExpanded(abilityId), Is.False);
         }
 
-        /// <summary>암시 행과 명시 행 모두가 요청한 context action을 전달하는지 검증합니다.</summary>
-        /// <param name="action">요청할 트리 context action입니다.</param>
-        [TestCase(GameplayTagTreeAction.Rename)]
-        [TestCase(GameplayTagTreeAction.EditComment)]
-        [TestCase(GameplayTagTreeAction.AddSubTag)]
-        [TestCase(GameplayTagTreeAction.Copy)]
-        [TestCase(GameplayTagTreeAction.Delete)]
-        public void Every_tree_row_dispatches_the_requested_context_action(GameplayTagTreeAction action)
+        /// <summary>Source 권한과 explicit 여부가 context action 집합을 정확히 제한하는지 검증합니다.</summary>
+        [Test]
+        public void Context_actions_follow_source_permissions_and_explicit_ownership()
         {
-            foreach (var isExplicit in new[] { false, true })
-            {
-                var tree = new GameplayTagTreeView(new TreeViewState());
-                var row = new GameplayTagTreeRowModel(1, 0, "State", "", isExplicit, false);
-                tree.SetRows(new[] { row }, isFiltering: false);
-                string? received = null;
-                Subscribe(tree, action, path => received = path);
+            const GameplayTagTreeAction commonWritable =
+                GameplayTagTreeAction.Rename |
+                GameplayTagTreeAction.EditComment |
+                GameplayTagTreeAction.AddSubTag |
+                GameplayTagTreeAction.Copy |
+                GameplayTagTreeAction.FindReferences;
+            const GameplayTagTreeAction readOnly =
+                GameplayTagTreeAction.Copy |
+                GameplayTagTreeAction.FindReferences;
 
-                tree.RequestAction(action, row.Index);
-
-                Assert.That(received, Is.EqualTo("State"));
-            }
+            Assert.That(GameplayTagTreeView.GetAvailableActions(
+                CreateTreeRow("game", "state.dead", isSourceRoot: false, isExplicit: true, isReadOnly: false)),
+                Is.EqualTo(commonWritable | GameplayTagTreeAction.Delete));
+            Assert.That(GameplayTagTreeView.GetAvailableActions(
+                CreateTreeRow("game", "state", isSourceRoot: false, isExplicit: false, isReadOnly: false)),
+                Is.EqualTo(commonWritable));
+            Assert.That(GameplayTagTreeView.GetAvailableActions(
+                CreateTreeRow("bun3.gameplay", "state.dead", false, true, true)),
+                Is.EqualTo(readOnly));
+            Assert.That(GameplayTagTreeView.GetAvailableActions(
+                CreateTreeRow("game", "", isSourceRoot: true, isExplicit: false, isReadOnly: false)),
+                Is.EqualTo(GameplayTagTreeAction.None));
         }
 
-        private static void Subscribe(
-            GameplayTagTreeView tree,
-            GameplayTagTreeAction action,
-            Action<string> handler)
+        /// <summary>같은 canonical 경로가 여러 Source에 있어도 선택 key가 정확한 행을 복원하는지 검증합니다.</summary>
+        [Test]
+        public void Selection_synchronization_uses_source_id_and_canonical_path()
         {
-            switch (action)
-            {
-                case GameplayTagTreeAction.Rename: tree.RenameRequested += handler; break;
-                case GameplayTagTreeAction.EditComment: tree.CommentEditRequested += handler; break;
-                case GameplayTagTreeAction.AddSubTag: tree.SubTagRequested += handler; break;
-                case GameplayTagTreeAction.Copy: tree.CopyRequested += handler; break;
-                case GameplayTagTreeAction.Delete: tree.DeleteRequested += handler; break;
-                default: throw new ArgumentOutOfRangeException(nameof(action));
-            }
+            var tree = new GameplayTagTreeView(new TreeViewState());
+            var packageRoot = CreateTreeRow("bun3.gameplay", "", true, false, true, id: 1, parentId: 0);
+            var packageTag = CreateTreeRow("bun3.gameplay", "ability.jump", false, true, true, id: 2, parentId: 1);
+            var gameRoot = CreateTreeRow("game", "", true, false, false, id: 3, parentId: 0);
+            var gameTag = CreateTreeRow("game", "ability.jump", false, true, false, id: 4, parentId: 3);
+            tree.SetRows(new[] { packageRoot, packageTag, gameRoot, gameTag }, isFiltering: false);
+
+            tree.SynchronizeSelection(new GameplayTagTreeSelectionKey("game", "ability.jump"));
+
+            Assert.That(tree.GetSelection(), Is.EqualTo(new[] { 4 }));
         }
 
         /// <summary>태그 편집기가 새 Gameplay 메뉴 경로를 사용하는지 검증합니다.</summary>
@@ -472,6 +491,52 @@ namespace Bun3.Gameplay.Unity.Tests
 
             Assert.That(confirmed, Is.False);
             Assert.That(invocationCount, Is.EqualTo(1));
+        }
+
+        /// <summary>정확한 canonical 태그 참조가 있으면 삭제하지 않고 결과 창으로 전환하는지 검증합니다.</summary>
+        [Test]
+        public void Referenced_exact_tag_blocks_delete_and_opens_reference_results()
+        {
+            var path = Path.Combine(_temporaryDirectory, "GameplayTags.json");
+            var window = EditorWindow.GetWindow<GameplayTagCatalogWindow>();
+            try
+            {
+                var controller = AttachController(window, path);
+                controller.Add("state.dead");
+                var before = controller.Session!.Serialize();
+                var result = GameplayTagReferenceSearchResult.Complete(new[]
+                {
+                    new GameplayTagReferenceMatch(
+                        "state.dead",
+                        "C:/Project/Assets/Actor.prefab",
+                        "Assets/Actor.prefab",
+                        4,
+                        "state.dead")
+                });
+                GameplayTagReferenceSearchResult? shown = null;
+                var confirmCalls = 0;
+
+                var deleted = window.TryDeleteSelected(
+                    new GameplayTagTreeSelectionKey("game", "state.dead"),
+                    result,
+                    () =>
+                    {
+                        confirmCalls++;
+                        return true;
+                    },
+                    displayed => shown = displayed);
+
+                Assert.That(deleted, Is.False);
+                Assert.That(confirmCalls, Is.Zero);
+                Assert.That(shown.HasValue, Is.True);
+                Assert.That(shown!.Value.Matches.Count, Is.EqualTo(1));
+                Assert.That(controller.Session!.Serialize(), Is.EqualTo(before));
+                Assert.That(controller.IsDirty, Is.True);
+            }
+            finally
+            {
+                CloseWithoutSaving(window);
+            }
         }
 
         [TestCase(0, 0)]
@@ -1134,6 +1199,27 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(tree.TryGetPath(selectedIds[0], out var actualPath), Is.True);
             Assert.That(actualPath, Is.EqualTo(expectedPath));
         }
+
+        private static GameplayTagTreeRowModel CreateTreeRow(
+            string sourceId,
+            string path,
+            bool isSourceRoot,
+            bool isExplicit,
+            bool isReadOnly,
+            int id = 1,
+            int parentId = 0) =>
+            new GameplayTagTreeRowModel(
+                id,
+                parentId,
+                runtimeIndex: isSourceRoot ? (ushort)0 : (ushort)1,
+                sourceId,
+                displayName: isSourceRoot ? sourceId : string.Empty,
+                path,
+                comment: string.Empty,
+                isSourceRoot,
+                isExplicit,
+                isReadOnly,
+                directMatch: false);
     }
 }
 #pragma warning restore CS0618
