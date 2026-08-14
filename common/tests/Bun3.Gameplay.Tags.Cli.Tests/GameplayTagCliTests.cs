@@ -120,6 +120,25 @@ public sealed class GameplayTagCliTests
     }
 
     [Test]
+    public void Published_compile_rejects_the_reserved_development_version_before_reading_sources()
+    {
+        var absentRoot = Path.Combine(_root, "absent");
+        Directory.CreateDirectory(absentRoot);
+        var output = Path.Combine(_root, "published.catalog");
+
+        var result = Run("compile", "--published", "--catalog-id", "sample",
+            "--catalog-version", "0.0.0-dev", "--project-root", absentRoot,
+            "--output", output);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.ExitCode, Is.EqualTo(2));
+            Assert.That(result.Stderr, Does.Contain("development").IgnoreCase);
+            Assert.That(File.Exists(output), Is.False);
+        });
+    }
+
+    [Test]
     public void Published_identity_is_idempotent_only_for_identical_content()
     {
         var projectRoot = CreateProject(GameJson("state.ready"));

@@ -121,6 +121,15 @@ public sealed class TagCatalogBinaryTests
             TagCatalogExpectations.ForPublished("game-a", "1.4.0", new byte[31]));
     }
 
+    [Test]
+    public void Published_expectations_reject_the_reserved_development_version()
+    {
+        var exception = Assert.Throws<ArgumentException>(() =>
+            TagCatalogExpectations.ForPublished("game-a", "0.0.0-dev", new byte[32]));
+
+        Assert.That(exception!.ParamName, Is.EqualTo("catalogVersion"));
+    }
+
     internal static TagCatalogCompilation Compile(string catalogId, string version, bool reverseSources)
     {
         var first = Source("source-a",

@@ -148,7 +148,7 @@ namespace Bun3.Gameplay.Editor.Tags
 
                 var gameOnly = TagCatalogCompiler.Compile(
                     new[] { gameSource },
-                    new TagCatalogIdentity("game", "0.0.0-dev"));
+                    new TagCatalogIdentity("game", TagCatalogVersions.Development));
                 AddCompilationDiagnostics(gameOnly.Diagnostics, diagnostics);
                 return new GameplayTagEditorWorkspace(
                     resolution,
@@ -225,7 +225,7 @@ namespace Bun3.Gameplay.Editor.Tags
 
             return candidate => TagCatalogCompiler.Compile(
                 new[] { candidate },
-                new TagCatalogIdentity("game", "0.0.0-dev"));
+                new TagCatalogIdentity("game", TagCatalogVersions.Development));
         }
 
         private static void AddCompilationDiagnostics(

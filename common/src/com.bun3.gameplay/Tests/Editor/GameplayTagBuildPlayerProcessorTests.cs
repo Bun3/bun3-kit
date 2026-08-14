@@ -88,6 +88,20 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(inclusionCount, Is.Zero);
         }
 
+        /// <summary>개발 전용 Version이 Published build context에 들어오는 즉시 거부되는지 검증합니다.</summary>
+        [Test]
+        public void Published_context_rejects_the_reserved_development_version()
+        {
+            var exception = Assert.Throws<ArgumentException>(() =>
+                new GameplayTagPublishedCatalogContext(
+                    Path.Combine(_temporaryDirectory, "GameplayTags.catalog"),
+                    "release-game",
+                    "0.0.0-dev",
+                    new byte[32]));
+
+            Assert.That(exception!.ParamName, Is.EqualTo("catalogVersion"));
+        }
+
         /// <summary>게시 build metadata의 ID, Version 또는 fingerprint 불일치를 모두 거부하는지 검증합니다.</summary>
         [TestCase("id")]
         [TestCase("version")]

@@ -1,5 +1,6 @@
 #nullable enable
 using System;
+using Bun3.Gameplay.Tags;
 
 namespace Bun3.Gameplay.Editor.Tags
 {
@@ -35,6 +36,13 @@ namespace Bun3.Gameplay.Editor.Tags
             ArtifactPath = RequireText(artifactPath, nameof(artifactPath), "Artifact path");
             CatalogId = RequireText(catalogId, nameof(catalogId), "Catalog ID");
             CatalogVersion = RequireText(catalogVersion, nameof(catalogVersion), "Catalog Version");
+            if (!TagCatalogVersions.IsPublished(CatalogVersion))
+            {
+                throw new ArgumentException(
+                    "예약된 개발 Catalog Version은 Published build에 사용할 수 없습니다.",
+                    nameof(catalogVersion));
+            }
+
             if (expectedFingerprint.Length != 32)
             {
                 throw new ArgumentException(

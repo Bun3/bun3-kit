@@ -31,10 +31,7 @@ namespace Bun3.Gameplay.Tags.Catalog
                 throw new ArgumentOutOfRangeException(nameof(mode));
             }
 
-            var isDevelopmentVersion = string.Equals(
-                identity.CatalogVersion,
-                "0.0.0-dev",
-                StringComparison.Ordinal);
+            var isDevelopmentVersion = TagCatalogVersions.IsDevelopment(identity.CatalogVersion);
             if ((mode == CatalogBuildMode.Development && !isDevelopmentVersion)
                 || (mode == CatalogBuildMode.Published && isDevelopmentVersion))
             {

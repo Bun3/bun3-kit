@@ -98,7 +98,7 @@ namespace Bun3.Gameplay.Editor.Tags
                 gameSource,
                 candidate => TagCatalogCompiler.Compile(
                     new[] { candidate },
-                    new TagCatalogIdentity("game", "0.0.0-dev")));
+                    new TagCatalogIdentity("game", TagCatalogVersions.Development)));
         }
 
         internal void Add(string path, string comment = "")

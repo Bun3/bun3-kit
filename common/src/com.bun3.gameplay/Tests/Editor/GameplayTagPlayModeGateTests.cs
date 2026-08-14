@@ -53,6 +53,27 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(GameplayTagPlaySessionCatalog.TryRestorePrepared(out _), Is.False);
         }
 
+        /// <summary>길이는 맞지만 준비한 Catalog와 다른 fingerprint marker를 거부하는지 검증합니다.</summary>
+        [Test]
+        public void Wrong_prepared_fingerprint_fails_closed_and_is_forgotten()
+        {
+            var workspace = GameplayTagDevelopmentCatalogTests.CreateValidWorkspace(
+                "play-marker-mismatch", "state.ready");
+            var catalog = GameplayTagDevelopmentCatalogBuilder.Build(workspace, _temporaryDirectory);
+            var path = TagCatalogDevelopmentPath.Get(catalog.CatalogId, _temporaryDirectory);
+            var wrongFingerprint = catalog.Fingerprint.ToArray();
+            wrongFingerprint[0] ^= 0xff;
+            SetRawPreparedMarker(
+                path,
+                catalog.CatalogId,
+                Convert.ToBase64String(wrongFingerprint));
+
+            Assert.That(GameplayTagPlaySessionCatalog.TryRestorePrepared(out var diagnostic), Is.False);
+            Assert.That(diagnostic, Does.Contain("could not be restored"));
+            Assert.That(GameplayTagPlaySessionCatalog.Current, Is.Null);
+            Assert.That(GameplayTagPlaySessionCatalog.TryRestorePrepared(out _), Is.False);
+        }
+
         /// <summary>비어 있거나 identity 규칙에 맞지 않는 Catalog ID marker를 폐쇄적으로 거부합니다.</summary>
         [TestCase(" ")]
         [TestCase("Invalid Catalog")]

@@ -86,8 +86,7 @@ namespace Bun3.Gameplay.Editor.Tags
                 using var input = File.OpenRead(path);
                 var catalog = TagCatalogBinary.Load(
                     input,
-                    TagCatalogExpectations.ForPublished(
-                        catalogId, "0.0.0-dev", fingerprint));
+                    TagCatalogExpectations.ForPreparedDevelopment(catalogId, fingerprint));
                 Freeze(catalog);
                 diagnostic = string.Empty;
                 return true;

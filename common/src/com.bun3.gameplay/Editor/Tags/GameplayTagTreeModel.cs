@@ -238,7 +238,7 @@ namespace Bun3.Gameplay.Editor.Tags
             var sources = new[] { session.GameSource };
             var compilation = TagCatalogCompiler.Compile(
                 sources,
-                new TagCatalogIdentity("game", "0.0.0-dev"));
+                new TagCatalogIdentity("game", TagCatalogVersions.Development));
             if (!compilation.Succeeded)
             {
                 throw new InvalidOperationException("The Game Source cannot be projected as a tree.");

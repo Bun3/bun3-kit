@@ -16,7 +16,7 @@ namespace Bun3.Gameplay.Tags.Cli
                 var bytes = File.ReadAllBytes(args[1]);
                 var info = ReadInfo(bytes);
                 using var input = new MemoryStream(bytes, false);
-                var expectations = string.Equals(info.Version, "0.0.0-dev", StringComparison.Ordinal)
+                var expectations = TagCatalogVersions.IsDevelopment(info.Version)
                     ? TagCatalogExpectations.ForDevelopment(info.CatalogId)
                     : TagCatalogExpectations.ForPublished(info.CatalogId, info.Version, info.Fingerprint);
                 TagCatalogBinary.Load(input, expectations);

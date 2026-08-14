@@ -201,6 +201,24 @@ public sealed class GameplayTagHostingTests
         Assert.That(starts, Is.Zero);
     }
 
+    [Test]
+    public void Packaged_mode_rejects_the_reserved_development_version_during_options_validation()
+    {
+        using var fixture = CatalogFixture.CreateDevelopment("server-game");
+        var starts = 0;
+        using var host = BuildHost(fixture.LocalApplicationData, options =>
+        {
+            options.Mode = GameplayTagCatalogMode.Packaged;
+            options.CatalogId = "server-game";
+            options.CatalogVersion = "0.0.0-dev";
+            options.ExpectedFingerprint = fixture.Fingerprint;
+            options.PackagedPath = fixture.CatalogPath;
+        }, () => starts++);
+
+        Assert.ThrowsAsync<OptionsValidationException>(async () => await host.StartAsync());
+        Assert.That(starts, Is.Zero);
+    }
+
     [TestCase("", "2026.8.14", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")]
     [TestCase("server-game", "", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")]
     [TestCase("server-game", "2026.8.14", "abcd")]

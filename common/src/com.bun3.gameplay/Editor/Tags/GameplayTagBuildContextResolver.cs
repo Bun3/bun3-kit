@@ -89,7 +89,7 @@ namespace Bun3.Gameplay.Editor.Tags
                 catalogId = provider.CatalogId;
                 externalPaths = provider.ExternalSourceMetadataPaths
                     ?? throw new InvalidOperationException("External Source Metadata path list is null.");
-                _ = new TagCatalogIdentity(catalogId, "0.0.0-dev");
+                _ = new TagCatalogIdentity(catalogId, TagCatalogVersions.Development);
             }
             catch (Exception exception)
             {
@@ -154,7 +154,7 @@ namespace Bun3.Gameplay.Editor.Tags
             {
                 return new GameplayTagBuildContextResolution(
                     new GameCatalogBuildContext(
-                        new TagCatalogIdentity(catalogId, "0.0.0-dev"),
+                        new TagCatalogIdentity(catalogId, TagCatalogVersions.Development),
                         CatalogBuildMode.Development,
                         sources),
                     Array.Empty<string>(),

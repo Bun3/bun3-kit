@@ -6,7 +6,6 @@ namespace Bun3.Gameplay.Tags
     /// <summary>런타임 B3DK 카탈로그에 요구할 명시적인 개발 또는 게시 식별 정보입니다.</summary>
     public sealed class TagCatalogExpectations
     {
-        private const string DevelopmentVersion = "0.0.0-dev";
         private readonly byte[]? _expectedFingerprint;
 
         private TagCatalogExpectations(string catalogId, string catalogVersion, byte[]? expectedFingerprint)
@@ -28,7 +27,7 @@ namespace Bun3.Gameplay.Tags
         public static TagCatalogExpectations ForDevelopment(string catalogId)
         {
             ValidateText(catalogId, nameof(catalogId), "Catalog ID");
-            return new TagCatalogExpectations(catalogId, DevelopmentVersion, null);
+            return new TagCatalogExpectations(catalogId, TagCatalogVersions.Development, null);
         }
 
         /// <summary>정확한 Catalog ID, Version과 외부에서 고정한 fingerprint를 요구하는 기대 조건을 만듭니다.</summary>
@@ -44,12 +43,40 @@ namespace Bun3.Gameplay.Tags
         {
             ValidateText(catalogId, nameof(catalogId), "Catalog ID");
             ValidateText(catalogVersion, nameof(catalogVersion), "Catalog Version");
-            if (expectedFingerprint.Length != 32)
+            if (!TagCatalogVersions.IsPublished(catalogVersion))
             {
-                throw new ArgumentException("게시 fingerprint는 정확히 32바이트여야 합니다.", nameof(expectedFingerprint));
+                throw new ArgumentException(
+                    "예약된 개발 Catalog Version은 게시 기대 조건에 사용할 수 없습니다.",
+                    nameof(catalogVersion));
             }
 
-            return new TagCatalogExpectations(catalogId, catalogVersion, expectedFingerprint.ToArray());
+            return new TagCatalogExpectations(
+                catalogId,
+                catalogVersion,
+                CopyFingerprint(expectedFingerprint));
+        }
+
+        internal static TagCatalogExpectations ForPreparedDevelopment(
+            string catalogId,
+            ReadOnlySpan<byte> expectedFingerprint)
+        {
+            ValidateText(catalogId, nameof(catalogId), "Catalog ID");
+            return new TagCatalogExpectations(
+                catalogId,
+                TagCatalogVersions.Development,
+                CopyFingerprint(expectedFingerprint));
+        }
+
+        private static byte[] CopyFingerprint(ReadOnlySpan<byte> expectedFingerprint)
+        {
+            if (expectedFingerprint.Length != 32)
+            {
+                throw new ArgumentException(
+                    "게시 fingerprint는 정확히 32바이트여야 합니다.",
+                    nameof(expectedFingerprint));
+            }
+
+            return expectedFingerprint.ToArray();
         }
 
         private static void ValidateText(string value, string parameterName, string label)

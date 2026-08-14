@@ -24,13 +24,20 @@ namespace Bun3.Gameplay.Tags.Cli
             if (development == published || catalogId is null || projectRoot is null) return Program.Usage(stderr);
             if (development && (version is not null || explicitOutput is not null)) return Program.Usage(stderr);
             if (published && (version is null || explicitOutput is null)) return Program.Usage(stderr);
+            if (published && TagCatalogVersions.IsDevelopment(version))
+            {
+                stderr.WriteLine("Published Catalog Version cannot use the reserved development Version.");
+                return 2;
+            }
 
             try
             {
                 var gamePath = Path.Combine(Path.GetFullPath(projectRoot), "ProjectSettings", "GameplayTags.json");
                 var sources = new List<TagSourceDocument> { LoadGame(gamePath) };
                 foreach (var sourcePath in parsed.Sources) sources.Add(LoadMetadata(sourcePath));
-                var identity = new TagCatalogIdentity(catalogId, development ? "0.0.0-dev" : version!);
+                var identity = new TagCatalogIdentity(
+                    catalogId,
+                    development ? TagCatalogVersions.Development : version!);
                 var compilation = TagCatalogCompiler.Compile(sources, identity);
                 foreach (var diagnostic in compilation.Diagnostics)
                 {

@@ -37,6 +37,10 @@ namespace Bun3.Server.GameplayTags
                     "Packaged GameplayTag Catalog Version이 필요합니다.")
                 .Validate(
                     options => options.Mode != GameplayTagCatalogMode.Packaged
+                        || !TagCatalogVersions.IsDevelopment(options.CatalogVersion),
+                    "Packaged GameplayTag Catalog Version은 예약된 개발 Version일 수 없습니다.")
+                .Validate(
+                    options => options.Mode != GameplayTagCatalogMode.Packaged
                         || GameplayTagCatalogOptions.IsFingerprintHex(options.ExpectedFingerprint),
                     "Packaged GameplayTag Catalog fingerprint는 정확히 64자리 hex여야 합니다.")
                 .Validate(
