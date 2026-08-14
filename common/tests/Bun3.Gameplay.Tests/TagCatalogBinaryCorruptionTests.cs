@@ -104,13 +104,38 @@ public sealed class TagCatalogBinaryCorruptionTests
     }
 
     [Test]
-    public void Tag_count_exceeding_file_derived_bound_is_rejected_before_allocation()
+    public void Tag_count_within_runtime_limit_but_beyond_file_bound_is_rejected_before_large_allocations()
     {
-        var bytes = Copy();
-        BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(PayloadOffset, 4), uint.MaxValue);
-        Rechecksum(bytes);
+        var expectations = TagCatalogExpectations.ForPublished("game-a", "1.4.0", Fingerprint);
+        using (var warmup = new MemoryStream(_valid, false))
+        {
+            _ = TagCatalogBinary.Load(warmup, expectations);
+        }
 
-        AssertFormat(bytes);
+        var bytes = Copy();
+        BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(PayloadOffset, 4), ushort.MaxValue);
+        Rechecksum(bytes);
+        using var input = new MemoryStream(bytes, false);
+
+        TagCatalogFormatException? error = null;
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        try
+        {
+            _ = TagCatalogBinary.Load(input, expectations);
+        }
+        catch (TagCatalogFormatException exception)
+        {
+            error = exception;
+        }
+
+        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        TestContext.Out.WriteLine($"Measured guarded-load allocation: {allocated} bytes");
+        Assert.Multiple(() =>
+        {
+            Assert.That(error, Is.Not.Null);
+            Assert.That(allocated, Is.LessThan(300_000),
+                "파일 길이 guard 전에 큰 tag 배열이나 Dictionary를 할당했습니다.");
+        });
     }
 
     [Test]
