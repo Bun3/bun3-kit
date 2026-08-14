@@ -239,7 +239,7 @@ namespace Bun3.Gameplay.Tags
             }
         }
 
-        private static class StrictJsonSyntax
+        internal static class StrictJsonSyntax
         {
             internal static void Validate(string text)
             {

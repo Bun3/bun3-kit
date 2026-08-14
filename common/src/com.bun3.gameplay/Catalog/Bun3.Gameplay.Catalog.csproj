@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <LangVersion>9.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Bun3.Gameplay.Tags.Catalog</RootNamespace>
+    <AssemblyName>Bun3.Gameplay.Catalog</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Bun3.Gameplay.csproj" />
+    <PackageReference Include="Newtonsoft.Json" Version="[13.0.2]" />
+  </ItemGroup>
+
+</Project>

@@ -2,3 +2,4 @@
 using System.Runtime.CompilerServices;
 
 [assembly: InternalsVisibleTo("Bun3.Gameplay.Unity.Tests")]
+[assembly: InternalsVisibleTo("Bun3.Gameplay.Catalog")]

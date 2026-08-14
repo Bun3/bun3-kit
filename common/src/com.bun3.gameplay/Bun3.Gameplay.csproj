@@ -23,6 +23,32 @@
   <ItemGroup>
     <Compile Remove="Editor/**/*.cs" />
     <Compile Remove="Tests/**/*.cs" />
+    <Compile Remove="Catalog/**/*.cs" />
   </ItemGroup>
+
+  <PropertyGroup>
+    <TargetsForTfmSpecificBuildOutput>$(TargetsForTfmSpecificBuildOutput);IncludeCatalogBuildOutput</TargetsForTfmSpecificBuildOutput>
+    <AllowedOutputExtensionsInPackageBuildOutputFolder>$(AllowedOutputExtensionsInPackageBuildOutputFolder);.pdb</AllowedOutputExtensionsInPackageBuildOutputFolder>
+  </PropertyGroup>
+
+  <Target Name="BuildCatalogForPackage">
+    <MSBuild Projects="$(MSBuildProjectDirectory)\Catalog\Bun3.Gameplay.Catalog.csproj"
+             Targets="Build"
+             Properties="Configuration=$(Configuration);BuildProjectReferences=false" />
+  </Target>
+
+  <Target Name="IncludeCatalogBuildOutput" DependsOnTargets="BuildCatalogForPackage">
+    <ItemGroup>
+      <BuildOutputInPackage Include="$(ArtifactsPath)\bin\Bun3.Gameplay.Catalog\$([System.String]::Copy('$(Configuration)').ToLowerInvariant())\Bun3.Gameplay.Catalog.dll">
+        <TargetPath>Bun3.Gameplay.Catalog.dll</TargetPath>
+      </BuildOutputInPackage>
+      <BuildOutputInPackage Include="$(ArtifactsPath)\bin\Bun3.Gameplay.Catalog\$([System.String]::Copy('$(Configuration)').ToLowerInvariant())\Bun3.Gameplay.Catalog.pdb">
+        <TargetPath>Bun3.Gameplay.Catalog.pdb</TargetPath>
+      </BuildOutputInPackage>
+      <BuildOutputInPackage Include="$(ArtifactsPath)\bin\Bun3.Gameplay.Catalog\$([System.String]::Copy('$(Configuration)').ToLowerInvariant())\Bun3.Gameplay.Catalog.xml">
+        <TargetPath>Bun3.Gameplay.Catalog.xml</TargetPath>
+      </BuildOutputInPackage>
+    </ItemGroup>
+  </Target>
 
 </Project>
