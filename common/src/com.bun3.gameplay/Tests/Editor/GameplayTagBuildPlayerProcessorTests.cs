@@ -137,6 +137,30 @@ namespace Bun3.Gameplay.Unity.Tests
                     new[] { typeof(ValidProvider), typeof(SecondProvider) }));
         }
 
+        /// <summary>Project Settings만으로 Published build Provider 요구를 우회할 수 없는지 검증합니다.</summary>
+        [Test]
+        public void Project_settings_is_development_only_and_does_not_replace_a_published_provider()
+        {
+            var error = Assert.Throws<BuildFailedException>(() =>
+                GameplayTagPublishedCatalogValidator.ResolveAndValidate(
+                    Array.Empty<Type>(), "jurassic-paradise"));
+
+            Assert.That(error!.Message, Does.Contain("Published"));
+            Assert.That(error.Message, Does.Contain("development"));
+        }
+
+        /// <summary>Published Provider와 Project Settings ID 불일치는 artifact를 열기 전에 실패하는지 검증합니다.</summary>
+        [Test]
+        public void Published_provider_catalog_id_must_match_project_settings_before_opening_the_artifact()
+        {
+            var error = Assert.Throws<BuildFailedException>(() =>
+                GameplayTagPublishedCatalogValidator.ResolveAndValidate(
+                    new[] { typeof(ValidProvider) }, "other-game"));
+
+            Assert.That(error!.Message, Does.Contain("Project Settings"));
+            Assert.That(error.Message, Does.Not.Contain("must not be opened"));
+        }
+
         /// <summary>provider의 제품 ID와 게시 context의 ID가 다르면 중복 설정을 stale 상태로 거부하는지 검증합니다.</summary>
         [Test]
         public void Provider_catalog_id_must_match_the_published_context_catalog_id()

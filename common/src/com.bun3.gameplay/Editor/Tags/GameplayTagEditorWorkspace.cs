@@ -61,6 +61,8 @@ namespace Bun3.Gameplay.Editor.Tags
         /// <summary>제품 전체 Source로 Runtime Catalog를 만들 수 있는지 나타냅니다.</summary>
         public bool CanBuildCatalog { get; }
 
+        internal bool RequiresCatalogConfiguration => _resolution.RequiresCatalogConfiguration;
+
         /// <summary>build context resolution과 고정 Game Source에서 새 Editor Workspace를 엽니다.</summary>
         /// <param name="resolution">provider 및 외부 Source resolve 결과입니다.</param>
         /// <param name="gameSourcePath">고정 Game Source 절대 경로입니다.</param>

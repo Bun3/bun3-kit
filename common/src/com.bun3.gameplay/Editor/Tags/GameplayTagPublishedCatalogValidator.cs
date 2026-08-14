@@ -10,10 +10,17 @@ namespace Bun3.Gameplay.Editor.Tags
     internal static class GameplayTagPublishedCatalogValidator
     {
         internal static GameplayTagPublishedCatalogContext ResolvePublishedCatalog()
-            => Execute(() => Resolve(GameplayTagBuildContextProviderDiscovery.Discover()));
+            => Execute(() => Resolve(
+                GameplayTagBuildContextProviderDiscovery.Discover(),
+                GameplayTagProjectSettings.ReadConfiguredCatalogId()));
 
         internal static string ResolveAndValidate(IReadOnlyList<Type> providerTypes) =>
-            Execute(() => Validate(Resolve(providerTypes)));
+            ResolveAndValidate(providerTypes, null);
+
+        internal static string ResolveAndValidate(
+            IReadOnlyList<Type> providerTypes,
+            string? configuredCatalogId) =>
+            Execute(() => Validate(Resolve(providerTypes, configuredCatalogId)));
 
         internal static string Validate(GameplayTagPublishedCatalogContext context) =>
             Execute(() => ValidateCore(context));
@@ -25,17 +32,25 @@ namespace Bun3.Gameplay.Editor.Tags
                 return buildFailedException;
             }
 
-            return new BuildFailedException(new InvalidOperationException(
-                "GameplayTag Published Catalog preflight failed: " + exception.Message,
-                exception));
+            return new BuildFailedException(
+                "GameplayTag Published Catalog preflight failed: " + exception.Message);
         }
 
-        private static GameplayTagPublishedCatalogContext Resolve(IReadOnlyList<Type> providerTypes)
+        private static GameplayTagPublishedCatalogContext Resolve(
+            IReadOnlyList<Type> providerTypes,
+            string? configuredCatalogId)
         {
             var candidates = GameplayTagBuildContextProviderDiscovery.SelectCandidates(providerTypes);
 
             if (candidates.Count != 1)
             {
+                if (candidates.Count == 0 && configuredCatalogId is not null)
+                {
+                    throw new InvalidOperationException(
+                        "Project Settings configures development only; exactly one gameplay tag build "
+                        + "context provider is required for a Published build.");
+                }
+
                 throw new InvalidOperationException(
                     "Exactly one gameplay tag build context provider is required for a Published build; found "
                     + GameplayTagBuildContextProviderDiscovery.FormatCandidateCount(candidates));
@@ -43,15 +58,22 @@ namespace Bun3.Gameplay.Editor.Tags
 
             var provider = (IGameplayTagBuildContextProvider)Activator.CreateInstance(
                 candidates[0], nonPublic: true)!;
-            var configuredCatalogId = provider.CatalogId;
-            if (string.IsNullOrWhiteSpace(configuredCatalogId))
+            var providerCatalogId = GameplayTagCatalogId.Require(
+                provider.CatalogId,
+                nameof(provider.CatalogId));
+            if (configuredCatalogId is not null
+                && !string.Equals(
+                    providerCatalogId,
+                    GameplayTagCatalogId.Require(configuredCatalogId, nameof(configuredCatalogId)),
+                    StringComparison.Ordinal))
             {
-                throw new InvalidOperationException("The gameplay tag build context provider Catalog ID is empty.");
+                throw new InvalidOperationException(
+                    "The gameplay tag build context provider Catalog ID does not match Project Settings.");
             }
 
             var context = provider.GetPublishedCatalog()
                 ?? throw new InvalidOperationException("The gameplay tag Published Catalog context is null.");
-            if (!string.Equals(configuredCatalogId, context.CatalogId, StringComparison.Ordinal))
+            if (!string.Equals(providerCatalogId, context.CatalogId, StringComparison.Ordinal))
             {
                 throw new InvalidOperationException(
                     "The gameplay tag provider Catalog ID does not match its Published Catalog context.");

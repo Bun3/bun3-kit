@@ -48,34 +48,85 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(result, Does.Not.StartWith(Path.GetFullPath(dataPath) + Path.DirectorySeparatorChar));
         }
 
-        /// <summary>Provider 개수 오류가 실제 후보 타입을 안정적인 순서로 보여 주는지 검증합니다.</summary>
+        /// <summary>설정되지 않은 Catalog와 여러 Provider를 안정적인 진단으로 구분하는지 검증합니다.</summary>
         [Test]
-        public void Resolver_requires_exactly_one_valid_provider_with_stable_diagnostics()
+        public void Resolver_reports_unconfigured_settings_and_multiple_providers_with_stable_diagnostics()
         {
             var gameSourcePath = WriteGameSource("game.json", "ability.jump");
 
             var missing = GameplayTagBuildContextResolver.ResolveDevelopment(
                 gameSourcePath,
                 Array.Empty<Type>(),
-                Array.Empty<string>());
+                Array.Empty<string>(),
+                null);
             var multiple = GameplayTagBuildContextResolver.ResolveDevelopment(
                 gameSourcePath,
                 new[] { typeof(SecondProvider), typeof(FakeProvider) },
-                Array.Empty<string>());
+                Array.Empty<string>(),
+                "test-game");
 
             Assert.That(missing.HasCompleteContext, Is.False);
             Assert.That(missing.Context, Is.Null);
+            Assert.That(missing.RequiresCatalogConfiguration, Is.True);
             Assert.That(missing.Diagnostics, Is.EqualTo(new[]
             {
-                "B3TAG3001: Exactly one gameplay tag build context provider is required; found 0."
+                "B3TAG3004: GameplayTag Catalog settings are not configured."
             }));
             Assert.That(multiple.HasCompleteContext, Is.False);
             Assert.That(multiple.Context, Is.Null);
+            Assert.That(multiple.RequiresCatalogConfiguration, Is.False);
             Assert.That(multiple.Diagnostics, Is.EqualTo(new[]
             {
                 "B3TAG3001: Exactly one gameplay tag build context provider is required; found 2. "
                 + "Candidates: Bun3.Gameplay.Unity.Tests.GameplayTagEditorWorkspaceTests+FakeProvider, "
                 + "Bun3.Gameplay.Unity.Tests.GameplayTagEditorWorkspaceTests+SecondProvider."
+            }));
+        }
+
+        /// <summary>코드 Provider가 없어도 Project Settings ID로 완전한 개발 context를 만드는지 검증합니다.</summary>
+        [Test]
+        public void Project_settings_catalog_id_is_the_development_fallback_without_a_provider()
+        {
+            var path = WriteGameSource("game.json", "ability.jump");
+            var resolution = GameplayTagBuildContextResolver.ResolveDevelopment(
+                path, Array.Empty<Type>(), Array.Empty<string>(), "jurassic-paradise");
+
+            Assert.That(resolution.HasCompleteContext, Is.True);
+            Assert.That(resolution.RequiresCatalogConfiguration, Is.False);
+            Assert.That(resolution.Context!.Identity.CatalogId, Is.EqualTo("jurassic-paradise"));
+            Assert.That(resolution.Context.Sources, Has.Count.EqualTo(1));
+        }
+
+        /// <summary>개발 context가 Provider와 Project Settings의 선택 매트릭스를 따르는지 검증합니다.</summary>
+        [Test]
+        public void Resolver_selects_development_context_from_the_provider_and_settings_matrix()
+        {
+            var gameSourcePath = WriteGameSource("game.json", "ability.jump");
+
+            var providerWithoutSettings = GameplayTagBuildContextResolver.ResolveDevelopment(
+                gameSourcePath,
+                new[] { typeof(FakeProvider) },
+                Array.Empty<string>(),
+                null);
+            var providerWithMatchingSettings = GameplayTagBuildContextResolver.ResolveDevelopment(
+                gameSourcePath,
+                new[] { typeof(FakeProvider) },
+                Array.Empty<string>(),
+                "test-game");
+            var providerWithMismatchedSettings = GameplayTagBuildContextResolver.ResolveDevelopment(
+                Path.Combine(_temporaryDirectory, "unopened-game.json"),
+                new[] { typeof(FakeProvider) },
+                Array.Empty<string>(),
+                "other-game");
+
+            Assert.That(providerWithoutSettings.HasCompleteContext, Is.True);
+            Assert.That(providerWithoutSettings.Context!.Identity.CatalogId, Is.EqualTo("test-game"));
+            Assert.That(providerWithMatchingSettings.HasCompleteContext, Is.True);
+            Assert.That(providerWithMatchingSettings.Context!.Identity.CatalogId, Is.EqualTo("test-game"));
+            Assert.That(providerWithMismatchedSettings.HasCompleteContext, Is.False);
+            Assert.That(providerWithMismatchedSettings.Diagnostics, Is.EqualTo(new[]
+            {
+                "B3TAG3002: GameplayTag Catalog ID does not match Project Settings."
             }));
         }
 
@@ -132,6 +183,7 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(workspace.CanCreateGameSource, Is.False);
             Assert.That(workspace.CanEditGameSource, Is.True);
             Assert.That(workspace.CanBuildCatalog, Is.False);
+            Assert.That(workspace.RequiresCatalogConfiguration, Is.True);
             Assert.That(workspace.GameSession, Is.Not.Null);
             Assert.That(workspace.GameSession!.Serialize(), Does.Contain("ability.jump"));
             Assert.That(workspace.Snapshot, Is.Null);

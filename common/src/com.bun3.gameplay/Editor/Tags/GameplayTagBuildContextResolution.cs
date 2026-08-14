@@ -29,8 +29,22 @@ namespace Bun3.Gameplay.Editor.Tags
             bool permitsGameOnlyValidation)
             : this(
                 context,
+                diagnostics,
+                permitsGameOnlyValidation,
+                requiresCatalogConfiguration: false)
+        {
+        }
+
+        internal GameplayTagBuildContextResolution(
+            GameCatalogBuildContext? context,
+            string[] diagnostics,
+            bool permitsGameOnlyValidation,
+            bool requiresCatalogConfiguration)
+            : this(
+                context,
                 CreateEntries(diagnostics),
-                permitsGameOnlyValidation)
+                permitsGameOnlyValidation,
+                requiresCatalogConfiguration)
         {
         }
 
@@ -38,6 +52,19 @@ namespace Bun3.Gameplay.Editor.Tags
             GameCatalogBuildContext? context,
             GameplayTagWorkspaceDiagnostic[] diagnostics,
             bool permitsGameOnlyValidation)
+            : this(
+                context,
+                diagnostics,
+                permitsGameOnlyValidation,
+                requiresCatalogConfiguration: false)
+        {
+        }
+
+        internal GameplayTagBuildContextResolution(
+            GameCatalogBuildContext? context,
+            GameplayTagWorkspaceDiagnostic[] diagnostics,
+            bool permitsGameOnlyValidation,
+            bool requiresCatalogConfiguration)
         {
             Context = context;
             if (diagnostics is null) throw new ArgumentNullException(nameof(diagnostics));
@@ -51,6 +78,7 @@ namespace Bun3.Gameplay.Editor.Tags
 
             _diagnostics = Array.AsReadOnly(messages);
             PermitsGameOnlyValidation = permitsGameOnlyValidation;
+            RequiresCatalogConfiguration = requiresCatalogConfiguration;
         }
 
         /// <summary>완전하게 resolve된 경우 제품 전체 개발 build context입니다.</summary>
@@ -66,6 +94,8 @@ namespace Bun3.Gameplay.Editor.Tags
         public bool HasCompleteContext => Context is not null && _diagnostics.Count == 0;
 
         internal bool PermitsGameOnlyValidation { get; }
+
+        internal bool RequiresCatalogConfiguration { get; }
 
         private static GameplayTagWorkspaceDiagnostic[] CreateEntries(string[] diagnostics)
         {

@@ -14,6 +14,7 @@ namespace Bun3.Gameplay.Editor.Tags
         private const string ProviderCountCode = "B3TAG3001";
         private const string ProviderConfigurationCode = "B3TAG3002";
         private const string SourceLoadCode = "B3TAG3003";
+        private const string ProjectSettingsConfigurationCode = "B3TAG3004";
 
         /// <summary>Unity의 타입 cache와 설치 package를 사용해 개발 build context를 resolve합니다.</summary>
         /// <param name="gameSourcePath">고정 Game Source 절대 경로입니다.</param>
@@ -22,12 +23,24 @@ namespace Bun3.Gameplay.Editor.Tags
             => ResolveDevelopment(
                 gameSourcePath,
                 GameplayTagBuildContextProviderDiscovery.Discover(),
-                DiscoverInstalledPackageMetadataPaths());
+                DiscoverInstalledPackageMetadataPaths(),
+                GameplayTagProjectSettings.ReadConfiguredCatalogId());
 
         internal static GameplayTagBuildContextResolution ResolveDevelopment(
             string gameSourcePath,
             IReadOnlyList<Type> providerTypes,
             IReadOnlyList<string> installedPackageMetadataPaths)
+            => ResolveDevelopment(
+                gameSourcePath,
+                providerTypes,
+                installedPackageMetadataPaths,
+                null);
+
+        internal static GameplayTagBuildContextResolution ResolveDevelopment(
+            string gameSourcePath,
+            IReadOnlyList<Type> providerTypes,
+            IReadOnlyList<string> installedPackageMetadataPaths,
+            string? configuredCatalogId)
         {
             if (gameSourcePath is null) throw new ArgumentNullException(nameof(gameSourcePath));
             if (providerTypes is null) throw new ArgumentNullException(nameof(providerTypes));
@@ -38,7 +51,7 @@ namespace Bun3.Gameplay.Editor.Tags
 
             var candidates = GameplayTagBuildContextProviderDiscovery.SelectCandidates(providerTypes);
 
-            if (candidates.Count != 1)
+            if (candidates.Count > 1)
             {
                 return Failure(
                     ProviderCountCode + ": Exactly one gameplay tag build context provider is required; found "
@@ -46,35 +59,79 @@ namespace Bun3.Gameplay.Editor.Tags
                     permitsGameOnlyValidation: true);
             }
 
-            IGameplayTagBuildContextProvider provider;
-            try
-            {
-                provider = (IGameplayTagBuildContextProvider)Activator.CreateInstance(
-                    candidates[0], nonPublic: true)!;
-            }
-            catch (Exception exception)
-            {
-                return Failure(
-                    ProviderConfigurationCode + ": Failed to create gameplay tag build context provider: "
-                    + exception.GetBaseException().Message,
-                    permitsGameOnlyValidation: true);
-            }
-
             IReadOnlyList<string> externalPaths;
             string catalogId;
-            try
+            if (candidates.Count == 0)
             {
-                catalogId = provider.CatalogId;
-                externalPaths = provider.ExternalSourceMetadataPaths
-                    ?? throw new InvalidOperationException("External Source Metadata path list is null.");
-                _ = new TagCatalogIdentity(catalogId, TagCatalogVersions.Development);
+                if (configuredCatalogId is null)
+                {
+                    return Failure(
+                        ProjectSettingsConfigurationCode
+                        + ": GameplayTag Catalog settings are not configured.",
+                        permitsGameOnlyValidation: true,
+                        requiresCatalogConfiguration: true);
+                }
+
+                try
+                {
+                    catalogId = GameplayTagCatalogId.Require(
+                        configuredCatalogId,
+                        nameof(configuredCatalogId));
+                }
+                catch (Exception exception) when (exception is ArgumentException)
+                {
+                    return Failure(
+                        ProviderConfigurationCode + ": Invalid GameplayTag Catalog settings: "
+                        + exception.Message,
+                        permitsGameOnlyValidation: true);
+                }
+
+                externalPaths = Array.Empty<string>();
             }
-            catch (Exception exception)
+            else
             {
-                return Failure(
-                    ProviderConfigurationCode + ": Invalid gameplay tag build context provider: "
-                    + exception.Message,
-                    permitsGameOnlyValidation: true);
+                IGameplayTagBuildContextProvider provider;
+                try
+                {
+                    provider = (IGameplayTagBuildContextProvider)Activator.CreateInstance(
+                        candidates[0], nonPublic: true)!;
+                }
+                catch (Exception exception)
+                {
+                    return Failure(
+                        ProviderConfigurationCode + ": Failed to create gameplay tag build context provider: "
+                        + exception.GetBaseException().Message,
+                        permitsGameOnlyValidation: true);
+                }
+
+                try
+                {
+                    catalogId = GameplayTagCatalogId.Require(provider.CatalogId, nameof(provider.CatalogId));
+                    externalPaths = provider.ExternalSourceMetadataPaths
+                        ?? throw new InvalidOperationException("External Source Metadata path list is null.");
+                    if (configuredCatalogId is not null
+                        && !string.Equals(
+                            catalogId,
+                            GameplayTagCatalogId.Require(
+                                configuredCatalogId,
+                                nameof(configuredCatalogId)),
+                            StringComparison.Ordinal))
+                    {
+                        return Failure(
+                            ProviderConfigurationCode
+                            + ": GameplayTag Catalog ID does not match Project Settings.",
+                            permitsGameOnlyValidation: true);
+                    }
+
+                    _ = new TagCatalogIdentity(catalogId, TagCatalogVersions.Development);
+                }
+                catch (Exception exception)
+                {
+                    return Failure(
+                        ProviderConfigurationCode + ": Invalid gameplay tag build context provider: "
+                        + exception.Message,
+                        permitsGameOnlyValidation: true);
+                }
             }
 
             string[] metadataPaths;
@@ -136,7 +193,8 @@ namespace Bun3.Gameplay.Editor.Tags
                         CatalogBuildMode.Development,
                         sources),
                     Array.Empty<string>(),
-                    permitsGameOnlyValidation: false);
+                    permitsGameOnlyValidation: false,
+                    requiresCatalogConfiguration: false);
             }
             catch (Exception exception) when (exception is ArgumentException)
             {
@@ -195,10 +253,12 @@ namespace Bun3.Gameplay.Editor.Tags
         private static GameplayTagBuildContextResolution Failure(
             string diagnostic,
             bool permitsGameOnlyValidation,
+            bool requiresCatalogConfiguration = false,
             string? localSourcePath = null) =>
             new GameplayTagBuildContextResolution(
                 null,
                 new[] { new GameplayTagWorkspaceDiagnostic(diagnostic, localSourcePath) },
-                permitsGameOnlyValidation);
+                permitsGameOnlyValidation,
+                requiresCatalogConfiguration);
     }
 }
