@@ -2,10 +2,8 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Reflection;
 using Bun3.Gameplay.Tags;
 using Bun3.Gameplay.Tags.Catalog;
-using UnityEditor;
 
 namespace Bun3.Gameplay.Editor.Tags
 {
@@ -21,18 +19,10 @@ namespace Bun3.Gameplay.Editor.Tags
         /// <param name="gameSourcePath">고정 Game Source 절대 경로입니다.</param>
         /// <returns>완전한 context 또는 작업을 막는 진단입니다.</returns>
         public static GameplayTagBuildContextResolution ResolveDevelopment(string gameSourcePath)
-        {
-            var providerTypes = new List<Type>();
-            foreach (var type in TypeCache.GetTypesDerivedFrom<IGameplayTagBuildContextProvider>())
-            {
-                providerTypes.Add(type);
-            }
-
-            return ResolveDevelopment(
+            => ResolveDevelopment(
                 gameSourcePath,
-                providerTypes,
+                GameplayTagBuildContextProviderDiscovery.Discover(),
                 DiscoverInstalledPackageMetadataPaths());
-        }
 
         internal static GameplayTagBuildContextResolution ResolveDevelopment(
             string gameSourcePath,
@@ -46,25 +36,13 @@ namespace Bun3.Gameplay.Editor.Tags
                 throw new ArgumentNullException(nameof(installedPackageMetadataPaths));
             }
 
-            var candidates = new List<Type>();
-            for (var index = 0; index < providerTypes.Count; index++)
-            {
-                var type = providerTypes[index] ?? throw new ArgumentNullException(nameof(providerTypes));
-                if (type.IsAbstract || type.ContainsGenericParameters
-                    || !typeof(IGameplayTagBuildContextProvider).IsAssignableFrom(type)
-                    || FindParameterlessConstructor(type) is null)
-                {
-                    continue;
-                }
-
-                candidates.Add(type);
-            }
+            var candidates = GameplayTagBuildContextProviderDiscovery.SelectCandidates(providerTypes);
 
             if (candidates.Count != 1)
             {
                 return Failure(
                     ProviderCountCode + ": Exactly one gameplay tag build context provider is required; found "
-                    + candidates.Count + ".",
+                    + GameplayTagBuildContextProviderDiscovery.FormatCandidateCount(candidates),
                     permitsGameOnlyValidation: true);
             }
 
@@ -168,13 +146,6 @@ namespace Bun3.Gameplay.Editor.Tags
                     permitsGameOnlyValidation: true);
             }
         }
-
-        private static ConstructorInfo? FindParameterlessConstructor(Type type) =>
-            type.GetConstructor(
-                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
-                binder: null,
-                Type.EmptyTypes,
-                modifiers: null);
 
         private static string[] DiscoverInstalledPackageMetadataPaths()
         {

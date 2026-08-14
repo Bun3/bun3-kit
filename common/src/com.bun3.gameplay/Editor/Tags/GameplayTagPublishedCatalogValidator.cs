@@ -2,9 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Reflection;
 using Bun3.Gameplay.Tags;
-using UnityEditor;
 using UnityEditor.Build;
 
 namespace Bun3.Gameplay.Editor.Tags
@@ -12,15 +10,7 @@ namespace Bun3.Gameplay.Editor.Tags
     internal static class GameplayTagPublishedCatalogValidator
     {
         internal static GameplayTagPublishedCatalogContext ResolvePublishedCatalog()
-        {
-            var providerTypes = new List<Type>();
-            foreach (var type in TypeCache.GetTypesDerivedFrom<IGameplayTagBuildContextProvider>())
-            {
-                providerTypes.Add(type);
-            }
-
-            return Execute(() => Resolve(providerTypes));
-        }
+            => Execute(() => Resolve(GameplayTagBuildContextProviderDiscovery.Discover()));
 
         internal static string ResolveAndValidate(IReadOnlyList<Type> providerTypes) =>
             Execute(() => Validate(Resolve(providerTypes)));
@@ -42,27 +32,13 @@ namespace Bun3.Gameplay.Editor.Tags
 
         private static GameplayTagPublishedCatalogContext Resolve(IReadOnlyList<Type> providerTypes)
         {
-            if (providerTypes is null) throw new ArgumentNullException(nameof(providerTypes));
-            var candidates = new List<Type>();
-            for (var index = 0; index < providerTypes.Count; index++)
-            {
-                var type = providerTypes[index]
-                    ?? throw new ArgumentNullException(nameof(providerTypes));
-                if (type.IsAbstract || type.ContainsGenericParameters
-                    || !typeof(IGameplayTagBuildContextProvider).IsAssignableFrom(type)
-                    || FindParameterlessConstructor(type) is null)
-                {
-                    continue;
-                }
-
-                candidates.Add(type);
-            }
+            var candidates = GameplayTagBuildContextProviderDiscovery.SelectCandidates(providerTypes);
 
             if (candidates.Count != 1)
             {
                 throw new InvalidOperationException(
                     "Exactly one gameplay tag build context provider is required for a Published build; found "
-                    + candidates.Count + ".");
+                    + GameplayTagBuildContextProviderDiscovery.FormatCandidateCount(candidates));
             }
 
             var provider = (IGameplayTagBuildContextProvider)Activator.CreateInstance(
@@ -100,13 +76,6 @@ namespace Bun3.Gameplay.Editor.Tags
 
             return artifactPath;
         }
-
-        private static ConstructorInfo? FindParameterlessConstructor(Type type) =>
-            type.GetConstructor(
-                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
-                binder: null,
-                Type.EmptyTypes,
-                modifiers: null);
 
         private static T Execute<T>(Func<T> action)
         {

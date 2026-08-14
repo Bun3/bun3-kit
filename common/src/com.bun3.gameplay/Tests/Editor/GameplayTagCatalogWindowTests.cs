@@ -463,6 +463,12 @@ namespace Bun3.Gameplay.Unity.Tests
             var previousClipboard = EditorGUIUtility.systemCopyBuffer;
             try
             {
+                AttachController(
+                    window,
+                    new GameplayTagCatalogWindowController(
+                        Path.Combine(_temporaryDirectory, "MissingGameplayTags.json"),
+                        ResolveWithoutProvider,
+                        _ => { }));
                 window.PrepareSubTag("State.Movement");
                 Assert.That(GetPrivateString(window, "_newTagName"), Is.EqualTo("State.Movement."));
                 Assert.That(GetController(window).Session, Is.Null);

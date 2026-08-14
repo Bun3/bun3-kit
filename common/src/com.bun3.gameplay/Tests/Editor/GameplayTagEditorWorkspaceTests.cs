@@ -48,6 +48,7 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(result, Does.Not.StartWith(Path.GetFullPath(dataPath) + Path.DirectorySeparatorChar));
         }
 
+        /// <summary>Provider 개수 오류가 실제 후보 타입을 안정적인 순서로 보여 주는지 검증합니다.</summary>
         [Test]
         public void Resolver_requires_exactly_one_valid_provider_with_stable_diagnostics()
         {
@@ -59,7 +60,7 @@ namespace Bun3.Gameplay.Unity.Tests
                 Array.Empty<string>());
             var multiple = GameplayTagBuildContextResolver.ResolveDevelopment(
                 gameSourcePath,
-                new[] { typeof(FakeProvider), typeof(SecondProvider) },
+                new[] { typeof(SecondProvider), typeof(FakeProvider) },
                 Array.Empty<string>());
 
             Assert.That(missing.HasCompleteContext, Is.False);
@@ -72,8 +73,20 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(multiple.Context, Is.Null);
             Assert.That(multiple.Diagnostics, Is.EqualTo(new[]
             {
-                "B3TAG3001: Exactly one gameplay tag build context provider is required; found 2."
+                "B3TAG3001: Exactly one gameplay tag build context provider is required; found 2. "
+                + "Candidates: Bun3.Gameplay.Unity.Tests.GameplayTagEditorWorkspaceTests+FakeProvider, "
+                + "Bun3.Gameplay.Unity.Tests.GameplayTagEditorWorkspaceTests+SecondProvider."
             }));
+        }
+
+        /// <summary>전역 Provider 탐색이 현재 Unity 테스트 어셈블리의 더블을 반환하지 않는지 검증합니다.</summary>
+        [Test]
+        public void Global_discovery_excludes_providers_from_test_assemblies()
+        {
+            var providers = GameplayTagBuildContextProviderDiscovery.Discover();
+            var testAssembly = typeof(GameplayTagEditorWorkspaceTests).Assembly;
+
+            Assert.That(providers.All(provider => provider.Assembly != testAssembly), Is.True);
         }
 
         [Test]
