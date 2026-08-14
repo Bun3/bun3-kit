@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>Bun3.Gameplay.Tags.NativePackageFixture</PackageId>
+    <Version>1.0.0</Version>
+    <Authors>Bun3</Authors>
+    <Bun3GameplayTagSource>true</Bun3GameplayTagSource>
+    <Bun3GameplayTagTasksAssembly>$(MSBuildThisFileDirectory)..\..\..\..\artifacts\bin\Bun3.Gameplay.TagSource.Tasks\release\Bun3.Gameplay.TagSource.Tasks.dll</Bun3GameplayTagTasksAssembly>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\src\com.bun3.gameplay\Bun3.Gameplay.csproj" />
+  </ItemGroup>
+
+  <Import Project="..\..\..\..\src\com.bun3.gameplay\buildTransitive\Bun3.Gameplay.NativeTags.targets" />
+
+</Project>
