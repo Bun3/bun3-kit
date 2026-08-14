@@ -30,7 +30,9 @@ namespace Bun3.Gameplay.Tests
         private static TagCatalog Load(byte[] utf8)
         {
             using var stream = new MemoryStream(utf8, writable: false);
+#pragma warning disable CS0618 // 레거시 JSON allocation fixture입니다.
             return TagCatalog.Load(stream);
+#pragma warning restore CS0618
         }
     }
 }

@@ -163,7 +163,9 @@ namespace Bun3.Gameplay.Tests
 
             var json = BuildCatalogJson(catalogSize, exactKinds, depth);
             using var stream = new MemoryStream(new UTF8Encoding(false, true).GetBytes(json));
+#pragma warning disable CS0618 // 기존 JSON performance fixture의 호환 경로입니다.
             var catalog = TagCatalog.Load(stream);
+#pragma warning restore CS0618
             var exact = new GameplayTag[exactKinds];
             var parents = new GameplayTag[exactKinds];
             var misses = new GameplayTag[exactKinds];

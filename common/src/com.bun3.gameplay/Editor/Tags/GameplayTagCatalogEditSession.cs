@@ -295,13 +295,17 @@ namespace Bun3.Gameplay.Editor.Tags
         private static void Validate(string json)
         {
             using var stream = new MemoryStream(new UTF8Encoding(false, true).GetBytes(json));
+#pragma warning disable CS0618 // Editor authoring JSON 검증 경로입니다.
             TagCatalog.Load(stream);
+#pragma warning restore CS0618
         }
 
         private TagCatalog EnsureActive(string path, string canonical, out GameplayTag tag)
         {
             using var stream = new MemoryStream(new UTF8Encoding(false, true).GetBytes(_serialized));
+#pragma warning disable CS0618 // Editor authoring JSON preview 경로입니다.
             var catalog = TagCatalog.Load(stream);
+#pragma warning restore CS0618
             if (!catalog.TryGet(path, out tag)
                 || Fold(catalog.GetDisplayName(tag)) != canonical)
             {

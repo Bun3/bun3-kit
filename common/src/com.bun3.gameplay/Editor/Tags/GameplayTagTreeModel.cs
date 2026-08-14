@@ -48,7 +48,9 @@ namespace Bun3.Gameplay.Editor.Tags
             }
 
             using var stream = new MemoryStream(new UTF8Encoding(false, true).GetBytes(session.Serialize()));
+#pragma warning disable CS0618 // Editor authoring JSON tree preview 경로입니다.
             var catalog = TagCatalog.Load(stream);
+#pragma warning restore CS0618
             _rows = new GameplayTagTreeRowModel[catalog.Count];
             for (var index = 1; index <= catalog.Count; index++)
             {

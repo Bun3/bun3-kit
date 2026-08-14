@@ -57,7 +57,9 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(json, Does.Not.Contain("\"name\": \"STATE\""));
 
             using var stream = new MemoryStream(new UTF8Encoding(false, true).GetBytes(json));
+#pragma warning disable CS0618 // 레거시 Editor JSON 결과를 검증합니다.
             var catalog = TagCatalog.Load(stream);
+#pragma warning restore CS0618
             Assert.That(catalog.GetDisplayName(catalog.GetRequired("State")), Is.EqualTo("state"));
             Assert.That(catalog.GetDisplayName(catalog.GetRequired("State.Dead")), Is.EqualTo("state.dead"));
             Assert.That(catalog.GetDisplayName(catalog.GetRequired("State.Dead.Ghost")),

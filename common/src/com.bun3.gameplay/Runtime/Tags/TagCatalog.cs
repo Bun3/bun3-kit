@@ -6,7 +6,7 @@ using System.IO;
 namespace Bun3.Gameplay.Tags
 {
     /// <summary>
-    /// 엄격한 JSON에서 한 번 만들어진 뒤 변경되지 않는 게임플레이 태그 카탈로그입니다.
+    /// 검증된 입력에서 한 번 만들어진 뒤 변경되지 않는 게임플레이 태그 카탈로그입니다.
     /// </summary>
     public sealed partial class TagCatalog
     {
@@ -213,6 +213,7 @@ namespace Bun3.Gameplay.Tags
         /// <exception cref="ArgumentNullException"><paramref name="utf8Json"/>이 null인 경우입니다.</exception>
         /// <exception cref="ArgumentException">스트림을 읽을 수 없는 경우입니다.</exception>
         /// <exception cref="TagCatalogException">JSON 또는 카탈로그가 유효하지 않은 경우입니다.</exception>
+        [Obsolete("JSON 로딩은 작성 도구 호환용입니다. 런타임에서는 TagCatalogBinary.Load를 사용하세요.", false)]
         public static TagCatalog Load(Stream utf8Json)
         {
             if (utf8Json is null) throw new ArgumentNullException(nameof(utf8Json));
@@ -321,6 +322,19 @@ namespace Bun3.Gameplay.Tags
 
         internal ushort GetSubtreeEnd(GameplayTag tag) =>
             tag.IsValid && tag.Index <= Count ? _subtreeEnds[tag.Index] : (ushort)0;
+
+        internal CompiledRedirect[] CopyCompiledRedirects()
+        {
+            var redirects = new CompiledRedirect[_redirects.Count];
+            var index = 0;
+            foreach (var pair in _redirects)
+            {
+                redirects[index++] = new CompiledRedirect(pair.Key, _displayNames[pair.Value]);
+            }
+
+            Array.Sort(redirects, (left, right) => StringComparer.Ordinal.Compare(left.From, right.From));
+            return redirects;
+        }
 
         private readonly struct RedirectDefinition
         {

@@ -38,7 +38,9 @@ namespace Bun3.Gameplay.Unity.Tests
                 "{\"schemaVersion\":1,\"tags\":[" +
                 "{\"name\":\"State.Alive\"},{\"name\":\"State.Dead\"}]}";
             using var stream = new MemoryStream(Encoding.UTF8.GetBytes(json));
+#pragma warning disable CS0618 // 레거시 Unity JSON smoke fixture입니다.
             var catalog = TagCatalog.Load(stream);
+#pragma warning restore CS0618
 
             Assert.That(catalog.TryGetByIndex(catalog.GetRequired("State.Dead").Index, out var wire), Is.True);
             Assert.That(wire, Is.EqualTo(catalog.GetRequired("state.dead")));

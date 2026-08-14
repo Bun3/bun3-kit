@@ -121,7 +121,9 @@ namespace Bun3.Gameplay.Editor.Tags
         private static void Validate(byte[] bytes)
         {
             using var stream = new MemoryStream(bytes, false);
+#pragma warning disable CS0618 // Editor authoring JSON adapter의 호환 경로입니다.
             _ = TagCatalog.Load(stream);
+#pragma warning restore CS0618
         }
     }
 }

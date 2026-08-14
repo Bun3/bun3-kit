@@ -21,7 +21,9 @@ namespace Bun3.Gameplay.Tests
         public void Runtime_indices_hierarchy_redirect_and_fingerprint_match_golden()
         {
             using var stream = new MemoryStream(new UTF8Encoding(false, true).GetBytes(Json));
+#pragma warning disable CS0618 // 레거시 JSON conformance fixture입니다.
             var catalog = TagCatalog.Load(stream);
+#pragma warning restore CS0618
 
             Assert.That(catalog.Count, Is.EqualTo(7));
             Assert.That(catalog.TryGetByIndex(GameplayTag.None.Index, out var none), Is.True);
@@ -54,7 +56,9 @@ namespace Bun3.Gameplay.Tests
         public void Containers_match_the_same_hierarchy_contract()
         {
             using var stream = new MemoryStream(Encoding.UTF8.GetBytes(Json));
+#pragma warning disable CS0618 // 레거시 JSON conformance fixture입니다.
             var catalog = TagCatalog.Load(stream);
+#pragma warning restore CS0618
             var ghost = catalog.GetRequired("State.Dead.Ghost");
             var dead = catalog.GetRequired("State.Dead");
 
@@ -73,7 +77,9 @@ namespace Bun3.Gameplay.Tests
         public void Fingerprint_gate_rejects_mismatched_peer_before_simulation_starts()
         {
             using var localStream = new MemoryStream(Encoding.UTF8.GetBytes(Json));
+#pragma warning disable CS0618 // 레거시 JSON conformance fixture입니다.
             var local = TagCatalog.Load(localStream);
+#pragma warning restore CS0618
             const string changedRedirectJson =
                 "{\"schemaVersion\":1,\"tags\":[" +
                 "{\"name\":\"State.Rooted\"}," +
@@ -81,7 +87,9 @@ namespace Bun3.Gameplay.Tests
                 "{\"name\":\"State.Dead.Ghost\"}]," +
                 "\"redirects\":[{\"from\":\"State.Gone\",\"to\":\"State.Dead\"}]}";
             using var peerStream = new MemoryStream(Encoding.UTF8.GetBytes(changedRedirectJson));
+#pragma warning disable CS0618 // 레거시 JSON conformance fixture입니다.
             var peer = TagCatalog.Load(peerStream);
+#pragma warning restore CS0618
             var simulationStarts = 0;
             Action onSimulationStart = () => simulationStarts++;
 
@@ -96,7 +104,9 @@ namespace Bun3.Gameplay.Tests
         public void Ability_effect_and_equipment_contributions_survive_until_the_last_source_is_removed()
         {
             using var stream = new MemoryStream(Encoding.UTF8.GetBytes(Json));
+#pragma warning disable CS0618 // 레거시 JSON conformance fixture입니다.
             var catalog = TagCatalog.Load(stream);
+#pragma warning restore CS0618
             var state = catalog.GetRequired("State");
             var dead = catalog.GetRequired("State.Dead");
             var subject = catalog.CreateCountContainer(1);
