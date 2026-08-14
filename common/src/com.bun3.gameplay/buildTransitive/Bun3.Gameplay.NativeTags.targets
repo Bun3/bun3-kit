@@ -12,14 +12,15 @@
           DependsOnTargets="Build;ResolveReferences"
           Condition="'$(Bun3GameplayTagSource)' == 'true'">
     <PropertyGroup>
-      <Bun3GameplayTagMetadataOutput Condition="'$(Bun3GameplayTagMetadataOutput)' == ''">$(IntermediateOutputPath)Bun3\GameplayTags\TagSource.json</Bun3GameplayTagMetadataOutput>
+      <Bun3GameplayTagMetadataOutput Condition="'$(Bun3GameplayTagMetadataOutput)' == ''">$(IntermediateOutputPath)Bun3/GameplayTags/TagSource.json</Bun3GameplayTagMetadataOutput>
+      <_Bun3GameplayTagMetadataFullPath>$([System.IO.Path]::GetFullPath($([System.IO.Path]::Combine('$(MSBuildProjectDirectory)', '$(Bun3GameplayTagMetadataOutput)'))))</_Bun3GameplayTagMetadataFullPath>
     </PropertyGroup>
     <ExtractNativeGameplayTagsTask Sources="@(Compile)"
                                    References="@(ReferencePath)"
                                    TargetPath="$(TargetPath)"
-                                   OutputPath="$(Bun3GameplayTagMetadataOutput)" />
+                                   OutputPath="$(_Bun3GameplayTagMetadataFullPath)" />
     <ItemGroup>
-      <TfmSpecificPackageFile Include="$(Bun3GameplayTagMetadataOutput)">
+      <TfmSpecificPackageFile Include="$(_Bun3GameplayTagMetadataFullPath)">
         <PackagePath>contentFiles/any/any/Bun3/GameplayTags/TagSource.json</PackagePath>
       </TfmSpecificPackageFile>
     </ItemGroup>

@@ -67,6 +67,11 @@ namespace Bun3.Gameplay.TagSource.Tasks
                     stream.Flush(true);
                 }
 
+                using (var staged = new FileStream(temporary, FileMode.Open, FileAccess.Read, FileShare.Read))
+                {
+                    NativeTagMetadataValidator.Validate(staged);
+                }
+
                 if (File.Exists(fullPath)) File.Replace(temporary, fullPath, null);
                 else File.Move(temporary, fullPath);
             }

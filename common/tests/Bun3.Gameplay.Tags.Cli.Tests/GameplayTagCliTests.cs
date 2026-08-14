@@ -1,8 +1,12 @@
 #nullable enable
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
+using System.Reflection;
+using System.Security;
 using System.Text;
 using Bun3.Gameplay.TagSource.Tasks;
 using Bun3.Gameplay.Tags.Catalog;
@@ -268,6 +272,126 @@ public sealed class GameplayTagCliTests
         });
     }
 
+    [Test]
+    public void Task_staged_metadata_readback_failure_preserves_destination_and_removes_temporary_file()
+    {
+        var output = Write("task-metadata.json", "previous-good");
+        var method = typeof(ExtractNativeGameplayTagsTask).GetMethod(
+            "WriteAtomically", BindingFlags.Static | BindingFlags.NonPublic);
+        Exception? readbackError = null;
+        try
+        {
+            method!.Invoke(null, new object[] { output, "{\"schemaVersion\":1" });
+        }
+        catch (TargetInvocationException exception)
+        {
+            readbackError = exception.InnerException;
+        }
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(method, Is.Not.Null);
+            Assert.That(readbackError, Is.TypeOf<InvalidDataException>());
+            Assert.That(File.ReadAllText(output), Is.EqualTo("previous-good"));
+            Assert.That(Directory.GetFiles(_root, ".task-metadata.json.*.tmp"), Is.Empty);
+        });
+    }
+
+    [Test]
+    public void Packaged_target_uses_platform_neutral_metadata_suffix()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var targetsPath = Path.Combine(repositoryRoot, "common", "src", "com.bun3.gameplay", "buildTransitive",
+            "Bun3.Gameplay.NativeTags.targets");
+        var targets = File.ReadAllText(targetsPath);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(targets, Does.Contain("Bun3/GameplayTags/TagSource.json"));
+            Assert.That(targets, Does.Not.Contain(@"Bun3\GameplayTags\TagSource.json"));
+        });
+    }
+
+    [Test]
+    public void External_pack_resolves_relative_intermediate_output_under_project_with_spaces()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var projectDirectory = Path.Combine(_root, "External Native Package With Spaces");
+        Directory.CreateDirectory(projectDirectory);
+        var relativeIntermediate = "relative intermediate " + Guid.NewGuid().ToString("N");
+        var expectedIntermediateRoot = Path.Combine(projectDirectory, relativeIntermediate);
+        var escapedRoot = Path.Combine(repositoryRoot, relativeIntermediate);
+        var packageOutput = Path.Combine(_root, "external package output");
+        var localFeed = Path.Combine(_root, "local package feed");
+        var localPackageCache = Path.Combine(_root, "local package cache");
+        var localPackageVersion = "0.8.0-local-" + Guid.NewGuid().ToString("N");
+        var projectPath = Path.Combine(projectDirectory, "External Native Package.csproj");
+        var gameplayProject = Path.Combine(repositoryRoot, "common", "src", "com.bun3.gameplay", "Bun3.Gameplay.csproj");
+        var rootPackageResult = RunProcess(repositoryRoot, "dotnet", "pack", gameplayProject, "-c", "Release",
+            "-o", localFeed, "-p:PackageVersion=" + localPackageVersion, "-nodeReuse:false");
+        var localPackage = Path.Combine(localFeed, "Bun3.Gameplay." + localPackageVersion + ".nupkg");
+        File.WriteAllText(projectPath, $$"""
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup>
+                <TargetFramework>net10.0</TargetFramework>
+                <PackageId>External.Native.Package.Fixture</PackageId>
+                <Version>1.0.0</Version>
+                <Bun3GameplayTagSource>true</Bun3GameplayTagSource>
+                <IntermediateOutputPath>{{relativeIntermediate}}/</IntermediateOutputPath>
+                <RestoreAdditionalProjectSources>{{SecurityElement.Escape(localFeed)}}</RestoreAdditionalProjectSources>
+                <RestorePackagesPath>{{SecurityElement.Escape(localPackageCache)}}</RestorePackagesPath>
+              </PropertyGroup>
+              <ItemGroup>
+                <PackageReference Include="Bun3.Gameplay" Version="{{localPackageVersion}}" />
+              </ItemGroup>
+            </Project>
+            """, new UTF8Encoding(false));
+        File.WriteAllText(Path.Combine(projectDirectory, "Native Tags.cs"), """
+            using Bun3.Gameplay.Tags;
+            [assembly: GameplayTagSource("external.native", "External Native")]
+            public static class NativeTags
+            {
+                [NativeGameplayTag]
+                public const string Ready = "State.Ready";
+            }
+            """, new UTF8Encoding(false));
+
+        try
+        {
+            var result = RunProcess(repositoryRoot, "dotnet", "pack", projectPath, "-c", "Release",
+                "-o", packageOutput, "-nodeReuse:false");
+            var package = Path.Combine(packageOutput, "External.Native.Package.Fixture.1.0.0.nupkg");
+            var tagSourceCount = File.Exists(package)
+                ? CountZipEntries(package, "contentFiles/any/any/Bun3/GameplayTags/TagSource.json")
+                : 0;
+            var expectedMetadata = Directory.Exists(expectedIntermediateRoot)
+                ? Directory.GetFiles(expectedIntermediateRoot, "TagSource.json", SearchOption.AllDirectories)
+                : Array.Empty<string>();
+            var escapedMetadata = Directory.Exists(escapedRoot)
+                ? Directory.GetFiles(escapedRoot, "TagSource.json", SearchOption.AllDirectories)
+                : Array.Empty<string>();
+            var generatedImports = string.Join(Environment.NewLine,
+                Directory.GetFiles(projectDirectory, "*.nuget.g.targets", SearchOption.AllDirectories)
+                    .Select(File.ReadAllText));
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(rootPackageResult.ExitCode, Is.Zero, rootPackageResult.Output);
+                Assert.That(File.Exists(localPackage), Is.True, "The unique local package must exist before consumer restore.");
+                Assert.That(result.ExitCode, Is.Zero, result.Output);
+                Assert.That(expectedMetadata, Has.Exactly(1).EndsWith("TagSource.json"),
+                    "Metadata must be rooted under the external project intermediate directory.\n"
+                    + result.Output + "\nGenerated imports:\n" + generatedImports);
+                Assert.That(escapedMetadata, Is.Empty, "Metadata must not escape to the pack process working directory.");
+                Assert.That(tagSourceCount, Is.EqualTo(1));
+            });
+        }
+        finally
+        {
+            if (Directory.Exists(escapedRoot)) Directory.Delete(escapedRoot, true);
+        }
+    }
+
     [TestCase("compile", "--development", "--published", "--catalog-id", "sample", "--project-root", ".")]
     [TestCase("compile", "--development", "--catalog-id", "a", "--catalog-id", "b", "--project-root", ".")]
     [TestCase("compile", "--development", "--catalog-id", "sample", "--project-root", ".", "--output", "bad")]
@@ -336,6 +460,44 @@ public sealed class GameplayTagCliTests
 
         references.Add(typeof(Bun3.Gameplay.Tags.GameplayTagSourceAttribute).Assembly.Location);
         return references;
+    }
+
+    private static string FindRepositoryRoot()
+    {
+        var directory = new DirectoryInfo(TestContext.CurrentContext.TestDirectory);
+        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "Bun3.sln")))
+        {
+            directory = directory.Parent;
+        }
+
+        return directory?.FullName ?? throw new InvalidOperationException("Repository root was not found.");
+    }
+
+    private static (int ExitCode, string Output) RunProcess(string workingDirectory, string fileName, params string[] arguments)
+    {
+        using var process = new Process
+        {
+            StartInfo = new ProcessStartInfo(fileName)
+            {
+                WorkingDirectory = workingDirectory,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+            },
+        };
+        foreach (var argument in arguments) process.StartInfo.ArgumentList.Add(argument);
+        process.Start();
+        var stdout = process.StandardOutput.ReadToEnd();
+        var stderr = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+        return (process.ExitCode, stdout + stderr);
+    }
+
+    private static int CountZipEntries(string packagePath, string entryPath)
+    {
+        using var archive = ZipFile.OpenRead(packagePath);
+        return archive.Entries.Count(entry => string.Equals(entry.FullName, entryPath, StringComparison.Ordinal));
     }
 
     private static string GameJson(params string[] tags) =>

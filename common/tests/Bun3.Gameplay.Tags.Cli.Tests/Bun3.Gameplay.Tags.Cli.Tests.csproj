@@ -5,10 +5,13 @@
     <IsPackable>false</IsPackable>
     <RootNamespace>Bun3.Gameplay.Tags.Cli.Tests</RootNamespace>
     <Nullable>enable</Nullable>
+    <NuGetAudit>false</NuGetAudit>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.10.0" />
+    <PackageReference Include="Microsoft.Build.Framework" Version="[17.8.3]" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.Build.Utilities.Core" Version="[17.8.3]" PrivateAssets="all" />
     <PackageReference Include="NUnit" Version="4.1.0" />
     <PackageReference Include="NUnit3TestAdapter" Version="4.5.0" />
   </ItemGroup>
