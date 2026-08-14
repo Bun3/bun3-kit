@@ -1,53 +1,70 @@
 #nullable enable
 using System;
 using System.Collections.Generic;
+using System.IO;
+using UnityEngine;
 
 namespace Bun3.Gameplay.Editor.Tags
 {
     internal sealed class GameplayTagCatalogWindowController
     {
-        internal string FilePath { get; private set; } = string.Empty;
+        private readonly Func<string, GameplayTagBuildContextResolution> _resolveContext;
+        private GameplayTagEditorWorkspace _workspace;
+
+        internal GameplayTagCatalogWindowController()
+            : this(
+                GameplayTagGameSourcePath.Get(Application.dataPath),
+                GameplayTagBuildContextResolver.ResolveDevelopment)
+        {
+        }
+
+        internal GameplayTagCatalogWindowController(
+            string gameSourcePath,
+            Func<string, GameplayTagBuildContextResolution> resolveContext)
+        {
+            if (gameSourcePath is null) throw new ArgumentNullException(nameof(gameSourcePath));
+            _resolveContext = resolveContext ?? throw new ArgumentNullException(nameof(resolveContext));
+            GameSourcePath = Path.GetFullPath(gameSourcePath);
+            _workspace = OpenWorkspace();
+        }
+
+        internal string GameSourcePath { get; }
+        internal GameplayTagEditorWorkspace Workspace => _workspace;
         internal GameplayTagCatalogEditSession? Session { get; private set; }
         internal string SelectedPath { get; private set; } = string.Empty;
         internal bool IsDirty { get; private set; }
+        internal bool CanCreateGameSource => _workspace.CanCreateGameSource;
+        internal bool CanEditGameSource => _workspace.CanEditGameSource;
+        internal bool CanBuildCatalog => _workspace.CanBuildCatalog;
 
-        internal void New(string absolutePath)
+        internal void CreateGameSource()
         {
-            if (absolutePath is null) throw new ArgumentNullException(nameof(absolutePath));
+            if (!CanCreateGameSource)
+            {
+                throw new InvalidOperationException("The fixed Game Source cannot be created in the current state.");
+            }
 
-            var session = GameplayTagCatalogEditSession.Open("{\"schemaVersion\":1,\"tags\":[]}");
-            GameplayTagCatalogFileAdapter.Save(absolutePath, session);
-            FilePath = absolutePath;
-            Session = session;
-            SelectedPath = string.Empty;
-            IsDirty = false;
+            GameplayTagCatalogFileAdapter.CreateGameSource(GameSourcePath);
+            ReplaceWorkspace();
         }
 
-        internal void Open(string absolutePath)
+        internal void ImportExisting(string sourcePath)
         {
-            if (absolutePath is null) throw new ArgumentNullException(nameof(absolutePath));
-
-            var session = GameplayTagCatalogFileAdapter.Load(absolutePath);
-            FilePath = absolutePath;
-            Session = session;
-            SelectedPath = string.Empty;
-            IsDirty = false;
+            if (sourcePath is null) throw new ArgumentNullException(nameof(sourcePath));
+            GameplayTagCatalogFileAdapter.ImportExisting(sourcePath, GameSourcePath);
+            ReplaceWorkspace();
         }
 
         internal bool Reload(bool discardDirty)
         {
             if (IsDirty && !discardDirty) return false;
-            var filePath = RequireFilePath();
-            var session = GameplayTagCatalogFileAdapter.Load(filePath);
-            Session = session;
-            SelectedPath = string.Empty;
-            IsDirty = false;
+            ReplaceWorkspace();
             return true;
         }
 
         internal void Save()
         {
-            GameplayTagCatalogFileAdapter.Save(RequireFilePath(), RequireSession());
+            GameplayTagCatalogFileAdapter.Save(GameSourcePath, RequireEditableSession());
             IsDirty = false;
         }
 
@@ -55,34 +72,34 @@ namespace Bun3.Gameplay.Editor.Tags
 
         internal void Add(string path, string comment = "")
         {
-            RequireSession().Add(path, comment);
+            RequireEditableSession().Add(path, comment);
             SelectedPath = path;
             IsDirty = true;
         }
 
         internal void SetComment(string path, string comment)
         {
-            RequireSession().SetComment(path, comment);
+            RequireEditableSession().SetComment(path, comment);
             SelectedPath = path;
             IsDirty = true;
         }
 
         internal void RenameSubtree(string path, string newSegment)
         {
-            SelectedPath = RequireSession().RenameSubtree(path, newSegment);
+            SelectedPath = RequireEditableSession().RenameSubtree(path, newSegment);
             IsDirty = true;
         }
 
         internal int RemoveRedirects(IReadOnlyCollection<string> sources)
         {
-            var removed = RequireSession().RemoveRedirects(sources);
+            var removed = RequireEditableSession().RemoveRedirects(sources);
             if (removed > 0) IsDirty = true;
             return removed;
         }
 
         internal void Delete(string path, bool includeDescendants)
         {
-            RequireSession().Delete(path, includeDescendants);
+            RequireEditableSession().Delete(path, includeDescendants);
             SelectedPath = string.Empty;
             IsDirty = true;
         }
@@ -98,7 +115,7 @@ namespace Bun3.Gameplay.Editor.Tags
         {
             if (command is null) throw new ArgumentNullException(nameof(command));
 
-            var filePath = FilePath;
+            var workspace = _workspace;
             var serializedSession = Session?.Serialize();
             var selectedPath = SelectedPath;
             var isDirty = IsDirty;
@@ -110,7 +127,7 @@ namespace Bun3.Gameplay.Editor.Tags
             }
             catch (Exception exception)
             {
-                FilePath = filePath;
+                _workspace = workspace;
                 Session = serializedSession is null
                     ? null
                     : GameplayTagCatalogEditSession.Open(serializedSession);
@@ -121,19 +138,35 @@ namespace Bun3.Gameplay.Editor.Tags
             }
         }
 
-        private string RequireFilePath()
+        private GameplayTagCatalogEditSession RequireEditableSession()
         {
-            if (FilePath.Length == 0)
+            if (!CanEditGameSource)
             {
-                throw new InvalidOperationException("No gameplay tag catalog is open.");
+                throw new InvalidOperationException("The Game Source is not editable while the Workspace is invalid.");
             }
 
-            return FilePath;
+            return RequireSession();
         }
 
         private GameplayTagCatalogEditSession RequireSession()
         {
             return Session ?? throw new InvalidOperationException("No gameplay tag catalog is open.");
+        }
+
+        private GameplayTagEditorWorkspace OpenWorkspace()
+        {
+            var workspace = GameplayTagEditorWorkspace.Open(
+                _resolveContext(GameSourcePath),
+                GameSourcePath);
+            Session = workspace.GameSession;
+            return workspace;
+        }
+
+        private void ReplaceWorkspace()
+        {
+            _workspace = OpenWorkspace();
+            SelectedPath = string.Empty;
+            IsDirty = false;
         }
     }
 }

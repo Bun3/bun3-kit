@@ -109,19 +109,18 @@ namespace Bun3.Gameplay.Unity.Tests
             var window = EditorWindow.GetWindow<GameplayTagCatalogWindow>();
             try
             {
-                var controller = GetController(window);
-                controller.Open(path);
+                var controller = AttachController(window, path);
                 var result = GameplayTagReferenceSearchResult.Complete(
                     Array.Empty<GameplayTagReferenceMatch>());
 
                 var applied = window.TryApplyBulkCleanup(
                     result,
-                    candidates => new[] { candidates.Single(source => source == "State.Gone") });
+                    candidates => new[] { candidates.Single(source => source == "state.gone") });
 
                 Assert.That(applied, Is.True);
                 Assert.That(controller.IsDirty, Is.True);
-                Assert.That(controller.Session!.Serialize(), Does.Contain("State.Killed"));
-                Assert.That(controller.Session.Serialize(), Does.Not.Contain("State.Gone"));
+                Assert.That(controller.Session!.Serialize(), Does.Contain("state.killed"));
+                Assert.That(controller.Session.Serialize(), Does.Not.Contain("state.gone"));
             }
             finally
             {
@@ -165,8 +164,7 @@ namespace Bun3.Gameplay.Unity.Tests
             var window = EditorWindow.GetWindow<GameplayTagCatalogWindow>();
             try
             {
-                var controller = GetController(window);
-                controller.Open(path);
+                var controller = AttachController(window, path);
 
                 var applied = window.TryApplyBulkCleanup(
                     GameplayTagReferenceSearchResult.Complete(
@@ -175,7 +173,7 @@ namespace Bun3.Gameplay.Unity.Tests
 
                 Assert.That(applied, Is.False);
                 Assert.That(controller.IsDirty, Is.False);
-                Assert.That(controller.Session!.Serialize(), Does.Contain("State.Killed"));
+                Assert.That(controller.Session!.Serialize(), Does.Contain("state.killed"));
             }
             finally
             {
@@ -192,9 +190,9 @@ namespace Bun3.Gameplay.Unity.Tests
             var session = GameplayTagCatalogEditSession.Open(
                 "{\"schemaVersion\":1,\"tags\":[{\"name\":\"State.Dead.Ghost\"},{\"name\":\"Ability.Jump\"}]}");
             var model = new GameplayTagTreeModel(session);
-            var abilityId = model.Rows.Single(row => row.Path == "Ability").Index;
-            var stateId = model.Rows.Single(row => row.Path == "State").Index;
-            var deadId = model.Rows.Single(row => row.Path == "State.Dead").Index;
+            var abilityId = model.Rows.Single(row => row.Path == "ability").Index;
+            var stateId = model.Rows.Single(row => row.Path == "state").Index;
+            var deadId = model.Rows.Single(row => row.Path == "state.dead").Index;
             tree.SetRows(model.Rows, isFiltering: false);
             tree.SetExpanded(abilityId, true);
             tree.SetExpanded(stateId, false);
@@ -217,9 +215,9 @@ namespace Bun3.Gameplay.Unity.Tests
             var session = GameplayTagCatalogEditSession.Open(
                 "{\"schemaVersion\":1,\"tags\":[{\"name\":\"State.Dead.Ghost\"},{\"name\":\"Ability.Jump\"}]}");
             var model = new GameplayTagTreeModel(session);
-            var abilityId = model.Rows.Single(row => row.Path == "Ability").Index;
-            var stateId = model.Rows.Single(row => row.Path == "State").Index;
-            var deadId = model.Rows.Single(row => row.Path == "State.Dead").Index;
+            var abilityId = model.Rows.Single(row => row.Path == "ability").Index;
+            var stateId = model.Rows.Single(row => row.Path == "state").Index;
+            var deadId = model.Rows.Single(row => row.Path == "state.dead").Index;
             tree.SetRows(model.Rows, isFiltering: false);
             tree.SetExpanded(abilityId, false);
             tree.SetExpanded(stateId, false);
@@ -327,14 +325,13 @@ namespace Bun3.Gameplay.Unity.Tests
             var window = EditorWindow.GetWindow<GameplayTagCatalogWindow>();
             try
             {
-                var controller = GetController(window);
-                controller.New(path);
+                var controller = AttachController(window, path);
                 controller.Add("State.Dead");
 
                 window.ApplyComment("State", GameplayTagTextEditResult.Accept(comment));
 
-                Assert.That(controller.Session!.Tags.Any(row => row.Name == "State"), Is.True);
-                Assert.That(controller.Session.Tags.Single(row => row.Name == "State").Comment,
+                Assert.That(controller.Session!.Tags.Any(row => row.Name == "state"), Is.True);
+                Assert.That(controller.Session.Tags.Single(row => row.Name == "state").Comment,
                     Is.EqualTo(comment));
             }
             finally
@@ -351,8 +348,7 @@ namespace Bun3.Gameplay.Unity.Tests
             var window = EditorWindow.GetWindow<GameplayTagCatalogWindow>();
             try
             {
-                var controller = GetController(window);
-                controller.New(path);
+                var controller = AttachController(window, path);
                 controller.Add("State.Dead");
                 var before = controller.Session!.Serialize();
 
@@ -375,14 +371,13 @@ namespace Bun3.Gameplay.Unity.Tests
             var window = EditorWindow.GetWindow<GameplayTagCatalogWindow>();
             try
             {
-                var controller = GetController(window);
-                controller.New(path);
+                var controller = AttachController(window, path);
                 controller.Add("State.Movement.Run");
 
                 window.ApplyRename("State.Movement", GameplayTagTextEditResult.Accept("Motion"));
 
-                Assert.That(controller.Session!.Serialize(), Does.Contain("State.Motion.Run"));
-                Assert.That(controller.SelectedPath, Is.EqualTo("State.Motion"));
+                Assert.That(controller.Session!.Serialize(), Does.Contain("state.Motion.Run"));
+                Assert.That(controller.SelectedPath, Is.EqualTo("state.Motion"));
             }
             finally
             {
@@ -400,19 +395,20 @@ namespace Bun3.Gameplay.Unity.Tests
                 var previousClipboard = EditorGUIUtility.systemCopyBuffer;
                 try
                 {
-                    var controller = GetController(window);
-                    controller.New(Path.Combine(_temporaryDirectory, "GameplayTags.json"));
+                    var controller = AttachController(
+                        window,
+                        Path.Combine(_temporaryDirectory, "GameplayTags.json"));
                     controller.Add("State.Dead");
                     RefreshTree(window);
                     var tree = GetTree(window);
                     var row = new GameplayTagTreeModel(controller.Session!).Filter(string.Empty)
-                        .Single(candidate => candidate.Path == "State.Dead");
+                        .Single(candidate => candidate.Path == "state.dead");
 
                     tree.RequestAction(GameplayTagTreeAction.AddSubTag, row.Index);
-                    Assert.That(GetPrivateString(window, "_newTagName"), Is.EqualTo("State.Dead."));
+                    Assert.That(GetPrivateString(window, "_newTagName"), Is.EqualTo("state.dead."));
 
                     tree.RequestAction(GameplayTagTreeAction.Copy, row.Index);
-                    Assert.That(EditorGUIUtility.systemCopyBuffer, Is.EqualTo("State.Dead"));
+                    Assert.That(EditorGUIUtility.systemCopyBuffer, Is.EqualTo("state.dead"));
                 }
                 finally
                 {
@@ -474,8 +470,7 @@ namespace Bun3.Gameplay.Unity.Tests
         public void Save_decision_persists_the_real_dirty_session_before_replacement()
         {
             var path = Path.Combine(_temporaryDirectory, "GameplayTags.json");
-            var controller = new GameplayTagCatalogWindowController();
-            controller.New(path);
+            var controller = CreateController(path);
             controller.Add("State.Dead");
 
             var proceed = GameplayTagCatalogWindow.TryResolveUnsavedChanges(
@@ -493,8 +488,7 @@ namespace Bun3.Gameplay.Unity.Tests
             int decisionValue, bool expectedProceed)
         {
             var path = Path.Combine(_temporaryDirectory, "GameplayTags.json");
-            var controller = new GameplayTagCatalogWindowController();
-            controller.New(path);
+            var controller = CreateController(path);
             controller.Add("State.Dead");
 
             var proceed = GameplayTagCatalogWindow.TryResolveUnsavedChanges(
@@ -511,8 +505,7 @@ namespace Bun3.Gameplay.Unity.Tests
         public void Failed_save_does_not_allow_catalog_replacement()
         {
             var path = Path.Combine(_temporaryDirectory, "GameplayTags.json");
-            var controller = new GameplayTagCatalogWindowController();
-            controller.New(path);
+            var controller = CreateController(path);
             controller.Add("State.Dead");
             File.Delete(path);
             Directory.CreateDirectory(path);
@@ -533,8 +526,7 @@ namespace Bun3.Gameplay.Unity.Tests
             var window = EditorWindow.GetWindow<GameplayTagCatalogWindow>();
             try
             {
-                var controller = GetController(window);
-                controller.New(path);
+                var controller = AttachController(window, path);
                 controller.Add("State.Dead");
                 SynchronizeUnsavedChanges(window);
 
@@ -556,8 +548,7 @@ namespace Bun3.Gameplay.Unity.Tests
             var window = EditorWindow.GetWindow<GameplayTagCatalogWindow>();
             try
             {
-                var controller = GetController(window);
-                controller.New(path);
+                var controller = AttachController(window, path);
                 controller.Add("State.Dead");
                 window.HandleBeforeAssemblyReload((UnsavedChangesDecision)decisionValue);
 
@@ -576,24 +567,50 @@ namespace Bun3.Gameplay.Unity.Tests
         public void Controller_executes_file_and_authoring_workflow_without_bypassing_the_session()
         {
             var path = Path.Combine(_temporaryDirectory, "GameplayTags.json");
-            var controller = new GameplayTagCatalogWindowController();
-            controller.New(path);
+            var controller = new GameplayTagCatalogWindowController(
+                path,
+                ResolveWithoutProvider);
+            Assert.That(controller.CanCreateGameSource, Is.True);
+            controller.CreateGameSource();
+            Assert.That(controller.CanCreateGameSource, Is.False);
             controller.Add("State.Dead", "사망");
             controller.SetComment("State.Dead", "전투 불능");
             controller.RenameSubtree("State.Dead", "Deceased");
             Assert.That(controller.IsDirty, Is.True);
-            Assert.That(controller.SelectedPath, Is.EqualTo("State.Deceased"));
+            Assert.That(controller.SelectedPath, Is.EqualTo("state.Deceased"));
             controller.Save();
             Assert.That(controller.IsDirty, Is.False);
-            Assert.That(File.ReadAllText(path), Does.Contain("State.Deceased"));
+            Assert.That(File.ReadAllText(path), Does.Contain("state.Deceased"));
 
             controller.Add("State.Stunned");
             Assert.That(controller.Reload(discardDirty: false), Is.False);
             Assert.That(controller.Session!.Serialize(), Does.Contain("State.Stunned"));
             Assert.That(controller.Reload(discardDirty: true), Is.True);
             Assert.That(controller.Session!.Serialize(), Does.Not.Contain("State.Stunned"));
-            controller.Delete("State.Deceased", includeDescendants: false);
-            Assert.That(controller.Session!.Serialize(), Does.Not.Contain("State.Deceased"));
+            controller.Delete("state.Deceased", includeDescendants: false);
+            Assert.That(controller.Session!.Serialize(), Does.Not.Contain("state.Deceased"));
+        }
+
+        [Test]
+        public void Controller_imports_once_into_its_fixed_path_and_never_follows_the_selected_source()
+        {
+            var sourcePath = Path.Combine(_temporaryDirectory, "LegacyGameplayTags.json");
+            var fixedPath = Path.Combine(_temporaryDirectory, "ProjectSettings", "GameplayTags.json");
+            const string original =
+                "{\"schemaVersion\":1,\"tags\":[{\"name\":\"Ability.Jump\",\"comment\":\"\"}],\"redirects\":[]}";
+            File.WriteAllText(sourcePath, original, new UTF8Encoding(false));
+            var controller = new GameplayTagCatalogWindowController(
+                fixedPath,
+                ResolveWithoutProvider);
+
+            controller.ImportExisting(sourcePath);
+            controller.Add("ability.run");
+            controller.Save();
+
+            Assert.That(controller.GameSourcePath, Is.EqualTo(Path.GetFullPath(fixedPath)));
+            Assert.That(File.ReadAllText(sourcePath), Is.EqualTo(original));
+            Assert.That(File.ReadAllText(fixedPath), Does.Contain("ability.jump"));
+            Assert.That(File.ReadAllText(fixedPath), Does.Contain("ability.run"));
         }
 
         /// <summary>컨트롤러가 세그먼트 rename의 전체 반환 경로를 선택하고 dirty 상태가 되는지 검증합니다.</summary>
@@ -601,13 +618,12 @@ namespace Bun3.Gameplay.Unity.Tests
         public void Controller_selects_the_full_path_returned_by_segment_rename()
         {
             var path = Path.Combine(_temporaryDirectory, "GameplayTags.json");
-            var controller = new GameplayTagCatalogWindowController();
-            controller.New(path);
+            var controller = CreateController(path);
             controller.Add("State.Dead");
 
             controller.RenameSubtree("State.Dead", "Deceased");
 
-            Assert.That(controller.SelectedPath, Is.EqualTo("State.Deceased"));
+            Assert.That(controller.SelectedPath, Is.EqualTo("state.Deceased"));
             Assert.That(controller.IsDirty, Is.True);
         }
 
@@ -620,8 +636,7 @@ namespace Bun3.Gameplay.Unity.Tests
                 "{\"schemaVersion\":1,\"tags\":[{\"name\":\"State.Dead\"}]," +
                 "\"redirects\":[{\"from\":\"State.Killed\",\"to\":\"State.Dead\"}]}",
                 new UTF8Encoding(false, true));
-            var controller = new GameplayTagCatalogWindowController();
-            controller.Open(path);
+            var controller = CreateController(path);
             controller.Select("State.Dead");
 
             Assert.That(controller.RemoveRedirects(Array.Empty<string>()), Is.Zero);
@@ -643,8 +658,7 @@ namespace Bun3.Gameplay.Unity.Tests
             File.WriteAllText(path,
                 "{\"schemaVersion\":1,\"tags\":[{\"name\":\"State.Dead\"},{\"name\":\"State.Alive\"}]}",
                 new UTF8Encoding(false, true));
-            var controller = new GameplayTagCatalogWindowController();
-            controller.Open(path);
+            var controller = CreateController(path);
             var before = controller.Session!.Serialize();
 
             var succeeded = controller.TryExecute(
@@ -674,13 +688,11 @@ namespace Bun3.Gameplay.Unity.Tests
         public void TryExecute_restores_a_fresh_session_after_a_partially_applied_command()
         {
             var path = Path.Combine(_temporaryDirectory, "GameplayTags.json");
-            var controller = new GameplayTagCatalogWindowController();
-            controller.New(path);
+            var controller = CreateController(path);
             controller.Add("State.Dead");
             controller.Save();
             var sessionBefore = controller.Session;
             var serializedBefore = sessionBefore!.Serialize();
-            var filePathBefore = controller.FilePath;
             var selectedPathBefore = controller.SelectedPath;
             var dirtyBefore = controller.IsDirty;
 
@@ -696,7 +708,6 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(error, Is.TypeOf<InvalidOperationException>());
             Assert.That(controller.Session, Is.Not.SameAs(sessionBefore));
             Assert.That(controller.Session!.Serialize(), Is.EqualTo(serializedBefore));
-            Assert.That(controller.FilePath, Is.EqualTo(filePathBefore));
             Assert.That(controller.SelectedPath, Is.EqualTo(selectedPathBefore));
             Assert.That(controller.IsDirty, Is.EqualTo(dirtyBefore));
         }
@@ -728,8 +739,7 @@ namespace Bun3.Gameplay.Unity.Tests
             var window = EditorWindow.GetWindow<GameplayTagCatalogWindow>();
             try
             {
-                var controller = GetController(window);
-                controller.New(path);
+                var controller = AttachController(window, path);
                 controller.Add("State.Dead");
                 RefreshTree(window);
                 SetTreeSelection(window, controller, "State.Dead");
@@ -737,14 +747,14 @@ namespace Bun3.Gameplay.Unity.Tests
                 controller.Add("State.Dead.Ghost");
                 RefreshTree(window);
 
-                AssertTreeSelection(window, "State.Dead.Ghost");
+                AssertTreeSelection(window, "state.dead.ghost");
                 Assert.That(controller.SelectedPath, Is.EqualTo("State.Dead.Ghost"));
 
                 controller.RenameSubtree("State.Dead", "Deceased");
                 RefreshTree(window);
 
-                AssertTreeSelection(window, "State.Deceased");
-                Assert.That(controller.SelectedPath, Is.EqualTo("State.Deceased"));
+                AssertTreeSelection(window, "state.deceased");
+                Assert.That(controller.SelectedPath, Is.EqualTo("state.Deceased"));
             }
             finally
             {
@@ -752,43 +762,21 @@ namespace Bun3.Gameplay.Unity.Tests
             }
         }
 
-        /// <summary>카탈로그 교체 뒤 트리가 남아 있던 시각 선택을 비우는지 검증합니다.</summary>
-        /// <param name="operation">실행할 카탈로그 교체 명령입니다.</param>
-        [TestCase("New")]
-        [TestCase("Open")]
-        [TestCase("Reload")]
-        public void Reload_tree_clears_stale_selection_after_catalog_replacement(string operation)
+        /// <summary>고정 Game Source reload 뒤 트리가 남아 있던 시각 선택을 비우는지 검증합니다.</summary>
+        [Test]
+        public void Reload_tree_clears_stale_selection_after_fixed_source_reload()
         {
             var initialPath = Path.Combine(_temporaryDirectory, "InitialGameplayTags.json");
-            var replacementPath = Path.Combine(_temporaryDirectory, "ReplacementGameplayTags.json");
             var window = EditorWindow.GetWindow<GameplayTagCatalogWindow>();
             try
             {
-                var controller = GetController(window);
-                controller.New(initialPath);
+                var controller = AttachController(window, initialPath);
                 controller.Add("State.Dead");
                 controller.Save();
                 RefreshTree(window);
                 SetTreeSelection(window, controller, "State.Dead");
 
-                switch (operation)
-                {
-                    case "New":
-                        controller.New(replacementPath);
-                        break;
-                    case "Open":
-                        GameplayTagCatalogFileAdapter.Save(
-                            replacementPath,
-                            GameplayTagCatalogEditSession.Open(
-                                "{\"schemaVersion\":1,\"tags\":[{\"name\":\"Ability.Jump\"}]}"));
-                        controller.Open(replacementPath);
-                        break;
-                    case "Reload":
-                        Assert.That(controller.Reload(discardDirty: true), Is.True);
-                        break;
-                    default:
-                        throw new ArgumentOutOfRangeException(nameof(operation));
-                }
+                Assert.That(controller.Reload(discardDirty: true), Is.True);
 
                 RefreshTree(window);
 
@@ -832,6 +820,41 @@ namespace Bun3.Gameplay.Unity.Tests
             return (GameplayTagCatalogWindowController)(field.GetValue(window)
                 ?? throw new InvalidOperationException("The catalog window controller is missing."));
         }
+
+        private static GameplayTagCatalogWindowController AttachController(
+            GameplayTagCatalogWindow window,
+            string path)
+        {
+            var controller = CreateController(path);
+            var field = typeof(GameplayTagCatalogWindow).GetField(
+                "_controller", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("The catalog window controller field is missing.");
+            field.SetValue(window, controller);
+            RefreshTree(window);
+            return controller;
+        }
+
+        private static GameplayTagCatalogWindowController CreateController(string path)
+        {
+            if (File.Exists(path))
+            {
+                GameplayTagCatalogFileAdapter.Save(
+                    path,
+                    GameplayTagCatalogEditSession.Open(File.ReadAllText(path)));
+            }
+            else
+            {
+                GameplayTagCatalogFileAdapter.CreateGameSource(path);
+            }
+
+            return new GameplayTagCatalogWindowController(path, ResolveWithoutProvider);
+        }
+
+        private static GameplayTagBuildContextResolution ResolveWithoutProvider(string path) =>
+            GameplayTagBuildContextResolver.ResolveDevelopment(
+                path,
+                Array.Empty<Type>(),
+                Array.Empty<string>());
 
         private static GameplayTagTreeView GetTree(GameplayTagCatalogWindow window)
         {

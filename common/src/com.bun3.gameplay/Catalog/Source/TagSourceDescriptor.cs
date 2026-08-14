@@ -62,10 +62,11 @@ namespace Bun3.Gameplay.Tags.Catalog
         private static bool IsValidSourceId(string? value)
         {
             if (string.IsNullOrEmpty(value)) return false;
+            var sourceId = value!;
             var previousWasSeparator = true;
-            for (var i = 0; i < value.Length; i++)
+            for (var i = 0; i < sourceId.Length; i++)
             {
-                var character = value[i];
+                var character = sourceId[i];
                 var alphaNumeric = (character >= 'a' && character <= 'z') || (character >= '0' && character <= '9');
                 if (alphaNumeric)
                 {

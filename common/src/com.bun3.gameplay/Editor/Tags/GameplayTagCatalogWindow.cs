@@ -22,8 +22,7 @@ namespace Bun3.Gameplay.Editor.Tags
 
         [SerializeField] private TreeViewState _treeViewState = null!;
 
-        private readonly GameplayTagCatalogWindowController _controller =
-            new GameplayTagCatalogWindowController();
+        private GameplayTagCatalogWindowController _controller = null!;
         private SearchField? _searchField;
         private GameplayTagTreeView _treeView = null!;
         private GameplayTagTreeModel? _model;
@@ -44,6 +43,10 @@ namespace Bun3.Gameplay.Editor.Tags
 
         private void OnEnable()
         {
+            _controller ??= new GameplayTagCatalogWindowController();
+            _search ??= string.Empty;
+            _newTagName ??= string.Empty;
+            _newTagComment ??= string.Empty;
             titleContent = new GUIContent("Gameplay Tags");
             minSize = new Vector2(640f, 420f);
             saveChangesMessage = "Save changes to the current gameplay tag catalog?";
@@ -124,11 +127,15 @@ namespace Bun3.Gameplay.Editor.Tags
         {
             EditorGUILayout.BeginHorizontal(EditorStyles.toolbar);
             EditorGUILayout.LabelField(
-                _controller.FilePath.Length == 0 ? "No catalog loaded" : _controller.FilePath,
+                _controller.GameSourcePath,
                 EditorStyles.toolbarButton,
                 GUILayout.ExpandWidth(true));
-            if (GUILayout.Button("New", EditorStyles.toolbarButton)) CreateNew();
-            if (GUILayout.Button("Open", EditorStyles.toolbarButton)) Open();
+            using (new EditorGUI.DisabledScope(!_controller.CanCreateGameSource))
+            {
+                if (GUILayout.Button("Create Game Source", EditorStyles.toolbarButton)) CreateGameSource();
+            }
+
+            if (GUILayout.Button("Import Existing…", EditorStyles.toolbarButton)) ImportExisting();
             if (GUILayout.Button("Reload", EditorStyles.toolbarButton)) Reload();
             using (new EditorGUI.DisabledScope(_controller.Session is null || !_controller.IsDirty))
             {
@@ -155,7 +162,8 @@ namespace Bun3.Gameplay.Editor.Tags
             GUI.SetNextControlName(NewTagNameControl);
             _newTagName = EditorGUILayout.TextField("Tag Name", _newTagName);
             _newTagComment = EditorGUILayout.TextField("Comment", _newTagComment);
-            using (new EditorGUI.DisabledScope(_controller.Session is null || _newTagName.Length == 0))
+            using (new EditorGUI.DisabledScope(
+                !_controller.CanEditGameSource || _newTagName.Length == 0))
             {
                 if (GUILayout.Button("Add"))
                 {
@@ -341,7 +349,7 @@ namespace Bun3.Gameplay.Editor.Tags
                 return new GameplayTagTextReferenceScanner(File.OpenText).Search(
                     files.Files,
                     sources,
-                    _controller.FilePath,
+                    _controller.GameSourcePath,
                     progress => EditorUtility.DisplayCancelableProgressBar(
                         "Find GameplayTag References", progress.DisplayPath, progress.Fraction))
                     .WithEnumerationErrors(files.Errors);
@@ -376,20 +384,18 @@ namespace Bun3.Gameplay.Editor.Tags
             EditorGUILayout.EndHorizontal();
         }
 
-        private void CreateNew()
+        private void CreateGameSource()
         {
-            var path = EditorUtility.SaveFilePanel("Create Gameplay Tag Catalog", "", "GameplayTags", "json");
-            if (path.Length == 0 ||
-                !TryPrepareForCatalogReplacement("Create Gameplay Tag Catalog")) return;
-            Execute(() => _controller.New(path));
+            if (!TryPrepareForCatalogReplacement("Create Game Source")) return;
+            Execute(_controller.CreateGameSource);
         }
 
-        private void Open()
+        private void ImportExisting()
         {
-            var path = EditorUtility.OpenFilePanel("Open Gameplay Tag Catalog", "", "json");
+            var path = EditorUtility.OpenFilePanel("Import Existing Gameplay Tag Source", "", "json");
             if (path.Length == 0 ||
-                !TryPrepareForCatalogReplacement("Open Gameplay Tag Catalog")) return;
-            Execute(() => _controller.Open(path));
+                !TryPrepareForCatalogReplacement("Import Existing Gameplay Tag Source")) return;
+            Execute(() => _controller.ImportExisting(path));
         }
 
         private void Reload()
@@ -556,7 +562,7 @@ namespace Bun3.Gameplay.Editor.Tags
 
             SynchronizeUnsavedChanges();
             GameplayTagValidationWindow.Show(
-                _controller.FilePath.Length == 0 ? "GameplayTags.json" : _controller.FilePath,
+                _controller.GameSourcePath,
                 error!);
             return false;
         }
