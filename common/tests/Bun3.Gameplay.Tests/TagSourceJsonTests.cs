@@ -35,6 +35,22 @@ public sealed class TagSourceJsonTests
         Assert.That(source.Descriptor.IsReadOnly, Is.True);
     }
 
+    [TestCase(false)]
+    [TestCase(true)]
+    public void Game_and_metadata_sources_reject_tags_without_required_comments(bool metadata)
+    {
+        var json = metadata
+            ? "{\"schemaVersion\":1,\"source\":{\"id\":\"bun3.gameplay\",\"displayName\":\"Bun3.Gameplay\",\"kind\":\"packageJson\"},\"tags\":[{\"name\":\"ability.jump\"}],\"redirects\":[]}"
+            : "{\"schemaVersion\":1,\"tags\":[{\"name\":\"ability.jump\"}],\"redirects\":[]}";
+        using var input = Utf8(json);
+
+        Assert.Throws<TagCatalogException>(() =>
+        {
+            if (metadata) TagSourceJson.LoadMetadata(input, "package.json");
+            else TagSourceJson.LoadGame(input, "game.json");
+        });
+    }
+
     [TestCase("{\"schemaVersion\":2,\"tags\":[],\"redirects\":[]}")]
     [TestCase("{\"schemaVersion\":1,\"tags\":[],\"tags\":[],\"redirects\":[]}")]
     [TestCase("{\"schemaVersion\":1,\"extra\":true,\"tags\":[],\"redirects\":[]}")]

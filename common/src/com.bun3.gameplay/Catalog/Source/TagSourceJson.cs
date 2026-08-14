@@ -134,7 +134,7 @@ namespace Bun3.Gameplay.Tags.Catalog
                 if (item is not JObject tag) throw Error("tags의 항목은 객체여야 합니다.", item);
                 RequireAllowedProperties(tag, "name", "comment");
                 var name = RequireString(tag, "name");
-                var comment = ReadOptionalString(tag, "comment") ?? string.Empty;
+                var comment = RequireString(tag, "comment");
                 var canonical = ValidateTagName(name, tag);
                 if (!seen.Add(canonical)) throw Error("대소문자를 제외하고 중복된 태그 이름입니다.", tag);
                 result.Add(new TagSourceTag(canonical, comment));
@@ -196,14 +196,6 @@ namespace Bun3.Gameplay.Tags.Catalog
             var token = RequireProperty(value, propertyName);
             if (token.Type != JTokenType.String) throw Error($"{propertyName}은 문자열이어야 합니다.", token);
             return token.Value<string>()!;
-        }
-
-        private static string? ReadOptionalString(JObject value, string propertyName)
-        {
-            var token = value.Property(propertyName, StringComparison.Ordinal)?.Value;
-            if (token is null) return null;
-            if (token.Type != JTokenType.String) throw Error($"{propertyName}은 문자열이어야 합니다.", token);
-            return token.Value<string>();
         }
 
         private static JToken RequireProperty(JObject value, string propertyName)
