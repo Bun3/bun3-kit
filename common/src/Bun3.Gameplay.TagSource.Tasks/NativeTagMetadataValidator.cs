@@ -22,7 +22,10 @@ namespace Bun3.Gameplay.TagSource.Tasks
                     false,
                     1024,
                     true);
-                using var jsonReader = new JsonTextReader(textReader)
+                var text = textReader.ReadToEnd();
+                StrictJsonSyntax.Validate(text);
+                using var stringReader = new StringReader(text);
+                using var jsonReader = new JsonTextReader(stringReader)
                 {
                     DateParseHandling = DateParseHandling.None,
                     FloatParseHandling = FloatParseHandling.Decimal,
@@ -173,6 +176,208 @@ namespace Bun3.Gameplay.TagSource.Tasks
             }
 
             return segmentLength != 0;
+        }
+
+        private static class StrictJsonSyntax
+        {
+            internal static void Validate(string text)
+            {
+                var parser = new Parser(text);
+                parser.ParseValue();
+                parser.SkipWhitespace();
+                if (!parser.End) parser.Fail();
+            }
+
+            private sealed class Parser
+            {
+                private readonly string _text;
+                private int _cursor;
+                private int _depth;
+
+                internal Parser(string text) => _text = text;
+
+                internal bool End => _cursor == _text.Length;
+
+                internal void ParseValue()
+                {
+                    SkipWhitespace();
+                    if (End) Fail();
+                    switch (Peek())
+                    {
+                        case '{': ParseObject(); return;
+                        case '[': ParseArray(); return;
+                        case '"': ParseString(); return;
+                        case 't': ConsumeLiteral("true"); return;
+                        case 'f': ConsumeLiteral("false"); return;
+                        case 'n': ConsumeLiteral("null"); return;
+                        default:
+                            if (Peek() == '-' || IsDigit(Peek()))
+                            {
+                                ParseNumber();
+                                return;
+                            }
+
+                            Fail();
+                            return;
+                    }
+                }
+
+                internal void SkipWhitespace()
+                {
+                    while (!End && (Peek() == ' ' || Peek() == '\t' || Peek() == '\r' || Peek() == '\n')) Read();
+                }
+
+                internal void Fail() => throw new InvalidDataException("Native metadata contains invalid JSON syntax.");
+
+                private void ParseObject()
+                {
+                    EnterContainer();
+                    try
+                    {
+                        Read();
+                        SkipWhitespace();
+                        if (TryConsume('}')) return;
+                        while (true)
+                        {
+                            if (End || Peek() != '"') Fail();
+                            ParseString();
+                            SkipWhitespace();
+                            Expect(':');
+                            ParseValue();
+                            SkipWhitespace();
+                            if (TryConsume('}')) return;
+                            Expect(',');
+                            SkipWhitespace();
+                            if (End || Peek() != '"') Fail();
+                        }
+                    }
+                    finally
+                    {
+                        _depth--;
+                    }
+                }
+
+                private void ParseArray()
+                {
+                    EnterContainer();
+                    try
+                    {
+                        Read();
+                        SkipWhitespace();
+                        if (TryConsume(']')) return;
+                        while (true)
+                        {
+                            ParseValue();
+                            SkipWhitespace();
+                            if (TryConsume(']')) return;
+                            Expect(',');
+                            SkipWhitespace();
+                            if (End || Peek() == ']') Fail();
+                        }
+                    }
+                    finally
+                    {
+                        _depth--;
+                    }
+                }
+
+                private void ParseString()
+                {
+                    Expect('"');
+                    while (!End)
+                    {
+                        var current = Read();
+                        if (current == '"') return;
+                        if (current < 0x20) Fail();
+                        if (current != '\\') continue;
+                        if (End) Fail();
+
+                        var escape = Read();
+                        if (escape == 'u')
+                        {
+                            for (var index = 0; index < 4; index++)
+                            {
+                                if (End || !IsHex(Read())) Fail();
+                            }
+                        }
+                        else if (escape != '"' && escape != '\\' && escape != '/' && escape != 'b'
+                            && escape != 'f' && escape != 'n' && escape != 'r' && escape != 't')
+                        {
+                            Fail();
+                        }
+                    }
+
+                    Fail();
+                }
+
+                private void ParseNumber()
+                {
+                    if (Peek() == '-') Read();
+                    if (End) Fail();
+                    if (Peek() == '0')
+                    {
+                        Read();
+                        if (!End && IsDigit(Peek())) Fail();
+                    }
+                    else
+                    {
+                        if (!IsDigitOneToNine(Peek())) Fail();
+                        do { Read(); } while (!End && IsDigit(Peek()));
+                    }
+
+                    if (!End && Peek() == '.')
+                    {
+                        Read();
+                        if (End || !IsDigit(Peek())) Fail();
+                        do { Read(); } while (!End && IsDigit(Peek()));
+                    }
+
+                    if (!End && (Peek() == 'e' || Peek() == 'E'))
+                    {
+                        Read();
+                        if (!End && (Peek() == '+' || Peek() == '-')) Read();
+                        if (End || !IsDigit(Peek())) Fail();
+                        do { Read(); } while (!End && IsDigit(Peek()));
+                    }
+                }
+
+                private void ConsumeLiteral(string literal)
+                {
+                    for (var index = 0; index < literal.Length; index++)
+                    {
+                        if (End || Read() != literal[index]) Fail();
+                    }
+                }
+
+                private void EnterContainer()
+                {
+                    if (_depth >= 8) Fail();
+                    _depth++;
+                }
+
+                private char Peek() => _text[_cursor];
+
+                private char Read() => _text[_cursor++];
+
+                private void Expect(char expected)
+                {
+                    if (End || Read() != expected) Fail();
+                }
+
+                private bool TryConsume(char expected)
+                {
+                    if (End || Peek() != expected) return false;
+                    Read();
+                    return true;
+                }
+
+                private static bool IsDigit(char value) => value >= '0' && value <= '9';
+
+                private static bool IsDigitOneToNine(char value) => value >= '1' && value <= '9';
+
+                private static bool IsHex(char value) =>
+                    (value >= '0' && value <= '9') || (value >= 'a' && value <= 'f') || (value >= 'A' && value <= 'F');
+            }
         }
     }
 }

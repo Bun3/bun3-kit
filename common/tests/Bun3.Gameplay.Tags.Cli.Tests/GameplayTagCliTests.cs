@@ -298,6 +298,39 @@ public sealed class GameplayTagCliTests
     }
 
     [Test]
+    public void Task_staged_metadata_with_trailing_comma_preserves_destination_and_removes_temporary_file()
+    {
+        var output = Write("task-metadata-trailing-comma.json", "previous-good");
+        const string invalidMetadata = """
+            {
+              "schemaVersion": 1,
+              "source": { "id": "fixture.native", "displayName": "Fixture Native", "kind": "native" },
+              "tags": [],
+              "redirects": [],
+            }
+            """;
+        var method = typeof(ExtractNativeGameplayTagsTask).GetMethod(
+            "WriteAtomically", BindingFlags.Static | BindingFlags.NonPublic);
+        Exception? readbackError = null;
+        try
+        {
+            method!.Invoke(null, new object[] { output, invalidMetadata });
+        }
+        catch (TargetInvocationException exception)
+        {
+            readbackError = exception.InnerException;
+        }
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(method, Is.Not.Null);
+            Assert.That(readbackError, Is.TypeOf<InvalidDataException>());
+            Assert.That(File.ReadAllText(output), Is.EqualTo("previous-good"));
+            Assert.That(Directory.GetFiles(_root, ".task-metadata-trailing-comma.json.*.tmp"), Is.Empty);
+        });
+    }
+
+    [Test]
     public void Packaged_target_uses_platform_neutral_metadata_suffix()
     {
         var repositoryRoot = FindRepositoryRoot();
