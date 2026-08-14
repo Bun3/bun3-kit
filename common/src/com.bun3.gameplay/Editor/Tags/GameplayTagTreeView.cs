@@ -160,11 +160,16 @@ namespace Bun3.Gameplay.Editor.Tags
 
         internal static GUIContent CreateLabelContent(GameplayTagTreeRowModel row)
         {
+            if (row.IsSourceRoot)
+            {
+                var label = row.DisplayName + (row.IsReadOnly ? "  [Read Only]" : string.Empty);
+                var tooltip = "Source: " + row.SourceId
+                    + (row.IsReadOnly ? "\nThis Source is read-only." : "\nThis Source is editable.");
+                return new GUIContent(label, tooltip);
+            }
+
             var lastDot = row.Path.LastIndexOf('.');
-            var label = row.IsSourceRoot
-                ? row.DisplayName
-                : row.Path.Substring(lastDot + 1);
-            return new GUIContent(label, row.Comment);
+            return new GUIContent(row.Path.Substring(lastDot + 1), row.Comment);
         }
 
         /// <summary>foldout과 계층 들여쓰기를 제외한 트리 행 레이블 영역을 계산합니다.</summary>

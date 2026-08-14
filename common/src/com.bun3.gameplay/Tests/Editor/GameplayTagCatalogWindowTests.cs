@@ -79,16 +79,63 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(content.tooltip, Is.EqualTo("전투 불능"));
         }
 
+        /// <summary>읽기 전용 Source root는 상태를 보이되 canonical tag 레이블은 오염시키지 않는지 검증합니다.</summary>
+        [Test]
+        public void Readonly_source_root_label_is_visible_without_polluting_tag_segments()
+        {
+            var root = new GameplayTagTreeRowModel(
+                id: 1,
+                parentId: 0,
+                runtimeIndex: 0,
+                sourceId: "bun3.gameplay",
+                displayName: "Bun3.Gameplay",
+                path: string.Empty,
+                comment: string.Empty,
+                isSourceRoot: true,
+                isExplicit: false,
+                isReadOnly: true,
+                directMatch: false);
+            var tag = new GameplayTagTreeRowModel(
+                id: 2,
+                parentId: 1,
+                runtimeIndex: 1,
+                sourceId: "bun3.gameplay",
+                displayName: "jump",
+                path: "ability.jump",
+                comment: "framework jump",
+                isSourceRoot: false,
+                isExplicit: true,
+                isReadOnly: true,
+                directMatch: false);
+
+            var rootContent = GameplayTagTreeView.CreateLabelContent(root);
+            var tagContent = GameplayTagTreeView.CreateLabelContent(tag);
+
+            Assert.That(rootContent.text, Is.EqualTo("Bun3.Gameplay  [Read Only]"));
+            Assert.That(rootContent.tooltip,
+                Does.Contain("bun3.gameplay").And.Contain("read-only"));
+            Assert.That(tagContent.text, Is.EqualTo("jump"));
+            Assert.That(tagContent.text, Does.Not.Contain("Read Only"));
+            Assert.That(tagContent.tooltip, Is.EqualTo("framework jump"));
+        }
+
         /// <summary>트리 행 레이블이 foldout과 계층 들여쓰기 뒤에서 시작하는지 검증합니다.</summary>
         [Test]
         public void Tree_row_label_starts_after_the_foldout_indent()
         {
             var tree = new GameplayTagTreeView(new TreeViewState());
-            var item = new TreeViewItem(id: 2, depth: 2, displayName: "Dead");
+            var item = new TreeViewItem(id: 2, depth: 2, displayName: "Dead")
+            {
+                children = new List<TreeViewItem>
+                {
+                    new TreeViewItem(id: 3, depth: 3, displayName: "Ghost")
+                }
+            };
             var rowRect = new UnityEngine.Rect(12f, 8f, 240f, 18f);
 
             var labelRect = tree.CalculateLabelRect(item, rowRect);
 
+            Assert.That(item.hasChildren, Is.True);
             Assert.That(labelRect.xMin, Is.GreaterThan(rowRect.xMin));
             Assert.That(labelRect.xMax, Is.EqualTo(rowRect.xMax));
         }

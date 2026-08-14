@@ -124,3 +124,51 @@ Final result: **111/111 passed**, 0 failed, 0 skipped.
 ## Concerns
 
 None.
+
+## Fix Round 1 — 읽기 전용 Source 표시와 disclosure 회귀 보강
+
+### Review finding and technical evaluation
+
+- Blocking Important를 수용했다. Source projection 설계의 `Bun3.Gameplay … Read Only` 표현과 달리 기존
+  `CreateLabelContent`는 Source 이름만 표시해 사용자가 읽기 전용 여부를 눈으로 확인할 수 없었다.
+- read-only Source root에만 `  [Read Only]` suffix를 표시하고 tooltip에 stable Source ID와 read-only 상태를
+  추가했다. canonical tag segment에는 suffix를 넣지 않고 기존 Source별 comment tooltip도 그대로 유지했다.
+- disclosure 회귀는 child가 없는 인공 `TreeViewItem` 대신 실제 child-bearing expandable row를 사용하도록
+  강화했다. `CalculateLabelRect`는 계속 Unity `GetContentIndent` 뒤에서 시작하므로 disclosure arrow와 label이
+  겹치지 않는다.
+- bulk redirect가 SourceId를 잃는다는 standards candidate는 적용하지 않았다. `TagSourceDescriptor`가 writable
+  Source를 `GameJson`/`game` 하나로 강제하고 설계 §4.1이 추가 writable Source를 future design으로 명시하므로,
+  이 task에서 다중 writable Source를 일반화하면 승인되지 않은 contract 확장이 된다.
+- Task 10 shared renderer extraction은 계획대로 Task 10에 남겼다.
+
+### Strict RED → GREEN
+
+Focused command:
+
+```powershell
+& common/tests/Bun3.Gameplay.Tests/Invoke-GameplayUnityTests.ps1 -Mode EditMode `
+  -TestFilter 'Bun3.Gameplay.Unity.Tests.GameplayTagTreeModelTests;Bun3.Gameplay.Unity.Tests.GameplayTagCatalogWindowTests'
+```
+
+- RED: **54/55 passed, 1 failed**. 새 rendered `GUIContent` test가 기대한
+  `Bun3.Gameplay  [Read Only]` 대신 기존 `Bun3.Gameplay`을 관찰했다.
+  - XML: `C:\Users\dudck\AppData\Local\Temp\bun3-gameplay-editmode-20260814092255206.xml`
+  - Log: `C:\Users\dudck\AppData\Local\Temp\bun3-gameplay-editmode-20260814092255206.log`
+- GREEN: **55/55 passed**, 0 failed/skipped, duration `1.0248897s`, C# diagnostics none.
+  - XML: `C:\Users\dudck\AppData\Local\Temp\bun3-gameplay-editmode-20260814092529303.xml`
+  - Log: `C:\Users\dudck\AppData\Local\Temp\bun3-gameplay-editmode-20260814092529303.log`
+
+### Final verification
+
+- Generated `Bun3.Gameplay.Editor.csproj`: **0 warnings, 0 errors** with warning-as-error.
+- Generated `Bun3.Gameplay.Unity.Tests.csproj`: **0 warnings, 0 errors** with warning-as-error.
+- Full EditMode: **112/112 passed**, 0 failed/skipped, duration `30.3163033s`, C# diagnostics none.
+  - XML: `C:\Users\dudck\AppData\Local\Temp\bun3-gameplay-editmode-20260814092719817.xml`
+  - Log: `C:\Users\dudck\AppData\Local\Temp\bun3-gameplay-editmode-20260814092719817.log`
+
+### Safety
+
+- No Unity process was terminated or interfered with.
+- Each runner changed only the exact removal of `SENTIS_ANALYTICS_ENABLED`; the one-line diff was inspected after
+  natural exit and only that token was restored. Final ProjectSettings diff is empty.
+- `artifacts/`, `unity/GameplayTags.json`, and sibling `.superpowers` contents remain untouched and unstaged.
