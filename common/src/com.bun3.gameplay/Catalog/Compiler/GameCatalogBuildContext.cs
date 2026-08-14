@@ -8,7 +8,7 @@ namespace Bun3.Gameplay.Tags.Catalog
     /// <summary>host가 카탈로그 컴파일과 게시에 제공하는 하나의 검증된 입력입니다.</summary>
     public sealed class GameCatalogBuildContext
     {
-        private readonly TagSourceDocument[] _sources;
+        private readonly IReadOnlyList<TagSourceDocument> _sources;
 
         /// <summary>빌드할 게임 카탈로그의 식별 정보입니다.</summary>
         public TagCatalogIdentity Identity { get; }
@@ -42,12 +42,13 @@ namespace Bun3.Gameplay.Tags.Catalog
             }
 
             if (sources is null) throw new ArgumentNullException(nameof(sources));
-            _sources = new TagSourceDocument[sources.Count];
-            for (var i = 0; i < _sources.Length; i++)
+            var sourceCopy = new TagSourceDocument[sources.Count];
+            for (var i = 0; i < sourceCopy.Length; i++)
             {
-                _sources[i] = sources[i] ?? throw new ArgumentNullException(nameof(sources));
+                sourceCopy[i] = sources[i] ?? throw new ArgumentNullException(nameof(sources));
             }
 
+            _sources = Array.AsReadOnly(sourceCopy);
             Mode = mode;
         }
     }

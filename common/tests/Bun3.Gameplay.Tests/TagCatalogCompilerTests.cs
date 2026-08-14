@@ -140,6 +140,30 @@ public sealed class TagCatalogCompilerTests
     }
 
     [Test]
+    public void Active_redirect_self_reference_is_still_a_cycle_error()
+    {
+        var result = Compile(Source("a", true,
+            new[] { Tag("state.old") }, Redirect("state.old", "state.old")));
+
+        AssertFailed(result, "B3TAG2003", "a", "state.old");
+    }
+
+    [Test]
+    public void Redirect_cycle_between_active_names_is_still_a_cycle_error()
+    {
+        var result = Compile(Source("a", true,
+            new[] { Tag("state.one"), Tag("state.two") },
+            Redirect("state.one", "state.two"),
+            Redirect("state.two", "state.one")));
+
+        Assert.Multiple(() =>
+        {
+            AssertFailed(result, "B3TAG2003", "a", "state.one");
+            AssertFailed(result, "B3TAG2003", "a", "state.two");
+        });
+    }
+
+    [Test]
     public void Redirect_missing_final_target_is_a_stable_error()
     {
         var result = Compile(Source("a", true,
@@ -217,6 +241,19 @@ public sealed class TagCatalogCompilerTests
             Assert.Throws<ArgumentException>(() => new GameCatalogBuildContext(
                 new TagCatalogIdentity("game", "0.0.0-dev"), CatalogBuildMode.Published, sources));
         });
+    }
+
+    [Test]
+    public void Build_context_sources_cannot_be_replaced_after_validation()
+    {
+        var context = new GameCatalogBuildContext(
+            Identity,
+            CatalogBuildMode.Development,
+            new[] { Source("a", true, Tag("state.dead")) });
+        var exposedSources = (IList<TagSourceDocument>)context.Sources;
+
+        Assert.Throws<NotSupportedException>(() => exposedSources[0] = null!);
+        Assert.That(context.Sources[0], Is.Not.Null);
     }
 
     [Test]

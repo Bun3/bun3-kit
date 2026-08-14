@@ -302,6 +302,8 @@ namespace Bun3.Gameplay.Tags.Catalog
             }
 
             if (HasErrors(diagnostics)) return Array.Empty<CompiledRedirect>();
+            AddRedirectCycleDiagnostics(fromNames, mergedTargets, declarationsByFrom, diagnostics);
+            if (HasErrors(diagnostics)) return Array.Empty<CompiledRedirect>();
 
             var resolvedTargets = new Dictionary<string, string>(fromNames.Length, StringComparer.Ordinal);
             for (var fromIndex = 0; fromIndex < fromNames.Length; fromIndex++)
@@ -330,6 +332,59 @@ namespace Bun3.Gameplay.Tags.Catalog
             }
 
             return redirects;
+        }
+
+        private static void AddRedirectCycleDiagnostics(
+            string[] fromNames,
+            Dictionary<string, string> mergedTargets,
+            Dictionary<string, List<RedirectDeclaration>> declarationsByFrom,
+            List<TagCatalogDiagnostic> diagnostics)
+        {
+            var completed = new HashSet<string>(StringComparer.Ordinal);
+            var cycleNames = new HashSet<string>(StringComparer.Ordinal);
+            for (var fromIndex = 0; fromIndex < fromNames.Length; fromIndex++)
+            {
+                var root = fromNames[fromIndex];
+                if (completed.Contains(root)) continue;
+
+                var path = new List<string>();
+                var positions = new Dictionary<string, int>(StringComparer.Ordinal);
+                var current = root;
+                while (mergedTargets.TryGetValue(current, out var target)
+                    && !completed.Contains(current))
+                {
+                    if (positions.TryGetValue(current, out var cycleStart))
+                    {
+                        for (var cycleIndex = cycleStart; cycleIndex < path.Count; cycleIndex++)
+                        {
+                            cycleNames.Add(path[cycleIndex]);
+                        }
+
+                        break;
+                    }
+
+                    positions.Add(current, path.Count);
+                    path.Add(current);
+                    current = target;
+                }
+
+                for (var pathIndex = 0; pathIndex < path.Count; pathIndex++)
+                {
+                    completed.Add(path[pathIndex]);
+                }
+            }
+
+            for (var fromIndex = 0; fromIndex < fromNames.Length; fromIndex++)
+            {
+                var from = fromNames[fromIndex];
+                if (!cycleNames.Contains(from)) continue;
+                AddDiagnosticsForDeclarations(
+                    diagnostics,
+                    declarationsByFrom[from],
+                    RedirectCycleCode,
+                    TagCatalogDiagnosticSeverity.Error,
+                    "Redirect self-reference or cycle");
+            }
         }
 
         private static bool TryResolveRedirect(
