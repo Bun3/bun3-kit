@@ -80,6 +80,51 @@ public static class InputTags
         }
 
         [Test]
+        public async Task Enum_member_declaration_reports_B3TAG0002()
+        {
+            var diagnostics = await AnalyzeAsync(@"
+using Bun3.Gameplay.Tags;
+[assembly: Bun3.Gameplay.Tags.GameplayTagSource(""bun3.input"", ""Bun3 Input"")]
+
+public enum InputTag
+{
+    [NativeGameplayTag]
+    Jump,
+}");
+
+            AssertDiagnosticIds(diagnostics, "B3TAG0002");
+        }
+
+        [Test]
+        public async Task Field_targeted_auto_property_reports_B3TAG0002()
+        {
+            var diagnostics = await AnalyzeAsync(@"
+using Bun3.Gameplay.Tags;
+[assembly: Bun3.Gameplay.Tags.GameplayTagSource(""bun3.input"", ""Bun3 Input"")]
+
+public sealed class InputTags
+{
+    [field: NativeGameplayTag]
+    public string Jump { get; } = ""input.jump"";
+}");
+
+            AssertDiagnosticIds(diagnostics, "B3TAG0002");
+        }
+
+        [Test]
+        public async Task Field_targeted_record_parameter_reports_B3TAG0002()
+        {
+            var diagnostics = await AnalyzeAsync(@"
+using Bun3.Gameplay.Tags;
+[assembly: Bun3.Gameplay.Tags.GameplayTagSource(""bun3.input"", ""Bun3 Input"")]
+
+public record InputTags([field: NativeGameplayTag] string Jump);
+");
+
+            AssertDiagnosticIds(diagnostics, "B3TAG0002");
+        }
+
+        [Test]
         public async Task Invalid_tag_path_reports_B3TAG0003()
         {
             var diagnostics = await AnalyzeAsync(@"
@@ -163,16 +208,102 @@ public static class InputTags
             AssertDiagnosticIds(diagnostics, "B3TAG0005");
         }
 
-        private static async Task<ImmutableArray<Diagnostic>> AnalyzeAsync(string source)
+        [Test]
+        public async Task Mixed_invalid_fields_report_in_compilation_syntax_tree_order()
+        {
+            const string source = @"
+[assembly: Bun3.Gameplay.Tags.GameplayTagSource(""bun3.input"", ""Bun3 Input"")]
+";
+            const string invalidField = @"
+using Bun3.Gameplay.Tags;
+
+public static class PrivateTags
+{
+    [NativeGameplayTag]
+    private const string Private = ""input.private"";
+}";
+            const string invalidPath = @"
+using Bun3.Gameplay.Tags;
+
+public static class InvalidTags
+{
+    [NativeGameplayTag]
+    public const string Invalid = ""input..invalid"";
+}";
+
+            for (var iteration = 0; iteration < 3; iteration++)
+            {
+                AssertDiagnosticIds(await AnalyzeAsync(source, invalidField, invalidPath), "B3TAG0002", "B3TAG0003");
+                AssertDiagnosticIds(await AnalyzeAsync(source, invalidPath, invalidField), "B3TAG0003", "B3TAG0002");
+            }
+        }
+
+        [Test]
+        public async Task Duplicate_and_invalid_field_diagnostics_share_global_syntax_tree_order()
+        {
+            const string source = @"
+[assembly: Bun3.Gameplay.Tags.GameplayTagSource(""bun3.input"", ""Bun3 Input"")]
+";
+            const string firstDuplicate = @"
+using Bun3.Gameplay.Tags;
+
+public static class FirstTags
+{
+    [NativeGameplayTag]
+    public const string First = ""input.duplicate"";
+}";
+            const string invalidField = @"
+using Bun3.Gameplay.Tags;
+
+public static class InvalidTags
+{
+    [NativeGameplayTag]
+    private const string Invalid = ""input.invalid"";
+}";
+            const string secondDuplicate = @"
+using Bun3.Gameplay.Tags;
+
+public static class SecondTags
+{
+    [NativeGameplayTag]
+    public const string Second = ""Input.Duplicate"";
+}";
+
+            AssertDiagnosticIds(
+                await AnalyzeAsync(source, firstDuplicate, invalidField, secondDuplicate),
+                "B3TAG0004",
+                "B3TAG0002",
+                "B3TAG0004");
+        }
+
+        [Test]
+        public async Task Invalid_source_and_field_diagnostics_share_global_syntax_tree_order()
+        {
+            const string invalidField = @"
+using Bun3.Gameplay.Tags;
+
+public static class InvalidTags
+{
+    [NativeGameplayTag]
+    private const string Invalid = ""input.invalid"";
+}";
+            const string invalidSource = @"
+[assembly: Bun3.Gameplay.Tags.GameplayTagSource(""Bun3.Input"", ""Bun3 Input"")]
+";
+
+            AssertDiagnosticIds(
+                await AnalyzeAsync(invalidField, invalidSource),
+                "B3TAG0002",
+                "B3TAG0005");
+        }
+
+        private static async Task<ImmutableArray<Diagnostic>> AnalyzeAsync(params string[] sources)
         {
             var parseOptions = CSharpParseOptions.Default.WithLanguageVersion(LanguageVersion.CSharp9);
             var compilation = CSharpCompilation.Create(
                 assemblyName: "NativeGameplayTagAnalyzerTests",
-                syntaxTrees: new[]
-                {
-                    CSharpSyntaxTree.ParseText(AttributeDefinitions, parseOptions),
-                    CSharpSyntaxTree.ParseText(source, parseOptions),
-                },
+                syntaxTrees: new[] { CSharpSyntaxTree.ParseText(AttributeDefinitions, parseOptions, path: "attributes.cs") }
+                    .Concat(sources.Select((source, index) => CSharpSyntaxTree.ParseText(source, parseOptions, path: "source-" + index + ".cs"))),
                 references: ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!).Split(System.IO.Path.PathSeparator).Select(path => MetadataReference.CreateFromFile(path)),
                 options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
 

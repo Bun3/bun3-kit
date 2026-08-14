@@ -41,21 +41,18 @@ namespace Bun3.Gameplay.TagSourceAnalyzer
                 var fields = new ConcurrentQueue<AnnotatedField>();
                 compilationStartContext.RegisterSyntaxNodeAction(syntaxNodeContext =>
                 {
-                    var declaration = (FieldDeclarationSyntax)syntaxNodeContext.Node;
-                    var attribute = FindAttribute(declaration.AttributeLists, syntaxNodeContext.SemanticModel, nativeTagAttribute);
+                    var attributeList = (AttributeListSyntax)syntaxNodeContext.Node;
+                    var attribute = FindAttribute(attributeList.Attributes, syntaxNodeContext.SemanticModel, nativeTagAttribute);
                     if (attribute is null)
                     {
                         return;
                     }
 
-                    foreach (var variable in declaration.Declaration.Variables)
+                    foreach (var field in GetAnnotatedFields(attributeList, syntaxNodeContext.SemanticModel))
                     {
-                        if (syntaxNodeContext.SemanticModel.GetDeclaredSymbol(variable) is IFieldSymbol field)
-                        {
-                            fields.Enqueue(new AnnotatedField(field, attribute));
-                        }
+                        fields.Enqueue(new AnnotatedField(field, attribute));
                     }
-                }, SyntaxKind.FieldDeclaration);
+                }, SyntaxKind.AttributeList);
 
                 compilationStartContext.RegisterCompilationEndAction(compilationEndContext =>
                 {
@@ -75,14 +72,24 @@ namespace Bun3.Gameplay.TagSourceAnalyzer
                 return;
             }
 
+            var annotatedFieldComparer = new AnnotatedFieldComparer(context.Compilation);
+            Array.Sort(annotatedFields, annotatedFieldComparer);
+            var diagnostics = new List<DiagnosticCandidate>();
+
             var sourceAttributes = FindAttributes(context.Compilation.Assembly.GetAttributes(), sourceAttribute);
             if (sourceAttributes.Count != 1)
             {
-                context.ReportDiagnostic(Diagnostic.Create(NativeGameplayTagDiagnostics.MissingOrMultipleSource, Location.None));
+                diagnostics.Add(new DiagnosticCandidate(
+                    NativeGameplayTagDiagnostics.MissingOrMultipleSource,
+                    Location.None,
+                    NativeGameplayTagDiagnostics.MissingOrMultipleSource.Id));
             }
             else if (!IsValidSource(sourceAttributes[0]))
             {
-                context.ReportDiagnostic(Diagnostic.Create(NativeGameplayTagDiagnostics.InvalidSource, GetLocation(sourceAttributes[0])));
+                diagnostics.Add(new DiagnosticCandidate(
+                    NativeGameplayTagDiagnostics.InvalidSource,
+                    GetLocation(sourceAttributes[0]),
+                    NativeGameplayTagDiagnostics.InvalidSource.Id));
             }
 
             var declarations = new List<TagDeclaration>();
@@ -93,24 +100,35 @@ namespace Bun3.Gameplay.TagSourceAnalyzer
 
                 if (field.DeclaredAccessibility != Accessibility.Public || !field.IsConst || field.Type.SpecialType != SpecialType.System_String)
                 {
-                    context.ReportDiagnostic(Diagnostic.Create(NativeGameplayTagDiagnostics.InvalidField, attribute.GetLocation()));
+                    diagnostics.Add(new DiagnosticCandidate(
+                        NativeGameplayTagDiagnostics.InvalidField,
+                        attribute.GetLocation(),
+                        GetFieldIdentity(field)));
                     continue;
                 }
 
                 if (field.ConstantValue is not string value || !TryFoldTagName(value, out var canonicalName))
                 {
-                    context.ReportDiagnostic(Diagnostic.Create(NativeGameplayTagDiagnostics.InvalidTagName, attribute.GetLocation()));
+                    diagnostics.Add(new DiagnosticCandidate(
+                        NativeGameplayTagDiagnostics.InvalidTagName,
+                        attribute.GetLocation(),
+                        GetFieldIdentity(field)));
                     continue;
                 }
 
-                declarations.Add(new TagDeclaration(canonicalName, attribute));
+                declarations.Add(new TagDeclaration(canonicalName, annotatedField));
             }
 
-            declarations.Sort(TagDeclarationComparer.Instance);
-            ReportDuplicates(context, declarations);
+            declarations.Sort(new TagDeclarationComparer(annotatedFieldComparer));
+            CollectDuplicateDiagnostics(diagnostics, declarations);
+            diagnostics.Sort(new DiagnosticCandidateComparer(context.Compilation));
+            foreach (var diagnostic in diagnostics)
+            {
+                context.ReportDiagnostic(Diagnostic.Create(diagnostic.Descriptor, diagnostic.Location));
+            }
         }
 
-        private static void ReportDuplicates(CompilationAnalysisContext context, List<TagDeclaration> declarations)
+        private static void CollectDuplicateDiagnostics(List<DiagnosticCandidate> diagnostics, List<TagDeclaration> declarations)
         {
             var index = 0;
             while (index < declarations.Count)
@@ -126,13 +144,20 @@ namespace Bun3.Gameplay.TagSourceAnalyzer
                 {
                     for (var duplicate = index; duplicate < end; duplicate++)
                     {
-                        context.ReportDiagnostic(Diagnostic.Create(NativeGameplayTagDiagnostics.DuplicateTagName, declarations[duplicate].Attribute.GetLocation()));
+                        var annotatedField = declarations[duplicate].AnnotatedField;
+                        diagnostics.Add(new DiagnosticCandidate(
+                            NativeGameplayTagDiagnostics.DuplicateTagName,
+                            annotatedField.Attribute.GetLocation(),
+                            GetFieldIdentity(annotatedField.Field)));
                     }
                 }
 
                 index = end;
             }
         }
+
+        private static string GetFieldIdentity(IFieldSymbol field) =>
+            field.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
 
         private static bool IsValidSource(AttributeData attribute)
         {
@@ -238,35 +263,118 @@ namespace Bun3.Gameplay.TagSourceAnalyzer
             return matches;
         }
 
-        private static AttributeSyntax? FindAttribute(
-            SyntaxList<AttributeListSyntax> attributeLists,
-            SemanticModel semanticModel,
-            INamedTypeSymbol attributeType)
+        private static IEnumerable<IFieldSymbol> GetAnnotatedFields(AttributeListSyntax attributeList, SemanticModel semanticModel)
         {
-            foreach (var attributeList in attributeLists)
+            switch (attributeList.Parent)
             {
-                foreach (var attribute in attributeList.Attributes)
-                {
-                    var attributeClass = semanticModel.GetTypeInfo(attribute.Name).Type
-                        ?? semanticModel.GetTypeInfo(attribute).Type;
-                    if (attributeClass is null)
+                case FieldDeclarationSyntax fieldDeclaration:
+                    foreach (var variable in fieldDeclaration.Declaration.Variables)
                     {
-                        var attributeSymbol = semanticModel.GetSymbolInfo(attribute.Name).Symbol;
-                        if (attributeSymbol is IMethodSymbol constructor)
+                        if (semanticModel.GetDeclaredSymbol(variable) is IFieldSymbol field)
                         {
-                            attributeClass = constructor.ContainingType;
-                        }
-                        else if (attributeSymbol is INamedTypeSymbol namedType)
-                        {
-                            attributeClass = namedType;
+                            yield return field;
                         }
                     }
 
-                    if (SymbolEqualityComparer.Default.Equals(attributeClass, attributeType)
-                        || (attributeClass is null && HasExpectedAttributeName(attribute.Name, attributeType.Name)))
+                    yield break;
+
+                case EnumMemberDeclarationSyntax enumMember:
+                    if (semanticModel.GetDeclaredSymbol(enumMember) is IFieldSymbol enumField)
                     {
-                        return attribute;
+                        yield return enumField;
                     }
+
+                    yield break;
+
+                case PropertyDeclarationSyntax propertyDeclaration when IsFieldTarget(attributeList):
+                    if (semanticModel.GetDeclaredSymbol(propertyDeclaration) is IPropertySymbol property
+                        && FindAssociatedField(property.ContainingType, property) is IFieldSymbol backingField)
+                    {
+                        yield return backingField;
+                    }
+
+                    yield break;
+
+                case ParameterSyntax parameterSyntax when IsFieldTarget(attributeList):
+                    if (semanticModel.GetDeclaredSymbol(parameterSyntax) is IParameterSymbol parameter
+                        && FindRecordParameterBackingField(parameter) is IFieldSymbol recordBackingField)
+                    {
+                        yield return recordBackingField;
+                    }
+
+                    yield break;
+
+                case EventFieldDeclarationSyntax eventFieldDeclaration when IsFieldTarget(attributeList):
+                    foreach (var variable in eventFieldDeclaration.Declaration.Variables)
+                    {
+                        if (semanticModel.GetDeclaredSymbol(variable) is IEventSymbol eventSymbol
+                            && FindAssociatedField(eventSymbol.ContainingType, eventSymbol) is IFieldSymbol eventBackingField)
+                        {
+                            yield return eventBackingField;
+                        }
+                    }
+
+                    yield break;
+            }
+        }
+
+        private static bool IsFieldTarget(AttributeListSyntax attributeList) =>
+            attributeList.Target?.Identifier.IsKind(SyntaxKind.FieldKeyword) == true;
+
+        private static IFieldSymbol? FindRecordParameterBackingField(IParameterSymbol parameter)
+        {
+            foreach (var member in parameter.ContainingType.GetMembers(parameter.Name))
+            {
+                if (member is IPropertySymbol property
+                    && FindAssociatedField(parameter.ContainingType, property) is IFieldSymbol backingField)
+                {
+                    return backingField;
+                }
+            }
+
+            return null;
+        }
+
+        private static IFieldSymbol? FindAssociatedField(INamedTypeSymbol containingType, ISymbol associatedSymbol)
+        {
+            foreach (var member in containingType.GetMembers())
+            {
+                if (member is IFieldSymbol field
+                    && SymbolEqualityComparer.Default.Equals(field.AssociatedSymbol, associatedSymbol))
+                {
+                    return field;
+                }
+            }
+
+            return null;
+        }
+
+        private static AttributeSyntax? FindAttribute(
+            SeparatedSyntaxList<AttributeSyntax> attributes,
+            SemanticModel semanticModel,
+            INamedTypeSymbol attributeType)
+        {
+            foreach (var attribute in attributes)
+            {
+                var attributeClass = semanticModel.GetTypeInfo(attribute.Name).Type
+                    ?? semanticModel.GetTypeInfo(attribute).Type;
+                if (attributeClass is null)
+                {
+                    var attributeSymbol = semanticModel.GetSymbolInfo(attribute.Name).Symbol;
+                    if (attributeSymbol is IMethodSymbol constructor)
+                    {
+                        attributeClass = constructor.ContainingType;
+                    }
+                    else if (attributeSymbol is INamedTypeSymbol namedType)
+                    {
+                        attributeClass = namedType;
+                    }
+                }
+
+                if (SymbolEqualityComparer.Default.Equals(attributeClass, attributeType)
+                    || (attributeClass is null && HasExpectedAttributeName(attribute.Name, attributeType.Name)))
+                {
+                    return attribute;
                 }
             }
 
@@ -287,15 +395,15 @@ namespace Bun3.Gameplay.TagSourceAnalyzer
 
         private sealed class TagDeclaration
         {
-            internal TagDeclaration(string canonicalName, AttributeSyntax attribute)
+            internal TagDeclaration(string canonicalName, AnnotatedField annotatedField)
             {
                 CanonicalName = canonicalName;
-                Attribute = attribute;
+                AnnotatedField = annotatedField;
             }
 
             internal string CanonicalName { get; }
 
-            internal AttributeSyntax Attribute { get; }
+            internal AnnotatedField AnnotatedField { get; }
         }
 
         private sealed class AnnotatedField
@@ -311,9 +419,89 @@ namespace Bun3.Gameplay.TagSourceAnalyzer
             internal AttributeSyntax Attribute { get; }
         }
 
+        private sealed class DiagnosticCandidate
+        {
+            internal DiagnosticCandidate(DiagnosticDescriptor descriptor, Location location, string finalKey)
+            {
+                Descriptor = descriptor;
+                Location = location;
+                FinalKey = finalKey;
+            }
+
+            internal DiagnosticDescriptor Descriptor { get; }
+
+            internal Location Location { get; }
+
+            internal string FinalKey { get; }
+        }
+
+        private sealed class AnnotatedFieldComparer : IComparer<AnnotatedField>
+        {
+            private readonly Dictionary<SyntaxTree, int> _syntaxTreeOrdinals = new Dictionary<SyntaxTree, int>();
+
+            internal AnnotatedFieldComparer(Compilation compilation)
+            {
+                var index = 0;
+                foreach (var syntaxTree in compilation.SyntaxTrees)
+                {
+                    _syntaxTreeOrdinals.Add(syntaxTree, index++);
+                }
+            }
+
+            public int Compare(AnnotatedField? left, AnnotatedField? right)
+            {
+                if (ReferenceEquals(left, right))
+                {
+                    return 0;
+                }
+
+                if (left is null)
+                {
+                    return -1;
+                }
+
+                if (right is null)
+                {
+                    return 1;
+                }
+
+                var leftLocation = left.Attribute.GetLocation();
+                var rightLocation = right.Attribute.GetLocation();
+                var comparison = GetSyntaxTreeOrdinal(leftLocation.SourceTree).CompareTo(GetSyntaxTreeOrdinal(rightLocation.SourceTree));
+                if (comparison != 0)
+                {
+                    return comparison;
+                }
+
+                comparison = leftLocation.SourceSpan.Start.CompareTo(rightLocation.SourceSpan.Start);
+                if (comparison != 0)
+                {
+                    return comparison;
+                }
+
+                comparison = leftLocation.SourceSpan.Length.CompareTo(rightLocation.SourceSpan.Length);
+                if (comparison != 0)
+                {
+                    return comparison;
+                }
+
+                return StringComparer.Ordinal.Compare(
+                    left.Field.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+                    right.Field.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
+            }
+
+            private int GetSyntaxTreeOrdinal(SyntaxTree? syntaxTree) =>
+                syntaxTree is not null && _syntaxTreeOrdinals.TryGetValue(syntaxTree, out var ordinal) ? ordinal : int.MaxValue;
+        }
+
         private sealed class TagDeclarationComparer : IComparer<TagDeclaration>
         {
-            internal static readonly TagDeclarationComparer Instance = new TagDeclarationComparer();
+            private readonly IComparer<AnnotatedField> _annotatedFieldComparer;
+
+            internal TagDeclarationComparer(IComparer<AnnotatedField> annotatedFieldComparer)
+            {
+                _annotatedFieldComparer = annotatedFieldComparer;
+            }
 
             public int Compare(TagDeclaration? left, TagDeclaration? right)
             {
@@ -333,21 +521,68 @@ namespace Bun3.Gameplay.TagSourceAnalyzer
                 }
 
                 var comparison = StringComparer.Ordinal.Compare(left.CanonicalName, right.CanonicalName);
-                if (comparison != 0)
-                {
-                    return comparison;
-                }
-
-                var leftLocation = left.Attribute.GetLocation();
-                var rightLocation = right.Attribute.GetLocation();
-                comparison = StringComparer.Ordinal.Compare(leftLocation.SourceTree?.FilePath, rightLocation.SourceTree?.FilePath);
-                if (comparison != 0)
-                {
-                    return comparison;
-                }
-
-                return leftLocation.SourceSpan.Start.CompareTo(rightLocation.SourceSpan.Start);
+                return comparison != 0
+                    ? comparison
+                    : _annotatedFieldComparer.Compare(left.AnnotatedField, right.AnnotatedField);
             }
+        }
+
+        private sealed class DiagnosticCandidateComparer : IComparer<DiagnosticCandidate>
+        {
+            private readonly Dictionary<SyntaxTree, int> _syntaxTreeOrdinals = new Dictionary<SyntaxTree, int>();
+
+            internal DiagnosticCandidateComparer(Compilation compilation)
+            {
+                var index = 0;
+                foreach (var syntaxTree in compilation.SyntaxTrees)
+                {
+                    _syntaxTreeOrdinals.Add(syntaxTree, index++);
+                }
+            }
+
+            public int Compare(DiagnosticCandidate? left, DiagnosticCandidate? right)
+            {
+                if (ReferenceEquals(left, right))
+                {
+                    return 0;
+                }
+
+                if (left is null)
+                {
+                    return -1;
+                }
+
+                if (right is null)
+                {
+                    return 1;
+                }
+
+                var comparison = GetSyntaxTreeOrdinal(left.Location.SourceTree).CompareTo(GetSyntaxTreeOrdinal(right.Location.SourceTree));
+                if (comparison != 0)
+                {
+                    return comparison;
+                }
+
+                comparison = left.Location.SourceSpan.Start.CompareTo(right.Location.SourceSpan.Start);
+                if (comparison != 0)
+                {
+                    return comparison;
+                }
+
+                comparison = left.Location.SourceSpan.Length.CompareTo(right.Location.SourceSpan.Length);
+                if (comparison != 0)
+                {
+                    return comparison;
+                }
+
+                comparison = StringComparer.Ordinal.Compare(left.FinalKey, right.FinalKey);
+                return comparison != 0
+                    ? comparison
+                    : StringComparer.Ordinal.Compare(left.Descriptor.Id, right.Descriptor.Id);
+            }
+
+            private int GetSyntaxTreeOrdinal(SyntaxTree? syntaxTree) =>
+                syntaxTree is not null && _syntaxTreeOrdinals.TryGetValue(syntaxTree, out var ordinal) ? ordinal : int.MaxValue;
         }
     }
 }
