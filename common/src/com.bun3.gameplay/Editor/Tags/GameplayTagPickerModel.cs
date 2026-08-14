@@ -87,7 +87,9 @@ namespace Bun3.Gameplay.Editor.Tags
                     .Append(" (")
                     .Append(contribution.DisplayName)
                     .Append("): ")
-                    .Append(contribution.Comment.Length == 0 ? "implicit" : contribution.Comment);
+                    .Append(contribution.Comment.Length > 0
+                        ? contribution.Comment
+                        : contribution.IsExplicit ? "explicit (no comment)" : "implicit");
             }
 
             return builder.ToString();

@@ -25,7 +25,8 @@ Task 9의 Source tree와 Picker가 별도 renderer를 복제하지 않도록 `Ga
   만들며 implicit contribution도 명시한다.
 - filter는 canonical 전체 경로만 `OrdinalIgnoreCase`로 검색하고 직접 일치 행과 조상만 반환한다.
 - Picker tree는 full canonical path와 Source/comment 상세를 tooltip으로 제공하고 `useScrollView`의 수평·수직
-  scroll을 함께 사용한다. 검색 종료 시 기존 expand ID와 양축 scroll position이 복원된다.
+  scroll을 함께 사용한다. 검색 종료 시 기존 expand ID를 복원하며, 양축 scroll position은 filter reload를
+  통과해 변경되지 않는다.
 - `GameplayTagPickerWindow.Show(snapshot, selectedPath, callback)`와 invalid 상태를 받을 수 있는 Workspace
   overload를 추가했다. current raw value는 catalog에 없거나 casing이 달라도 그대로 표시한다.
 - Workspace가 build 불가이면 tree interaction과 programmatic selection을 모두 차단하고 diagnostic banner를
@@ -44,7 +45,8 @@ Production code 작성 전에 Picker test 6개를 추가하고 다음 command를
 ```
 
 예상한 compiler RED로 `GameplayTagPickerModel`, `GameplayTagPickerRow`, `GameplayTagPickerTreeView`,
-`GameplayTagPickerWindow`이 없다는 `CS0246`/`CS0103`만 발생했다.
+`GameplayTagPickerWindow`이 없다는 `CS0246`/`CS0103`이 발생했다. 같은 log에는 test가 사용하는 legacy
+TreeView API의 `CS0618` obsolete warning도 있었고, test file 범위에서 이후 suppression했다.
 
 - RED log: `C:\Users\dudck\AppData\Local\Temp\bun3-gameplay-editmode-20260814093356884.log`
 - Result: Unity exit 1, Task 10 production contracts 부재로 compile 실패
@@ -125,3 +127,52 @@ Fresh final result: **118/118 passed**, 0 failed/skipped, duration `29.9780627s`
 ## Concerns
 
 None.
+
+## Fix Round 1 — explicit empty-comment provenance 표시 수정
+
+### Review finding and correction
+
+- Important finding을 수용했다. 기존 formatter는 `Comment.Length == 0`을 implicit 판정으로 사용해 comment를
+  생략한 explicit 선언까지 `implicit`으로 잘못 표시했다.
+- `TagSourceContribution.IsExplicit`을 authoritative provenance flag로 사용한다. comment가 있으면 기존
+  Source detail/comment text를 유지하고, 빈 comment의 explicit declaration은 `explicit (no comment)`, 실제
+  implicit contribution은 `implicit`으로 표시한다.
+- duplicate leaf의 explicit empty-comment contribution과 같은 Source들의 실제 implicit parent를 한 test에서
+  함께 검증해 두 상태가 다시 합쳐지지 않게 했다.
+
+### Strict RED → GREEN
+
+Picker-only command:
+
+```powershell
+& common/tests/Bun3.Gameplay.Tests/Invoke-GameplayUnityTests.ps1 -Mode EditMode `
+  -TestFilter 'Bun3.Gameplay.Unity.Tests.GameplayTagPickerTests'
+```
+
+- RED: **6/7 passed, 1 failed**. 새
+  `Empty_comment_explicit_contribution_is_not_reported_as_implicit` test가 기대한
+  `game (Game): explicit (no comment)` 대신 기존 `game (Game): implicit`을 관찰했다.
+  - XML: `C:\Users\dudck\AppData\Local\Temp\bun3-gameplay-editmode-20260814095629354.xml`
+  - Log: `C:\Users\dudck\AppData\Local\Temp\bun3-gameplay-editmode-20260814095629354.log`
+- GREEN: **7/7 passed**, 0 failed/skipped, duration `0.0878205s`, C# diagnostics none.
+  - XML: `C:\Users\dudck\AppData\Local\Temp\bun3-gameplay-editmode-20260814095800648.xml`
+  - Log: `C:\Users\dudck\AppData\Local\Temp\bun3-gameplay-editmode-20260814095800648.log`
+
+### Final verification
+
+- Picker + Tree focused: **11/11 passed**, 0 failed/skipped, duration `0.1029116s`, C# diagnostics none.
+  - XML: `C:\Users\dudck\AppData\Local\Temp\bun3-gameplay-editmode-20260814095928083.xml`
+  - Log: `C:\Users\dudck\AppData\Local\Temp\bun3-gameplay-editmode-20260814095928083.log`
+- Generated `Bun3.Gameplay.Editor.csproj`: **0 warnings, 0 errors** with warning-as-error.
+- Generated `Bun3.Gameplay.Unity.Tests.csproj`: **0 warnings, 0 errors** with warning-as-error.
+- Full EditMode: **119/119 passed**, 0 failed/skipped, duration `30.9574318s`, C# diagnostics none.
+  - XML: `C:\Users\dudck\AppData\Local\Temp\bun3-gameplay-editmode-20260814100101935.xml`
+  - Log: `C:\Users\dudck\AppData\Local\Temp\bun3-gameplay-editmode-20260814100101935.log`
+
+### Safety
+
+- No Unity process was terminated or interfered with.
+- Each runner changed only the exact removal of `SENTIS_ANALYTICS_ENABLED`; the one-line diff was inspected after
+  natural exit and only that token was restored. Final ProjectSettings diff is empty.
+- PropertyDrawer, Task 11 live invalidation and filter allocation behavior were not changed.
+- `artifacts/`, `unity/GameplayTags.json`, and sibling `.superpowers/brainstorm` remain untouched and unstaged.

@@ -41,6 +41,29 @@ namespace Bun3.Gameplay.Unity.Tests
                 Does.StartWith("ability.jump\n").And.Contain(row.SourceDetails));
         }
 
+        /// <summary>빈 comment의 명시 선언과 실제 implicit 부모를 provenance flag로 구분하는지 검증합니다.</summary>
+        [Test]
+        public void Empty_comment_explicit_contribution_is_not_reported_as_implicit()
+        {
+            var model = new GameplayTagPickerModel(CreateSnapshot(
+                CreateSource(
+                    "game", "Game", TagSourceKind.GameJson, false,
+                    new TagSourceTag("ability.jump", string.Empty)),
+                CreateSource(
+                    "bun3.gameplay", "Bun3.Gameplay", TagSourceKind.PackageJson, true,
+                    new TagSourceTag("ability.jump", "framework jump"))));
+
+            var explicitLeaf = model.Rows.Single(row => row.CanonicalPath == "ability.jump");
+            var implicitParent = model.Rows.Single(row => row.CanonicalPath == "ability");
+
+            Assert.That(explicitLeaf.SourceDetails,
+                Does.Contain("game (Game): explicit (no comment)")
+                    .And.Not.Contain("game (Game): implicit"));
+            Assert.That(implicitParent.SourceDetails,
+                Does.Contain("bun3.gameplay (Bun3.Gameplay): implicit")
+                    .And.Contain("game (Game): implicit"));
+        }
+
         /// <summary>검색이 canonical 전체 경로만 대소문자와 무관하게 찾고 조상을 유지하는지 검증합니다.</summary>
         [Test]
         public void Filter_matches_the_canonical_path_case_insensitively_and_keeps_only_ancestors()
