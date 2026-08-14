@@ -63,6 +63,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Bun3.Gameplay.Tags.Cli", "c
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Bun3.Gameplay.Tags.Cli.Tests", "common\tests\Bun3.Gameplay.Tags.Cli.Tests\Bun3.Gameplay.Tags.Cli.Tests.csproj", "{7AA25507-9977-431F-850A-AAEFCD0F1483}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Bun3.Server.GameplayTags", "server\src\Bun3.Server.GameplayTags\Bun3.Server.GameplayTags.csproj", "{7828FBF7-3EE4-469A-A4C1-4DFD1F254621}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -325,6 +327,18 @@ Global
 		{7AA25507-9977-431F-850A-AAEFCD0F1483}.Release|x64.Build.0 = Release|Any CPU
 		{7AA25507-9977-431F-850A-AAEFCD0F1483}.Release|x86.ActiveCfg = Release|Any CPU
 		{7AA25507-9977-431F-850A-AAEFCD0F1483}.Release|x86.Build.0 = Release|Any CPU
+		{7828FBF7-3EE4-469A-A4C1-4DFD1F254621}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7828FBF7-3EE4-469A-A4C1-4DFD1F254621}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7828FBF7-3EE4-469A-A4C1-4DFD1F254621}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{7828FBF7-3EE4-469A-A4C1-4DFD1F254621}.Debug|x64.Build.0 = Debug|Any CPU
+		{7828FBF7-3EE4-469A-A4C1-4DFD1F254621}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{7828FBF7-3EE4-469A-A4C1-4DFD1F254621}.Debug|x86.Build.0 = Debug|Any CPU
+		{7828FBF7-3EE4-469A-A4C1-4DFD1F254621}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7828FBF7-3EE4-469A-A4C1-4DFD1F254621}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7828FBF7-3EE4-469A-A4C1-4DFD1F254621}.Release|x64.ActiveCfg = Release|Any CPU
+		{7828FBF7-3EE4-469A-A4C1-4DFD1F254621}.Release|x64.Build.0 = Release|Any CPU
+		{7828FBF7-3EE4-469A-A4C1-4DFD1F254621}.Release|x86.ActiveCfg = Release|Any CPU
+		{7828FBF7-3EE4-469A-A4C1-4DFD1F254621}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -358,5 +372,6 @@ Global
 		{965AD14F-D2EE-4AA9-BDF4-5DAE9543FD37} = {D90AB541-7400-80B1-A0B4-F58D0D439F55}
 		{5D16995A-A568-4361-8B33-BA6F6FA7068F} = {D90AB541-7400-80B1-A0B4-F58D0D439F55}
 		{7AA25507-9977-431F-850A-AAEFCD0F1483} = {13AACEBB-5F00-79C1-2D14-6EA8B5DDD1FE}
+		{7828FBF7-3EE4-469A-A4C1-4DFD1F254621} = {2132E9AA-A8A6-6DB3-1CCB-FE240A8CB002}
 	EndGlobalSection
 EndGlobal
