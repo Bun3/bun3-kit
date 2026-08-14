@@ -35,7 +35,7 @@ namespace Bun3.Gameplay.Editor.Tags
         }
     }
 
-    internal readonly struct GameplayTagTreeRowModel
+    internal readonly struct GameplayTagTreeRowModel : IGameplayTagProjectionRow
     {
         internal GameplayTagTreeRowModel(
             int id,
@@ -74,6 +74,10 @@ namespace Bun3.Gameplay.Editor.Tags
         internal bool IsExplicit { get; }
         internal bool IsReadOnly { get; }
         internal bool IsDirectMatch { get; }
+        internal string DisplaySegment => DisplayName;
+        int IGameplayTagProjectionRow.Id => Id;
+        int IGameplayTagProjectionRow.ParentId => ParentId;
+        string IGameplayTagProjectionRow.DisplaySegment => DisplaySegment;
         internal GameplayTagTreeSelectionKey SelectionKey =>
             new GameplayTagTreeSelectionKey(SourceId, Path);
 

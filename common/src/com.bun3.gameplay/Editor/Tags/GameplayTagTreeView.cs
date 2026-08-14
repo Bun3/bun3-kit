@@ -8,36 +8,25 @@ using UnityEngine;
 
 namespace Bun3.Gameplay.Editor.Tags
 {
-    [Flags]
-    internal enum GameplayTagTreeAction
+    internal interface IGameplayTagProjectionRow
     {
-        None = 0,
-        Rename = 1 << 0,
-        EditComment = 1 << 1,
-        AddSubTag = 1 << 2,
-        Copy = 1 << 3,
-        FindReferences = 1 << 4,
-        Delete = 1 << 5
+        int Id { get; }
+        int ParentId { get; }
+        string DisplaySegment { get; }
     }
 
-    internal sealed class GameplayTagTreeView : TreeView
+    /// <summary>Source와 merged projection이 공유하는 트리 계층, scroll 및 행 geometry입니다.</summary>
+    internal abstract class GameplayTagProjectionTreeView<TRow> : TreeView
+        where TRow : struct, IGameplayTagProjectionRow
     {
         private readonly TreeViewState _state;
-        private IReadOnlyList<GameplayTagTreeRowModel> _rows = Array.Empty<GameplayTagTreeRowModel>();
-        private readonly Dictionary<int, GameplayTagTreeRowModel> _rowsById =
-            new Dictionary<int, GameplayTagTreeRowModel>();
+        private IReadOnlyList<TRow> _rows = Array.Empty<TRow>();
+        private readonly Dictionary<int, TRow> _rowsById = new Dictionary<int, TRow>();
         private List<int>? _expandedBeforeFilter;
         private bool _isFiltering;
+        private bool _suppressSelectionChanged;
 
-        internal event Action<GameplayTagTreeSelectionKey>? TagSelected;
-        internal event Action<GameplayTagTreeSelectionKey>? RenameRequested;
-        internal event Action<GameplayTagTreeSelectionKey>? CommentEditRequested;
-        internal event Action<GameplayTagTreeSelectionKey>? SubTagRequested;
-        internal event Action<GameplayTagTreeSelectionKey>? CopyRequested;
-        internal event Action<GameplayTagTreeSelectionKey>? FindReferencesRequested;
-        internal event Action<GameplayTagTreeSelectionKey>? DeleteRequested;
-
-        internal GameplayTagTreeView(TreeViewState state)
+        protected GameplayTagProjectionTreeView(TreeViewState state)
             : base(state)
         {
             _state = state ?? throw new ArgumentNullException(nameof(state));
@@ -46,9 +35,9 @@ namespace Bun3.Gameplay.Editor.Tags
             Reload();
         }
 
-        internal void SetRows(IReadOnlyList<GameplayTagTreeRowModel> rows) => SetRows(rows, false);
+        internal bool UsesScrollView => useScrollView;
 
-        internal void SetRows(IReadOnlyList<GameplayTagTreeRowModel> rows, bool isFiltering)
+        protected void SetProjectionRows(IReadOnlyList<TRow> rows, bool isFiltering)
         {
             if (rows is null) throw new ArgumentNullException(nameof(rows));
             if (isFiltering && !_isFiltering)
@@ -71,9 +60,136 @@ namespace Bun3.Gameplay.Editor.Tags
             }
         }
 
+        protected bool TryGetRow(int id, out TRow row) => _rowsById.TryGetValue(id, out row);
+
+        protected void SynchronizeSelection(Predicate<TRow> matches)
+        {
+            if (matches is null) throw new ArgumentNullException(nameof(matches));
+            _suppressSelectionChanged = true;
+            try
+            {
+                foreach (var pair in _rowsById)
+                {
+                    if (!matches(pair.Value)) continue;
+                    ExpandAncestors(pair.Value);
+                    SetSelection(new[] { pair.Key }, TreeViewSelectionOptions.RevealAndFrame);
+                    return;
+                }
+
+                SetSelection(Array.Empty<int>(), TreeViewSelectionOptions.None);
+            }
+            finally
+            {
+                _suppressSelectionChanged = false;
+            }
+        }
+
+        /// <summary>foldout과 계층 들여쓰기를 제외한 트리 행 레이블 영역을 계산합니다.</summary>
+        internal Rect CalculateLabelRect(TreeViewItem item, Rect rowRect)
+        {
+            if (item is null) throw new ArgumentNullException(nameof(item));
+            rowRect.xMin += GetContentIndent(item);
+            return rowRect;
+        }
+
+        protected override TreeViewItem BuildRoot()
+        {
+            _rowsById.Clear();
+            var root = new TreeViewItem
+            {
+                id = 0,
+                depth = -1,
+                displayName = "Root",
+                children = new List<TreeViewItem>()
+            };
+            var items = new Dictionary<int, TreeViewItem>();
+            for (var index = 0; index < _rows.Count; index++)
+            {
+                var row = _rows[index];
+                var item = new TreeViewItem(row.Id, 0, row.DisplaySegment);
+                _rowsById.Add(item.id, row);
+                if (!items.TryGetValue(row.ParentId, out var parent)) parent = root;
+                if (parent.children is null) parent.children = new List<TreeViewItem>();
+                parent.children.Add(item);
+                items.Add(item.id, item);
+            }
+
+            SetupDepthsFromParentsAndChildren(root);
+            return root;
+        }
+
+        protected override void RowGUI(RowGUIArgs args)
+        {
+            if (_rowsById.TryGetValue(args.item.id, out var row))
+            {
+                GUI.Label(CalculateLabelRect(args.item, args.rowRect), CreateRowContent(row));
+                return;
+            }
+
+            base.RowGUI(args);
+        }
+
+        protected override void SelectionChanged(IList<int> selectedIds)
+        {
+            base.SelectionChanged(selectedIds);
+            if (!_suppressSelectionChanged
+                && selectedIds.Count == 1
+                && _rowsById.TryGetValue(selectedIds[0], out var row))
+            {
+                RowSelected(row);
+            }
+        }
+
+        protected abstract GUIContent CreateRowContent(TRow row);
+
+        protected abstract void RowSelected(TRow row);
+
+        private void ExpandAncestors(TRow row)
+        {
+            for (var parent = row.ParentId;
+                _rowsById.TryGetValue(parent, out var ancestor);
+                parent = ancestor.ParentId)
+            {
+                SetExpanded(ancestor.Id, true);
+            }
+        }
+    }
+
+    [Flags]
+    internal enum GameplayTagTreeAction
+    {
+        None = 0,
+        Rename = 1 << 0,
+        EditComment = 1 << 1,
+        AddSubTag = 1 << 2,
+        Copy = 1 << 3,
+        FindReferences = 1 << 4,
+        Delete = 1 << 5
+    }
+
+    internal sealed class GameplayTagTreeView : GameplayTagProjectionTreeView<GameplayTagTreeRowModel>
+    {
+        internal event Action<GameplayTagTreeSelectionKey>? TagSelected;
+        internal event Action<GameplayTagTreeSelectionKey>? RenameRequested;
+        internal event Action<GameplayTagTreeSelectionKey>? CommentEditRequested;
+        internal event Action<GameplayTagTreeSelectionKey>? SubTagRequested;
+        internal event Action<GameplayTagTreeSelectionKey>? CopyRequested;
+        internal event Action<GameplayTagTreeSelectionKey>? FindReferencesRequested;
+        internal event Action<GameplayTagTreeSelectionKey>? DeleteRequested;
+
+        internal GameplayTagTreeView(TreeViewState state)
+            : base(state)
+        {
+        }
+
+        internal void SetRows(IReadOnlyList<GameplayTagTreeRowModel> rows) => SetRows(rows, false);
+
+        internal void SetRows(IReadOnlyList<GameplayTagTreeRowModel> rows, bool isFiltering) =>
+            SetProjectionRows(rows, isFiltering);
+
         internal void RequestAction(GameplayTagTreeAction action, int id)
         {
-            if (!_rowsById.TryGetValue(id, out var row)) throw new ArgumentOutOfRangeException(nameof(id));
+            if (!TryGetRow(id, out var row)) throw new ArgumentOutOfRangeException(nameof(id));
             if ((GetAvailableActions(row) & action) != action || !IsSingleAction(action))
             {
                 throw new InvalidOperationException("The selected Source row does not permit this action.");
@@ -110,7 +226,7 @@ namespace Bun3.Gameplay.Editor.Tags
 
         internal bool TryGetPath(int id, out string path)
         {
-            if (_rowsById.TryGetValue(id, out var row) && !row.IsSourceRoot)
+            if (TryGetRow(id, out var row) && !row.IsSourceRoot)
             {
                 path = row.Path;
                 return true;
@@ -122,40 +238,26 @@ namespace Bun3.Gameplay.Editor.Tags
 
         internal void SynchronizeSelection(GameplayTagTreeSelectionKey key)
         {
-            if (key.CanonicalPath.Length > 0)
+            if (key.CanonicalPath.Length == 0)
             {
-                foreach (var pair in _rowsById)
-                {
-                    if (!pair.Value.SelectionKey.Equals(key)) continue;
-                    ExpandAncestors(pair.Value);
-                    SetSelection(new[] { pair.Key }, TreeViewSelectionOptions.RevealAndFrame);
-                    return;
-                }
+                SetSelection(Array.Empty<int>(), TreeViewSelectionOptions.None);
+                return;
             }
 
-            SetSelection(Array.Empty<int>(), TreeViewSelectionOptions.None);
+            SynchronizeSelection(row => row.SelectionKey.Equals(key));
         }
 
         internal void SynchronizeSelection(string path)
         {
             if (path is null) throw new ArgumentNullException(nameof(path));
-            if (path.Length > 0)
+            if (path.Length == 0)
             {
-                foreach (var pair in _rowsById)
-                {
-                    if (pair.Value.IsSourceRoot
-                        || !string.Equals(pair.Value.Path, path, StringComparison.OrdinalIgnoreCase))
-                    {
-                        continue;
-                    }
-
-                    ExpandAncestors(pair.Value);
-                    SetSelection(new[] { pair.Key }, TreeViewSelectionOptions.RevealAndFrame);
-                    return;
-                }
+                SetSelection(Array.Empty<int>(), TreeViewSelectionOptions.None);
+                return;
             }
 
-            SetSelection(Array.Empty<int>(), TreeViewSelectionOptions.None);
+            SynchronizeSelection(row => !row.IsSourceRoot
+                && string.Equals(row.Path, path, StringComparison.OrdinalIgnoreCase));
         }
 
         internal static GUIContent CreateLabelContent(GameplayTagTreeRowModel row)
@@ -172,54 +274,9 @@ namespace Bun3.Gameplay.Editor.Tags
             return new GUIContent(row.Path.Substring(lastDot + 1), row.Comment);
         }
 
-        /// <summary>foldout과 계층 들여쓰기를 제외한 트리 행 레이블 영역을 계산합니다.</summary>
-        internal Rect CalculateLabelRect(TreeViewItem item, Rect rowRect)
-        {
-            if (item is null) throw new ArgumentNullException(nameof(item));
-            rowRect.xMin += GetContentIndent(item);
-            return rowRect;
-        }
-
-        protected override TreeViewItem BuildRoot()
-        {
-            _rowsById.Clear();
-            var root = new TreeViewItem
-            {
-                id = 0,
-                depth = -1,
-                displayName = "Root",
-                children = new List<TreeViewItem>()
-            };
-            var items = new Dictionary<int, TreeViewItem>();
-            for (var index = 0; index < _rows.Count; index++)
-            {
-                var row = _rows[index];
-                var item = new TreeViewItem(row.Id, 0, row.DisplayName);
-                _rowsById.Add(item.id, row);
-                if (!items.TryGetValue(row.ParentId, out var parent)) parent = root;
-                if (parent.children is null) parent.children = new List<TreeViewItem>();
-                parent.children.Add(item);
-                items.Add(item.id, item);
-            }
-
-            SetupDepthsFromParentsAndChildren(root);
-            return root;
-        }
-
-        protected override void RowGUI(RowGUIArgs args)
-        {
-            if (_rowsById.TryGetValue(args.item.id, out var row))
-            {
-                GUI.Label(CalculateLabelRect(args.item, args.rowRect), CreateLabelContent(row));
-                return;
-            }
-
-            base.RowGUI(args);
-        }
-
         protected override void ContextClickedItem(int id)
         {
-            if (!_rowsById.TryGetValue(id, out var row)) return;
+            if (!TryGetRow(id, out var row)) return;
             var actions = GetAvailableActions(row);
             if (actions == GameplayTagTreeAction.None) return;
 
@@ -234,25 +291,12 @@ namespace Bun3.Gameplay.Editor.Tags
             Event.current.Use();
         }
 
-        protected override void SelectionChanged(IList<int> selectedIds)
-        {
-            base.SelectionChanged(selectedIds);
-            if (selectedIds.Count == 1
-                && _rowsById.TryGetValue(selectedIds[0], out var row)
-                && !row.IsSourceRoot)
-            {
-                TagSelected?.Invoke(row.SelectionKey);
-            }
-        }
+        protected override GUIContent CreateRowContent(GameplayTagTreeRowModel row) =>
+            CreateLabelContent(row);
 
-        private void ExpandAncestors(GameplayTagTreeRowModel row)
+        protected override void RowSelected(GameplayTagTreeRowModel row)
         {
-            for (var parent = row.ParentId;
-                _rowsById.TryGetValue(parent, out var ancestor);
-                parent = ancestor.ParentId)
-            {
-                SetExpanded(ancestor.Id, true);
-            }
+            if (!row.IsSourceRoot) TagSelected?.Invoke(row.SelectionKey);
         }
 
         private void AddActionItem(
