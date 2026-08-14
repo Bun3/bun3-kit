@@ -19,6 +19,8 @@ namespace Bun3.Gameplay.Editor.Tags
     internal sealed class GameplayTagCatalogWindow : EditorWindow
     {
         private const string NewTagNameControl = "GameplayTag.NewTagName";
+        private const string ConfigureCatalogTitle = "Configure GameplayTag Catalog";
+        private const string ProjectSettingsPath = "Project/Gameplay Tags";
 
         [SerializeField] private TreeViewState _treeViewState = null!;
 
@@ -29,11 +31,13 @@ namespace Bun3.Gameplay.Editor.Tags
         private string _search = string.Empty;
         private string _newTagName = string.Empty;
         private string _newTagComment = string.Empty;
+        private string _catalogId = string.Empty;
         private bool _focusNewTagName;
         private bool _showRedirects = true;
         private Vector2 _redirectScroll;
         private double _nextWorkspaceRefresh;
         private Action<string, Exception>? _showValidationError;
+        private Action<string, string>? _showConfigureWarning;
         private IReadOnlyList<GameplayTagRedirectRowModel> _redirectRows =
             Array.Empty<GameplayTagRedirectRowModel>();
 
@@ -51,6 +55,8 @@ namespace Bun3.Gameplay.Editor.Tags
             _search ??= string.Empty;
             _newTagName ??= string.Empty;
             _newTagComment ??= string.Empty;
+            _catalogId = GameplayTagProjectSettings.ReadConfiguredCatalogId()
+                ?? GameplayTagProjectSettings.GetSuggestedCatalogId(PlayerSettings.productName);
             titleContent = new GUIContent("Gameplay Tags");
             minSize = new Vector2(640f, 420f);
             saveChangesMessage = "Save changes to the current gameplay tag catalog?";
@@ -89,6 +95,7 @@ namespace Bun3.Gameplay.Editor.Tags
             HandleSaveShortcut(Event.current, EditorWindow.focusedWindow == this);
             EnsureTreeViewState();
             GameplayTagDiagnosticsPanel.Draw(_controller.Workspace.DiagnosticEntries);
+            DrawConfigureCatalog();
             DrawToolbar();
             DrawSearch();
             DrawAddTag();
@@ -121,6 +128,34 @@ namespace Bun3.Gameplay.Editor.Tags
         internal void SetValidationErrorHandler(Action<string, Exception> showValidationError) =>
             _showValidationError = showValidationError
                 ?? throw new ArgumentNullException(nameof(showValidationError));
+
+        internal bool RequiresCatalogConfiguration => _controller.RequiresCatalogConfiguration;
+
+        internal void SetConfigureWarningHandler(Action<string, string> showConfigureWarning) =>
+            _showConfigureWarning = showConfigureWarning
+                ?? throw new ArgumentNullException(nameof(showConfigureWarning));
+
+        internal bool ConfigureCatalog(string catalogId)
+        {
+            _catalogId = catalogId;
+            if (_controller.TryExecute(() => _controller.ConfigureCatalog(catalogId), out var error))
+            {
+                ReloadTree();
+                SynchronizeUnsavedChanges();
+                Repaint();
+                return true;
+            }
+
+            SynchronizeUnsavedChanges();
+            ShowConfigureWarning(error!);
+            return false;
+        }
+
+        internal static void OpenProjectSettings(Action<string> openProjectSettings)
+        {
+            if (openProjectSettings is null) throw new ArgumentNullException(nameof(openProjectSettings));
+            openProjectSettings(ProjectSettingsPath);
+        }
 
         private void EnsureTreeViewState()
         {
@@ -162,6 +197,28 @@ namespace Bun3.Gameplay.Editor.Tags
             }
 
             EditorGUILayout.EndHorizontal();
+        }
+
+        private void DrawConfigureCatalog()
+        {
+            if (!RequiresCatalogConfiguration) return;
+
+            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+            EditorGUILayout.LabelField(ConfigureCatalogTitle, EditorStyles.boldLabel);
+            _catalogId = EditorGUILayout.TextField("Catalog ID", _catalogId);
+            EditorGUILayout.BeginHorizontal();
+            if (GUILayout.Button("Save Settings"))
+            {
+                _ = ConfigureCatalog(_catalogId);
+            }
+
+            if (GUILayout.Button("Open Project Settings"))
+            {
+                OpenProjectSettings(path => { _ = SettingsService.OpenProjectSettings(path); });
+            }
+
+            EditorGUILayout.EndHorizontal();
+            EditorGUILayout.EndVertical();
         }
 
         private void DrawSearch()
@@ -709,6 +766,11 @@ namespace Bun3.Gameplay.Editor.Tags
             (_showValidationError ?? GameplayTagValidationWindow.Show)(
                 _controller.GameSourcePath,
                 error);
+
+        private void ShowConfigureWarning(Exception error) =>
+            (_showConfigureWarning ?? GameplayTagDiagnosticsPanel.ShowWarning)(
+                ConfigureCatalogTitle,
+                error.Message);
 
         private void ReloadTree()
         {

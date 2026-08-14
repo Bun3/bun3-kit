@@ -58,6 +58,136 @@ namespace Bun3.Gameplay.Unity.Tests
             }
         }
 
+        /// <summary>Catalog 설정 후 dirty Game Source와 선택을 보존한 채 Workspace를 다시 여는지 검증합니다.</summary>
+        [Test]
+        public void Configure_catalog_preserves_dirty_session_and_selection_while_refreshing_workspace()
+        {
+            var path = Path.Combine(_temporaryDirectory, "GameplayTags.json");
+            GameplayTagCatalogFileAdapter.CreateGameSource(path);
+            string? configuredId = null;
+            var controller = CreateControllerWithSettings(
+                path,
+                () => configuredId,
+                value => configuredId = GameplayTagCatalogId.Require(value, nameof(value)));
+            controller.Add("State.Dead");
+
+            controller.ConfigureCatalog("Jurassic Paradise");
+
+            Assert.That(configuredId, Is.EqualTo("jurassic-paradise"));
+            Assert.That(controller.RequiresCatalogConfiguration, Is.False);
+            Assert.That(controller.IsDirty, Is.True);
+            Assert.That(controller.SelectedPath, Is.EqualTo("state.dead"));
+            Assert.That(controller.Session!.Serialize(), Does.Contain("state.dead"));
+        }
+
+        /// <summary>Catalog 설정 저장 실패가 Workspace와 dirty session 및 선택을 모두 되돌리는지 검증합니다.</summary>
+        [Test]
+        public void Configure_catalog_failure_restores_workspace_session_dirty_and_selection()
+        {
+            var path = Path.Combine(_temporaryDirectory, "GameplayTags.json");
+            GameplayTagCatalogFileAdapter.CreateGameSource(path);
+            var expectedError = new InvalidOperationException("forced settings save failure");
+            var controller = CreateControllerWithSettings(
+                path,
+                () => null,
+                _ => throw expectedError);
+            controller.Add("State.Dead");
+            var workspace = controller.Workspace;
+            var serialized = controller.Session!.Serialize();
+
+            var succeeded = controller.TryExecute(
+                () => controller.ConfigureCatalog("Jurassic Paradise"),
+                out var error);
+
+            Assert.That(succeeded, Is.False);
+            Assert.That(error, Is.SameAs(expectedError));
+            AssertWorkspaceState(controller.Workspace, workspace);
+            Assert.That(controller.Session!.Serialize(), Is.EqualTo(serialized));
+            Assert.That(controller.IsDirty, Is.True);
+            Assert.That(controller.SelectedSourceId, Is.EqualTo("game"));
+            Assert.That(controller.SelectedPath, Is.EqualTo("state.dead"));
+        }
+
+        /// <summary>설정이 없을 때만 창이 인라인 Catalog 설정 box를 요구하는지 검증합니다.</summary>
+        [Test]
+        public void Configure_box_policy_turns_off_after_catalog_settings_are_saved()
+        {
+            var path = Path.Combine(_temporaryDirectory, "GameplayTags.json");
+            GameplayTagCatalogFileAdapter.CreateGameSource(path);
+            string? configuredId = null;
+            var controller = CreateControllerWithSettings(
+                path,
+                () => configuredId,
+                value => configuredId = GameplayTagCatalogId.Require(value, nameof(value)));
+            var window = EditorWindow.GetWindow<GameplayTagCatalogWindow>();
+            try
+            {
+                AttachController(window, controller);
+
+                Assert.That(window.RequiresCatalogConfiguration, Is.True);
+
+                Assert.That(window.ConfigureCatalog("Jurassic Paradise"), Is.True);
+
+                Assert.That(window.RequiresCatalogConfiguration, Is.False);
+            }
+            finally
+            {
+                CloseWithoutSaving(window);
+            }
+        }
+
+        /// <summary>무효 Catalog ID가 경고를 한 번만 표시하고 controller 상태를 보존하는지 검증합니다.</summary>
+        [Test]
+        public void Invalid_catalog_id_reports_one_configure_warning_without_changing_controller_state()
+        {
+            var path = Path.Combine(_temporaryDirectory, "GameplayTags.json");
+            GameplayTagCatalogFileAdapter.CreateGameSource(path);
+            var controller = CreateControllerWithSettings(
+                path,
+                () => null,
+                value => GameplayTagCatalogId.Require(value, nameof(value)));
+            controller.Add("State.Dead");
+            var workspace = controller.Workspace;
+            var serialized = controller.Session!.Serialize();
+            var warningCount = 0;
+            var window = EditorWindow.GetWindow<GameplayTagCatalogWindow>();
+            try
+            {
+                AttachController(window, controller);
+                window.SetConfigureWarningHandler((title, message) =>
+                {
+                    warningCount++;
+                    Assert.That(title, Is.EqualTo("Configure GameplayTag Catalog"));
+                    Assert.That(message, Does.Contain("ASCII letter or digit"));
+                });
+
+                var succeeded = window.ConfigureCatalog("---");
+
+                Assert.That(succeeded, Is.False);
+                Assert.That(warningCount, Is.EqualTo(1));
+                AssertWorkspaceState(controller.Workspace, workspace);
+                Assert.That(controller.Session!.Serialize(), Is.EqualTo(serialized));
+                Assert.That(controller.IsDirty, Is.True);
+                Assert.That(controller.SelectedPath, Is.EqualTo("state.dead"));
+                Assert.That(controller.RequiresCatalogConfiguration, Is.True);
+            }
+            finally
+            {
+                CloseWithoutSaving(window);
+            }
+        }
+
+        /// <summary>인라인 버튼이 정확한 Gameplay Tags Project Settings 경로를 여는지 검증합니다.</summary>
+        [Test]
+        public void Open_project_settings_uses_the_gameplay_tags_settings_path()
+        {
+            string? openedPath = null;
+
+            GameplayTagCatalogWindow.OpenProjectSettings(path => openedPath = path);
+
+            Assert.That(openedPath, Is.EqualTo("Project/Gameplay Tags"));
+        }
+
         /// <summary>트리 행의 주석이 레이블 도구 설명으로 노출되는지 검증합니다.</summary>
         [Test]
         public void Tree_row_label_exposes_the_comment_as_a_tooltip()
@@ -1362,6 +1492,19 @@ namespace Bun3.Gameplay.Unity.Tests
                 ?? throw new InvalidOperationException("The expected Window value is missing."));
         }
 
+        private static void AssertWorkspaceState(
+            GameplayTagEditorWorkspace actual,
+            GameplayTagEditorWorkspace expected)
+        {
+            Assert.That(actual.CanCreateGameSource, Is.EqualTo(expected.CanCreateGameSource));
+            Assert.That(actual.CanEditGameSource, Is.EqualTo(expected.CanEditGameSource));
+            Assert.That(actual.CanBuildCatalog, Is.EqualTo(expected.CanBuildCatalog));
+            Assert.That(
+                actual.RequiresCatalogConfiguration,
+                Is.EqualTo(expected.RequiresCatalogConfiguration));
+            Assert.That(actual.Diagnostics, Is.EqualTo(expected.Diagnostics));
+        }
+
         private static void CloseWithoutSaving(GameplayTagCatalogWindow window)
         {
             if (window.hasUnsavedChanges) window.DiscardChanges();
@@ -1424,6 +1567,21 @@ namespace Bun3.Gameplay.Unity.Tests
 
             return new GameplayTagCatalogWindowController(path, ResolveWithoutProvider, _ => { });
         }
+
+        private static GameplayTagCatalogWindowController CreateControllerWithSettings(
+            string path,
+            Func<string?> readCatalogId,
+            Func<string, string> saveCatalogId) =>
+            new GameplayTagCatalogWindowController(
+                path,
+                candidatePath => GameplayTagBuildContextResolver.ResolveDevelopment(
+                    candidatePath,
+                    Array.Empty<Type>(),
+                    Array.Empty<string>(),
+                    readCatalogId()),
+                _ => { },
+                GameplayTagCatalogFileAdapter.Save,
+                saveCatalogId);
 
         private static GameplayTagBuildContextResolution ResolveWithoutProvider(string path) =>
             GameplayTagBuildContextResolver.ResolveDevelopment(
