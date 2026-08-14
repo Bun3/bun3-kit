@@ -133,5 +133,85 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(File.ReadAllBytes(destination), Is.EqualTo(destinationBytes));
             Assert.That(Directory.GetFiles(_temporaryDirectory, "*.tmp"), Is.Empty);
         }
+
+        [Test]
+        public void Staged_readback_failure_preserves_existing_save_destination_and_removes_temp()
+        {
+            var path = Path.Combine(_temporaryDirectory, "GameplayTags.json");
+            var originalBytes = Encoding.UTF8.GetBytes(
+                "{\"schemaVersion\":1,\"tags\":[{\"name\":\"state.dead\",\"comment\":\"old\"}],\"redirects\":[]}");
+            File.WriteAllBytes(path, originalBytes);
+            var session = GameplayTagCatalogEditSession.Open(
+                "{\"schemaVersion\":1,\"tags\":[{\"name\":\"state.alive\",\"comment\":\"new\"}],\"redirects\":[]}");
+            string? stagedPath = null;
+            string? stagedText = null;
+
+            Assert.Throws<InvalidDataException>(() =>
+                GameplayTagCatalogFileAdapter.Save(
+                    path,
+                    session,
+                    staged =>
+                    {
+                        stagedPath = ((FileStream)staged).Name;
+                        using var reader = new StreamReader(
+                            staged,
+                            new UTF8Encoding(false, true),
+                            false,
+                            1024,
+                            leaveOpen: true);
+                        stagedText = reader.ReadToEnd();
+                        throw new InvalidDataException("Injected staged readback failure.");
+                    }));
+
+            Assert.That(stagedPath, Does.EndWith(".tmp"));
+            Assert.That(stagedText, Does.Contain("state.alive"));
+            Assert.That(File.ReadAllBytes(path), Is.EqualTo(originalBytes));
+            Assert.That(Directory.GetFiles(_temporaryDirectory, "*.tmp"), Is.Empty);
+        }
+
+        [Test]
+        public void Staged_readback_failure_leaves_create_destination_absent_and_removes_temp()
+        {
+            var path = Path.Combine(_temporaryDirectory, "ProjectSettings", "GameplayTags.json");
+
+            Assert.Throws<InvalidDataException>(() =>
+                GameplayTagCatalogFileAdapter.CreateGameSource(
+                    path,
+                    _ => throw new InvalidDataException("Injected staged readback failure.")));
+
+            Assert.That(File.Exists(path), Is.False);
+            Assert.That(FindTemporaryFiles(path), Is.Empty);
+        }
+
+        [Test]
+        public void Staged_readback_failure_preserves_import_source_and_leaves_destination_absent()
+        {
+            var source = Path.Combine(_temporaryDirectory, "LegacyGameplayTags.json");
+            var destination = Path.Combine(
+                _temporaryDirectory, "ProjectSettings", "GameplayTags.json");
+            var sourceBytes = Encoding.UTF8.GetBytes(
+                "{\"schemaVersion\":1,\"tags\":[{\"name\":\"Ability.Jump\",\"comment\":\"\"}],\"redirects\":[]}");
+            File.WriteAllBytes(source, sourceBytes);
+
+            Assert.Throws<InvalidDataException>(() =>
+                GameplayTagCatalogFileAdapter.ImportExisting(
+                    source,
+                    destination,
+                    _ => throw new InvalidDataException("Injected staged readback failure.")));
+
+            Assert.That(File.ReadAllBytes(source), Is.EqualTo(sourceBytes));
+            Assert.That(File.Exists(destination), Is.False);
+            Assert.That(FindTemporaryFiles(destination), Is.Empty);
+        }
+
+        private static string[] FindTemporaryFiles(string destinationPath)
+        {
+            var directory = Path.GetDirectoryName(destinationPath)!;
+            return Directory.Exists(directory)
+                ? Directory.GetFiles(
+                    directory,
+                    "." + Path.GetFileName(destinationPath) + ".*.tmp")
+                : Array.Empty<string>();
+        }
     }
 }

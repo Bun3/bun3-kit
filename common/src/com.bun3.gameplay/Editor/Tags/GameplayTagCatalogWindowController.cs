@@ -10,6 +10,7 @@ namespace Bun3.Gameplay.Editor.Tags
     {
         private readonly Func<string, GameplayTagBuildContextResolution> _resolveContext;
         private readonly Action<GameplayTagEditorWorkspace> _buildDevelopmentCatalog;
+        private readonly Action<string, GameplayTagCatalogEditSession> _saveGameSource;
         private GameplayTagEditorWorkspace _workspace;
         private long _saveRevision;
 
@@ -17,7 +18,8 @@ namespace Bun3.Gameplay.Editor.Tags
             : this(
                 GameplayTagGameSourcePath.Get(Application.dataPath),
                 GameplayTagBuildContextResolver.ResolveDevelopment,
-                workspace => _ = GameplayTagDevelopmentCatalogBuilder.Build(workspace))
+                workspace => _ = GameplayTagDevelopmentCatalogBuilder.Build(workspace),
+                GameplayTagCatalogFileAdapter.Save)
         {
         }
 
@@ -25,11 +27,25 @@ namespace Bun3.Gameplay.Editor.Tags
             string gameSourcePath,
             Func<string, GameplayTagBuildContextResolution> resolveContext,
             Action<GameplayTagEditorWorkspace> buildDevelopmentCatalog)
+            : this(
+                gameSourcePath,
+                resolveContext,
+                buildDevelopmentCatalog,
+                GameplayTagCatalogFileAdapter.Save)
+        {
+        }
+
+        internal GameplayTagCatalogWindowController(
+            string gameSourcePath,
+            Func<string, GameplayTagBuildContextResolution> resolveContext,
+            Action<GameplayTagEditorWorkspace> buildDevelopmentCatalog,
+            Action<string, GameplayTagCatalogEditSession> saveGameSource)
         {
             if (gameSourcePath is null) throw new ArgumentNullException(nameof(gameSourcePath));
             _resolveContext = resolveContext ?? throw new ArgumentNullException(nameof(resolveContext));
             _buildDevelopmentCatalog = buildDevelopmentCatalog
                 ?? throw new ArgumentNullException(nameof(buildDevelopmentCatalog));
+            _saveGameSource = saveGameSource ?? throw new ArgumentNullException(nameof(saveGameSource));
             GameSourcePath = Path.GetFullPath(gameSourcePath);
             _workspace = OpenWorkspace();
         }
@@ -84,7 +100,7 @@ namespace Bun3.Gameplay.Editor.Tags
 
         internal void Save()
         {
-            GameplayTagCatalogFileAdapter.Save(GameSourcePath, RequireEditableSession("game"));
+            _saveGameSource(GameSourcePath, RequireEditableSession("game"));
             IsDirty = false;
             _saveRevision++;
             InstallRefreshedWorkspace(CreateRefreshedWorkspace());

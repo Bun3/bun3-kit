@@ -728,6 +728,37 @@ namespace Bun3.Gameplay.Unity.Tests
         }
 
         [Test]
+        public void Staged_readback_save_failure_preserves_destination_and_dirty_session_state()
+        {
+            var path = Path.Combine(_temporaryDirectory, "GameplayTags.json");
+            GameplayTagCatalogFileAdapter.CreateGameSource(path);
+            var destinationBefore = File.ReadAllBytes(path);
+            var controller = new GameplayTagCatalogWindowController(
+                path,
+                ResolveWithoutProvider,
+                _ => { },
+                (destination, session) => GameplayTagCatalogFileAdapter.Save(
+                    destination,
+                    session,
+                    _ => throw new InvalidDataException("Injected staged readback failure.")));
+            controller.Add("state.dead");
+            var sessionBefore = controller.Session!.Serialize();
+            var selectedSourceBefore = controller.SelectedSourceId;
+            var selectedPathBefore = controller.SelectedPath;
+
+            var succeeded = controller.TryExecute(controller.Save, out var error);
+
+            Assert.That(succeeded, Is.False);
+            Assert.That(error, Is.TypeOf<InvalidDataException>());
+            Assert.That(File.ReadAllBytes(path), Is.EqualTo(destinationBefore));
+            Assert.That(controller.Session!.Serialize(), Is.EqualTo(sessionBefore));
+            Assert.That(controller.SelectedSourceId, Is.EqualTo(selectedSourceBefore));
+            Assert.That(controller.SelectedPath, Is.EqualTo(selectedPathBefore));
+            Assert.That(controller.IsDirty, Is.True);
+            Assert.That(Directory.GetFiles(_temporaryDirectory, "*.tmp"), Is.Empty);
+        }
+
+        [Test]
         public void Synchronizing_a_dirty_controller_marks_the_window_unsaved()
         {
             var path = Path.Combine(_temporaryDirectory, "GameplayTags.json");
