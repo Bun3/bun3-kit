@@ -1,5 +1,6 @@
 #nullable enable
 using System;
+using System.Text;
 using UnityEditor;
 using UnityEngine;
 
@@ -56,12 +57,39 @@ namespace Bun3.Gameplay.Editor.Tags
         {
             if (path is null) throw new ArgumentNullException(nameof(path));
 
-            var separator = path.LastIndexOf('.');
+            var canonical = GameplayTagCatalogEditSession.Canonicalize(path, nameof(path));
+            var separator = canonical.LastIndexOf('.');
             return separator < 0
-                ? new GameplayTagTextEditRequest(string.Empty, path)
+                ? new GameplayTagTextEditRequest(string.Empty, canonical)
                 : new GameplayTagTextEditRequest(
-                    path.Substring(0, separator),
-                    path.Substring(separator + 1));
+                    canonical.Substring(0, separator),
+                    canonical.Substring(separator + 1));
+        }
+
+        internal static string FormatShadowedRenameWarning(GameplayTagRenameResult result)
+        {
+            if (result is null) throw new ArgumentNullException(nameof(result));
+            var message = new StringBuilder(
+                "The renamed old paths remain active because another Tag Source still declares them. "
+                + "Their redirects are shadowed until those declarations are removed:");
+            for (var index = 0; index < result.ShadowedOldPaths.Count; index++)
+            {
+                message.Append(Environment.NewLine);
+                message.Append("• ");
+                message.Append(result.ShadowedOldPaths[index]);
+            }
+
+            return message.ToString();
+        }
+
+        internal static void ShowShadowedRenameWarning(GameplayTagRenameResult result)
+        {
+            if (result is null) throw new ArgumentNullException(nameof(result));
+            if (result.ShadowedOldPaths.Count == 0) return;
+            EditorUtility.DisplayDialog(
+                "Gameplay Tag Rename Warning",
+                FormatShadowedRenameWarning(result),
+                "OK");
         }
 
         /// <summary>마지막 세그먼트만 편집하는 이름 변경 modal을 열고 결과를 반환합니다.</summary>

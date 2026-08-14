@@ -434,7 +434,12 @@ namespace Bun3.Gameplay.Editor.Tags
         /// <summary>승인된 이름 변경 결과를 마지막 세그먼트 rename으로 적용합니다.</summary>
         internal void ApplyRename(string path, GameplayTagTextEditResult result)
         {
-            if (result.Accepted) Execute(() => _controller.RenameSubtree(path, result.Value));
+            if (!result.Accepted) return;
+            GameplayTagRenameResult? rename = null;
+            if (Execute(() => rename = _controller.RenameSubtree(path, result.Value)))
+            {
+                GameplayTagEditDialog.ShowShadowedRenameWarning(rename!);
+            }
         }
 
         /// <summary>승인된 comment 결과를 적용하고 암시 부모를 명시 행으로 승격합니다.</summary>

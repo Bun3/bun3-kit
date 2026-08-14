@@ -31,6 +31,7 @@ namespace Bun3.Gameplay.Editor.Tags
         internal string GameSourcePath { get; }
         internal GameplayTagEditorWorkspace Workspace => _workspace;
         internal GameplayTagCatalogEditSession? Session { get; private set; }
+        internal string SelectedSourceId { get; private set; } = string.Empty;
         internal string SelectedPath { get; private set; } = string.Empty;
         internal bool IsDirty { get; private set; }
         internal bool CanCreateGameSource => _workspace.CanCreateGameSource;
@@ -77,7 +78,7 @@ namespace Bun3.Gameplay.Editor.Tags
 
         internal void Save()
         {
-            GameplayTagCatalogFileAdapter.Save(GameSourcePath, RequireEditableSession());
+            GameplayTagCatalogFileAdapter.Save(GameSourcePath, RequireEditableSession("game"));
             IsDirty = false;
         }
 
@@ -85,43 +86,98 @@ namespace Bun3.Gameplay.Editor.Tags
 
         internal void Add(string path, string comment = "")
         {
-            RequireEditableSession().Add(path, comment);
-            SelectedPath = path;
+            var session = RequireEditableSession("game");
+            session.Add(path, comment);
+            CommitMutation(session);
+            SelectedSourceId = "game";
+            SelectedPath = GameplayTagCatalogEditSession.Canonicalize(path, nameof(path));
             IsDirty = true;
         }
 
         internal void SetComment(string path, string comment)
         {
-            RequireEditableSession().SetComment(path, comment);
-            SelectedPath = path;
+            SetComment("game", path, comment);
+        }
+
+        internal void SetComment(string sourceId, string path, string comment)
+        {
+            var session = RequireEditableSession(sourceId);
+            session.SetComment(path, comment);
+            CommitMutation(session);
+            SelectedSourceId = "game";
+            SelectedPath = GameplayTagCatalogEditSession.Canonicalize(path, nameof(path));
             IsDirty = true;
         }
 
-        internal void RenameSubtree(string path, string newSegment)
+        internal GameplayTagRenameResult RenameSubtree(string path, string newSegment) =>
+            RenameSubtree("game", path, newSegment);
+
+        internal GameplayTagRenameResult RenameSubtree(
+            string sourceId,
+            string path,
+            string newSegment)
         {
-            SelectedPath = RequireEditableSession().RenameSubtree(path, newSegment);
+            var session = RequireEditableSession(sourceId);
+            var result = session.RenameSubtree(path, newSegment);
+            CommitMutation(session);
+            SelectedSourceId = "game";
+            SelectedPath = result.NewPath;
             IsDirty = true;
+            return result;
         }
 
         internal int RemoveRedirects(IReadOnlyCollection<string> sources)
         {
-            var removed = RequireEditableSession().RemoveRedirects(sources);
-            if (removed > 0) IsDirty = true;
+            return RemoveRedirects("game", sources);
+        }
+
+        internal int RemoveRedirects(string sourceId, IReadOnlyCollection<string> sources)
+        {
+            var session = RequireEditableSession(sourceId);
+            var removed = session.RemoveRedirects(sources);
+            if (removed > 0)
+            {
+                CommitMutation(session);
+                IsDirty = true;
+            }
+
             return removed;
         }
 
         internal void Delete(string path, bool includeDescendants)
         {
-            RequireEditableSession().Delete(path, includeDescendants);
+            if (includeDescendants)
+            {
+                throw new InvalidOperationException("Subtree deletion is not supported; delete one explicit tag.");
+            }
+
+            DeleteExact("game", path);
+        }
+
+        internal void DeleteExact(string path) => DeleteExact("game", path);
+
+        internal void DeleteExact(string sourceId, string path)
+        {
+            var session = RequireEditableSession(sourceId);
+            session.DeleteExact(path);
+            CommitMutation(session);
+            SelectedSourceId = string.Empty;
             SelectedPath = string.Empty;
             IsDirty = true;
         }
 
         internal void Select(string path)
         {
+            Select("game", path);
+        }
+
+        internal void Select(string sourceId, string path)
+        {
+            if (sourceId is null) throw new ArgumentNullException(nameof(sourceId));
             if (path is null) throw new ArgumentNullException(nameof(path));
             RequireSession();
-            SelectedPath = path;
+            SelectedSourceId = sourceId;
+            SelectedPath = GameplayTagCatalogEditSession.Canonicalize(path, nameof(path));
         }
 
         internal bool TryExecute(Action command, out Exception? error)
@@ -129,7 +185,9 @@ namespace Bun3.Gameplay.Editor.Tags
             if (command is null) throw new ArgumentNullException(nameof(command));
 
             var workspace = _workspace;
-            var serializedSession = Session?.Serialize();
+            var session = Session;
+            var gameSource = session?.GameSource;
+            var selectedSourceId = SelectedSourceId;
             var selectedPath = SelectedPath;
             var isDirty = IsDirty;
             try
@@ -140,10 +198,22 @@ namespace Bun3.Gameplay.Editor.Tags
             }
             catch (Exception exception)
             {
+                if (isDirty && !IsDirty)
+                {
+                    error = exception;
+                    return false;
+                }
+
                 _workspace = workspace;
-                Session = serializedSession is null
+                Session = gameSource is null || session is null
                     ? null
-                    : GameplayTagCatalogEditSession.Open(serializedSession);
+                    : session.Restore(gameSource);
+                if (Session is not null)
+                {
+                    _workspace = workspace.WithGameSession(Session);
+                }
+
+                SelectedSourceId = selectedSourceId;
                 SelectedPath = selectedPath;
                 IsDirty = isDirty;
                 error = exception;
@@ -151,11 +221,17 @@ namespace Bun3.Gameplay.Editor.Tags
             }
         }
 
-        private GameplayTagCatalogEditSession RequireEditableSession()
+        private GameplayTagCatalogEditSession RequireEditableSession(string sourceId)
         {
+            if (sourceId is null) throw new ArgumentNullException(nameof(sourceId));
             if (!CanEditGameSource)
             {
                 throw new InvalidOperationException("The Game Source is not editable while the Workspace is invalid.");
+            }
+
+            if (!string.Equals(sourceId, "game", StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException("The selected Tag Source is read-only.");
             }
 
             return RequireSession();
@@ -184,8 +260,15 @@ namespace Bun3.Gameplay.Editor.Tags
         {
             _workspace = workspace;
             Session = workspace.GameSession;
+            SelectedSourceId = string.Empty;
             SelectedPath = string.Empty;
             IsDirty = false;
+        }
+
+        private void CommitMutation(GameplayTagCatalogEditSession session)
+        {
+            _workspace = _workspace.WithGameSession(session);
+            Session = _workspace.GameSession;
         }
     }
 }

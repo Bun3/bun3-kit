@@ -37,7 +37,7 @@ namespace Bun3.Gameplay.Unity.Tests
         {
             var path = Path.Combine(_temporaryDirectory, "GameplayTags.json");
             var session = GameplayTagCatalogEditSession.Open(
-                "{\"schemaVersion\":1,\"tags\":[{\"name\":\"State.Dead\"}]}");
+                "{\"schemaVersion\":1,\"tags\":[{\"name\":\"State.Dead\",\"comment\":\"\"}]}");
 
             GameplayTagCatalogFileAdapter.Save(path, session);
             var bytes = File.ReadAllBytes(path);
@@ -73,11 +73,11 @@ namespace Bun3.Gameplay.Unity.Tests
                 "{\"schemaVersion\":1,\"tags\":[{\"name\":\"State.Dead\",\"comment\":\"\"}],\"redirects\":[]}",
                 new UTF8Encoding(false, true));
             var session = GameplayTagCatalogEditSession.Open(
-                "{\"schemaVersion\":1,\"tags\":[{\"name\":\"State.Alive\"}]}");
+                "{\"schemaVersion\":1,\"tags\":[{\"name\":\"State.Alive\",\"comment\":\"\"}]}");
 
             GameplayTagCatalogFileAdapter.Save(path, session);
 
-            Assert.That(File.ReadAllText(path), Does.Contain("State.Alive"));
+            Assert.That(File.ReadAllText(path), Does.Contain("state.alive"));
             Assert.That(Directory.GetFiles(_temporaryDirectory, "*.tmp"), Is.Empty);
         }
 

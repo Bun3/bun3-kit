@@ -106,7 +106,7 @@ namespace Bun3.Gameplay.Unity.Tests
         {
             var path = Path.Combine(_temporaryDirectory, "GameplayTags.json");
             File.WriteAllText(path,
-                "{\"schemaVersion\":1,\"tags\":[{\"name\":\"State.Dead\"}]," +
+                "{\"schemaVersion\":1,\"tags\":[{\"name\":\"State.Dead\",\"comment\":\"\"}]," +
                 "\"redirects\":[{\"from\":\"State.Killed\",\"to\":\"State.Dead\"}," +
                 "{\"from\":\"State.Gone\",\"to\":\"State.Dead\"}]}");
             var window = EditorWindow.GetWindow<GameplayTagCatalogWindow>();
@@ -162,7 +162,7 @@ namespace Bun3.Gameplay.Unity.Tests
         {
             var path = Path.Combine(_temporaryDirectory, "GameplayTags.json");
             File.WriteAllText(path,
-                "{\"schemaVersion\":1,\"tags\":[{\"name\":\"State.Dead\"}]," +
+                "{\"schemaVersion\":1,\"tags\":[{\"name\":\"State.Dead\",\"comment\":\"\"}]," +
                 "\"redirects\":[{\"from\":\"State.Killed\",\"to\":\"State.Dead\"}]}");
             var window = EditorWindow.GetWindow<GameplayTagCatalogWindow>();
             try
@@ -191,7 +191,8 @@ namespace Bun3.Gameplay.Unity.Tests
             var state = new TreeViewState { scrollPos = new UnityEngine.Vector2(23f, 47f) };
             var tree = new GameplayTagTreeView(state);
             var session = GameplayTagCatalogEditSession.Open(
-                "{\"schemaVersion\":1,\"tags\":[{\"name\":\"State.Dead.Ghost\"},{\"name\":\"Ability.Jump\"}]}");
+                "{\"schemaVersion\":1,\"tags\":[{\"name\":\"State.Dead.Ghost\",\"comment\":\"\"},"
+                + "{\"name\":\"Ability.Jump\",\"comment\":\"\"}]}");
             var model = new GameplayTagTreeModel(session);
             var abilityId = model.Rows.Single(row => row.Path == "ability").Index;
             var stateId = model.Rows.Single(row => row.Path == "state").Index;
@@ -216,7 +217,8 @@ namespace Bun3.Gameplay.Unity.Tests
         {
             var tree = new GameplayTagTreeView(new TreeViewState());
             var session = GameplayTagCatalogEditSession.Open(
-                "{\"schemaVersion\":1,\"tags\":[{\"name\":\"State.Dead.Ghost\"},{\"name\":\"Ability.Jump\"}]}");
+                "{\"schemaVersion\":1,\"tags\":[{\"name\":\"State.Dead.Ghost\",\"comment\":\"\"},"
+                + "{\"name\":\"Ability.Jump\",\"comment\":\"\"}]}");
             var model = new GameplayTagTreeModel(session);
             var abilityId = model.Rows.Single(row => row.Path == "ability").Index;
             var stateId = model.Rows.Single(row => row.Path == "state").Index;
@@ -286,14 +288,27 @@ namespace Bun3.Gameplay.Unity.Tests
         /// <param name="path">이름을 바꿀 전체 태그 경로입니다.</param>
         /// <param name="expectedParent">예상하는 읽기 전용 부모 경로입니다.</param>
         /// <param name="expectedSegment">예상하는 편집 가능한 마지막 세그먼트입니다.</param>
-        [TestCase("State", "", "State")]
-        [TestCase("State.Movement.Run", "State.Movement", "Run")]
+        [TestCase("State", "", "state")]
+        [TestCase("State.Movement.Run", "state.movement", "run")]
         public void Rename_dialog_request_separates_the_readonly_parent_and_editable_segment(
             string path, string expectedParent, string expectedSegment)
         {
             var request = GameplayTagEditDialog.CreateRenameRequest(path);
             Assert.That(request.ParentPath, Is.EqualTo(expectedParent));
             Assert.That(request.InitialValue, Is.EqualTo(expectedSegment));
+        }
+
+        [Test]
+        public void Shadowed_rename_warning_lists_the_active_old_paths()
+        {
+            var warning = GameplayTagEditDialog.FormatShadowedRenameWarning(
+                new GameplayTagRenameResult(
+                    "ability.leap",
+                    new[] { "ability", "ability.jump" }));
+
+            Assert.That(warning, Does.Contain("ability"));
+            Assert.That(warning, Does.Contain("ability.jump"));
+            Assert.That(warning, Does.Contain("remain active"));
         }
 
         /// <summary>Add Sub-Tag가 입력만 채우고 Copy Tag가 전체 경로를 복사하는지 검증합니다.</summary>
@@ -379,8 +394,8 @@ namespace Bun3.Gameplay.Unity.Tests
 
                 window.ApplyRename("State.Movement", GameplayTagTextEditResult.Accept("Motion"));
 
-                Assert.That(controller.Session!.Serialize(), Does.Contain("state.Motion.Run"));
-                Assert.That(controller.SelectedPath, Is.EqualTo("state.Motion"));
+                Assert.That(controller.Session!.Serialize(), Does.Contain("state.motion.run"));
+                Assert.That(controller.SelectedPath, Is.EqualTo("state.motion"));
             }
             finally
             {
@@ -482,7 +497,7 @@ namespace Bun3.Gameplay.Unity.Tests
 
             Assert.That(proceed, Is.True);
             Assert.That(controller.IsDirty, Is.False);
-            Assert.That(File.ReadAllText(path), Does.Contain("State.Dead"));
+            Assert.That(File.ReadAllText(path), Does.Contain("state.dead"));
         }
 
         [TestCase(1, true)]
@@ -500,8 +515,8 @@ namespace Bun3.Gameplay.Unity.Tests
 
             Assert.That(proceed, Is.EqualTo(expectedProceed));
             Assert.That(controller.IsDirty, Is.True);
-            Assert.That(File.ReadAllText(path), Does.Not.Contain("State.Dead"));
-            Assert.That(controller.Session!.Serialize(), Does.Contain("State.Dead"));
+            Assert.That(File.ReadAllText(path), Does.Not.Contain("state.dead"));
+            Assert.That(controller.Session!.Serialize(), Does.Contain("state.dead"));
         }
 
         [Test]
@@ -519,7 +534,7 @@ namespace Bun3.Gameplay.Unity.Tests
 
             Assert.That(proceed, Is.False);
             Assert.That(controller.IsDirty, Is.True);
-            Assert.That(controller.Session!.Serialize(), Does.Contain("State.Dead"));
+            Assert.That(controller.Session!.Serialize(), Does.Contain("state.dead"));
         }
 
         [Test]
@@ -555,7 +570,7 @@ namespace Bun3.Gameplay.Unity.Tests
                 controller.Add("State.Dead");
                 window.HandleBeforeAssemblyReload((UnsavedChangesDecision)decisionValue);
 
-                Assert.That(File.ReadAllText(path).Contains("State.Dead"), Is.EqualTo(expectedSaved));
+                Assert.That(File.ReadAllText(path).Contains("state.dead"), Is.EqualTo(expectedSaved));
                 Assert.That(controller.IsDirty, Is.False);
                 Assert.That(window.hasUnsavedChanges, Is.False);
             }
@@ -580,18 +595,19 @@ namespace Bun3.Gameplay.Unity.Tests
             controller.SetComment("State.Dead", "전투 불능");
             controller.RenameSubtree("State.Dead", "Deceased");
             Assert.That(controller.IsDirty, Is.True);
-            Assert.That(controller.SelectedPath, Is.EqualTo("state.Deceased"));
+            Assert.That(controller.SelectedPath, Is.EqualTo("state.deceased"));
             controller.Save();
             Assert.That(controller.IsDirty, Is.False);
-            Assert.That(File.ReadAllText(path), Does.Contain("state.Deceased"));
+            Assert.That(File.ReadAllText(path), Does.Contain("state.deceased"));
 
             controller.Add("State.Stunned");
             Assert.That(controller.Reload(discardDirty: false), Is.False);
-            Assert.That(controller.Session!.Serialize(), Does.Contain("State.Stunned"));
+            Assert.That(controller.Session!.Serialize(), Does.Contain("state.stunned"));
             Assert.That(controller.Reload(discardDirty: true), Is.True);
-            Assert.That(controller.Session!.Serialize(), Does.Not.Contain("State.Stunned"));
-            controller.Delete("state.Deceased", includeDescendants: false);
-            Assert.That(controller.Session!.Serialize(), Does.Not.Contain("state.Deceased"));
+            Assert.That(controller.Session!.Serialize(), Does.Not.Contain("state.stunned"));
+            controller.RemoveRedirects(new[] { "state.dead" });
+            controller.Delete("state.deceased", includeDescendants: false);
+            Assert.That(controller.Session!.Serialize(), Does.Not.Contain("state.deceased"));
         }
 
         [Test]
@@ -666,6 +682,57 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(FindImportTemporaryFiles(fixedPath), Is.Empty);
         }
 
+        [Test]
+        public void Controller_rename_validates_the_game_candidate_against_read_only_sources()
+        {
+            var fixedPath = Path.Combine(_temporaryDirectory, "ProjectSettings", "GameplayTags.json");
+            Directory.CreateDirectory(Path.GetDirectoryName(fixedPath)!);
+            File.WriteAllText(
+                fixedPath,
+                "{\"schemaVersion\":1,\"tags\":[{\"name\":\"Ability.Jump\",\"comment\":\"game\"}],"
+                + "\"redirects\":[]}",
+                new UTF8Encoding(false));
+            WriteExternalSource("ability.jump");
+            var controller = new GameplayTagCatalogWindowController(
+                fixedPath,
+                ResolveWithImportConflictProvider);
+
+            var result = controller.RenameSubtree("game", "ABILITY.JUMP", "Leap");
+
+            Assert.That(result.NewPath, Is.EqualTo("ability.leap"));
+            Assert.That(result.ShadowedOldPaths, Is.EqualTo(new[] { "ability.jump" }));
+            Assert.That(controller.SelectedSourceId, Is.EqualTo("game"));
+            Assert.That(controller.SelectedPath, Is.EqualTo("ability.leap"));
+            Assert.That(controller.Workspace.Snapshot!.Catalog.TryGet("ability.jump", out _), Is.True);
+            Assert.That(controller.Workspace.Snapshot.Catalog.TryGet("ability.leap", out _), Is.True);
+        }
+
+        [Test]
+        public void Controller_rejects_a_read_only_source_mutation_without_changing_state()
+        {
+            var fixedPath = Path.Combine(_temporaryDirectory, "ProjectSettings", "GameplayTags.json");
+            Directory.CreateDirectory(Path.GetDirectoryName(fixedPath)!);
+            File.WriteAllText(
+                fixedPath,
+                "{\"schemaVersion\":1,\"tags\":[{\"name\":\"game.keep\",\"comment\":\"\"}],"
+                + "\"redirects\":[]}",
+                new UTF8Encoding(false));
+            WriteExternalSource("ability.jump");
+            var controller = new GameplayTagCatalogWindowController(
+                fixedPath,
+                ResolveWithImportConflictProvider);
+            controller.Select("framework.external", "ABILITY.JUMP");
+            var before = controller.Session!.Serialize();
+
+            Assert.Throws<InvalidOperationException>(
+                () => controller.SetComment("framework.external", "ability.jump", "blocked"));
+
+            Assert.That(controller.Session!.Serialize(), Is.EqualTo(before));
+            Assert.That(controller.SelectedSourceId, Is.EqualTo("framework.external"));
+            Assert.That(controller.SelectedPath, Is.EqualTo("ability.jump"));
+            Assert.That(controller.IsDirty, Is.False);
+        }
+
         /// <summary>컨트롤러가 세그먼트 rename의 전체 반환 경로를 선택하고 dirty 상태가 되는지 검증합니다.</summary>
         [Test]
         public void Controller_selects_the_full_path_returned_by_segment_rename()
@@ -676,7 +743,7 @@ namespace Bun3.Gameplay.Unity.Tests
 
             controller.RenameSubtree("State.Dead", "Deceased");
 
-            Assert.That(controller.SelectedPath, Is.EqualTo("state.Deceased"));
+            Assert.That(controller.SelectedPath, Is.EqualTo("state.deceased"));
             Assert.That(controller.IsDirty, Is.True);
         }
 
@@ -686,7 +753,7 @@ namespace Bun3.Gameplay.Unity.Tests
         {
             var path = Path.Combine(_temporaryDirectory, "GameplayTags.json");
             File.WriteAllText(path,
-                "{\"schemaVersion\":1,\"tags\":[{\"name\":\"State.Dead\"}]," +
+                "{\"schemaVersion\":1,\"tags\":[{\"name\":\"State.Dead\",\"comment\":\"\"}]," +
                 "\"redirects\":[{\"from\":\"State.Killed\",\"to\":\"State.Dead\"}]}",
                 new UTF8Encoding(false, true));
             var controller = CreateController(path);
@@ -696,11 +763,11 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(controller.IsDirty, Is.False);
             Assert.That(controller.RemoveRedirects(new[] { "State.Killed" }), Is.EqualTo(1));
             Assert.That(controller.IsDirty, Is.True);
-            Assert.That(controller.SelectedPath, Is.EqualTo("State.Dead"));
+            Assert.That(controller.SelectedPath, Is.EqualTo("state.dead"));
             controller.Save();
 
             Assert.That(controller.IsDirty, Is.False);
-            Assert.That(File.ReadAllText(path), Does.Not.Contain("State.Killed"));
+            Assert.That(File.ReadAllText(path), Does.Not.Contain("state.killed"));
         }
 
         /// <summary>실패한 명령이 상태를 보존하고 검증 진단을 만드는지 검증합니다.</summary>
@@ -709,7 +776,8 @@ namespace Bun3.Gameplay.Unity.Tests
         {
             var path = Path.Combine(_temporaryDirectory, "GameplayTags.json");
             File.WriteAllText(path,
-                "{\"schemaVersion\":1,\"tags\":[{\"name\":\"State.Dead\"},{\"name\":\"State.Alive\"}]}",
+                "{\"schemaVersion\":1,\"tags\":[{\"name\":\"State.Dead\",\"comment\":\"\"},"
+                + "{\"name\":\"State.Alive\",\"comment\":\"\"}]}",
                 new UTF8Encoding(false, true));
             var controller = CreateController(path);
             var before = controller.Session!.Serialize();
@@ -722,7 +790,7 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(controller.Session!.Serialize(), Is.EqualTo(before));
             var diagnostic = GameplayTagValidationWindow.FormatDiagnostic(path, error!);
             Assert.That(diagnostic, Does.Contain(path));
-            Assert.That(diagnostic, Does.Contain("The destination path is already active."));
+            Assert.That(diagnostic, Does.Contain("The destination path is already active in the Game Source."));
         }
 
         /// <summary>카탈로그 예외가 없는 일반 예외는 최상위 메시지를 표시하는지 검증합니다.</summary>
@@ -745,7 +813,8 @@ namespace Bun3.Gameplay.Unity.Tests
             controller.Add("State.Dead");
             controller.Save();
             var sessionBefore = controller.Session;
-            var serializedBefore = sessionBefore!.Serialize();
+            var documentBefore = sessionBefore!.GameSource;
+            var serializedBefore = sessionBefore.Serialize();
             var selectedPathBefore = controller.SelectedPath;
             var dirtyBefore = controller.IsDirty;
 
@@ -760,9 +829,32 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(succeeded, Is.False);
             Assert.That(error, Is.TypeOf<InvalidOperationException>());
             Assert.That(controller.Session, Is.Not.SameAs(sessionBefore));
-            Assert.That(controller.Session!.Serialize(), Is.EqualTo(serializedBefore));
+            Assert.That(controller.Session!.GameSource, Is.SameAs(documentBefore));
+            Assert.That(controller.Session.Serialize(), Is.EqualTo(serializedBefore));
             Assert.That(controller.SelectedPath, Is.EqualTo(selectedPathBefore));
             Assert.That(controller.IsDirty, Is.EqualTo(dirtyBefore));
+        }
+
+        [Test]
+        public void Failure_after_a_successful_save_keeps_the_saved_source_clean()
+        {
+            var path = Path.Combine(_temporaryDirectory, "GameplayTags.json");
+            var controller = CreateController(path);
+            controller.Add("State.Dead");
+
+            var succeeded = controller.TryExecute(
+                () =>
+                {
+                    controller.Save();
+                    throw new InvalidOperationException("Development Catalog compile failed.");
+                },
+                out var error);
+
+            Assert.That(succeeded, Is.False);
+            Assert.That(error!.Message, Does.Contain("Development Catalog compile failed."));
+            Assert.That(controller.IsDirty, Is.False);
+            Assert.That(controller.Session!.Serialize(), Does.Contain("state.dead"));
+            Assert.That(File.ReadAllText(path), Does.Contain("state.dead"));
         }
 
         /// <summary>검증 진단에 JSON 경로, 줄, 위치가 포함되는지 검증합니다.</summary>
@@ -801,13 +893,13 @@ namespace Bun3.Gameplay.Unity.Tests
                 RefreshTree(window);
 
                 AssertTreeSelection(window, "state.dead.ghost");
-                Assert.That(controller.SelectedPath, Is.EqualTo("State.Dead.Ghost"));
+                Assert.That(controller.SelectedPath, Is.EqualTo("state.dead.ghost"));
 
                 controller.RenameSubtree("State.Dead", "Deceased");
                 RefreshTree(window);
 
                 AssertTreeSelection(window, "state.deceased");
-                Assert.That(controller.SelectedPath, Is.EqualTo("state.Deceased"));
+                Assert.That(controller.SelectedPath, Is.EqualTo("state.deceased"));
             }
             finally
             {
@@ -938,6 +1030,19 @@ namespace Bun3.Gameplay.Unity.Tests
                 + "\"redirects\":[{\"from\":\"legacy.path\",\"to\":\"game.target\"}]}",
                 new UTF8Encoding(false));
             return sourcePath;
+        }
+
+        private void WriteExternalSource(string tagPath)
+        {
+            var externalPath = Path.Combine(_temporaryDirectory, "ExternalTagSource.json");
+            File.WriteAllText(
+                externalPath,
+                "{\"schemaVersion\":1,\"source\":{\"id\":\"framework.external\","
+                + "\"displayName\":\"External\",\"kind\":\"packageJson\"},"
+                + "\"tags\":[{\"name\":\"" + tagPath + "\",\"comment\":\"package\"}],"
+                + "\"redirects\":[]}",
+                new UTF8Encoding(false));
+            ImportConflictProvider.ExternalSourceMetadataPathsValue = new[] { externalPath };
         }
 
         private static GameplayTagBuildContextResolution ResolveWithImportConflictProvider(string path) =>

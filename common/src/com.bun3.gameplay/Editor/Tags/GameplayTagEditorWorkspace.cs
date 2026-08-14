@@ -11,8 +11,10 @@ namespace Bun3.Gameplay.Editor.Tags
     public sealed class GameplayTagEditorWorkspace
     {
         private readonly IReadOnlyList<string> _diagnostics;
+        private readonly GameplayTagBuildContextResolution _resolution;
 
         private GameplayTagEditorWorkspace(
+            GameplayTagBuildContextResolution resolution,
             GameplayTagWorkspaceSnapshot? snapshot,
             GameplayTagCatalogEditSession? gameSession,
             string[] diagnostics,
@@ -20,6 +22,7 @@ namespace Bun3.Gameplay.Editor.Tags
             bool canEditGameSource,
             bool canBuildCatalog)
         {
+            _resolution = resolution ?? throw new ArgumentNullException(nameof(resolution));
             Snapshot = snapshot;
             GameSession = gameSession;
             _diagnostics = Array.AsReadOnly((string[])diagnostics.Clone());
@@ -62,17 +65,16 @@ namespace Bun3.Gameplay.Editor.Tags
             {
                 diagnostics.Add("B3TAG3101: Game Source is missing: " + gameSourcePath);
                 return Invalid(
+                    resolution,
                     diagnostics,
                     gameSession: null,
                     canCreateGameSource: true);
             }
 
             TagSourceDocument gameSource;
-            GameplayTagCatalogEditSession gameSession;
             try
             {
                 gameSource = GameplayTagCatalogFileAdapter.LoadGameSourceDocument(gameSourcePath);
-                gameSession = GameplayTagCatalogFileAdapter.CreateSession(gameSource);
             }
             catch (Exception exception) when (exception is IOException
                 || exception is UnauthorizedAccessException
@@ -81,12 +83,13 @@ namespace Bun3.Gameplay.Editor.Tags
                 diagnostics.Add("B3TAG3102: Invalid Game Source '" + gameSourcePath
                     + "': " + exception.Message);
                 return Invalid(
+                    resolution,
                     diagnostics,
                     gameSession: null,
                     canCreateGameSource: false);
             }
 
-            return Open(resolution, gameSource, gameSession);
+            return Open(resolution, gameSource);
         }
 
         internal static GameplayTagEditorWorkspace Open(
@@ -95,10 +98,18 @@ namespace Bun3.Gameplay.Editor.Tags
         {
             if (resolution is null) throw new ArgumentNullException(nameof(resolution));
             if (gameSource is null) throw new ArgumentNullException(nameof(gameSource));
+            var compileCandidate = CreateCandidateCompiler(resolution);
             return Open(
                 resolution,
                 gameSource,
-                GameplayTagCatalogFileAdapter.CreateSession(gameSource));
+                GameplayTagCatalogEditSession.Open(gameSource, compileCandidate));
+        }
+
+        internal GameplayTagEditorWorkspace WithGameSession(
+            GameplayTagCatalogEditSession gameSession)
+        {
+            if (gameSession is null) throw new ArgumentNullException(nameof(gameSession));
+            return Open(_resolution, gameSession.GameSource, gameSession);
         }
 
         private static GameplayTagEditorWorkspace Open(
@@ -113,6 +124,7 @@ namespace Bun3.Gameplay.Editor.Tags
                 if (!resolution.PermitsGameOnlyValidation)
                 {
                     return Invalid(
+                        resolution,
                         diagnostics,
                         gameSession,
                         canCreateGameSource: false);
@@ -123,6 +135,7 @@ namespace Bun3.Gameplay.Editor.Tags
                     new TagCatalogIdentity("game", "0.0.0-dev"));
                 AddCompilationDiagnostics(gameOnly.Diagnostics, diagnostics);
                 return new GameplayTagEditorWorkspace(
+                    resolution,
                     snapshot: null,
                     gameSession,
                     diagnostics.ToArray(),
@@ -137,6 +150,7 @@ namespace Bun3.Gameplay.Editor.Tags
             if (!compilation.Succeeded)
             {
                 return Invalid(
+                    resolution,
                     diagnostics,
                     gameSession,
                     canCreateGameSource: false);
@@ -147,6 +161,7 @@ namespace Bun3.Gameplay.Editor.Tags
                 compilation.Provenance!,
                 sources);
             return new GameplayTagEditorWorkspace(
+                resolution,
                 snapshot,
                 gameSession,
                 diagnostics.ToArray(),
@@ -182,6 +197,21 @@ namespace Bun3.Gameplay.Editor.Tags
             return result;
         }
 
+        private static Func<TagSourceDocument, TagCatalogCompilation> CreateCandidateCompiler(
+            GameplayTagBuildContextResolution resolution)
+        {
+            if (resolution.HasCompleteContext)
+            {
+                return candidate => TagCatalogCompiler.Compile(
+                    ReplaceGameSource(resolution.Context!.Sources, candidate),
+                    resolution.Context.Identity);
+            }
+
+            return candidate => TagCatalogCompiler.Compile(
+                new[] { candidate },
+                new TagCatalogIdentity("game", "0.0.0-dev"));
+        }
+
         private static void AddCompilationDiagnostics(
             IReadOnlyList<TagCatalogDiagnostic> source,
             List<string> destination)
@@ -195,10 +225,12 @@ namespace Bun3.Gameplay.Editor.Tags
         }
 
         private static GameplayTagEditorWorkspace Invalid(
+            GameplayTagBuildContextResolution resolution,
             List<string> diagnostics,
             GameplayTagCatalogEditSession? gameSession,
             bool canCreateGameSource) =>
             new GameplayTagEditorWorkspace(
+                resolution,
                 snapshot: null,
                 gameSession,
                 diagnostics.ToArray(),

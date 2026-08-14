@@ -1,11 +1,10 @@
 #nullable enable
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.IO;
 using System.Text;
 using Bun3.Gameplay.Tags;
-using Newtonsoft.Json;
+using Bun3.Gameplay.Tags.Catalog;
 using Newtonsoft.Json.Linq;
 
 namespace Bun3.Gameplay.Editor.Tags
@@ -36,144 +35,186 @@ namespace Bun3.Gameplay.Editor.Tags
 
     internal sealed class GameplayTagCatalogEditSession
     {
+        private readonly Func<TagSourceDocument, TagCatalogCompilation> _compileCandidate;
+        private TagSourceDocument _gameSource;
         private IReadOnlyList<EditableTagRow> _tags;
         private IReadOnlyList<EditableRedirectRow> _redirects;
         private string _serialized;
 
         private GameplayTagCatalogEditSession(
-            IReadOnlyList<EditableTagRow> tags,
-            IReadOnlyList<EditableRedirectRow> redirects,
-            string serialized)
+            TagSourceDocument gameSource,
+            Func<TagSourceDocument, TagCatalogCompilation> compileCandidate)
         {
-            _tags = tags;
-            _redirects = redirects;
-            _serialized = serialized;
+            _gameSource = gameSource;
+            _compileCandidate = compileCandidate;
+            _tags = CreateTagRows(gameSource.Tags);
+            _redirects = CreateRedirectRows(gameSource.Redirects);
+            _serialized = Serialize(gameSource);
         }
 
         internal IReadOnlyList<EditableTagRow> Tags => _tags;
 
         internal IReadOnlyList<EditableRedirectRow> Redirects => _redirects;
 
+        internal TagSourceDocument GameSource => _gameSource;
+
+        internal TagCatalogCompilation? LastCompilation { get; private set; }
+
+        internal static GameplayTagCatalogEditSession Open(
+            TagSourceDocument gameSource,
+            Func<TagSourceDocument, TagCatalogCompilation> compileCandidate)
+        {
+            if (gameSource is null) throw new ArgumentNullException(nameof(gameSource));
+            if (compileCandidate is null) throw new ArgumentNullException(nameof(compileCandidate));
+            if (gameSource.Descriptor.Kind != TagSourceKind.GameJson
+                || gameSource.Descriptor.IsReadOnly)
+            {
+                throw new ArgumentException("The edit session requires the writable Game Source.", nameof(gameSource));
+            }
+
+            return new GameplayTagCatalogEditSession(gameSource, compileCandidate);
+        }
+
         internal static GameplayTagCatalogEditSession Open(string json)
         {
             if (json is null) throw new ArgumentNullException(nameof(json));
-
-            Validate(json);
             var root = JObject.Parse(json);
-            var tags = new List<EditableTagRow>();
-            foreach (var token in (JArray)root["tags"]!)
+            if (root["redirects"] is null) root["redirects"] = new JArray();
+            if (root["tags"] is JArray tags)
             {
-                var row = (JObject)token;
-                tags.Add(new EditableTagRow(
-                    row.Value<string>("name")!,
-                    row.Value<string>("comment") ?? string.Empty));
-            }
-
-            var redirects = new List<EditableRedirectRow>();
-            var redirectTokens = root["redirects"] as JArray;
-            if (redirectTokens is not null)
-            {
-                foreach (var token in redirectTokens)
+                for (var index = 0; index < tags.Count; index++)
                 {
-                    var row = (JObject)token;
-                    redirects.Add(new EditableRedirectRow(
-                        row.Value<string>("from")!,
-                        row.Value<string>("to")!));
+                    if (tags[index] is JObject tag && tag["comment"] is null)
+                    {
+                        tag["comment"] = string.Empty;
+                    }
                 }
             }
 
-            return Create(tags, redirects);
+            using var stream = new MemoryStream(
+                new UTF8Encoding(false, true).GetBytes(root.ToString()));
+            var gameSource = TagSourceJson.LoadGame(stream, string.Empty);
+            return Open(
+                gameSource,
+                candidate => TagCatalogCompiler.Compile(
+                    new[] { candidate },
+                    new TagCatalogIdentity("game", "0.0.0-dev")));
         }
 
         internal void Add(string path, string comment = "")
         {
+            var canonical = RequireCanonical(path, nameof(path));
             Apply((tags, _) =>
             {
-                var canonical = RequireCanonical(path, nameof(path));
-                for (var i = 0; i < tags.Count; i++)
+                for (var index = 0; index < tags.Count; index++)
                 {
-                    if (Fold(tags[i].Name) == canonical)
+                    if (tags[index].Name == canonical)
                     {
                         throw new InvalidOperationException("The tag already has an authoring row.");
                     }
                 }
 
-                tags.Add(new EditableTagRow(path, comment ?? string.Empty));
+                tags.Add(new TagSourceTag(canonical, comment ?? string.Empty));
             });
         }
 
         internal void SetComment(string path, string comment)
         {
+            var canonical = RequireCanonical(path, nameof(path));
+            EnsureLocallyActive(canonical);
             Apply((tags, _) =>
             {
-                var canonical = RequireCanonical(path, nameof(path));
-                for (var i = 0; i < tags.Count; i++)
+                for (var index = 0; index < tags.Count; index++)
                 {
-                    if (Fold(tags[i].Name) == canonical)
-                    {
-                        tags[i] = new EditableTagRow(tags[i].Name, comment ?? string.Empty);
-                        return;
-                    }
-                }
-
-                var catalog = EnsureActive(path, canonical, out var tag);
-                tags.Add(new EditableTagRow(catalog.GetDisplayName(tag), comment ?? string.Empty));
-            });
-        }
-
-        internal string RenameSubtree(string path, string newSegment)
-        {
-            var renamedPath = string.Empty;
-            Apply((tags, redirects) =>
-            {
-                if (newSegment is null || newSegment.IndexOf('.') >= 0)
-                {
-                    throw new ArgumentException(
-                        "The new name must be one gameplay tag segment.", nameof(newSegment));
-                }
-
-                _ = RequireCanonical(newSegment, nameof(newSegment));
-
-                var oldCanonical = RequireCanonical(path, nameof(path));
-                var catalog = EnsureActive(path, oldCanonical, out var tag);
-                var oldDisplayPath = catalog.GetDisplayName(tag);
-                var separator = oldDisplayPath.LastIndexOf('.');
-                renamedPath = separator < 0
-                    ? newSegment
-                    : oldDisplayPath.Substring(0, separator + 1) + newSegment;
-                var newCanonical = RequireCanonical(renamedPath, nameof(newSegment));
-                var activePaths = GetActiveSubtreePaths(catalog, oldCanonical);
-
-                if (oldCanonical != newCanonical
-                    && catalog.TryGet(renamedPath, out var existingTag)
-                    && Fold(catalog.GetDisplayName(existingTag)) == newCanonical)
-                {
-                    throw new InvalidOperationException("The destination path is already active.");
-                }
-
-                RenameTagRows(tags, oldCanonical, oldDisplayPath, renamedPath);
-                if (oldCanonical == newCanonical)
-                {
+                    if (tags[index].Name != canonical) continue;
+                    tags[index] = new TagSourceTag(canonical, comment ?? string.Empty);
                     return;
                 }
 
-                for (var i = 0; i < redirects.Count; i++)
+                tags.Add(new TagSourceTag(canonical, comment ?? string.Empty));
+            });
+        }
+
+        internal GameplayTagRenameResult RenameSubtree(string path, string newSegment)
+        {
+            if (newSegment is null || newSegment.IndexOf('.') >= 0)
+            {
+                throw new ArgumentException(
+                    "The new name must be one gameplay tag segment.", nameof(newSegment));
+            }
+
+            var canonicalSegment = RequireCanonical(newSegment, nameof(newSegment));
+            var oldCanonical = RequireCanonical(path, nameof(path));
+            var activePaths = CollectActivePaths(_gameSource.Tags);
+            if (!activePaths.Contains(oldCanonical))
+            {
+                throw new InvalidOperationException("The path is not active in the Game Source.");
+            }
+
+            var separator = oldCanonical.LastIndexOf('.');
+            var newCanonical = separator < 0
+                ? canonicalSegment
+                : oldCanonical.Substring(0, separator + 1) + canonicalSegment;
+            if (oldCanonical == newCanonical)
+            {
+                return new GameplayTagRenameResult(newCanonical, Array.Empty<string>());
+            }
+
+            if (activePaths.Contains(newCanonical))
+            {
+                throw new InvalidOperationException("The destination path is already active in the Game Source.");
+            }
+
+            var renamedActivePaths = new List<string>();
+            foreach (var activePath in activePaths)
+            {
+                if (HasPrefix(activePath, oldCanonical)) renamedActivePaths.Add(activePath);
+            }
+
+            renamedActivePaths.Sort(StringComparer.Ordinal);
+            var compilation = Apply((tags, redirects) =>
+            {
+                for (var index = 0; index < tags.Count; index++)
                 {
-                    var redirect = redirects[i];
-                    redirects[i] = new EditableRedirectRow(
-                        redirect.From,
-                        RewritePrefix(redirect.To, oldCanonical, renamedPath));
+                    var tag = tags[index];
+                    if (!HasPrefix(tag.Name, oldCanonical)) continue;
+                    tags[index] = new TagSourceTag(
+                        RewritePrefix(tag.Name, oldCanonical, newCanonical),
+                        tag.Comment);
                 }
 
-                for (var i = 0; i < activePaths.Count; i++)
+                for (var index = 0; index < redirects.Count; index++)
                 {
-                    var activePath = activePaths[i];
-                    redirects.Add(new EditableRedirectRow(
-                        activePath,
-                        RewritePrefix(activePath, oldCanonical, renamedPath)));
+                    var redirect = redirects[index];
+                    redirects[index] = new TagSourceRedirect(
+                        redirect.From,
+                        RewritePrefix(redirect.To, oldCanonical, newCanonical));
                 }
+
+                UpsertRenameRedirects(redirects, renamedActivePaths, oldCanonical, newCanonical);
             });
-            return renamedPath;
+
+            var shadowed = new List<string>();
+            for (var diagnosticIndex = 0;
+                diagnosticIndex < compilation.Diagnostics.Count;
+                diagnosticIndex++)
+            {
+                var diagnostic = compilation.Diagnostics[diagnosticIndex];
+                if (diagnostic.Severity != TagCatalogDiagnosticSeverity.Warning
+                    || diagnostic.Code != "B3TAG2001"
+                    || !renamedActivePaths.Contains(diagnostic.CanonicalPath))
+                {
+                    continue;
+                }
+
+                if (!shadowed.Contains(diagnostic.CanonicalPath))
+                {
+                    shadowed.Add(diagnostic.CanonicalPath);
+                }
+            }
+
+            shadowed.Sort(StringComparer.Ordinal);
+            return new GameplayTagRenameResult(newCanonical, shadowed);
         }
 
         internal int RemoveRedirects(IReadOnlyCollection<string> sources)
@@ -190,10 +231,10 @@ namespace Bun3.Gameplay.Editor.Tags
             var removed = 0;
             Apply((_, redirects) =>
             {
-                for (var i = redirects.Count - 1; i >= 0; i--)
+                for (var index = redirects.Count - 1; index >= 0; index--)
                 {
-                    if (!requested.Contains(Fold(redirects[i].From))) continue;
-                    redirects.RemoveAt(i);
+                    if (!requested.Contains(redirects[index].From)) continue;
+                    redirects.RemoveAt(index);
                     removed++;
                 }
 
@@ -205,46 +246,123 @@ namespace Bun3.Gameplay.Editor.Tags
             return removed;
         }
 
-        internal void Delete(string path, bool includeDescendants)
+        internal void DeleteExact(string path)
         {
-            Apply((tags, redirects) =>
+            var canonical = RequireCanonical(path, nameof(path));
+            Apply((tags, _) =>
             {
-                var canonical = RequireCanonical(path, nameof(path));
-                var catalog = EnsureActive(path, canonical, out _);
-                var activePaths = GetActiveSubtreePaths(catalog, canonical);
-                if (!includeDescendants && activePaths.Count > 1)
+                for (var index = 0; index < tags.Count; index++)
                 {
-                    throw new InvalidOperationException("The tag has descendants.");
+                    if (tags[index].Name != canonical) continue;
+                    tags.RemoveAt(index);
+                    return;
                 }
 
-                for (var i = tags.Count - 1; i >= 0; i--)
-                {
-                    if (HasPrefix(Fold(tags[i].Name), canonical))
-                    {
-                        tags.RemoveAt(i);
-                    }
-                }
-
-                // 삭제로 암시 부모까지 사라질 수 있으므로 남은 활성 경로를 다시 만들어
-                // target이 더 이상 활성이 아닌 redirect를 모두 같은 트랜잭션에서 지운다.
-                var survivors = CollectActivePaths(tags);
-                for (var i = redirects.Count - 1; i >= 0; i--)
-                {
-                    if (!survivors.Contains(Fold(redirects[i].To)))
-                    {
-                        redirects.RemoveAt(i);
-                    }
-                }
+                throw new InvalidOperationException(
+                    "The path is not an explicit tag in the Game Source.");
             });
         }
 
-        /// <summary>남은 작성 행에서 암시 부모를 포함한 활성 canonical 경로를 모읍니다.</summary>
-        private static HashSet<string> CollectActivePaths(List<EditableTagRow> tags)
+        internal void Delete(string path, bool includeDescendants)
+        {
+            if (includeDescendants)
+            {
+                throw new InvalidOperationException("Subtree deletion is not supported; delete one explicit tag.");
+            }
+
+            DeleteExact(path);
+        }
+
+        internal string Serialize() => _serialized;
+
+        internal GameplayTagCatalogEditSession Restore(TagSourceDocument gameSource) =>
+            Open(gameSource, _compileCandidate);
+
+        internal static string Canonicalize(string path, string parameterName) =>
+            RequireCanonical(path, parameterName);
+
+        private TagCatalogCompilation Apply(
+            Action<List<TagSourceTag>, List<TagSourceRedirect>> mutation)
+        {
+            var tags = new List<TagSourceTag>(_gameSource.Tags.Count);
+            for (var index = 0; index < _gameSource.Tags.Count; index++)
+            {
+                var tag = _gameSource.Tags[index];
+                tags.Add(new TagSourceTag(tag.Name, tag.Comment));
+            }
+
+            var redirects = new List<TagSourceRedirect>(_gameSource.Redirects.Count);
+            for (var index = 0; index < _gameSource.Redirects.Count; index++)
+            {
+                var redirect = _gameSource.Redirects[index];
+                redirects.Add(new TagSourceRedirect(redirect.From, redirect.To));
+            }
+
+            mutation(tags, redirects);
+            var candidate = new TagSourceDocument(
+                _gameSource.Descriptor,
+                _gameSource.Origin,
+                tags,
+                redirects);
+            var compilation = _compileCandidate(candidate)
+                ?? throw new InvalidOperationException("The Workspace compiler returned no result.");
+            if (!compilation.Succeeded)
+            {
+                throw CreateCompilationException(compilation.Diagnostics);
+            }
+
+            _gameSource = candidate;
+            _tags = CreateTagRows(candidate.Tags);
+            _redirects = CreateRedirectRows(candidate.Redirects);
+            _serialized = Serialize(candidate);
+            LastCompilation = compilation;
+            return compilation;
+        }
+
+        private void EnsureLocallyActive(string canonical)
+        {
+            if (!CollectActivePaths(_gameSource.Tags).Contains(canonical))
+            {
+                throw new InvalidOperationException("The path is not active in the Game Source.");
+            }
+        }
+
+        private static void UpsertRenameRedirects(
+            List<TagSourceRedirect> redirects,
+            List<string> activePaths,
+            string oldPrefix,
+            string newPrefix)
+        {
+            var indices = new Dictionary<string, int>(StringComparer.Ordinal);
+            for (var index = 0; index < redirects.Count; index++)
+            {
+                indices[redirects[index].From] = index;
+            }
+
+            for (var index = 0; index < activePaths.Count; index++)
+            {
+                var from = activePaths[index];
+                var replacement = new TagSourceRedirect(
+                    from,
+                    RewritePrefix(from, oldPrefix, newPrefix));
+                if (indices.TryGetValue(from, out var existingIndex))
+                {
+                    redirects[existingIndex] = replacement;
+                }
+                else
+                {
+                    indices.Add(from, redirects.Count);
+                    redirects.Add(replacement);
+                }
+            }
+        }
+
+        private static HashSet<string> CollectActivePaths(IReadOnlyList<TagSourceTag> tags)
         {
             var active = new HashSet<string>(StringComparer.Ordinal);
-            for (var i = 0; i < tags.Count; i++)
+            for (var index = 0; index < tags.Count; index++)
             {
-                var canonical = Fold(tags[i].Name);
+                var canonical = tags[index].Name;
                 active.Add(canonical);
                 for (var separator = canonical.LastIndexOf('.');
                     separator > 0;
@@ -257,218 +375,95 @@ namespace Bun3.Gameplay.Editor.Tags
             return active;
         }
 
-        internal string Serialize() => _serialized;
-
-        private void Apply(Action<List<EditableTagRow>, List<EditableRedirectRow>> mutation)
+        private static IReadOnlyList<EditableTagRow> CreateTagRows(
+            IReadOnlyList<TagSourceTag> tags)
         {
-            var tags = new List<EditableTagRow>(_tags);
-            var redirects = new List<EditableRedirectRow>(_redirects);
-            mutation(tags, redirects);
-
-            GameplayTagCatalogEditSession candidate;
-            try
+            var rows = new EditableTagRow[tags.Count];
+            for (var index = 0; index < rows.Length; index++)
             {
-                candidate = Create(tags, redirects);
-            }
-            catch (TagCatalogException exception)
-            {
-                throw new InvalidOperationException("The edit would create an invalid tag catalog.", exception);
+                rows[index] = new EditableTagRow(tags[index].Name, tags[index].Comment);
             }
 
-            _tags = candidate._tags;
-            _redirects = candidate._redirects;
-            _serialized = candidate._serialized;
+            Array.Sort(rows, (left, right) => StringComparer.Ordinal.Compare(left.Name, right.Name));
+            return Array.AsReadOnly(rows);
         }
 
-        private static GameplayTagCatalogEditSession Create(
-            List<EditableTagRow> tags,
-            List<EditableRedirectRow> redirects)
+        private static IReadOnlyList<EditableRedirectRow> CreateRedirectRows(
+            IReadOnlyList<TagSourceRedirect> redirects)
         {
-            var serialized = Serialize(tags, redirects);
-            Validate(serialized);
-            return new GameplayTagCatalogEditSession(
-                Array.AsReadOnly(tags.ToArray()),
-                Array.AsReadOnly(redirects.ToArray()),
-                serialized);
-        }
-
-        private static void Validate(string json)
-        {
-            using var stream = new MemoryStream(new UTF8Encoding(false, true).GetBytes(json));
-#pragma warning disable CS0618 // Editor authoring JSON 검증 경로입니다.
-            TagCatalog.Load(stream);
-#pragma warning restore CS0618
-        }
-
-        private TagCatalog EnsureActive(string path, string canonical, out GameplayTag tag)
-        {
-            using var stream = new MemoryStream(new UTF8Encoding(false, true).GetBytes(_serialized));
-#pragma warning disable CS0618 // Editor authoring JSON preview 경로입니다.
-            var catalog = TagCatalog.Load(stream);
-#pragma warning restore CS0618
-            if (!catalog.TryGet(path, out tag)
-                || Fold(catalog.GetDisplayName(tag)) != canonical)
+            var rows = new EditableRedirectRow[redirects.Count];
+            for (var index = 0; index < rows.Length; index++)
             {
-                throw new InvalidOperationException("The path does not name an active tag.");
+                rows[index] = new EditableRedirectRow(redirects[index].From, redirects[index].To);
             }
 
-            return catalog;
+            Array.Sort(rows, (left, right) => StringComparer.Ordinal.Compare(left.From, right.From));
+            return Array.AsReadOnly(rows);
         }
 
-        private static List<string> GetActiveSubtreePaths(TagCatalog catalog, string canonical)
+        private static InvalidOperationException CreateCompilationException(
+            IReadOnlyList<TagCatalogDiagnostic> diagnostics)
         {
-            var paths = new List<string>();
-            for (var index = 1; index <= catalog.Count; index++)
+            var message = new StringBuilder("The edit would create an invalid tag catalog.");
+            for (var index = 0; index < diagnostics.Count; index++)
             {
-                var path = catalog.GetDisplayName(catalog.GetRequiredByIndex(checked((ushort)index)));
-                if (HasPrefix(Fold(path), canonical))
+                var diagnostic = diagnostics[index];
+                message.Append(Environment.NewLine);
+                message.Append(diagnostic.Code);
+                message.Append(": ");
+                message.Append(diagnostic.Message);
+                if (diagnostic.SourceId.Length > 0)
                 {
-                    paths.Add(path);
+                    message.Append(" [");
+                    message.Append(diagnostic.SourceId);
+                    message.Append(']');
+                }
+
+                if (diagnostic.CanonicalPath.Length > 0)
+                {
+                    message.Append(" (");
+                    message.Append(diagnostic.CanonicalPath);
+                    message.Append(')');
                 }
             }
 
-            return paths;
+            return new InvalidOperationException(message.ToString());
         }
 
-        private static void RenameTagRows(
-            List<EditableTagRow> tags,
-            string oldCanonical,
-            string oldPath,
-            string newPath)
-        {
-            for (var i = 0; i < tags.Count; i++)
-            {
-                var tag = tags[i];
-                if (HasPrefix(Fold(tag.Name), oldCanonical))
-                {
-                    tags[i] = new EditableTagRow(
-                        newPath + tag.Name.Substring(oldPath.Length),
-                        tag.Comment);
-                }
-            }
-        }
-
-        private static string RewritePrefix(string path, string oldCanonical, string newPath)
-        {
-            return HasPrefix(Fold(path), oldCanonical)
-                ? newPath + path.Substring(oldCanonical.Length)
+        private static string RewritePrefix(string path, string oldPrefix, string newPrefix) =>
+            HasPrefix(path, oldPrefix)
+                ? newPrefix + path.Substring(oldPrefix.Length)
                 : path;
-        }
 
-        private static bool HasPrefix(string value, string prefix)
-        {
-            return value == prefix
-                || (value.Length > prefix.Length
-                    && value.StartsWith(prefix, StringComparison.Ordinal)
-                    && value[prefix.Length] == '.');
-        }
+        private static bool HasPrefix(string value, string prefix) =>
+            value == prefix
+            || (value.Length > prefix.Length
+                && value.StartsWith(prefix, StringComparison.Ordinal)
+                && value[prefix.Length] == '.');
 
         private static string RequireCanonical(string path, string parameterName)
         {
-            if (path is null || !TryFold(path, out var canonical))
+            if (path is null)
             {
                 throw new ArgumentException("The path must be a valid gameplay tag.", parameterName);
             }
 
-            return canonical;
+            try
+            {
+                return new TagSourceTag(path, string.Empty).Name;
+            }
+            catch (ArgumentException exception)
+            {
+                throw new ArgumentException(
+                    "The path must be a valid gameplay tag.", parameterName, exception);
+            }
         }
 
-        private static string Fold(string value)
+        private static string Serialize(TagSourceDocument gameSource)
         {
-            if (!TryFold(value, out var canonical))
-            {
-                throw new InvalidOperationException("An authoring row contains an invalid gameplay tag.");
-            }
-
-            return canonical;
-        }
-
-        private static bool TryFold(string value, out string canonical)
-        {
-            canonical = string.Empty;
-            if (value.Length == 0 || value.Length > 255) return false;
-
-            var chars = value.ToCharArray();
-            var depth = 1;
-            var segmentLength = 0;
-            for (var i = 0; i < chars.Length; i++)
-            {
-                var character = chars[i];
-                if (character == '.')
-                {
-                    if (segmentLength == 0 || ++depth > 16) return false;
-                    segmentLength = 0;
-                    continue;
-                }
-
-                if (!((character >= 'a' && character <= 'z')
-                    || (character >= 'A' && character <= 'Z')
-                    || (character >= '0' && character <= '9')))
-                {
-                    return false;
-                }
-
-                if (character >= 'A' && character <= 'Z')
-                {
-                    chars[i] = (char)(character + ('a' - 'A'));
-                }
-
-                segmentLength++;
-            }
-
-            if (segmentLength == 0) return false;
-            canonical = new string(chars);
-            return true;
-        }
-
-        private static string Serialize(
-            List<EditableTagRow> tags,
-            List<EditableRedirectRow> redirects)
-        {
-            tags.Sort((left, right) => StringComparer.Ordinal.Compare(Fold(left.Name), Fold(right.Name)));
-            redirects.Sort((left, right) => StringComparer.Ordinal.Compare(Fold(left.From), Fold(right.From)));
-
-            using var stringWriter = new StringWriter(CultureInfo.InvariantCulture) { NewLine = "\n" };
-            using (var writer = new JsonTextWriter(stringWriter)
-            {
-                Formatting = Formatting.Indented,
-                Indentation = 2,
-                IndentChar = ' ',
-            })
-            {
-                writer.WriteStartObject();
-                writer.WritePropertyName("schemaVersion");
-                writer.WriteValue(1);
-                writer.WritePropertyName("tags");
-                writer.WriteStartArray();
-                for (var i = 0; i < tags.Count; i++)
-                {
-                    writer.WriteStartObject();
-                    writer.WritePropertyName("name");
-                    writer.WriteValue(tags[i].Name);
-                    writer.WritePropertyName("comment");
-                    writer.WriteValue(tags[i].Comment);
-                    writer.WriteEndObject();
-                }
-
-                writer.WriteEndArray();
-                writer.WritePropertyName("redirects");
-                writer.WriteStartArray();
-                for (var i = 0; i < redirects.Count; i++)
-                {
-                    writer.WriteStartObject();
-                    writer.WritePropertyName("from");
-                    writer.WriteValue(redirects[i].From);
-                    writer.WritePropertyName("to");
-                    writer.WriteValue(redirects[i].To);
-                    writer.WriteEndObject();
-                }
-
-                writer.WriteEndArray();
-                writer.WriteEndObject();
-            }
-
-            return stringWriter.ToString() + "\n";
+            using var stream = new MemoryStream();
+            TagSourceJson.WriteGame(stream, gameSource);
+            return new UTF8Encoding(false, true).GetString(stream.ToArray());
         }
     }
 }
