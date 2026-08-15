@@ -34,6 +34,7 @@
     <Compile Remove="Editor/**/*.cs" />
     <Compile Remove="Tests/**/*.cs" />
     <Compile Remove="Catalog/**/*.cs" />
+    <Compile Remove="Unity/**/*.cs" />
   </ItemGroup>
 
   <PropertyGroup>

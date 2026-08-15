@@ -1,0 +1,14 @@
+{
+  "name": "Bun3.Gameplay.Unity",
+  "rootNamespace": "Bun3.Gameplay",
+  "references": ["Bun3.Gameplay"],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}
