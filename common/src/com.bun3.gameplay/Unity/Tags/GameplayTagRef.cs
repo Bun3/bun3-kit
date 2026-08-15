@@ -17,9 +17,17 @@ namespace Bun3.Gameplay.Tags
 
         /// <summary>새 reference를 만들고 입력 경로를 canonical 소문자로 정규화합니다.</summary>
         /// <param name="path">저장할 태그 경로입니다.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="path"/>가 null인 경우입니다.</exception>
         /// <exception cref="ArgumentException">태그 경로 문법이 올바르지 않은 경우입니다.</exception>
         public GameplayTagRef(string path)
         {
+            if (path is null) throw new ArgumentNullException(nameof(path));
+            if (path.Length == 0)
+            {
+                _path = string.Empty;
+                return;
+            }
+
             if (!TagName.TryFold(path, out var canonical))
             {
                 throw new ArgumentException("태그 경로 문법이 올바르지 않습니다.", nameof(path));

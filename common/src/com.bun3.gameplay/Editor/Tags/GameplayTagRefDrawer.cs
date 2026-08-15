@@ -13,6 +13,7 @@ namespace Bun3.Gameplay.Editor.Tags
         private const float ClearButtonWidth = 22f;
         private const float Spacing = 2f;
 
+        /// <inheritdoc />
         public override void OnGUI(Rect position, SerializedProperty property, GUIContent label)
         {
             if (property is null) throw new ArgumentNullException(nameof(property));

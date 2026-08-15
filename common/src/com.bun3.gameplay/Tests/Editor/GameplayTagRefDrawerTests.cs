@@ -122,15 +122,7 @@ namespace Bun3.Gameplay.Unity.Tests
         [Test]
         public void Invalid_workspace_keeps_raw_text_and_reports_a_warning()
         {
-            var valid = GameplayTagDevelopmentCatalogTests.CreateValidWorkspace(
-                "tag-ref-invalid-workspace", "ability.attack");
-            var game = valid.Snapshot!.Sources.Single(source => source.Descriptor.SourceId == "game");
-            var invalid = GameplayTagEditorWorkspace.Open(
-                new GameplayTagBuildContextResolution(
-                    null,
-                    new[] { "B3TAG3003: package Source is malformed" },
-                    permitsGameOnlyValidation: false),
-                game);
+            var invalid = CreateInvalidWorkspace();
 
             var state = GameplayTagRefFieldState.Describe("Legacy.Raw.Value", isMixed: false, invalid);
 
@@ -138,6 +130,25 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(state.HasWarning, Is.True);
             Assert.That(state.CanSelect, Is.False);
             Assert.That(state.Tooltip, Does.Contain("B3TAG3003"));
+        }
+
+        /// <summary>잘못된 Workspace가 None 경고를 만들거나 raw 문법 경고를 가리지 않는지 검증합니다.</summary>
+        [Test]
+        public void Invalid_workspace_preserves_none_and_malformed_raw_states()
+        {
+            var invalid = CreateInvalidWorkspace();
+
+            var none = GameplayTagRefFieldState.Describe(string.Empty, isMixed: false, invalid);
+            var malformed = GameplayTagRefFieldState.Describe("Legacy..Broken", isMixed: false, invalid);
+
+            Assert.That(none.DisplayText, Is.EqualTo("None"));
+            Assert.That(none.HasWarning, Is.False);
+            Assert.That(none.CanSelect, Is.False);
+            Assert.That(none.Tooltip, Does.Contain("참조하지"));
+            Assert.That(malformed.DisplayText, Is.EqualTo("Legacy..Broken"));
+            Assert.That(malformed.HasWarning, Is.True);
+            Assert.That(malformed.CanSelect, Is.False);
+            Assert.That(malformed.Tooltip, Does.Contain("문법"));
         }
 
         /// <summary>cache 만료 후 현재 invalid Workspace가 이전 정상 snapshot을 대체하는지 검증합니다.</summary>
@@ -186,6 +197,19 @@ namespace Bun3.Gameplay.Unity.Tests
             serialized.FindProperty("_tag").FindPropertyRelative("_path").stringValue = path;
             serialized.ApplyModifiedPropertiesWithoutUndo();
             return host;
+        }
+
+        private static GameplayTagEditorWorkspace CreateInvalidWorkspace()
+        {
+            var valid = GameplayTagDevelopmentCatalogTests.CreateValidWorkspace(
+                "tag-ref-invalid-workspace", "ability.attack");
+            var game = valid.Snapshot!.Sources.Single(source => source.Descriptor.SourceId == "game");
+            return GameplayTagEditorWorkspace.Open(
+                new GameplayTagBuildContextResolution(
+                    null,
+                    new[] { "B3TAG3003: package Source is malformed" },
+                    permitsGameOnlyValidation: false),
+                game);
         }
 
         private sealed class TagRefHost : ScriptableObject

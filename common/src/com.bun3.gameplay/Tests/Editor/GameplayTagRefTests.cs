@@ -38,6 +38,21 @@ namespace Bun3.Gameplay.Unity.Tests
                 Is.EqualTo(GameplayTag.None));
         }
 
+        /// <summary>빈 문자열로 만든 reference가 None과 같은 값으로 동작하는지 검증합니다.</summary>
+        [Test]
+        public void Empty_string_constructor_creates_none()
+        {
+            var catalog = CreateCatalog("ability.attack");
+            var reference = new GameplayTagRef(string.Empty);
+
+            Assert.That(reference.Path, Is.Empty);
+            Assert.That(reference.IsEmpty, Is.True);
+            Assert.That(reference, Is.EqualTo(GameplayTagRef.None));
+            Assert.That(reference.TryResolve(catalog, out var tag), Is.True);
+            Assert.That(tag, Is.EqualTo(GameplayTag.None));
+            Assert.That(reference.ResolveRequired(catalog), Is.EqualTo(GameplayTag.None));
+        }
+
         /// <summary>등록 경로와 미등록 경로가 현재 Catalog에서 정확히 구분되는지 검증합니다.</summary>
         [Test]
         public void Resolve_uses_the_supplied_catalog()
@@ -57,8 +72,8 @@ namespace Bun3.Gameplay.Unity.Tests
         [Test]
         public void Constructor_rejects_invalid_tag_syntax()
         {
+            Assert.Throws<ArgumentNullException>(() => new GameplayTagRef(null!));
             Assert.Throws<ArgumentException>(() => new GameplayTagRef("bad..tag"));
-            Assert.Throws<ArgumentException>(() => new GameplayTagRef(string.Empty));
         }
 
         /// <summary>기존 자산의 잘못된 raw 문자열을 변경하지 않고 resolve만 실패하는지 검증합니다.</summary>

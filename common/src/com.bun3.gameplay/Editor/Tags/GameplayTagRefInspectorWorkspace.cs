@@ -98,13 +98,7 @@ namespace Bun3.Gameplay.Editor.Tags
             if (workspace is null) throw new ArgumentNullException(nameof(workspace));
 
             var displayText = isMixed ? "—" : rawPath.Length == 0 ? "None" : rawPath;
-            if (!workspace.CanBuildCatalog || workspace.Snapshot is null)
-            {
-                var tooltip = workspace.Diagnostics.Count == 0
-                    ? "현재 GameplayTag Workspace가 유효하지 않습니다."
-                    : string.Join(Environment.NewLine, workspace.Diagnostics);
-                return new GameplayTagRefFieldState(displayText, tooltip, true, false);
-            }
+            var canSelect = workspace.CanBuildCatalog && workspace.Snapshot is not null;
 
             if (isMixed)
             {
@@ -112,12 +106,16 @@ namespace Bun3.Gameplay.Editor.Tags
                     displayText,
                     "선택한 객체에 서로 다른 GameplayTag 값이 있습니다.",
                     false,
-                    true);
+                    canSelect);
             }
 
             if (rawPath.Length == 0)
             {
-                return new GameplayTagRefFieldState("None", "GameplayTag를 참조하지 않습니다.", false, true);
+                return new GameplayTagRefFieldState(
+                    "None",
+                    "GameplayTag를 참조하지 않습니다.",
+                    false,
+                    canSelect);
             }
 
             if (!TagName.TryFold(rawPath, out _))
@@ -126,10 +124,18 @@ namespace Bun3.Gameplay.Editor.Tags
                     displayText,
                     "직렬화된 GameplayTag 경로 문법이 올바르지 않습니다.",
                     true,
-                    true);
+                    canSelect);
             }
 
-            if (!workspace.Snapshot.Catalog.TryGet(rawPath, out _))
+            if (!canSelect)
+            {
+                var tooltip = workspace.Diagnostics.Count == 0
+                    ? "현재 GameplayTag Workspace가 유효하지 않습니다."
+                    : string.Join(Environment.NewLine, workspace.Diagnostics);
+                return new GameplayTagRefFieldState(displayText, tooltip, true, false);
+            }
+
+            if (!workspace.Snapshot!.Catalog.TryGet(rawPath, out _))
             {
                 return new GameplayTagRefFieldState(
                     displayText,
