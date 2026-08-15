@@ -11,3 +11,8 @@ server/**/obj/
 
 # 테스트 러너 산출물(blame 덤프 등)
 TestResults/
+
+# Local design and validation artifacts
+/.superpowers/brainstorm/
+/artifacts/
+/unity/TestResult/
