@@ -142,7 +142,7 @@ namespace Bun3.Gameplay.Unity.Tests
                 Assert.That(selected.text, Is.EqualTo("jump"));
                 Assert.That(selected.image, Is.SameAs(selectedIcon));
                 Assert.That(ordinary.image, Is.Null);
-                Assert.That(fallback.text, Does.StartWith("??"));
+                Assert.That(fallback.text, Is.EqualTo("\u2713 jump"));
                 Assert.That(GameplayTagPickerTreeView.CreateSourceContent(row).text, Is.EqualTo("1 source"));
             }
             finally
@@ -169,6 +169,18 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(rects.SourceRect.xMax, Is.EqualTo(280f));
             Assert.That(rects.SourceRect.width, Is.EqualTo(56f));
             Assert.That(rects.NameRect.xMax + 8f, Is.EqualTo(rects.SourceRect.xMin));
+            Assert.That(rects.NameRect.Overlaps(rects.SourceRect), Is.False);
+        }
+
+        [Test]
+        public void Picker_row_geometry_clamps_source_column_when_row_is_narrower_than_source_and_spacing()
+        {
+            var rects = GameplayTagPickerRowGeometry.Calculate(
+                new Rect(40f, 8f, 40f, 18f), sourceWidth: 56f, spacing: 8f);
+
+            Assert.That(rects.SourceRect.xMax, Is.EqualTo(80f));
+            Assert.That(rects.SourceRect.width, Is.EqualTo(40f));
+            Assert.That(rects.NameRect.width, Is.EqualTo(0f));
             Assert.That(rects.NameRect.Overlaps(rects.SourceRect), Is.False);
         }
 

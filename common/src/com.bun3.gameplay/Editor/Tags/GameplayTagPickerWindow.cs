@@ -96,7 +96,7 @@ namespace Bun3.Gameplay.Editor.Tags
             var tooltip = row.CanonicalPath + "\n" + row.SourceDetails;
             if (!isCurrent) return new GUIContent(row.DisplaySegment, tooltip);
             return checkImage is null
-                ? new GUIContent("??" + row.DisplaySegment, tooltip)
+                ? new GUIContent("\u2713 " + row.DisplaySegment, tooltip)
                 : new GUIContent(row.DisplaySegment, checkImage, tooltip);
         }
 
