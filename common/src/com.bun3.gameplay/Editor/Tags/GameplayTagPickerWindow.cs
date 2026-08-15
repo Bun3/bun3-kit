@@ -8,9 +8,41 @@ using UnityEngine;
 
 namespace Bun3.Gameplay.Editor.Tags
 {
+    internal readonly struct GameplayTagPickerRowRects
+    {
+        internal GameplayTagPickerRowRects(Rect nameRect, Rect sourceRect)
+        {
+            NameRect = nameRect;
+            SourceRect = sourceRect;
+        }
+
+        internal Rect NameRect { get; }
+        internal Rect SourceRect { get; }
+    }
+
+    internal static class GameplayTagPickerRowGeometry
+    {
+        internal static GameplayTagPickerRowRects Calculate(
+            Rect labelRect,
+            float sourceWidth,
+            float spacing)
+        {
+            var safeSourceWidth = Math.Min(Math.Max(0f, sourceWidth), labelRect.width);
+            var sourceRect = new Rect(
+                labelRect.xMax - safeSourceWidth,
+                labelRect.y,
+                safeSourceWidth,
+                labelRect.height);
+            var nameWidth = Math.Max(0f, sourceRect.xMin - spacing - labelRect.xMin);
+            var nameRect = new Rect(labelRect.x, labelRect.y, nameWidth, labelRect.height);
+            return new GameplayTagPickerRowRects(nameRect, sourceRect);
+        }
+    }
+
     internal sealed class GameplayTagPickerTreeView : GameplayTagProjectionTreeView<GameplayTagPickerRow>
     {
         internal event Action<string>? PathSelected;
+        private string _currentCanonicalPath = string.Empty;
 
         internal GameplayTagPickerTreeView(TreeViewState state)
             : base(state)
@@ -35,6 +67,7 @@ namespace Bun3.Gameplay.Editor.Tags
         internal void SynchronizeSelection(string canonicalPath)
         {
             if (canonicalPath is null) throw new ArgumentNullException(nameof(canonicalPath));
+            SetCurrentPath(canonicalPath);
             if (canonicalPath.Length == 0)
             {
                 SetSelection(Array.Empty<int>(), TreeViewSelectionOptions.None);
@@ -47,16 +80,53 @@ namespace Bun3.Gameplay.Editor.Tags
                 StringComparison.OrdinalIgnoreCase));
         }
 
-        internal static GUIContent CreateLabelContent(GameplayTagPickerRow row)
+        internal void SetCurrentPath(string canonicalPath)
         {
-            var sourceLabel = row.SourceCount == 1 ? " source" : " sources";
-            var text = row.DisplaySegment + "  " + row.SourceCount + sourceLabel;
+            _currentCanonicalPath = canonicalPath ?? throw new ArgumentNullException(nameof(canonicalPath));
+        }
+
+        internal bool IsCurrent(GameplayTagPickerRow row) =>
+            string.Equals(row.CanonicalPath, _currentCanonicalPath, StringComparison.OrdinalIgnoreCase);
+
+        internal static GUIContent CreateNameContent(
+            GameplayTagPickerRow row,
+            bool isCurrent,
+            Texture? checkImage)
+        {
             var tooltip = row.CanonicalPath + "\n" + row.SourceDetails;
-            return new GUIContent(text, tooltip);
+            if (!isCurrent) return new GUIContent(row.DisplaySegment, tooltip);
+            return checkImage is null
+                ? new GUIContent("??" + row.DisplaySegment, tooltip)
+                : new GUIContent(row.DisplaySegment, checkImage, tooltip);
+        }
+
+        internal static GUIContent CreateSourceContent(GameplayTagPickerRow row)
+        {
+            var suffix = row.SourceCount == 1 ? " source" : " sources";
+            return new GUIContent(
+                row.SourceCount + suffix,
+                row.CanonicalPath + "\n" + row.SourceDetails);
         }
 
         protected override GUIContent CreateRowContent(GameplayTagPickerRow row) =>
-            CreateLabelContent(row);
+            CreateNameContent(row, IsCurrent(row), checkImage: null);
+
+        protected override void RowGUI(RowGUIArgs args)
+        {
+            if (!TryGetRow(args.item.id, out var row))
+            {
+                base.RowGUI(args);
+                return;
+            }
+
+            var labelRect = CalculateLabelRect(args.item, args.rowRect);
+            var sourceContent = CreateSourceContent(row);
+            var sourceWidth = EditorStyles.miniLabel.CalcSize(sourceContent).x;
+            var rects = GameplayTagPickerRowGeometry.Calculate(labelRect, sourceWidth, 8f);
+            var checkImage = EditorGUIUtility.IconContent("TestPassed").image;
+            GUI.Label(rects.NameRect, CreateNameContent(row, IsCurrent(row), checkImage));
+            GUI.Label(rects.SourceRect, sourceContent, EditorStyles.miniLabel);
+        }
 
         protected override void RowSelected(GameplayTagPickerRow row) =>
             PathSelected?.Invoke(row.CanonicalPath);
@@ -302,6 +372,7 @@ namespace Bun3.Gameplay.Editor.Tags
         private void ApplySelection(string canonicalPath, bool closeWindow)
         {
             _currentRawValue = canonicalPath;
+            _treeView?.SetCurrentPath(canonicalPath);
             _onSelected!(canonicalPath);
             if (closeWindow) Close();
         }

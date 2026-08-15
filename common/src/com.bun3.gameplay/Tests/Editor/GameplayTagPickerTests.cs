@@ -29,7 +29,7 @@ namespace Bun3.Gameplay.Unity.Tests
                     new TagSourceTag("ability.jump", "framework jump"))));
 
             var row = model.Rows.Single(candidate => candidate.CanonicalPath == "ability.jump");
-            var content = GameplayTagPickerTreeView.CreateLabelContent(row);
+            var content = GameplayTagPickerTreeView.CreateNameContent(row, isCurrent: false, checkImage: null);
 
             Assert.That(model.Rows.Count(candidate => candidate.CanonicalPath == "ability.jump"), Is.EqualTo(1));
             Assert.That(row.SourceCount, Is.EqualTo(2));
@@ -130,17 +130,69 @@ namespace Bun3.Gameplay.Unity.Tests
             var rowRect = new Rect(12f, 8f, 240f, 18f);
             const float childBearingRowContentIndent = 46f;
 
-            var content = GameplayTagPickerTreeView.CreateLabelContent(row);
+            var selectedIcon = new Texture2D(1, 1);
+            GUIContent selected;
+            GUIContent ordinary;
+            GUIContent fallback;
+            try
+            {
+                selected = GameplayTagPickerTreeView.CreateNameContent(row, isCurrent: true, selectedIcon);
+                ordinary = GameplayTagPickerTreeView.CreateNameContent(row, isCurrent: false, selectedIcon);
+                fallback = GameplayTagPickerTreeView.CreateNameContent(row, isCurrent: true, checkImage: null);
+                Assert.That(selected.text, Is.EqualTo("jump"));
+                Assert.That(selected.image, Is.SameAs(selectedIcon));
+                Assert.That(ordinary.image, Is.Null);
+                Assert.That(fallback.text, Does.StartWith("??"));
+                Assert.That(GameplayTagPickerTreeView.CreateSourceContent(row).text, Is.EqualTo("1 source"));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(selectedIcon);
+            }
             var labelRect = GameplayTagTreeRowGeometry.CalculateLabelRect(
                 rowRect,
                 childBearingRowContentIndent);
 
-            Assert.That(content.text, Is.EqualTo("jump  1 source"));
-            Assert.That(content.tooltip,
+            Assert.That(GameplayTagPickerTreeView.CreateNameContent(row, false, null).tooltip,
                 Does.Contain("ability.movement.jump").And.Contain("game (Game): player jump"));
             Assert.That(labelRect.xMin,
                 Is.EqualTo(rowRect.xMin + childBearingRowContentIndent));
             Assert.That(labelRect.xMax, Is.EqualTo(rowRect.xMax));
+        }
+
+        [Test]
+        public void Picker_row_geometry_reserves_a_non_overlapping_source_column()
+        {
+            var rects = GameplayTagPickerRowGeometry.Calculate(
+                new Rect(40f, 8f, 240f, 18f), sourceWidth: 56f, spacing: 8f);
+
+            Assert.That(rects.SourceRect.xMax, Is.EqualTo(280f));
+            Assert.That(rects.SourceRect.width, Is.EqualTo(56f));
+            Assert.That(rects.NameRect.xMax + 8f, Is.EqualTo(rects.SourceRect.xMin));
+            Assert.That(rects.NameRect.Overlaps(rects.SourceRect), Is.False);
+        }
+
+        [Test]
+        public void Picker_current_path_state_survives_projection_replacement_and_invalid_paths_clear_current()
+        {
+            var model = new GameplayTagPickerModel(CreateSnapshot(CreateSource(
+                "game", "Game", TagSourceKind.GameJson, false,
+                new TagSourceTag("ability.jump", "jump"),
+                new TagSourceTag("state.dead", "dead"))));
+            var tree = new GameplayTagPickerTreeView(new TreeViewState());
+            tree.SetRows(model.Rows, isFiltering: false);
+            tree.SynchronizeSelection("ABILITY.JUMP");
+            var filteredRows = model.Filter("JUMP");
+            tree.SetRows(filteredRows, isFiltering: true);
+            Assert.That(filteredRows.Count(row => tree.IsCurrent(row)), Is.EqualTo(1));
+            Assert.That(filteredRows.Single(tree.IsCurrent).CanonicalPath,
+                Is.EqualTo("ability.jump"));
+
+            foreach (var path in new[] { string.Empty, "Legacy..Broken", "ability.missing" })
+            {
+                tree.SetCurrentPath(path);
+                Assert.That(model.Rows.Any(tree.IsCurrent), Is.False);
+            }
         }
 
         /// <summary>선택 callback이 Source 정보 없이 canonical 런타임 경로만 반환하는지 검증합니다.</summary>
