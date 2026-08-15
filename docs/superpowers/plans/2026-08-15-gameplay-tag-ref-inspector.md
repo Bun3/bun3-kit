@@ -38,7 +38,7 @@
 - Consumes: internal `TagName.TryFold`, public `TagCatalog.TryGet/GetRequired`, `GameplayTag.None`.
 - Produces: `GameplayTagRef(string)`, `Path`, `IsEmpty`, `TryResolve(TagCatalog, out GameplayTag)`, `ResolveRequired(TagCatalog)`, equality operators.
 
-- [ ] **Step 1: Write failing runtime-reference tests**
+- [x] **Step 1: Write failing runtime-reference tests**
 
 Add tests whose literal expectations prove:
 
@@ -52,7 +52,7 @@ Assert.Throws<ArgumentException>(() => new GameplayTagRef("bad..tag"));
 
 Also set the private serialized `_path` through a real `SerializedObject` host to prove malformed legacy raw text is preserved and `TryResolve` returns false instead of mutating it.
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
 ```powershell
 & common/tests/Bun3.Gameplay.Tests/Invoke-GameplayUnityTests.ps1 -Mode EditMode `
@@ -61,7 +61,7 @@ Also set the private serialized `_path` through a real `SerializedObject` host t
 
 Expected: `GameplayTagRef`/Unity Adapter가 없어서 `CS0246` 또는 asmdef reference failure.
 
-- [ ] **Step 3: Implement the Unity Adapter**
+- [x] **Step 3: Implement the Unity Adapter**
 
 Create a Unity runtime assembly referencing `Bun3.Gameplay`, keep the type in namespace
 `Bun3.Gameplay.Tags`, and give that assembly internal access to `TagName`. Exclude `Unity/**/*.cs`
@@ -101,11 +101,11 @@ public struct GameplayTagRef : IEquatable<GameplayTagRef>
 Complete equality/hash/operators with ordinal path semantics and Korean XML docs. The asmdef must be runtime-capable,
 reference only `Bun3.Gameplay`, and keep engine references enabled for `[SerializeField]`.
 
-- [ ] **Step 4: Run focused GREEN**
+- [x] **Step 4: Run focused GREEN**
 
 Run the exact filter from Step 2. Expected: all `GameplayTagRefTests` pass with C# diagnostics 0.
 
-- [ ] **Step 5: Commit Task 1**
+- [x] **Step 5: Commit Task 1**
 
 Stage only Task 1 code/test/asmdef/meta files and commit with a gitmoji Korean subject and the required co-author trailer.
 
@@ -124,7 +124,7 @@ Stage only Task 1 code/test/asmdef/meta files and commit with a gitmoji Korean s
 - Consumes: `GameplayTagRef`, `GameplayTagPickerWindow.ShowLive`, `GameplayTagBuildContextResolver.ResolveDevelopment`, `GameplayTagEditorWorkspace.Open`, `GameplayTagGameSourcePath.Get`.
 - Produces: one-line PropertyDrawer, clear/select application through `SerializedProperty`, cached current Workspace validation.
 
-- [ ] **Step 1: Write failing drawer behavior tests**
+- [x] **Step 1: Write failing drawer behavior tests**
 
 Use real `ScriptableObject` hosts and `SerializedObject` instances. Prove these observable behaviors:
 
@@ -139,7 +139,7 @@ Assert.That(first.Tag.IsEmpty, Is.True);
 Add separate tests for clear, mixed values, invalid raw display content, and current invalid Workspace preserving
 the raw value while disabling Picker selection.
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
 ```powershell
 & common/tests/Bun3.Gameplay.Tests/Invoke-GameplayUnityTests.ps1 -Mode EditMode `
@@ -148,7 +148,7 @@ the raw value while disabling Picker selection.
 
 Expected: drawer/workspace adapter types are missing.
 
-- [ ] **Step 3: Implement the drawer and Workspace Adapter**
+- [x] **Step 3: Implement the drawer and Workspace Adapter**
 
 Implement the PropertyDrawer with label, dropdown text and clear button. Capture target objects and property path
 when opening `ShowLive`; apply callback values using fresh `SerializedObject` instances. The Workspace adapter must
@@ -191,11 +191,11 @@ GameplayTagPickerWindow.ShowLive(
 current result for at most 0.75 seconds and invalidate on `EditorApplication.projectChanged`; do not retain an older
 successful snapshot after a failed refresh.
 
-- [ ] **Step 4: Run focused GREEN**
+- [x] **Step 4: Run focused GREEN**
 
 Run the exact filter from Step 2. Expected: drawer and existing Picker tests all pass, C#/GUI diagnostics 0.
 
-- [ ] **Step 5: Commit Task 2**
+- [x] **Step 5: Commit Task 2**
 
 Stage only Task 2 code/test/meta/asmdef files and commit with the required message/trailer.
 
@@ -211,13 +211,13 @@ Stage only Task 2 code/test/meta/asmdef files and commit with the required messa
 - Consumes: completed Unity Adapter and PropertyDrawer.
 - Produces: documented `GameplayTagRef` language and Gameplay package version `0.11.0`.
 
-- [ ] **Step 1: Update domain language and package metadata**
+- [x] **Step 1: Update domain language and package metadata**
 
 Add `GameplayTagRef` as Unity 자산에 canonical path를 저장하고 Runtime Catalog에서 `GameplayTag`로 resolve하는
 authoring reference. State that it is not a Runtime Catalog handle. Set NuGet and UPM versions to `0.11.0` and update
 the UPM description so only the core assembly is described as UnityEngine-free.
 
-- [ ] **Step 2: Run generated warning-zero builds**
+- [x] **Step 2: Run generated warning-zero builds**
 
 ```powershell
 dotnet build unity/Bun3.Gameplay.csproj --no-restore -p:NoWarn=MSB3277 -warnaserror -v:minimal
@@ -227,7 +227,7 @@ dotnet build unity/Bun3.Gameplay.Unity.Tests.csproj --no-restore -p:NoWarn=MSB32
 
 Expected: each warning 0/error 0. If Unity generates a separate Adapter csproj, build it sequentially with the same gate.
 
-- [ ] **Step 3: Run full Unity EditMode**
+- [x] **Step 3: Run full Unity EditMode**
 
 ```powershell
 & common/tests/Bun3.Gameplay.Tests/Invoke-GameplayUnityTests.ps1 -Mode EditMode -AllEditMode
@@ -237,13 +237,13 @@ Expected: failed/skipped/inconclusive 0, C# diagnostics 0, GUI style diagnostics
 `unity/ProjectSettings/ProjectSettings.asset` and restore only the exact runner-removed existing define token by
 `apply_patch` if present.
 
-- [ ] **Step 4: Pack and inspect UPM**
+- [x] **Step 4: Pack and inspect UPM**
 
 Create an isolated archive, then assert `package.json` version `0.11.0`, Unity Adapter C#/asmdef and every matching
 `.meta` exactly once. Confirm NuGet package version `0.11.0` while Unity Adapter source is not compiled into the
 netstandard core DLL.
 
-- [ ] **Step 5: Final scope check and commit**
+- [x] **Step 5: Final scope check and commit**
 
 ```powershell
 git diff --check
