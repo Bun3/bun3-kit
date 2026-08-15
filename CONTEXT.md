@@ -28,6 +28,10 @@ _Avoid_: Default Catalog, User Tags
 Unity Editor가 소유하는 Catalog ID 설정이며 Tag Source가 아니다.
 _Avoid_: Tag Source, Catalog
 
+**GameplayTagRef**:
+Unity 자산에 canonical 태그 경로를 저장하고 명시한 Runtime Catalog에서 `GameplayTag`로 해석하는 authoring reference다.
+_Avoid_: Runtime Tag Handle, Serialized Tag Index
+
 **Runtime Catalog**:
 모든 Tag Source를 canonical 이름으로 병합한 단일 불변 태그 집합이다. Source별 comment와 소유 정보는 포함하지 않는다.
 _Avoid_: Tag Source, Editor Catalog
