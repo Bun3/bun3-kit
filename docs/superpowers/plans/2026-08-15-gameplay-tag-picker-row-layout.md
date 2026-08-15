@@ -33,7 +33,7 @@
 - Consumes: `GameplayTagProjectionTreeView<GameplayTagPickerRow>.TryGetRow`, `CalculateLabelRect`, `SynchronizeSelection`.
 - Produces: `GameplayTagPickerRowGeometry.Calculate(Rect, float, float)`, `GameplayTagPickerRowRects`, `GameplayTagPickerTreeView.SetCurrentPath(string)`, `IsCurrent(GameplayTagPickerRow)`, `CreateNameContent(GameplayTagPickerRow, bool, Texture?)`, `CreateSourceContent(GameplayTagPickerRow)`.
 
-- [ ] **Step 1: Write failing selected-content and geometry tests**
+- [x] **Step 1: Write failing selected-content and geometry tests**
 
 Replace tests that expect `"jump  1 source"` in one content string with separate name and Source content assertions. Add tests equivalent to:
 
@@ -77,7 +77,7 @@ Assert.That(rects.NameRect.Overlaps(rects.SourceRect), Is.False);
 
 Add a current-path state test that sets rows, synchronizes with `"ABILITY.JUMP"`, filters/reloads rows, and proves only the `ability.jump` row remains current by ordinal-ignore-case comparison. Then set the current path to `string.Empty`, `"Legacy..Broken"`, and a valid-but-missing path in turn and prove no projected row is current.
 
-- [ ] **Step 2: Run focused RED**
+- [x] **Step 2: Run focused RED**
 
 Run:
 
@@ -88,7 +88,7 @@ Run:
 
 Expected: compile failure for the new geometry/content/current-path APIs. If Unity is already open, capture the generated Unity test csproj compiler RED instead of terminating the user process.
 
-- [ ] **Step 3: Implement pure Picker row geometry**
+- [x] **Step 3: Implement pure Picker row geometry**
 
 In `GameplayTagPickerWindow.cs`, add the following Picker-only value types before `GameplayTagPickerTreeView`:
 
@@ -127,7 +127,7 @@ internal static class GameplayTagPickerRowGeometry
 
 The calculation must clamp negative widths and keep `SourceRect.xMax == labelRect.xMax`.
 
-- [ ] **Step 4: Implement selected content and split RowGUI**
+- [x] **Step 4: Implement selected content and split RowGUI**
 
 Add `_currentCanonicalPath` to `GameplayTagPickerTreeView`. `SetCurrentPath` validates non-null and stores it. `IsCurrent` compares row path with `StringComparison.OrdinalIgnoreCase`. `SynchronizeSelection` must call `SetCurrentPath` before its existing selection behavior.
 
@@ -165,7 +165,7 @@ Override Picker `RowGUI` only. For known rows:
 
 Unknown rows delegate to `base.RowGUI(args)`. Keep `CreateRowContent` implemented for the abstract base but return the same name content.
 
-- [ ] **Step 5: Keep current-path state synchronized**
+- [x] **Step 5: Keep current-path state synchronized**
 
 In `GameplayTagPickerWindow.ApplySelection`, after assigning `_currentRawValue`, call:
 
@@ -175,11 +175,11 @@ _treeView?.SetCurrentPath(canonicalPath);
 
 Do this before invoking `_onSelected`. Existing `ApplyWorkspace` already calls `SynchronizeSelection(_currentRawValue)` after rows reload, so initial/live refresh and filter row replacement retain the current path.
 
-- [ ] **Step 6: Run focused GREEN**
+- [x] **Step 6: Run focused GREEN**
 
 Run the exact focused command from Step 2. Expected: every `GameplayTagPickerTests` test passes, C# diagnostics 0, GUI style/OnGUI diagnostics 0.
 
-- [ ] **Step 7: Run generated warning-zero builds**
+- [x] **Step 7: Run generated warning-zero builds**
 
 Run sequentially:
 
@@ -190,7 +190,7 @@ dotnet build unity/Bun3.Gameplay.Unity.Tests.csproj --no-restore -p:NoWarn=MSB32
 
 Expected for each: warnings 0, errors 0.
 
-- [ ] **Step 8: Commit Task 1**
+- [x] **Step 8: Commit Task 1**
 
 Stage only the Picker production/test files. Verify `git diff --cached --check`, then commit:
 
@@ -209,7 +209,7 @@ git commit -m "✨ GameplayTag Picker 선택 표시와 행 정렬 개선" `
 - Consumes: completed Picker UI change.
 - Produces: Gameplay NuGet/UPM version `0.11.1`.
 
-- [ ] **Step 1: Bump Gameplay package versions**
+- [x] **Step 1: Bump Gameplay package versions**
 
 Set the two exact values:
 
@@ -223,7 +223,7 @@ Set the two exact values:
 
 Do not change dependency constraints or other package versions.
 
-- [ ] **Step 2: Run full .NET and Unity regression**
+- [x] **Step 2: Run full .NET and Unity regression**
 
 Run:
 
@@ -234,7 +234,7 @@ dotnet test Bun3.sln -c Release --no-restore -v:minimal
 
 Expected: .NET failures 0; Unity failed/skipped/inconclusive 0; C#/GUI diagnostics 0. Let Unity exit naturally and restore only the exact runner-removed compiler define token after inspecting the diff.
 
-- [ ] **Step 3: Pack and read back metadata**
+- [x] **Step 3: Pack and read back metadata**
 
 Pack Gameplay NuGet into an isolated temporary directory and create/read the UPM archive. Assert:
 
@@ -244,7 +244,7 @@ Pack Gameplay NuGet into an isolated temporary directory and create/read the UPM
 - UPM Unity remains `2022.3` and Newtonsoft UPM remains `3.2.2`.
 - Picker production/test source changes are present exactly once in UPM output.
 
-- [ ] **Step 4: Commit Task 2 and completed checklist**
+- [x] **Step 4: Commit Task 2 and completed checklist**
 
 Mark every plan checkbox complete. Stage only the two metadata files and this plan, verify staged scope and `git diff --cached --check`, then commit:
 
@@ -253,7 +253,7 @@ git commit -m "🔖 GameplayTag Picker 0.11.1 버전 갱신" `
   -m "Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 ```
 
-- [ ] **Step 5: Final scope verification**
+- [x] **Step 5: Final scope verification**
 
 Run:
 
