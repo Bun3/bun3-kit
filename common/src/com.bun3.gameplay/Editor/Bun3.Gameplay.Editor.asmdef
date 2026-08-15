@@ -1,7 +1,7 @@
 {
   "name": "Bun3.Gameplay.Editor",
   "rootNamespace": "Bun3.Gameplay.Editor",
-  "references": ["Bun3.Gameplay", "Bun3.Gameplay.Catalog"],
+  "references": ["Bun3.Gameplay", "Bun3.Gameplay.Unity", "Bun3.Gameplay.Catalog"],
   "includePlatforms": ["Editor"],
   "excludePlatforms": [],
   "allowUnsafeCode": false,
