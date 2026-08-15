@@ -7,7 +7,7 @@
     <RootNamespace>Bun3.Gameplay</RootNamespace>
     <AssemblyName>Bun3.Gameplay</AssemblyName>
     <PackageId>Bun3.Gameplay</PackageId>
-    <Version>0.4.0</Version>
+    <Version>0.11.1</Version>
     <Authors>Bun3</Authors>
     <RepositoryUrl>https://github.com/Bun3/bun3-kit</RepositoryUrl>
   </PropertyGroup>
@@ -17,7 +17,77 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Remove="Tests/**/*.cs" />
+    <PackageReference Include="Newtonsoft.Json" Version="[13.0.2]" />
   </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Bun3.Gameplay.TagSourceAnalyzer\Bun3.Gameplay.TagSourceAnalyzer.csproj"
+                      ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\Bun3.Gameplay.TagSource.Tasks\Bun3.Gameplay.TagSource.Tasks.csproj"
+                      ReferenceOutputAssembly="false" />
+    <None Include="buildTransitive\Bun3.Gameplay.NativeTags.targets"
+          Pack="true"
+          PackagePath="buildTransitive\Bun3.Gameplay.targets" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="Editor/**/*.cs" />
+    <Compile Remove="Tests/**/*.cs" />
+    <Compile Remove="Catalog/**/*.cs" />
+    <Compile Remove="Unity/**/*.cs" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetsForTfmSpecificBuildOutput>$(TargetsForTfmSpecificBuildOutput);IncludeCatalogBuildOutput</TargetsForTfmSpecificBuildOutput>
+    <TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);IncludeTagSourceToolingBuildOutput</TargetsForTfmSpecificContentInPackage>
+    <AllowedOutputExtensionsInPackageBuildOutputFolder>$(AllowedOutputExtensionsInPackageBuildOutputFolder);.pdb</AllowedOutputExtensionsInPackageBuildOutputFolder>
+  </PropertyGroup>
+
+  <Target Name="BuildCatalogForPackage">
+    <MSBuild Projects="$(MSBuildProjectDirectory)\Catalog\Bun3.Gameplay.Catalog.csproj"
+             Targets="Build"
+             Properties="Configuration=$(Configuration);BuildProjectReferences=false" />
+  </Target>
+
+  <Target Name="IncludeCatalogBuildOutput" DependsOnTargets="BuildCatalogForPackage">
+    <ItemGroup>
+      <BuildOutputInPackage Include="$(ArtifactsPath)\bin\Bun3.Gameplay.Catalog\$([System.String]::Copy('$(Configuration)').ToLowerInvariant())\Bun3.Gameplay.Catalog.dll">
+        <TargetPath>Bun3.Gameplay.Catalog.dll</TargetPath>
+      </BuildOutputInPackage>
+      <BuildOutputInPackage Include="$(ArtifactsPath)\bin\Bun3.Gameplay.Catalog\$([System.String]::Copy('$(Configuration)').ToLowerInvariant())\Bun3.Gameplay.Catalog.pdb">
+        <TargetPath>Bun3.Gameplay.Catalog.pdb</TargetPath>
+      </BuildOutputInPackage>
+      <BuildOutputInPackage Include="$(ArtifactsPath)\bin\Bun3.Gameplay.Catalog\$([System.String]::Copy('$(Configuration)').ToLowerInvariant())\Bun3.Gameplay.Catalog.xml">
+        <TargetPath>Bun3.Gameplay.Catalog.xml</TargetPath>
+      </BuildOutputInPackage>
+    </ItemGroup>
+  </Target>
+
+  <Target Name="BuildTagSourceToolingForPackage">
+    <MSBuild Projects="$(MSBuildProjectDirectory)\..\Bun3.Gameplay.TagSourceAnalyzer\Bun3.Gameplay.TagSourceAnalyzer.csproj"
+             Targets="Build"
+             Properties="Configuration=$(Configuration);TargetFramework=netstandard2.0;BuildProjectReferences=false" />
+    <MSBuild Projects="$(MSBuildProjectDirectory)\..\Bun3.Gameplay.TagSource.Tasks\Bun3.Gameplay.TagSource.Tasks.csproj"
+             Targets="Build"
+             Properties="Configuration=$(Configuration);TargetFramework=netstandard2.0;BuildProjectReferences=false" />
+  </Target>
+
+  <Target Name="IncludeTagSourceToolingBuildOutput" DependsOnTargets="BuildTagSourceToolingForPackage">
+    <ItemGroup>
+      <TfmSpecificPackageFile Include="$(ArtifactsPath)\bin\Bun3.Gameplay.TagSourceAnalyzer\$([System.String]::Copy('$(Configuration)').ToLowerInvariant())\Bun3.Gameplay.TagSourceAnalyzer.dll">
+        <PackagePath>analyzers/dotnet/cs</PackagePath>
+      </TfmSpecificPackageFile>
+      <TfmSpecificPackageFile Include="$(ArtifactsPath)\bin\Bun3.Gameplay.TagSourceAnalyzer\$([System.String]::Copy('$(Configuration)').ToLowerInvariant())\Bun3.Gameplay.TagSourceAnalyzer.pdb">
+        <PackagePath>analyzers/dotnet/cs</PackagePath>
+      </TfmSpecificPackageFile>
+      <TfmSpecificPackageFile Include="$(ArtifactsPath)\bin\Bun3.Gameplay.TagSource.Tasks\$([System.String]::Copy('$(Configuration)').ToLowerInvariant())\Bun3.Gameplay.TagSource.Tasks.dll">
+        <PackagePath>buildTransitive</PackagePath>
+      </TfmSpecificPackageFile>
+      <TfmSpecificPackageFile Include="$(ArtifactsPath)\bin\Bun3.Gameplay.TagSource.Tasks\$([System.String]::Copy('$(Configuration)').ToLowerInvariant())\*.dll"
+                              Exclude="$(ArtifactsPath)\bin\Bun3.Gameplay.TagSource.Tasks\$([System.String]::Copy('$(Configuration)').ToLowerInvariant())\Bun3.Gameplay.TagSource.Tasks.dll">
+        <PackagePath>buildTransitive</PackagePath>
+      </TfmSpecificPackageFile>
+    </ItemGroup>
+  </Target>
 
 </Project>

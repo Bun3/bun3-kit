@@ -1,0 +1,29 @@
+<Project>
+
+  <PropertyGroup>
+    <Bun3GameplayTagTasksAssembly Condition="'$(Bun3GameplayTagTasksAssembly)' == ''">$(MSBuildThisFileDirectory)Bun3.Gameplay.TagSource.Tasks.dll</Bun3GameplayTagTasksAssembly>
+    <TargetsForTfmSpecificContentInPackage Condition="'$(Bun3GameplayTagSource)' == 'true'">$(TargetsForTfmSpecificContentInPackage);ExtractBun3NativeGameplayTags</TargetsForTfmSpecificContentInPackage>
+  </PropertyGroup>
+
+  <UsingTask TaskName="Bun3.Gameplay.TagSource.Tasks.ExtractNativeGameplayTagsTask"
+             AssemblyFile="$(Bun3GameplayTagTasksAssembly)" />
+
+  <Target Name="ExtractBun3NativeGameplayTags"
+          DependsOnTargets="Build;ResolveReferences"
+          Condition="'$(Bun3GameplayTagSource)' == 'true'">
+    <PropertyGroup>
+      <Bun3GameplayTagMetadataOutput Condition="'$(Bun3GameplayTagMetadataOutput)' == ''">$(IntermediateOutputPath)Bun3/GameplayTags/TagSource.json</Bun3GameplayTagMetadataOutput>
+      <_Bun3GameplayTagMetadataFullPath>$([System.IO.Path]::GetFullPath($([System.IO.Path]::Combine('$(MSBuildProjectDirectory)', '$(Bun3GameplayTagMetadataOutput)'))))</_Bun3GameplayTagMetadataFullPath>
+    </PropertyGroup>
+    <ExtractNativeGameplayTagsTask Sources="@(Compile)"
+                                   References="@(ReferencePath)"
+                                   TargetPath="$(TargetPath)"
+                                   OutputPath="$(_Bun3GameplayTagMetadataFullPath)" />
+    <ItemGroup>
+      <TfmSpecificPackageFile Include="$(_Bun3GameplayTagMetadataFullPath)">
+        <PackagePath>contentFiles/any/any/Bun3/GameplayTags/TagSource.json</PackagePath>
+      </TfmSpecificPackageFile>
+    </ItemGroup>
+  </Target>
+
+</Project>

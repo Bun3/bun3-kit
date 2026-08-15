@@ -1,0 +1,14 @@
+{
+  "name": "Bun3.Gameplay.Catalog",
+  "rootNamespace": "Bun3.Gameplay.Tags.Catalog",
+  "references": ["Bun3.Gameplay"],
+  "includePlatforms": ["Editor"],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": true
+}

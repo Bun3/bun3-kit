@@ -12,7 +12,7 @@ No scene wiring — everything is configured by one settings asset.
    (a sprite or uGUI `Image`; give it a `GraphicRaycaster`/`Physics2DRaycaster` path so
    the click-through hit test can see it).
 3. Add `DesktopOverlaySample` to any GameObject — it only binds Esc to quit.
-4. Run **Bun3 → Window → Validate Overlay Settings** and fix every warning
+4. Run **Window → Validate Overlay Settings** and fix every warning
    (Windowed, Run In Background on, D3D11, flip-model swapchain off, HDR off).
 5. Build for Windows and run the exe. Keep post-processing off in the sample —
    bloom/tonemapping can overwrite the alpha channel DWM transparency depends on.

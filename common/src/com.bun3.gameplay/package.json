@@ -1,9 +1,12 @@
 {
   "name": "com.bun3.gameplay",
   "displayName": "Bun3 Gameplay",
-  "version": "0.4.0",
+  "version": "0.11.1",
   "unity": "2022.3",
-  "description": "Generic gameplay framework (BigNum, tags, attributes, effects, abilities). netstandard2.1; no UnityEngine dependency.",
+  "description": "Generic gameplay framework with a Unity authoring adapter. The netstandard2.1 core has no UnityEngine dependency.",
+  "dependencies": {
+    "com.unity.nuget.newtonsoft-json": "3.2.2"
+  },
   "author": {
     "name": "Bun3",
     "url": "https://github.com/Bun3",

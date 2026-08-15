@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using Bun3.Gameplay.Numerics;
 using Bun3.Gameplay.Tags;
 using NUnit.Framework;
@@ -33,26 +34,116 @@ public class AllocationSmokeTests
     [Test]
     public void Tag_queries_do_not_allocate()
     {
-        var registry = new TagRegistry();
-        var set = new TagSet(registry);
-        var ghost = registry.GetOrRegister("State.Dead.Ghost");
-        var dead = registry.GetOrRegister("State.Dead");
-        set.Add(ghost, 2);
+        var catalog = TagCatalogTestData.Load();
+        var ghost = catalog.GetRequired("State.Dead.Ghost");
+        var dead = catalog.GetRequired("State.Dead");
+        var set = catalog.CreateContainer(8);
+        var counts = catalog.CreateCountContainer(8);
+        set.Add(ghost);
+        counts.Add(ghost, 2);
 
-        // 워밍업
-        _ = set.Has(dead) && set.Count(dead) > 0 && registry.GetName(ghost).Length > 0;
+        _ = MeasureTagQueries(set, counts, dead, 1, out _);
+        var allocated = MeasureTagQueries(set, counts, dead, 100_000, out var hits);
 
+        Assert.That(allocated, Is.Zero);
+        Assert.That(hits, Is.EqualTo(400_000));
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static long MeasureTagQueries(
+        TagContainer tags,
+        TagCountContainer counts,
+        GameplayTag query,
+        int iterations,
+        out int hits)
+    {
         var before = GC.GetAllocatedBytesForCurrentThread();
-        for (var i = 0; i < 1_000; i++)
+        hits = 0;
+        for (var i = 0; i < iterations; i++)
         {
-            _ = set.Has(dead);
-            _ = set.Count(dead);
-            _ = set.HasExact(ghost);
-            _ = registry.GetName(ghost);
-            _ = registry.IsAncestorOrSelf(dead, ghost);
+            if (tags.Has(query)) hits++;
+            if (counts.Has(query)) hits++;
+            hits += counts.Count(query);
         }
 
+        return GC.GetAllocatedBytesForCurrentThread() - before;
+    }
+
+    [Test]
+    public void Exact_state_copy_does_not_allocate()
+    {
+        var catalog = TagCatalogTestData.Load();
+        var ghost = catalog.GetRequired("State.Dead.Ghost");
+        var rooted = catalog.GetRequired("State.Rooted");
+        var tags = catalog.CreateContainer(2);
+        var counts = catalog.CreateCountContainer(2);
+        tags.Add(rooted);
+        tags.Add(ghost);
+        counts.Add(rooted, 4);
+        counts.Add(ghost, 2);
+
+        _ = MeasureExactCopies(tags, counts, 1, out _);
+        var allocated = MeasureExactCopies(tags, counts, 100_000, out var copied);
+
+        Assert.That(allocated, Is.Zero);
+        Assert.That(copied, Is.EqualTo(400_000));
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static long MeasureExactCopies(
+        TagContainer tags, TagCountContainer counts, int iterations, out int copied)
+    {
+        Span<GameplayTag> tagBuffer = stackalloc GameplayTag[64];
+        Span<TagCountEntry> countBuffer = stackalloc TagCountEntry[64];
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        copied = 0;
+        for (var i = 0; i < iterations; i++)
+        {
+            copied += tags.CopyExactTags(tagBuffer);
+            copied += counts.CopyExactEntries(countBuffer);
+        }
+
+        return GC.GetAllocatedBytesForCurrentThread() - before;
+    }
+
+    [Test]
+    public void Reserved_tag_mutations_do_not_allocate()
+    {
+        var catalog = TagCatalogTestData.Load(TagCatalogTestData.BuildChainCatalog(8, 16, false));
+        var leaves = new GameplayTag[8];
+        for (var i = 0; i < leaves.Length; i++)
+            leaves[i] = catalog.GetRequired(TagCatalogTestData.ChainLeaf(i, 16));
+        var tags = catalog.CreateContainer(8);
+        var counts = catalog.CreateCountContainer(8);
+
+        RunCycles(tags, counts, leaves, 1);
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        RunCycles(tags, counts, leaves, 100);
         var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
-        Assert.That(allocated, Is.Zero, "태그 쿼리 경로에서 힙 할당 발생");
+
+        Assert.That(tags.ExactKindCount, Is.Zero);
+        Assert.That(counts.ExactKindCount, Is.Zero);
+        Assert.That(allocated, Is.Zero);
+    }
+
+    private static void RunCycles(
+        TagContainer tags,
+        TagCountContainer counts,
+        GameplayTag[] leaves,
+        int cycles)
+    {
+        for (var cycle = 0; cycle < cycles; cycle++)
+        {
+            for (var i = 0; i < leaves.Length; i++)
+            {
+                tags.Add(leaves[i]);
+                counts.Add(leaves[i]);
+            }
+            for (var i = 0; i < leaves.Length; i++)
+            {
+                tags.Remove(leaves[i]);
+                counts.Remove(leaves[i]);
+            }
+        }
     }
 }

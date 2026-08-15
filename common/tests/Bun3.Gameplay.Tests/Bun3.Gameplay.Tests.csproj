@@ -15,6 +15,14 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\com.bun3.gameplay\Bun3.Gameplay.csproj" />
+    <ProjectReference Include="..\..\src\com.bun3.gameplay\Catalog\Bun3.Gameplay.Catalog.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\..\src\com.bun3.gameplay\Tests\Editor\TagCatalogConformanceTests.cs"
+             Link="TagCatalogConformanceTests.cs" />
+    <Compile Include="..\..\src\com.bun3.gameplay\Tests\Runtime\TagPerformanceFixture.cs"
+             Link="TagPerformanceFixture.cs" />
   </ItemGroup>
 
 </Project>

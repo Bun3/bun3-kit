@@ -3,6 +3,9 @@
   "rootNamespace": "Bun3.Gameplay.Unity.Tests",
   "references": [
     "Bun3.Gameplay",
+    "Bun3.Gameplay.Unity",
+    "Bun3.Gameplay.Catalog",
+    "Bun3.Gameplay.Editor",
     "UnityEngine.TestRunner",
     "UnityEditor.TestRunner"
   ],
