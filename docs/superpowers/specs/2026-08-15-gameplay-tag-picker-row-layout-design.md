@@ -46,6 +46,7 @@ Picker TreeView만 행 렌더링을 확장한다. Source 기반 Tag Editor TreeV
   유지하며 자동으로 다른 경로를 체크하지 않는다.
 - Source 개수와 tooltip 내용은 변경하지 않고 위치만 변경한다.
 - 전용 이미지 에셋이나 새 직렬화 필드는 추가하지 않는다.
+- 공개 API 변화가 없는 Editor UI 개선이므로 Gameplay NuGet/UPM 버전을 `0.11.1`로 올린다.
 
 ## 검증
 
