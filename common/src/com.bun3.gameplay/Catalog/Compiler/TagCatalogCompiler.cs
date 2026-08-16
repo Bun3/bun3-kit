@@ -183,6 +183,10 @@ namespace Bun3.Gameplay.Tags.Catalog
             }
         }
 
+        // ordinal 정렬이 곧 DFS 사전 순회다 — 태그 세그먼트 허용 문자(0-9=0x30, a-z=0x61)가
+        // 전부 구분자 '.'(0x2E)보다 크므로 "x"의 자손("x.…")은 항상 "x" 바로 뒤, 형제("xa")보다
+        // 앞에 온다. 이 전제가 서브트리를 연속 구간 [index, subtreeEnd]로 만들고 IsAncestorOrSelf를
+        // 두 번의 비교로 끝낸다. 허용 문자에 '.'보다 작은 것이 생기면 계층 질의가 조용히 깨진다.
         private static string[] BuildCanonicalNames(HashSet<string> activeNames)
         {
             var sorted = new string[activeNames.Count];

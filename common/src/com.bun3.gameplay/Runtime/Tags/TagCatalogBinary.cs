@@ -71,6 +71,10 @@ namespace Bun3.Gameplay.Tags
             return catalog;
         }
 
+        // 최대 태그 수(65,535) × 최대 이름 길이(255) + redirect·header 여유 — 이 상한을 넘는 입력은
+        // 정상 catalog일 수 없으므로 OOM으로 죽기 전에 형식 오류로 끊는다.
+        private const int MaximumCatalogBytes = 64 * 1024 * 1024;
+
         private static byte[] ReadToEnd(Stream input)
         {
             using var output = new MemoryStream();
@@ -79,6 +83,11 @@ namespace Bun3.Gameplay.Tags
             {
                 var read = input.Read(buffer, 0, buffer.Length);
                 if (read == 0) return output.ToArray();
+                if (output.Length + read > MaximumCatalogBytes)
+                {
+                    throw Format("B3DK 입력이 허용 크기를 넘었습니다.");
+                }
+
                 output.Write(buffer, 0, read);
             }
         }

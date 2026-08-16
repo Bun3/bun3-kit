@@ -602,7 +602,7 @@ namespace Bun3.Gameplay.Numerics
         /// <summary>이상.</summary>
         public static bool operator >=(BigNum a, BigNum b) => a.CompareTo(b) >= 0;
 
-        /// <summary>디버그 표기. 핫패스 사용 금지 — 표시용은 TryFormat(Task 5).</summary>
+        /// <summary>디버그 표기. 핫패스 사용 금지 — 표시용은 <see cref="TryFormat"/>이다.</summary>
         public override string ToString() =>
             Exponent == 0
                 ? Mantissa.ToString(CultureInfo.InvariantCulture)
