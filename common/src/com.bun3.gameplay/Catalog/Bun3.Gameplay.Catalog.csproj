@@ -5,8 +5,13 @@
     <LangVersion>9.0</LangVersion>
     <Nullable>enable</Nullable>
     <RootNamespace>Bun3.Gameplay.Tags.Catalog</RootNamespace>
+    <!-- 어셈블리 이름은 Unity asmdef(Bun3.Gameplay.Catalog)와 맞춘다 — PackageId만 저작용임을 드러낸다. -->
     <AssemblyName>Bun3.Gameplay.Catalog</AssemblyName>
-    <IsPackable>false</IsPackable>
+    <PackageId>Bun3.Gameplay.Authoring</PackageId>
+    <Version>0.1.0</Version>
+    <Authors>Bun3</Authors>
+    <Description>GameplayTag 저작 도구 — Source 컴파일러, B3DK writer, 레거시 JSON 로더. 런타임에는 필요 없다.</Description>
+    <RepositoryUrl>https://github.com/Bun3/bun3-kit</RepositoryUrl>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
 

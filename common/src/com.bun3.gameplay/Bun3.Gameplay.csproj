@@ -7,17 +7,13 @@
     <RootNamespace>Bun3.Gameplay</RootNamespace>
     <AssemblyName>Bun3.Gameplay</AssemblyName>
     <PackageId>Bun3.Gameplay</PackageId>
-    <Version>0.11.1</Version>
+    <Version>0.12.0</Version>
     <Authors>Bun3</Authors>
     <RepositoryUrl>https://github.com/Bun3/bun3-kit</RepositoryUrl>
   </PropertyGroup>
 
   <ItemGroup>
     <InternalsVisibleTo Include="Bun3.Gameplay.Tests" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <PackageReference Include="Newtonsoft.Json" Version="[13.0.2]" />
   </ItemGroup>
 
   <ItemGroup>
@@ -38,30 +34,9 @@
   </ItemGroup>
 
   <PropertyGroup>
-    <TargetsForTfmSpecificBuildOutput>$(TargetsForTfmSpecificBuildOutput);IncludeCatalogBuildOutput</TargetsForTfmSpecificBuildOutput>
     <TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);IncludeTagSourceToolingBuildOutput</TargetsForTfmSpecificContentInPackage>
     <AllowedOutputExtensionsInPackageBuildOutputFolder>$(AllowedOutputExtensionsInPackageBuildOutputFolder);.pdb</AllowedOutputExtensionsInPackageBuildOutputFolder>
   </PropertyGroup>
-
-  <Target Name="BuildCatalogForPackage">
-    <MSBuild Projects="$(MSBuildProjectDirectory)\Catalog\Bun3.Gameplay.Catalog.csproj"
-             Targets="Build"
-             Properties="Configuration=$(Configuration);BuildProjectReferences=false" />
-  </Target>
-
-  <Target Name="IncludeCatalogBuildOutput" DependsOnTargets="BuildCatalogForPackage">
-    <ItemGroup>
-      <BuildOutputInPackage Include="$(ArtifactsPath)\bin\Bun3.Gameplay.Catalog\$([System.String]::Copy('$(Configuration)').ToLowerInvariant())\Bun3.Gameplay.Catalog.dll">
-        <TargetPath>Bun3.Gameplay.Catalog.dll</TargetPath>
-      </BuildOutputInPackage>
-      <BuildOutputInPackage Include="$(ArtifactsPath)\bin\Bun3.Gameplay.Catalog\$([System.String]::Copy('$(Configuration)').ToLowerInvariant())\Bun3.Gameplay.Catalog.pdb">
-        <TargetPath>Bun3.Gameplay.Catalog.pdb</TargetPath>
-      </BuildOutputInPackage>
-      <BuildOutputInPackage Include="$(ArtifactsPath)\bin\Bun3.Gameplay.Catalog\$([System.String]::Copy('$(Configuration)').ToLowerInvariant())\Bun3.Gameplay.Catalog.xml">
-        <TargetPath>Bun3.Gameplay.Catalog.xml</TargetPath>
-      </BuildOutputInPackage>
-    </ItemGroup>
-  </Target>
 
   <Target Name="BuildTagSourceToolingForPackage">
     <MSBuild Projects="$(MSBuildProjectDirectory)\..\Bun3.Gameplay.TagSourceAnalyzer\Bun3.Gameplay.TagSourceAnalyzer.csproj"
