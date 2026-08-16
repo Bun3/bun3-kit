@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Text;
 using Bun3.Gameplay.Tags;
+using Bun3.Gameplay.Tags.Catalog;
 
 namespace Bun3.Gameplay.Tests;
 
@@ -22,9 +23,7 @@ internal static class TagCatalogTestData
     internal static TagCatalog Load(string json = CanonicalJson)
     {
         using var stream = new MemoryStream(new UTF8Encoding(false, true).GetBytes(json));
-#pragma warning disable CS0618 // 레거시 JSON 테스트 fixture를 의도적으로 만듭니다.
-        return TagCatalog.Load(stream);
-#pragma warning restore CS0618
+        return TagCatalogJson.Load(stream);
     }
 
     internal static string BuildFlatCatalog(int count)

@@ -6,13 +6,13 @@ namespace Bun3.Gameplay.Tags
 {
     public sealed partial class TagCatalog
     {
-        private static BuildData Build(List<ExplicitTag> explicitTags)
+        private static BuildData Build(List<string> canonicalNames)
         {
-            explicitTags.Sort((left, right) => StringComparer.Ordinal.Compare(left.CanonicalName, right.CanonicalName));
+            canonicalNames.Sort(StringComparer.Ordinal);
             var nodes = new Dictionary<string, BuildNode>(StringComparer.Ordinal);
-            foreach (var explicitTag in explicitTags)
+            foreach (var canonicalName in canonicalNames)
             {
-                AddPath(nodes, explicitTag);
+                AddPath(nodes, canonicalName);
             }
 
             if (nodes.Count > ushort.MaxValue)
@@ -20,7 +20,7 @@ namespace Bun3.Gameplay.Tags
                 throw new TagCatalogException("활성 태그 노드는 65,535개를 넘을 수 없습니다.", string.Empty, 1, 1);
             }
 
-            var root = new BuildNode(string.Empty, string.Empty);
+            var root = new BuildNode(string.Empty);
             foreach (var node in nodes.Values)
             {
                 var lastDot = node.CanonicalName.LastIndexOf('.');
@@ -35,66 +35,53 @@ namespace Bun3.Gameplay.Tags
             }
 
             var count = nodes.Count;
-            var displayNames = new string[count + 1];
             var parents = new ushort[count + 1];
             var subtreeEnds = new ushort[count + 1];
             var byCanonicalName = new Dictionary<string, ushort>(count, StringComparer.Ordinal);
             var nextIndex = 1;
-            FillPreorder(root, 0, displayNames, parents, subtreeEnds, byCanonicalName, ref nextIndex);
-            return new BuildData(byCanonicalName, displayNames, parents, subtreeEnds);
+            FillPreorder(root, 0, parents, subtreeEnds, byCanonicalName, ref nextIndex);
+            return new BuildData(byCanonicalName, parents, subtreeEnds);
         }
 
         private readonly struct BuildData
         {
             internal BuildData(
                 Dictionary<string, ushort> byCanonicalName,
-                string[] displayNames,
                 ushort[] parents,
                 ushort[] subtreeEnds)
             {
                 ByCanonicalName = byCanonicalName;
-                DisplayNames = displayNames;
                 Parents = parents;
                 SubtreeEnds = subtreeEnds;
             }
 
             internal Dictionary<string, ushort> ByCanonicalName { get; }
-            internal string[] DisplayNames { get; }
             internal ushort[] Parents { get; }
             internal ushort[] SubtreeEnds { get; }
         }
 
-        private static void AddPath(Dictionary<string, BuildNode> nodes, ExplicitTag explicitTag)
+        // 명시 태그와 그 조상 경로를 모두 노드로 만든다 — 부모는 암묵적으로 활성화된다.
+        private static void AddPath(Dictionary<string, BuildNode> nodes, string canonicalName)
         {
-            var canonicalEnd = 0;
-            var displayEnd = 0;
+            var start = 0;
             while (true)
             {
-                var nextCanonicalDot = explicitTag.CanonicalName.IndexOf('.', canonicalEnd);
-                var nextDisplayDot = explicitTag.DisplayName.IndexOf('.', displayEnd);
-                var canonicalLength = nextCanonicalDot < 0 ? explicitTag.CanonicalName.Length : nextCanonicalDot;
-                var displayLength = nextDisplayDot < 0 ? explicitTag.DisplayName.Length : nextDisplayDot;
-                var canonicalPrefix = explicitTag.CanonicalName.Substring(0, canonicalLength);
-                var displayPrefix = explicitTag.DisplayName.Substring(0, displayLength);
-                if (!nodes.TryGetValue(canonicalPrefix, out var node))
+                var nextDot = canonicalName.IndexOf('.', start);
+                var length = nextDot < 0 ? canonicalName.Length : nextDot;
+                var prefix = canonicalName.Substring(0, length);
+                if (!nodes.ContainsKey(prefix))
                 {
-                    nodes.Add(canonicalPrefix, new BuildNode(canonicalPrefix, displayPrefix));
-                }
-                else if (nextCanonicalDot < 0)
-                {
-                    node.DisplayName = explicitTag.DisplayName;
+                    nodes.Add(prefix, new BuildNode(prefix));
                 }
 
-                if (nextCanonicalDot < 0) return;
-                canonicalEnd = nextCanonicalDot + 1;
-                displayEnd = nextDisplayDot + 1;
+                if (nextDot < 0) return;
+                start = nextDot + 1;
             }
         }
 
         private static void FillPreorder(
             BuildNode node,
             ushort parent,
-            string[] displayNames,
             ushort[] parents,
             ushort[] subtreeEnds,
             Dictionary<string, ushort> byCanonicalName,
@@ -103,36 +90,21 @@ namespace Bun3.Gameplay.Tags
             foreach (var child in node.GetChildrenInOrdinalOrder())
             {
                 var index = checked((ushort)nextIndex++);
-                displayNames[index] = child.DisplayName;
                 parents[index] = parent;
                 byCanonicalName.Add(child.CanonicalName, index);
-                FillPreorder(child, index, displayNames, parents, subtreeEnds, byCanonicalName, ref nextIndex);
+                FillPreorder(child, index, parents, subtreeEnds, byCanonicalName, ref nextIndex);
                 subtreeEnds[index] = checked((ushort)(nextIndex - 1));
             }
         }
 
-        private readonly struct ExplicitTag
-        {
-            internal ExplicitTag(string canonicalName, string displayName)
-            {
-                CanonicalName = canonicalName;
-                DisplayName = displayName;
-            }
-
-            internal string CanonicalName { get; }
-            internal string DisplayName { get; }
-        }
-
         private sealed class BuildNode
         {
-            internal BuildNode(string canonicalName, string displayName)
+            internal BuildNode(string canonicalName)
             {
                 CanonicalName = canonicalName;
-                DisplayName = displayName;
             }
 
             internal string CanonicalName { get; }
-            internal string DisplayName { get; set; }
             internal Dictionary<string, BuildNode> Children { get; } = new Dictionary<string, BuildNode>(StringComparer.Ordinal);
 
             internal List<BuildNode> GetChildrenInOrdinalOrder()

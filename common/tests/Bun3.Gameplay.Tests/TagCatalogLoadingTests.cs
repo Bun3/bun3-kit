@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using Bun3.Gameplay.Tags;
+using Bun3.Gameplay.Tags.Catalog;
 using NUnit.Framework;
 
 namespace Bun3.Gameplay.Tests;
@@ -61,9 +62,7 @@ public sealed class TagCatalogLoadingTests
         stream.Write(prefix, 0, prefix.Length);
         stream.Write(json, 0, json.Length);
         stream.Position = prefix.Length;
-#pragma warning disable CS0618 // 레거시 JSON stream 계약을 검증합니다.
-        Assert.That(TagCatalog.Load(stream).Count, Is.EqualTo(7));
-#pragma warning restore CS0618
+        Assert.That(TagCatalogJson.Load(stream).Count, Is.EqualTo(7));
         Assert.That(stream.CanRead, Is.True);
         Assert.That(stream.Position, Is.EqualTo(stream.Length));
     }
@@ -79,9 +78,7 @@ public sealed class TagCatalogLoadingTests
         source.Position = prefix.Length;
         using var stream = new NonSeekableReadStream(source);
 
-#pragma warning disable CS0618 // 레거시 JSON stream 계약을 검증합니다.
-        Assert.That(TagCatalog.Load(stream).Count, Is.EqualTo(7));
-#pragma warning restore CS0618
+        Assert.That(TagCatalogJson.Load(stream).Count, Is.EqualTo(7));
         Assert.That(stream.CanRead, Is.True);
         Assert.That(stream.ReadByte(), Is.EqualTo(-1));
     }
@@ -91,9 +88,7 @@ public sealed class TagCatalogLoadingTests
     {
         using var stream = new MemoryStream(new byte[] { 0xFF });
 
-#pragma warning disable CS0618 // 레거시 JSON UTF-8 오류 계약을 검증합니다.
-        var error = Assert.Throws<TagCatalogException>(() => TagCatalog.Load(stream));
-#pragma warning restore CS0618
+        var error = Assert.Throws<TagCatalogException>(() => TagCatalogJson.Load(stream));
 
         Assert.That(error!.LineNumber, Is.EqualTo(1));
         Assert.That(error.LinePosition, Is.EqualTo(1));

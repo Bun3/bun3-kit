@@ -1413,9 +1413,8 @@ namespace Bun3.Gameplay.Unity.Tests
             const string invalid =
                 "{\n  \"schemaVersion\":1,\n  \"tags\":[{\"name\":\"State_Bad\"}]\n}";
             using var stream = new MemoryStream(Encoding.UTF8.GetBytes(invalid));
-#pragma warning disable CS0618 // 레거시 Editor JSON 진단을 검증합니다.
             var error = Assert.Throws<Bun3.Gameplay.Tags.TagCatalogException>(
-                () => Bun3.Gameplay.Tags.TagCatalog.Load(stream));
+                () => Bun3.Gameplay.Tags.Catalog.TagCatalogJson.Load(stream));
 #pragma warning restore CS0618
 
             var diagnostic = GameplayTagValidationWindow.FormatDiagnostic("GameplayTags.json", error!);

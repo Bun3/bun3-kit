@@ -54,7 +54,7 @@ namespace Bun3.Gameplay.Tags.Catalog
                 throw new TagCatalogException(exception.Message, origin, 1, 1);
             }
 
-            TagCatalog.StrictJsonSyntax.Validate(text);
+            TagCatalogJson.StrictJsonSyntax.Validate(text);
             try
             {
                 using var stringReader = new StringReader(text);

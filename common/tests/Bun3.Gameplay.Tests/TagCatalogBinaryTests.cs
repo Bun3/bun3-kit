@@ -98,17 +98,13 @@ public sealed class TagCatalogBinaryTests
 
         var original = Compile("game-a", "0.0.0-dev", false).Catalog!;
         using var binary = new MemoryStream(WriteBinary(original));
-#pragma warning disable CS0618 // 레거시 JSON 로더가 binary를 자동 감지하지 않는 계약을 검증합니다.
-        Assert.Throws<TagCatalogException>(() => TagCatalog.Load(binary));
-#pragma warning restore CS0618
+        Assert.Throws<TagCatalogException>(() => TagCatalogJson.Load(binary));
     }
 
     [Test]
     public void Writer_rejects_identity_less_legacy_json_catalog()
     {
-#pragma warning disable CS0618 // 레거시 JSON Catalog의 배포 차단 계약을 검증합니다.
         var legacy = TagCatalogTestData.Load();
-#pragma warning restore CS0618
         using var output = new MemoryStream();
 
         Assert.Throws<InvalidOperationException>(() => TagCatalogBinaryWriter.Write(output, legacy));

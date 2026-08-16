@@ -1,7 +1,6 @@
 #nullable enable
 using System;
 using System.Collections.Generic;
-using System.IO;
 
 namespace Bun3.Gameplay.Tags
 {
@@ -40,11 +39,15 @@ namespace Bun3.Gameplay.Tags
             Count = displayNames.Length - 1;
         }
 
-        private static TagCatalog Create(List<ExplicitTag> explicitTags, List<RedirectDefinition> definitions)
+        /// <summary>
+        /// canonical 태그 이름과 redirect 정의에서 카탈로그를 조립한다 — 저작 어셈블리의 JSON
+        /// 로더와 런타임 성능 픽스처가 쓰는 형식 무관 진입점이다.
+        /// </summary>
+        internal static TagCatalog Create(List<string> canonicalTagNames, List<RedirectDefinition> definitions)
         {
-            var build = Build(explicitTags);
+            var build = Build(canonicalTagNames);
             var redirects = BuildRedirects(definitions, build.ByCanonicalName, out var fingerprintRedirects);
-            var canonicalNames = CreateCanonicalNames(build.ByCanonicalName, build.DisplayNames.Length);
+            var canonicalNames = CreateCanonicalNames(build.ByCanonicalName, build.Parents.Length);
             var fingerprint = ComputeFingerprint(
                 2,
                 canonicalNames,
@@ -205,22 +208,6 @@ namespace Bun3.Gameplay.Tags
         /// <returns>두 fingerprint가 같으면 true입니다.</returns>
         public bool MatchesFingerprint(ReadOnlySpan<byte> other) => other.SequenceEqual(_fingerprint);
 
-        /// <summary>
-        /// UTF-8 JSON 스트림의 현재 위치부터 끝까지 읽어 불변 카탈로그를 만듭니다.
-        /// </summary>
-        /// <param name="utf8Json">읽을 수 있는 UTF-8 JSON 스트림입니다.</param>
-        /// <returns>검증되고 색인화된 카탈로그입니다.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="utf8Json"/>이 null인 경우입니다.</exception>
-        /// <exception cref="ArgumentException">스트림을 읽을 수 없는 경우입니다.</exception>
-        /// <exception cref="TagCatalogException">JSON 또는 카탈로그가 유효하지 않은 경우입니다.</exception>
-        [Obsolete("JSON 로딩은 작성 도구 호환용입니다. 런타임에서는 TagCatalogBinary.Load를 사용하세요.", false)]
-        public static TagCatalog Load(Stream utf8Json)
-        {
-            if (utf8Json is null) throw new ArgumentNullException(nameof(utf8Json));
-            if (!utf8Json.CanRead) throw new ArgumentException("읽을 수 있는 스트림이 필요합니다.", nameof(utf8Json));
-            return Loader.Load(utf8Json);
-        }
-
         /// <summary>경로에 해당하는 등록 태그를 찾습니다.</summary>
         /// <param name="path">ASCII 영숫자 세그먼트 경로입니다.</param>
         /// <param name="tag">찾은 태그 또는 None입니다.</param>
@@ -336,7 +323,8 @@ namespace Bun3.Gameplay.Tags
             return redirects;
         }
 
-        private readonly struct RedirectDefinition
+        /// <summary>redirect 한 건의 canonical 이름 쌍과 원본 JSON 위치입니다.</summary>
+        internal readonly struct RedirectDefinition
         {
             internal RedirectDefinition(
                 string from,

@@ -2,7 +2,6 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.IO;
 using System.Text;
 using Bun3.Gameplay.Tags;
 using NUnit.Framework;
@@ -161,19 +160,17 @@ namespace Bun3.Gameplay.Tests
             if (catalogSize < exactKinds * depth)
                 throw new ArgumentOutOfRangeException(nameof(catalogSize));
 
-            var json = BuildCatalogJson(catalogSize, exactKinds, depth);
-            using var stream = new MemoryStream(new UTF8Encoding(false, true).GetBytes(json));
-#pragma warning disable CS0618 // 기존 JSON performance fixture의 호환 경로입니다.
-            var catalog = TagCatalog.Load(stream);
-#pragma warning restore CS0618
+            var catalog = TagCatalog.Create(
+                BuildCatalogTagNames(catalogSize, exactKinds, depth),
+                new List<TagCatalog.RedirectDefinition>());
             var exact = new GameplayTag[exactKinds];
             var parents = new GameplayTag[exactKinds];
             var misses = new GameplayTag[exactKinds];
             for (var index = 0; index < exactKinds; index++)
             {
                 exact[index] = catalog.GetRequired(BuildChainLeaf(index, depth));
-                parents[index] = catalog.GetRequired("B" + index);
-                misses[index] = catalog.GetRequired("F" + index);
+                parents[index] = catalog.GetRequired("b" + index);
+                misses[index] = catalog.GetRequired("f" + index);
             }
 
             TagContainer? tags = null;
@@ -408,31 +405,25 @@ namespace Bun3.Gameplay.Tests
             return kind == TagQueryKind.ParentHit ? _parentQueries : _missQueries;
         }
 
-        private static string BuildCatalogJson(int catalogSize, int exactKinds, int depth)
+        // 런타임 조립 코어를 직접 부른다 — 이 fixture는 저작 어셈블리를 참조할 수 없는
+        // IL2CPP/Mono 플레이어에서 돌기 때문에 JSON 로더를 쓸 수 없다. 부모는 암묵 활성화된다.
+        private static List<string> BuildCatalogTagNames(int catalogSize, int exactKinds, int depth)
         {
-            var json = new StringBuilder(catalogSize * 24);
-            json.Append("{\"schemaVersion\":1,\"tags\":[");
-            var written = 0;
+            var names = new List<string>(catalogSize);
             for (var index = 0; index < exactKinds; index++)
-            {
-                if (written++ != 0) json.Append(',');
-                json.Append("{\"name\":\"").Append(BuildChainLeaf(index, depth)).Append("\"}");
-            }
+                names.Add(BuildChainLeaf(index, depth));
 
             for (var index = 0; index < catalogSize - exactKinds * depth; index++)
-            {
-                if (written++ != 0) json.Append(',');
-                json.Append("{\"name\":\"F").Append(index).Append("\"}");
-            }
+                names.Add("f" + index);
 
-            return json.Append("]}").ToString();
+            return names;
         }
 
         private static string BuildChainLeaf(int chain, int depth)
         {
-            var path = new StringBuilder().Append('B').Append(chain);
+            var path = new StringBuilder().Append('b').Append(chain);
             for (var level = 1; level < depth; level++)
-                path.Append(".L").Append(level);
+                path.Append(".l").Append(level);
             return path.ToString();
         }
     }

@@ -7,10 +7,27 @@ using System.Text;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
-namespace Bun3.Gameplay.Tags
+namespace Bun3.Gameplay.Tags.Catalog
 {
-    public sealed partial class TagCatalog
+    /// <summary>
+    /// 작성 도구 호환용 레거시 JSON 카탈로그 로더입니다. 런타임 로딩 경로는
+    /// <see cref="TagCatalogBinary"/>이며, 이 형식은 저작 도구에서만 읽습니다.
+    /// </summary>
+    public static class TagCatalogJson
     {
+        /// <summary>UTF-8 JSON 스트림의 현재 위치부터 끝까지 읽어 불변 카탈로그를 만듭니다.</summary>
+        /// <param name="utf8Json">읽을 수 있는 UTF-8 JSON 스트림입니다.</param>
+        /// <returns>검증되고 색인화된 카탈로그입니다.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="utf8Json"/>이 null인 경우입니다.</exception>
+        /// <exception cref="ArgumentException">스트림을 읽을 수 없는 경우입니다.</exception>
+        /// <exception cref="TagCatalogException">JSON 또는 카탈로그가 유효하지 않은 경우입니다.</exception>
+        public static TagCatalog Load(Stream utf8Json)
+        {
+            if (utf8Json is null) throw new ArgumentNullException(nameof(utf8Json));
+            if (!utf8Json.CanRead) throw new ArgumentException("읽을 수 있는 스트림이 필요합니다.", nameof(utf8Json));
+            return Loader.Load(utf8Json);
+        }
+
         private static class Loader
         {
             internal static TagCatalog Load(Stream utf8Json)
@@ -87,12 +104,12 @@ namespace Bun3.Gameplay.Tags
 
                 var explicitTags = ReadTags(tags);
                 var redirectDefinitions = ReadRedirects(root.Property("redirects", StringComparison.Ordinal)?.Value);
-                return Create(explicitTags, redirectDefinitions);
+                return TagCatalog.Create(explicitTags, redirectDefinitions);
             }
 
-            private static List<ExplicitTag> ReadTags(JArray tags)
+            private static List<string> ReadTags(JArray tags)
             {
-                var explicitTags = new List<ExplicitTag>(tags.Count);
+                var explicitTags = new List<string>(tags.Count);
                 var seen = new HashSet<string>(StringComparer.Ordinal);
                 foreach (var token in tags)
                 {
@@ -123,21 +140,21 @@ namespace Bun3.Gameplay.Tags
                         throw Error("comment는 문자열이어야 합니다.", comment);
                     }
 
-                    explicitTags.Add(new ExplicitTag(canonical, name.Value));
+                    explicitTags.Add(canonical);
                 }
 
                 return explicitTags;
             }
 
-            private static List<RedirectDefinition> ReadRedirects(JToken? redirects)
+            private static List<TagCatalog.RedirectDefinition> ReadRedirects(JToken? redirects)
             {
-                if (redirects is null) return new List<RedirectDefinition>();
+                if (redirects is null) return new List<TagCatalog.RedirectDefinition>();
                 if (redirects is not JArray redirectArray)
                 {
                     throw Error("redirects는 배열이어야 합니다.", redirects);
                 }
 
-                var definitions = new List<RedirectDefinition>(redirectArray.Count);
+                var definitions = new List<TagCatalog.RedirectDefinition>(redirectArray.Count);
                 foreach (var token in redirectArray)
                 {
                     if (token is not JObject redirect)
@@ -150,7 +167,7 @@ namespace Bun3.Gameplay.Tags
                     var to = RequireString(redirect, "to");
                     var canonicalFrom = TagName.ValidateAndFold(from.Value, from.Path, from.LineNumber, from.LinePosition);
                     var canonicalTo = TagName.ValidateAndFold(to.Value, to.Path, to.LineNumber, to.LinePosition);
-                    definitions.Add(new RedirectDefinition(
+                    definitions.Add(new TagCatalog.RedirectDefinition(
                         canonicalFrom,
                         canonicalTo,
                         from.Path,

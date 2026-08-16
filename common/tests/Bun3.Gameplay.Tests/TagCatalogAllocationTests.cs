@@ -3,6 +3,7 @@ using System;
 using System.IO;
 using System.Text;
 using Bun3.Gameplay.Tags;
+using Bun3.Gameplay.Tags.Catalog;
 using NUnit.Framework;
 
 namespace Bun3.Gameplay.Tests
@@ -30,9 +31,7 @@ namespace Bun3.Gameplay.Tests
         private static TagCatalog Load(byte[] utf8)
         {
             using var stream = new MemoryStream(utf8, writable: false);
-#pragma warning disable CS0618 // 레거시 JSON allocation fixture입니다.
-            return TagCatalog.Load(stream);
-#pragma warning restore CS0618
+            return TagCatalogJson.Load(stream);
         }
     }
 }
