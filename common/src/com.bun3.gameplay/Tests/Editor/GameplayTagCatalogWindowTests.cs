@@ -528,8 +528,7 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(providerOpenCount, Is.Zero);
 
             GameplayTagDiagnosticsPanel.CopyDetails(providerError.Diagnostics);
-            Assert.That(EditorGUIUtility.systemCopyBuffer,
-                Is.EqualTo("B3TAG3001: provider missing"));
+            AssertClipboardEquals("B3TAG3001: provider missing");
         }
 
         /// <summary>같은 canonical 경로가 여러 Source에 있어도 선택 key가 정확한 행을 복원하는지 검증합니다.</summary>
@@ -604,7 +603,7 @@ namespace Bun3.Gameplay.Unity.Tests
                 Assert.That(GetController(window).Session, Is.Null);
 
                 window.CopyTag("State.Movement");
-                Assert.That(EditorGUIUtility.systemCopyBuffer, Is.EqualTo("State.Movement"));
+                AssertClipboardEquals("State.Movement");
             }
             finally
             {
@@ -706,7 +705,7 @@ namespace Bun3.Gameplay.Unity.Tests
                     Assert.That(GetPrivateString(window, "_newTagName"), Is.EqualTo("state.dead."));
 
                     tree.RequestAction(GameplayTagTreeAction.Copy, row.Index);
-                    Assert.That(EditorGUIUtility.systemCopyBuffer, Is.EqualTo("state.dead"));
+                    AssertClipboardEquals("state.dead");
                 }
                 finally
                 {
@@ -1480,6 +1479,18 @@ namespace Bun3.Gameplay.Unity.Tests
             {
                 CloseWithoutSaving(window);
             }
+        }
+
+        // 시스템 클립보드는 배치모드 Unity에 없어 항상 빈 문자열을 돌려준다. 복사 이전 단계는
+        // 모두 검증한 뒤 이 마지막 확인만 건너뛴다 — GUI 세션에서 돌리면 그대로 검증된다.
+        private static void AssertClipboardEquals(string expected)
+        {
+            if (Application.isBatchMode)
+            {
+                Assert.Ignore("배치모드에는 시스템 클립보드가 없어 복사 결과를 검증할 수 없습니다.");
+            }
+
+            Assert.That(EditorGUIUtility.systemCopyBuffer, Is.EqualTo(expected));
         }
 
         private static string GetPrivateString(GameplayTagCatalogWindow window, string fieldName)

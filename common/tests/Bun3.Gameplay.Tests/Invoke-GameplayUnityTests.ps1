@@ -65,9 +65,18 @@ if ($Mode -eq 'EditMode') {
 if (-not (Test-Path -LiteralPath $resultPath)) { throw "Unity result XML missing: $resultPath" }
 [xml]$results = Get-Content -Raw -Encoding UTF8 -LiteralPath $resultPath
 if ([int]$results.'test-run'.testcasecount -eq 0 `
-  -or $results.'test-run'.result -ne 'Passed' `
-  -or [int]$results.'test-run'.failed -ne 0) {
+  -or [int]$results.'test-run'.failed -ne 0 `
+  -or [int]$results.'test-run'.inconclusive -ne 0) {
   throw "Unity $Mode failed or discovered zero tests: $resultPath"
+}
+# 배치모드에서 검증할 수 없는 테스트(시스템 클립보드 등)는 Assert.Ignore로 빠진다. 실패는
+# 위에서 이미 막았으므로 여기서는 무엇이 빠졌는지 드러내기만 한다 — 조용한 skip 증식 방지.
+$ignored = $results.SelectNodes("//test-case[@result='Skipped']")
+if ($ignored.Count -ne 0) {
+  Write-Host "Ignored $($ignored.Count) test(s):"
+  foreach ($case in $ignored) {
+    Write-Host "  - $($case.fullname)"
+  }
 }
 if (-not (Select-String -LiteralPath $logPath -Pattern 'Run completed' -Quiet)) {
   throw "Unity Test Runner did not report completion: $logPath"
