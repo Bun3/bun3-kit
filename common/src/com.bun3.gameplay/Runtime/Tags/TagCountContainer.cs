@@ -4,13 +4,12 @@ using System;
 namespace Bun3.Gameplay.Tags
 {
     /// <summary>하나의 카탈로그에서 명시적 태그 수와 모든 조상에 누적된 태그 수를 정렬된 와이어 인덱스로 저장합니다.</summary>
-    public sealed class TagCountContainer
+    public sealed class TagCountContainer : TagQueryContainer
     {
         private const int MaximumExactKinds = 64;
         private const int MaximumDepth = 16;
         private const int MaximumEntries = MaximumExactKinds * MaximumDepth;
 
-        private readonly TagCatalog _catalog;
         private ushort[] _indices;
         private int[] _exactCounts;
         private int[] _aggregateCounts;
@@ -18,11 +17,11 @@ namespace Bun3.Gameplay.Tags
         private int _exactKindCount;
 
         internal TagCountContainer(TagCatalog catalog, int expectedExactKinds)
+            : base(catalog)
         {
             if ((uint)expectedExactKinds > MaximumExactKinds)
                 throw new ArgumentOutOfRangeException(nameof(expectedExactKinds));
 
-            _catalog = catalog;
             var capacity = expectedExactKinds * MaximumDepth;
             _indices = capacity == 0 ? Array.Empty<ushort>() : new ushort[capacity];
             _exactCounts = capacity == 0 ? Array.Empty<int>() : new int[capacity];
@@ -40,7 +39,7 @@ namespace Bun3.Gameplay.Tags
         {
             if (destination.Length < _exactKindCount)
                 throw new ArgumentException(
-                    "The destination is too small for the exact entries.", nameof(destination));
+                    "버퍼가 명시 entry 수보다 작습니다.", nameof(destination));
 
             var copied = 0;
             for (var i = 0; i < _entryCount; i++)
@@ -70,14 +69,15 @@ namespace Bun3.Gameplay.Tags
         /// <exception cref="OverflowException">명시적 또는 누적 수가 <see cref="int.MaxValue"/>를 초과하는 경우입니다.</exception>
         public void Add(GameplayTag tag, int count = 1)
         {
-            ValidateMutation(tag, count);
+            ValidateMutationTag(tag);
+            ValidateMutationCount(count);
 
             Span<ushort> ancestors = stackalloc ushort[MaximumDepth];
             var ancestorCount = CollectAncestors(tag, ancestors);
             var exactPosition = TagSearch.LowerBound(_indices, _entryCount, tag.Index, out _);
             var hasExact = exactPosition < _entryCount && _indices[exactPosition] == tag.Index && _exactCounts[exactPosition] != 0;
             if (!hasExact && _exactKindCount == MaximumExactKinds)
-                throw new InvalidOperationException("A TagCountContainer cannot hold more than 64 explicit kinds.");
+                throw new InvalidOperationException("TagCountContainer는 명시적 종류를 64개까지만 담을 수 있습니다.");
 
             var newEntryCount = _entryCount;
             for (var ancestorPosition = 0; ancestorPosition < ancestorCount; ancestorPosition++)
@@ -96,7 +96,7 @@ namespace Bun3.Gameplay.Tags
             }
 
             if (newEntryCount > MaximumEntries)
-                throw new InvalidOperationException("A TagCountContainer cannot hold more than 1,024 aggregate entries.");
+                throw new InvalidOperationException("TagCountContainer는 누적 entry를 1,024개까지만 담을 수 있습니다.");
             EnsureCapacity(newEntryCount);
 
             MergeAddedCounts(tag.Index, count, ancestors, ancestorCount, newEntryCount);
@@ -115,7 +115,8 @@ namespace Bun3.Gameplay.Tags
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="count"/>가 양수가 아닌 경우입니다.</exception>
         public int Remove(GameplayTag tag, int count = 1)
         {
-            ValidateMutation(tag, count);
+            ValidateMutationTag(tag);
+            ValidateMutationCount(count);
 
             var exactPosition = TagSearch.LowerBound(_indices, _entryCount, tag.Index, out _);
             if (exactPosition == _entryCount || _indices[exactPosition] != tag.Index || _exactCounts[exactPosition] == 0)
@@ -187,7 +188,7 @@ namespace Bun3.Gameplay.Tags
         /// <summary>태그 자신에게 명시적으로 저장된 수가 있는지 확인합니다.</summary>
         /// <param name="tag">조회할 태그입니다.</param>
         /// <returns>명시적으로 저장된 수가 있으면 <see langword="true"/>입니다.</returns>
-        public bool HasExact(GameplayTag tag)
+        public override bool HasExact(GameplayTag tag)
         {
             GetCountsCore(tag, out var exact, out _, out _);
             return exact != 0;
@@ -196,78 +197,10 @@ namespace Bun3.Gameplay.Tags
         /// <summary>태그 자신 또는 자손에게 저장된 수가 있는지 확인합니다.</summary>
         /// <param name="tag">조회할 태그입니다.</param>
         /// <returns>누적 수가 있으면 <see langword="true"/>입니다.</returns>
-        public bool Has(GameplayTag tag)
+        public override bool Has(GameplayTag tag)
         {
             GetCountsCore(tag, out _, out var aggregate, out _);
             return aggregate != 0;
-        }
-
-        /// <summary>계층형 조회 태그 중 하나라도 누적 수를 가지는지 확인합니다.</summary>
-        /// <param name="query">같은 카탈로그에서 만든 조회 태그 컨테이너입니다.</param>
-        /// <returns>조회 태그 중 하나라도 누적 수를 가지면 <see langword="true"/>입니다.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="query"/>가 <see langword="null"/>인 경우입니다.</exception>
-        /// <exception cref="ArgumentException"><paramref name="query"/>가 다른 카탈로그에서 만들어진 경우입니다.</exception>
-        public bool HasAny(TagContainer query)
-        {
-            ValidateQueryCatalog(query);
-            for (var i = 0; i < query.ExactKindCount; i++)
-            {
-                if (Has(new GameplayTag(query.GetExactIndexAt(i))))
-                    return true;
-            }
-
-            return false;
-        }
-
-        /// <summary>계층형 조회 태그가 모두 누적 수를 가지는지 확인합니다.</summary>
-        /// <param name="query">같은 카탈로그에서 만든 조회 태그 컨테이너입니다.</param>
-        /// <returns>빈 조회를 포함해 모든 조회 태그가 누적 수를 가지면 <see langword="true"/>입니다.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="query"/>가 <see langword="null"/>인 경우입니다.</exception>
-        /// <exception cref="ArgumentException"><paramref name="query"/>가 다른 카탈로그에서 만들어진 경우입니다.</exception>
-        public bool HasAll(TagContainer query)
-        {
-            ValidateQueryCatalog(query);
-            for (var i = 0; i < query.ExactKindCount; i++)
-            {
-                if (!Has(new GameplayTag(query.GetExactIndexAt(i))))
-                    return false;
-            }
-
-            return true;
-        }
-
-        /// <summary>정확한 조회 태그 중 하나라도 명시적 수를 가지는지 확인합니다.</summary>
-        /// <param name="query">같은 카탈로그에서 만든 조회 태그 컨테이너입니다.</param>
-        /// <returns>조회 태그 중 하나라도 명시적 수를 가지면 <see langword="true"/>입니다.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="query"/>가 <see langword="null"/>인 경우입니다.</exception>
-        /// <exception cref="ArgumentException"><paramref name="query"/>가 다른 카탈로그에서 만들어진 경우입니다.</exception>
-        public bool HasAnyExact(TagContainer query)
-        {
-            ValidateQueryCatalog(query);
-            for (var i = 0; i < query.ExactKindCount; i++)
-            {
-                if (HasExact(new GameplayTag(query.GetExactIndexAt(i))))
-                    return true;
-            }
-
-            return false;
-        }
-
-        /// <summary>정확한 조회 태그가 모두 명시적 수를 가지는지 확인합니다.</summary>
-        /// <param name="query">같은 카탈로그에서 만든 조회 태그 컨테이너입니다.</param>
-        /// <returns>빈 조회를 포함해 모든 정확한 조회 태그가 명시적 수를 가지면 <see langword="true"/>입니다.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="query"/>가 <see langword="null"/>인 경우입니다.</exception>
-        /// <exception cref="ArgumentException"><paramref name="query"/>가 다른 카탈로그에서 만들어진 경우입니다.</exception>
-        public bool HasAllExact(TagContainer query)
-        {
-            ValidateQueryCatalog(query);
-            for (var i = 0; i < query.ExactKindCount; i++)
-            {
-                if (!HasExact(new GameplayTag(query.GetExactIndexAt(i))))
-                    return false;
-            }
-
-            return true;
         }
 
         internal void GetCountsCore(GameplayTag tag, out int exact, out int aggregate, out int comparisons)
@@ -299,7 +232,7 @@ namespace Bun3.Gameplay.Tags
             while (current.IsValid)
             {
                 ancestors[count++] = current.Index;
-                current = _catalog.GetParent(current);
+                current = Catalog.GetParent(current);
             }
 
             return count;
@@ -345,8 +278,14 @@ namespace Bun3.Gameplay.Tags
             {
                 var index = TagSearch.LowerBound(_indices, _entryCount, ancestors[ancestorPosition], out _);
                 if (index == _entryCount || _indices[index] != ancestors[ancestorPosition] || _aggregateCounts[index] < removed)
-                    throw new InvalidOperationException("TagCountContainer aggregate state is invalid.");
+                    throw new InvalidOperationException("TagCountContainer의 누적 상태가 깨졌습니다.");
             }
+        }
+
+        private static void ValidateMutationCount(int count)
+        {
+            if (count <= 0)
+                throw new ArgumentOutOfRangeException(nameof(count));
         }
 
         private void EnsureCapacity(int required)
@@ -369,22 +308,6 @@ namespace Bun3.Gameplay.Tags
             _indices = indices;
             _exactCounts = exactCounts;
             _aggregateCounts = aggregateCounts;
-        }
-
-        private static void ValidateMutation(GameplayTag tag, int count)
-        {
-            if (!tag.IsValid)
-                throw new ArgumentException("GameplayTag.None cannot be stored in a TagCountContainer.", nameof(tag));
-            if (count <= 0)
-                throw new ArgumentOutOfRangeException(nameof(count));
-        }
-
-        private void ValidateQueryCatalog(TagContainer query)
-        {
-            if (query is null)
-                throw new ArgumentNullException(nameof(query));
-            if (!ReferenceEquals(_catalog, query.Catalog))
-                throw new ArgumentException("TagCountContainer queries require the same TagCatalog instance.", nameof(query));
         }
     }
 }
