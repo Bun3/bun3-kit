@@ -64,7 +64,7 @@ namespace Bun3.Gameplay.Tags
         /// <param name="tag">추가할 태그입니다.</param>
         /// <param name="count">추가할 양의 수입니다.</param>
         /// <exception cref="ArgumentException"><paramref name="tag"/>가 <see cref="GameplayTag.None"/>인 경우입니다.</exception>
-        /// <exception cref="ArgumentOutOfRangeException"><paramref name="count"/>가 양수가 아닌 경우입니다.</exception>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="count"/>가 양수가 아니거나 <paramref name="tag"/>가 이 컨테이너의 카탈로그 범위 밖인 경우입니다.</exception>
         /// <exception cref="InvalidOperationException">명시적 태그 종류가 64개를 초과하거나 누적 항목이 1,024개를 초과하는 경우입니다.</exception>
         /// <exception cref="OverflowException">명시적 또는 누적 수가 <see cref="int.MaxValue"/>를 초과하는 경우입니다.</exception>
         public void Add(GameplayTag tag, int count = 1)
@@ -112,7 +112,7 @@ namespace Bun3.Gameplay.Tags
         /// <param name="count">제거를 요청할 양의 수입니다.</param>
         /// <returns>실제로 제거한 수입니다.</returns>
         /// <exception cref="ArgumentException"><paramref name="tag"/>가 <see cref="GameplayTag.None"/>인 경우입니다.</exception>
-        /// <exception cref="ArgumentOutOfRangeException"><paramref name="count"/>가 양수가 아닌 경우입니다.</exception>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="count"/>가 양수가 아니거나 <paramref name="tag"/>가 이 컨테이너의 카탈로그 범위 밖인 경우입니다.</exception>
         public int Remove(GameplayTag tag, int count = 1)
         {
             ValidateMutationTag(tag);

@@ -44,6 +44,7 @@ namespace Bun3.Gameplay.Tags
         /// <param name="tag">추가할 카탈로그 태그입니다.</param>
         /// <returns>태그가 추가되면 <see langword="true"/>이고, 이미 저장되어 있으면 <see langword="false"/>입니다.</returns>
         /// <exception cref="ArgumentException"><paramref name="tag"/>가 <see cref="GameplayTag.None"/>인 경우입니다.</exception>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="tag"/>가 이 컨테이너의 카탈로그 범위 밖인 경우입니다.</exception>
         /// <exception cref="InvalidOperationException">컨테이너에 이미 64개의 명시적 종류가 저장된 경우입니다.</exception>
         public bool Add(GameplayTag tag)
         {
@@ -66,6 +67,7 @@ namespace Bun3.Gameplay.Tags
         /// <param name="tag">제거할 카탈로그 태그입니다.</param>
         /// <returns>태그가 제거되면 <see langword="true"/>이고, 저장되어 있지 않으면 <see langword="false"/>입니다.</returns>
         /// <exception cref="ArgumentException"><paramref name="tag"/>가 <see cref="GameplayTag.None"/>인 경우입니다.</exception>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="tag"/>가 이 컨테이너의 카탈로그 범위 밖인 경우입니다.</exception>
         public bool Remove(GameplayTag tag)
         {
             ValidateMutationTag(tag);

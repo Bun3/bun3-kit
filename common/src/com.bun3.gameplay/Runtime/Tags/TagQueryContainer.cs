@@ -6,6 +6,19 @@ namespace Bun3.Gameplay.Tags
     /// <summary>
     /// 하나의 카탈로그에 묶여 계층 태그 질의를 받는 컨테이너의 공통 기반입니다.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>프로세스 내 카탈로그는 하나여야 합니다.</b> 여러 태그 Source를 하나의 카탈로그로 합쳐
+    /// 런타임에 동작시키는 것이 이 설계의 전제이며, <see cref="GameplayTag"/>는 그 카탈로그
+    /// 안에서만 뜻을 가지는 2바이트 index입니다. 서로 다른 카탈로그의 태그를 섞으면 index는
+    /// 같아도 가리키는 태그가 달라 계층 질의가 조용히 다른 답을 냅니다.
+    /// </para>
+    /// <para>
+    /// 변경 경로는 카탈로그 범위를 벗어난 index를 예외로 거부합니다. 다만 크기가 같은 서로 다른
+    /// 카탈로그를 섞는 경우는 index만으로 탐지할 수 없으므로, 계약을 지키는 것은 호출자 책임입니다.
+    /// 조회 경로는 틱 핫패스이므로 범위 밖 태그를 예외 대신 미일치로 처리합니다.
+    /// </para>
+    /// </remarks>
     public abstract class TagQueryContainer
     {
         private readonly TagCatalog _catalog;
@@ -93,11 +106,15 @@ namespace Bun3.Gameplay.Tags
             return true;
         }
 
-        // 변경 경로 공통 검증.
+        // 변경 경로 공통 검증 — None과 다른 카탈로그의 index를 거부한다.
         private protected void ValidateMutationTag(GameplayTag tag)
         {
             if (!tag.IsValid)
                 throw new ArgumentException("GameplayTag.None은 컨테이너에 담을 수 없습니다.", nameof(tag));
+            if (tag.Index > _catalog.Count)
+                throw new ArgumentOutOfRangeException(
+                    nameof(tag),
+                    "이 컨테이너의 카탈로그 범위를 벗어난 태그입니다 — 프로세스 내 카탈로그는 하나여야 합니다.");
         }
 
         private void ValidateQueryCatalog(TagContainer query)
