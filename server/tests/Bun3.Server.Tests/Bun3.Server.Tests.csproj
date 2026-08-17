@@ -35,6 +35,7 @@
     <ProjectReference Include="..\..\src\Bun3.Server.Players\Bun3.Server.Players.csproj" />
     <ProjectReference Include="..\..\src\Bun3.Server.Ticking\Bun3.Server.Ticking.csproj" />
     <ProjectReference Include="..\..\src\Bun3.Server.GameplayTags\Bun3.Server.GameplayTags.csproj" />
+    <ProjectReference Include="..\..\src\Bun3.Server.Items\Bun3.Server.Items.csproj" />
     <ProjectReference Include="..\..\..\common\src\com.bun3.gameplay\Catalog\Bun3.Gameplay.Catalog.csproj" />
   </ItemGroup>
 

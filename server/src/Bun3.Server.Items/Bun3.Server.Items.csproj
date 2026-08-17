@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <LangVersion>9.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Bun3.Server.Items</RootNamespace>
+    <PackageId>Bun3.Server.Items</PackageId>
+    <Version>0.1.0</Version>
+    <Authors>Bun3</Authors>
+    <RepositoryUrl>https://github.com/Bun3/bun3-kit</RepositoryUrl>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <Description>서버 아이템 카탈로그와 스택 인벤토리 — id 인터닝, 원자적 지급/소모 트랜잭션, 저장 dirty 연계</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Bun3.Server.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\common\src\com.bun3.gameplay\Bun3.Gameplay.csproj" />
+  </ItemGroup>
+
+</Project>
