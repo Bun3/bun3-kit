@@ -8,9 +8,9 @@ using Bun3.Gameplay.Seams;
 namespace Bun3.Gameplay.Effects
 {
     /// <summary>
-    /// 효과 적용 큐를 드레인하고 Instant 경로를 처리하는 파이프라인입니다.
-    /// 이 단계는 페이즈 ① (드레인·면역·적용조건·Instant 적용)만 구현합니다 — 주기 실행·만료·
-    /// 지속 조건 재평가 등 나머지 페이즈는 후속 확장에서 채워집니다.
+    /// 효과 적용 큐를 드레인하고 Instant/Duration/Infinite 경로를 처리하는 파이프라인입니다.
+    /// 페이즈 ①(드레인·면역·적용조건·적용) → 페이즈 ②(대상별 주기 발화·수명 감소·만료) →
+    /// 페이즈 ③(dirty 속성 재집계) 순으로 한 틱을 처리합니다. 지속 조건 재평가는 후속 확장 몫입니다.
     /// </summary>
     public sealed class EffectPipeline
     {
@@ -27,6 +27,7 @@ namespace Bun3.Gameplay.Effects
         private readonly IRng _rng;
         private readonly int _applyBudgetPerTick;
         private readonly Queue<PendingApply> _queue = new Queue<PendingApply>();
+        private readonly List<EffectInstance> _expiryScratch = new List<EffectInstance>();
         private ulong _nextInstanceId = 1;
 
         /// <summary>대상 해석 실패로 조용히 드롭된 적용 요청 수입니다.</summary>
@@ -66,7 +67,10 @@ namespace Bun3.Gameplay.Effects
             _queue.Enqueue(new PendingApply { SpecId = specId, Source = source, Target = target, Level = level });
         }
 
-        /// <summary>한 틱을 처리합니다. 적용 큐를 예산만큼 드레인합니다.</summary>
+        /// <summary>
+        /// 한 틱을 처리합니다. ① 적용 큐를 예산만큼 드레인 → ② 대상별 주기 발화·수명 감소·만료 처리 →
+        /// ③ dirty 속성 재집계 순입니다.
+        /// </summary>
         public void Tick()
         {
             var budget = _applyBudgetPerTick;
@@ -76,6 +80,9 @@ namespace Bun3.Gameplay.Effects
                 var pending = _queue.Dequeue();
                 ProcessPendingApply(in pending);
             }
+
+            TickActiveEffects();
+            RebuildAllDirty();
 
             CurrentTick++;
         }
@@ -216,7 +223,7 @@ namespace Bun3.Gameplay.Effects
             var executions = spec.Executions;
             for (var i = 0; i < executions.Length; i++)
             {
-                RunExecution(executions[i], target, source, hasSource, in pending);
+                RunExecution(executions[i], target, source, hasSource, pending.Source, pending.Target, pending.Level, stack: 1);
             }
         }
 
@@ -237,7 +244,8 @@ namespace Bun3.Gameplay.Effects
         }
 
         private void RunExecution(
-            CompiledExecution execution, EffectTarget target, EffectTarget? source, bool hasSource, in PendingApply pending)
+            CompiledExecution execution, EffectTarget target, EffectTarget? source, bool hasSource,
+            TargetId sourceId, TargetId targetId, int level, int stack)
         {
             // ponytail: 입력 개수는 저작 스펙 규모라 stackalloc으로 충분 — 대량 입력이 실제로 필요해지면 힙 배열로 교체.
             Span<BigNum> inputs = stackalloc BigNum[execution.Inputs.Length];
@@ -247,21 +255,213 @@ namespace Bun3.Gameplay.Effects
             }
 
             var ctx = new ExecutionContext(
-                this, target, source, hasSource, pending.Source, pending.Target,
-                pending.Level, stack: 1, CurrentTick, inputs, _rng);
+                this, target, source, hasSource, sourceId, targetId,
+                level, stack, CurrentTick, inputs, _rng);
             execution.Calc.Execute(ref ctx);
         }
 
-        // Duration/Infinite: 인스턴스를 만들어 활성 목록에 꽂고 Applied 이벤트를 낸다.
-        // 수정자 부착·주기 실행·지속 조건 재평가는 후속 확장에서 채워진다.
+        // Duration/Infinite: 대상에 동일 SpecId 활성 인스턴스가 있으면 스택 정책으로 병합하고,
+        // 없으면 새 인스턴스를 만들어 수정자 부착·태그 부여까지 끝낸다.
         private void ApplyDurationOrInfinite(CompiledEffectSpec spec, EffectTarget target, in PendingApply pending)
+        {
+            var existing = FindActiveBySpec(target, pending.SpecId);
+            if (existing != null)
+            {
+                MergeReapply(spec, target, existing);
+                return;
+            }
+
+            CreateInstance(spec, target, in pending);
+        }
+
+        private static EffectInstance? FindActiveBySpec(EffectTarget target, int specId)
+        {
+            var active = target.ActiveEffects;
+            for (var i = 0; i < active.Count; i++)
+            {
+                if (active[i].SpecId == specId) return active[i];
+            }
+
+            return null;
+        }
+
+        // 재적용 병합: AddStack이면 스택을 늘리고(클램프), Refresh/AddStack 공통으로 정책에 따라
+        // 지속시간·주기 타이머를 리셋한다. 스택 값이 실제로 바뀔 때만 StackChanged를 낸다.
+        private void MergeReapply(CompiledEffectSpec spec, EffectTarget target, EffectInstance instance)
+        {
+            var stackPolicy = spec.Stack;
+            if (stackPolicy.OnReapply == StackReapply.AddStack)
+            {
+                // Build 단계에서 AddStack 정책은 MaxStack > 0을 보장한다.
+                var wouldBe = instance.Stack + stackPolicy.AddStackCount;
+                // ponytail: 초과분(wouldBe > MaxStack)의 오버플로 정책(Deny/ApplyEffect) 처리는 자리만 비워둔다 — 지금은 클램프만.
+                var newStack = wouldBe > stackPolicy.MaxStack ? stackPolicy.MaxStack : wouldBe;
+                if (newStack != instance.Stack)
+                {
+                    instance.Stack = newStack;
+                    target.RaiseEffectEvent(new EffectLifecycleEvent(
+                        EffectLifecycleKind.StackChanged, instance.Id, instance.SpecId, instance.Stack));
+                    MarkDirtyForModifiers(target, spec);
+                }
+            }
+
+            if (stackPolicy.RefreshDurationOnReapply && spec.DurationType == EffectDurationType.Duration)
+            {
+                instance.RemainingTicks = spec.DurationTicks;
+            }
+
+            if (stackPolicy.ResetPeriodOnReapply && spec.PeriodTicks > 0)
+            {
+                instance.PeriodCountdown = spec.PeriodTicks;
+            }
+        }
+
+        // 새 인스턴스: 렌트→Id 오름차순 삽입→(주기 효과가 아니면) 수정자 부착→GrantedTags 부여→Applied.
+        // 주기 효과(PeriodTicks > 0)는 매 주기 Instant와 동일한 경로로 Base에 가감할 뿐 지속 부착 대상이 아니다.
+        private void CreateInstance(CompiledEffectSpec spec, EffectTarget target, in PendingApply pending)
         {
             var remainingTicks = spec.DurationType == EffectDurationType.Duration ? spec.DurationTicks : -1;
             var periodCountdown = spec.PeriodTicks > 0 ? spec.PeriodTicks : -1;
             var instance = EffectInstance.Rent(
-                _nextInstanceId++, pending.SpecId, pending.Source, pending.Level, stack: 1, remainingTicks, periodCountdown);
+                _nextInstanceId++, pending.SpecId, pending.Source, pending.Level, stack: 1,
+                remainingTicks, periodCountdown, CurrentTick);
             target.InsertActive(instance);
+
+            if (spec.PeriodTicks == 0)
+            {
+                var hasSource = _resolver.TryResolve(pending.Source, out var source) && source is not null;
+                var modifiers = spec.Modifiers;
+                for (var i = 0; i < modifiers.Length; i++)
+                {
+                    var modifier = modifiers[i];
+                    var magnitude = EvaluateMagnitude(modifier, target, source, hasSource, pending.Level, instance.Stack);
+                    target.Attributes.AttachModifier(instance, i, modifier.AttributeId, modifier.Op, magnitude, modifier.ScaleWithStack);
+                }
+            }
+
+            var grantedTags = spec.GrantedTags;
+            for (var i = 0; i < grantedTags.Length; i++)
+            {
+                target.Tags.Add(grantedTags[i]);
+            }
+
             target.RaiseEffectEvent(new EffectLifecycleEvent(EffectLifecycleKind.Applied, instance.Id, pending.SpecId, instance.Stack));
+        }
+
+        private static void MarkDirtyForModifiers(EffectTarget target, CompiledEffectSpec spec)
+        {
+            var modifiers = spec.Modifiers;
+            for (var i = 0; i < modifiers.Length; i++)
+            {
+                target.Attributes.MarkDirty(modifiers[i].AttributeId);
+            }
+        }
+
+        // 페이즈 ②: 대상을 TargetId 순으로, 인스턴스를 Id 순(활성 목록이 이미 canonical)으로 순회한다.
+        // 이번 틱 생성분은 건너뛴다(컨트롤러 룰링). 주기 발화가 만료 검사보다 먼저 처리되므로
+        // 만료되는 그 틱의 마지막 주기 발화도 반영된다.
+        private void TickActiveEffects()
+        {
+            var targetIds = _resolver.TargetIds;
+            for (var t = 0; t < targetIds.Count; t++)
+            {
+                if (!_resolver.TryResolve(targetIds[t], out var target) || target is null) continue;
+
+                var active = target.ActiveEffects;
+                _expiryScratch.Clear();
+                for (var i = 0; i < active.Count; i++)
+                {
+                    var instance = active[i];
+                    if (instance.CreatedTick == CurrentTick) continue;   // 생성 틱은 다음 틱부터 진행
+
+                    var spec = _catalog.GetSpec(instance.SpecId);
+
+                    if (spec.PeriodTicks > 0)
+                    {
+                        instance.PeriodCountdown--;
+                        if (instance.PeriodCountdown == 0)
+                        {
+                            FirePeriodic(spec, target, instance);
+                            instance.PeriodCountdown = spec.PeriodTicks;
+                        }
+                    }
+
+                    if (spec.DurationType == EffectDurationType.Duration)
+                    {
+                        instance.RemainingTicks--;
+                        if (instance.RemainingTicks <= 0)
+                        {
+                            _expiryScratch.Add(instance);
+                        }
+                    }
+                }
+
+                for (var i = 0; i < _expiryScratch.Count; i++)
+                {
+                    ExpireInstance(target, _expiryScratch[i]);
+                }
+            }
+        }
+
+        // 주기 도래: Instant와 동일한 경로 — Modifiers는 Base 가감(Add-only, Build 단계 보장), Executions 실행.
+        private void FirePeriodic(CompiledEffectSpec spec, EffectTarget target, EffectInstance instance)
+        {
+            var hasSource = _resolver.TryResolve(instance.Source, out var source) && source is not null;
+
+            var modifiers = spec.Modifiers;
+            for (var i = 0; i < modifiers.Length; i++)
+            {
+                var modifier = modifiers[i];
+                var magnitude = EvaluateMagnitude(modifier, target, source, hasSource, instance.Level, instance.Stack);
+                ApplyModifierToBase(target, modifier, magnitude);
+            }
+
+            var executions = spec.Executions;
+            for (var i = 0; i < executions.Length; i++)
+            {
+                RunExecution(executions[i], target, source, hasSource, instance.Source, target.Id, instance.Level, instance.Stack);
+            }
+        }
+
+        // 만료: 스택 정책이 RemoveOneAndRefresh고 스택이 남아있으면 하나만 줄이고 지속시간을 리셋,
+        // 아니면 완전 제거(수정자 분리·태그 회수·활성 목록 제거·풀 반환).
+        private void ExpireInstance(EffectTarget target, EffectInstance instance)
+        {
+            var spec = _catalog.GetSpec(instance.SpecId);
+            if (spec.Stack.OnExpiration == StackExpiration.RemoveOneAndRefresh && instance.Stack > 1)
+            {
+                instance.Stack--;
+                instance.RemainingTicks = spec.DurationTicks;
+                target.RaiseEffectEvent(new EffectLifecycleEvent(
+                    EffectLifecycleKind.StackChanged, instance.Id, instance.SpecId, instance.Stack));
+                MarkDirtyForModifiers(target, spec);
+                return;
+            }
+
+            target.Attributes.DetachModifiers(instance);
+            var grantedTags = spec.GrantedTags;
+            for (var i = 0; i < grantedTags.Length; i++)
+            {
+                target.Tags.Remove(grantedTags[i]);
+            }
+
+            target.RemoveActive(instance);
+            target.RaiseEffectEvent(new EffectLifecycleEvent(EffectLifecycleKind.Expired, instance.Id, instance.SpecId, instance.Stack));
+            EffectInstance.Return(instance);
+        }
+
+        // 페이즈 ③: 대상별로 dirty 속성 슬롯을 재집계한다(부착/분리는 이미 AttachModifier/DetachModifiers가
+        // dirty를 표시하고, 스택 변경 전용 경로는 MarkDirtyForModifiers가 표시한다).
+        private void RebuildAllDirty()
+        {
+            var targetIds = _resolver.TargetIds;
+            for (var t = 0; t < targetIds.Count; t++)
+            {
+                if (_resolver.TryResolve(targetIds[t], out var target) && target is not null)
+                {
+                    target.Attributes.RebuildDirty();
+                }
+            }
         }
     }
 }

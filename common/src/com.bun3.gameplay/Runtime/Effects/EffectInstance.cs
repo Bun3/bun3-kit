@@ -40,9 +40,16 @@ namespace Bun3.Gameplay.Effects
         /// <summary>Ongoing 조건 등으로 집계에서 제외되었는지 여부입니다. false면 집계에서 건너뜁니다.</summary>
         public bool Enabled { get; internal set; }
 
+        /// <summary>
+        /// 이 인스턴스가 생성된 파이프라인 틱입니다. 컨트롤러 룰링: 생성된 틱에는 수명(RemainingTicks)·
+        /// 주기(PeriodCountdown)가 진행되지 않고, 다음 틱부터 진행됩니다.
+        /// </summary>
+        public long CreatedTick { get; private set; }
+
         /// <summary>풀에서 인스턴스를 빌리고 필드를 초기화합니다.</summary>
         internal static EffectInstance Rent(
-            ulong id, int specId, TargetId source, int level, int stack, int remainingTicks, int periodCountdown)
+            ulong id, int specId, TargetId source, int level, int stack,
+            int remainingTicks, int periodCountdown, long createdTick)
         {
             var instance = Pool.Count > 0 ? Pool.Pop() : new EffectInstance();
             instance.Id = id;
@@ -52,6 +59,7 @@ namespace Bun3.Gameplay.Effects
             instance.Stack = stack;
             instance.RemainingTicks = remainingTicks;
             instance.PeriodCountdown = periodCountdown;
+            instance.CreatedTick = createdTick;
             instance.Enabled = true;
             return instance;
         }
