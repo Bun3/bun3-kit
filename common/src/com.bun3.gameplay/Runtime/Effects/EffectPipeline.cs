@@ -221,6 +221,8 @@ namespace Bun3.Gameplay.Effects
         }
 
         // Instant는 인스턴스가 없으므로 수정자가 즉시 Base에 반영되는 영구 변경으로 해석한다.
+        // Multiply/Override는 ΣMulPct·override 집계(Duration/Infinite 전용) 의미라 Instant엔 없다 —
+        // 퍼센트 증감은 Add + 자기참조 피연산자(예: Operand.Attribute(Hp, -0.3))로 표현한다.
         private static void ApplyModifierToBase(EffectTarget target, CompiledModifier modifier, BigNum magnitude)
         {
             switch (modifier.Op)
@@ -228,13 +230,9 @@ namespace Bun3.Gameplay.Effects
                 case AttributeModifierOp.Add:
                     target.Attributes.AddBase(modifier.AttributeId, magnitude);
                     break;
-                case AttributeModifierOp.Multiply:
-                    target.Attributes.AddBase(
-                        modifier.AttributeId, target.Attributes.GetBase(modifier.AttributeId) * magnitude);
-                    break;
-                default:   // Override
-                    target.Attributes.SetBase(modifier.AttributeId, magnitude);
-                    break;
+                default:
+                    // EffectCatalogBuilder가 Instant/주기 실행 스펙의 Op를 Add로 강제하므로 도달하지 않는다.
+                    throw new InvalidOperationException($"Instant 수정자는 Add만 허용됩니다: {modifier.Op}");
             }
         }
 

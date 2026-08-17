@@ -64,6 +64,7 @@ namespace Bun3.Gameplay.Effects
             ValidateDurationTypeFields(spec);
             ValidateExecutionEligibility(spec);
             ValidateStackOverflowConsistency(spec);
+            ValidateInstantOrPeriodicModifierOps(spec);
 
             var grantedTags = ResolveTags(spec.GrantedTags, spec.Name, tags, "부여");
             var assetTags = ResolveTags(spec.AssetTags, spec.Name, tags, "자산");
@@ -187,6 +188,25 @@ namespace Bun3.Gameplay.Effects
             {
                 throw new InvalidOperationException(
                     $"효과 '{spec.Name}': Executions는 Instant이거나 PeriodTicks > 0일 때만 허용됩니다.");
+            }
+        }
+
+        // 규칙: Instant 또는 주기 실행(PeriodTicks > 0) 스펙의 수정자는 Add만 허용한다.
+        // Multiply/Override는 ΣMulPct·override 집계(Duration/Infinite 무주기 전용) 의미라
+        // 인스턴스 없이 즉시 적용되는 경로엔 없다 — 퍼센트 증감은 Add + 자기참조 피연산자
+        // (예: Operand.Attribute(id, -0.3) = "현재 값의 30% 감소")로 표현하는 것과 등가다.
+        private static void ValidateInstantOrPeriodicModifierOps(EffectSpec spec)
+        {
+            if (spec.DurationType != EffectDurationType.Instant && spec.PeriodTicks <= 0) return;
+
+            for (var i = 0; i < spec.Modifiers.Count; i++)
+            {
+                if (spec.Modifiers[i].Op != AttributeModifierOp.Add)
+                {
+                    throw new InvalidOperationException(
+                        $"효과 '{spec.Name}': Instant/주기 실행 수정자는 Add만 허용됩니다 — " +
+                        "퍼센트 증감은 Add + 자기참조 피연산자(예: Operand.Attribute(id, -0.3))로 표현하세요.");
+                }
             }
         }
 

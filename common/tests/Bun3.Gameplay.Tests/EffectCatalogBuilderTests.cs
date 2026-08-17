@@ -109,6 +109,56 @@ public sealed class EffectCatalogBuilderTests
         Assert.That(ex!.Message, Does.Contain("s2"));
     }
 
+    // 규칙: Instant/주기 실행 스펙의 수정자는 Add만 허용한다.
+
+    [Test]
+    public void Build_rejects_instant_modifier_with_multiply_op()
+    {
+        var spec = EffectTestKit.MinimalInstant("mul");
+        spec.Modifiers.Add(new ModifierDef
+        {
+            AttributeId = EffectTestKit.Hp,
+            Op = AttributeModifierOp.Multiply,
+            Magnitude = new MagnitudeDef { Base = Operand.Constant(BigNum.FromParts(-3, -1)) },
+        });
+        var builder = new EffectCatalogBuilder();
+        builder.Add(spec);
+        var ex = Assert.Throws<InvalidOperationException>(() => EffectTestKit.BuildCatalog(builder));
+        Assert.That(ex!.Message, Does.Contain("mul"));
+    }
+
+    [Test]
+    public void Build_rejects_periodic_duration_modifier_with_override_op()
+    {
+        var spec = EffectTestKit.MinimalDuration("periodic", 100);
+        spec.PeriodTicks = 10;
+        spec.Modifiers.Add(new ModifierDef
+        {
+            AttributeId = EffectTestKit.Hp,
+            Op = AttributeModifierOp.Override,
+            Magnitude = new MagnitudeDef { Base = Operand.Constant(0) },
+        });
+        var builder = new EffectCatalogBuilder();
+        builder.Add(spec);
+        var ex = Assert.Throws<InvalidOperationException>(() => EffectTestKit.BuildCatalog(builder));
+        Assert.That(ex!.Message, Does.Contain("periodic"));
+    }
+
+    [Test]
+    public void Build_allows_multiply_op_on_non_periodic_duration_modifier()
+    {
+        var spec = EffectTestKit.MinimalDuration("buff", 100);
+        spec.Modifiers.Add(new ModifierDef
+        {
+            AttributeId = EffectTestKit.Hp,
+            Op = AttributeModifierOp.Multiply,
+            Magnitude = new MagnitudeDef { Base = Operand.Constant(BigNum.FromParts(2, -1)) },
+        });
+        var builder = new EffectCatalogBuilder();
+        builder.Add(spec);
+        Assert.DoesNotThrow(() => EffectTestKit.BuildCatalog(builder));
+    }
+
     // 규칙 6: 태그·CalcTag·SelectorTag는 카탈로그·SeamRegistry에서 해석되어야 한다.
 
     [Test]
