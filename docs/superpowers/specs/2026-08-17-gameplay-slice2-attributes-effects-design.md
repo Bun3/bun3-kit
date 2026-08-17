@@ -52,20 +52,20 @@ EffectSpec은 로직 필드가 없는 순수 데이터 형태로 강제하며, *
 ## 4. Operand — 3용도 공용 피연산자 어휘
 
 ```
-Operand (readonly struct, kind 판별자)
-├─ Constant(BigNum)
-└─ Attribute(attributeId, 상수 계수 = 1, origin: Target(기본) | Source)
+Operand (readonly struct — 세 형태, 내부 kind 판별)
+├─ Constant(BigNum)                          상수
+├─ Attribute(attributeId, 계수 = 1)          대상(target) 속성 Current × 계수
+└─ SourceAttribute(attributeId, 계수 = 1)    시전자(source) 속성 Current × 계수
 ```
 
 사용처: ① Modifier 크기 ② Condition 양변 ③ 클램프 경계. Modifier 크기 자리에서만
 네 번째 형태(MagnitudeCalc 태그 참조)가 허용된다.
 
-**origin 축** (GAS AttributeSource의 채택): 속성 참조는 대상(Target)이 기본이고
-`Source`를 명시하면 시전자 속성을 읽는다 — "시전자 공격력 × 1.2 데미지"가 순수
-데이터다. 자리별 허용은 Build가 검증한다: Modifier 크기·Execution inputs·
-ApplicationConditions는 Source 허용, OngoingConditions(소스가 수명 중 소멸
-가능)·클램프 경계(소스 개념 없음)는 Source 금지. 소스 미해석 시 Source 피연산자는
-0으로 평가된다.
+**SourceAttribute** (GAS AttributeSource 캡처의 kind 흡수 — 별도 축을 두지 않는다):
+"시전자 공격력 × 1.2 데미지"가 순수 데이터다. 자리별 허용은 Build가 검증한다 —
+Modifier 크기·Execution inputs·ApplicationConditions는 허용, OngoingConditions
+(소스가 수명 중 소멸 가능)·클램프 경계(소스 개념 없음)에서는 오류. 소스 미해석 시
+SourceAttribute는 0으로 평가된다.
 
 **캡처 시점**: v1은 전부 **적용 시점 평가(스냅샷)** — Duration 수정자의 크기는 적용
 순간 고정된다. GAS의 Spec-생성-시점 스냅샷(투사체 발사 순간 캡처)은 생성≠적용 분리가

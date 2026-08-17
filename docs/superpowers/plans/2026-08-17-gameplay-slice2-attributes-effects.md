@@ -17,7 +17,7 @@
 - 무할당 규율: 틱 정착 상태에서 힙 할당 0. 클로저·LINQ 금지. 컨텍스트는 `ref struct`.
 - 결정론: 모든 순회는 canonical 순서(§ 각 태스크 명시). float/double 금지 — BigNum·정수만.
 - 수정자 크기의 Operand는 **적용 시점 평가(스냅샷)로 고정** — 적용 후 원본 속성이 변해도 이미 적용된 수정자 크기는 불변 (스펙 §4, live 갱신·Spec 생성 시점 스냅샷은 후속).
-- 속성 참조 Operand는 **origin(Target 기본 | Source)** 을 가진다 — Source는 Modifier 크기·Execution inputs·ApplicationConditions에서만 허용, OngoingConditions·클램프 경계에서는 Build 오류. 소스 미해석 시 Source 피연산자는 BigNum.Zero로 평가.
+- Operand는 세 형태다 — `Constant` / `Attribute`(대상 속성) / `SourceAttribute`(시전자 속성). 별도 origin 축 없음 — kind가 곧 판별자. `SourceAttribute`는 Modifier 크기·Execution inputs·ApplicationConditions에서만 허용, OngoingConditions·클램프 경계에서는 Build 오류. 소스 미해석 시 `SourceAttribute`는 BigNum.Zero로 평가.
 - 테스트: `common/tests/Bun3.Gameplay.Tests/` (net10.0, NUnit). 실행: `dotnet test common/tests/Bun3.Gameplay.Tests -c Release -v:minimal`.
 - 커밋: gitmoji + `git commit -m "<제목>" -m "Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"` 이중 플래그 (here-string 금지).
 - 신규 `.cs`의 Unity `.meta`는 이번 플랜에서 만들지 않는다 — 에디터를 여는 후속 커밋에서 일괄 (기존 관례).
@@ -33,7 +33,7 @@
 - Test: `common/tests/Bun3.Gameplay.Tests/OperandTests.cs`
 
 **Interfaces:**
-- Produces: `Operand`(readonly struct — `Kind: OperandKind`, `Value: BigNum`, `AttributeId: ushort`, `Origin: OperandOrigin`; 팩토리 `Operand.Constant(BigNum)`, `Operand.Attribute(ushort)`, `Operand.Attribute(ushort, BigNum coefficient)`, `Operand.SourceAttribute(ushort)`, `Operand.SourceAttribute(ushort, BigNum coefficient)`; `IEquatable<Operand>`), `OperandKind { Constant=0, Attribute=1 }`, `OperandOrigin { Target=0, Source=1 }`, `AttributeModifierOp { Add=0, Multiply=1, Override=2 }`, `MaxIncreasePolicy { Stay=0, Follow=1 }`, `MaxDecreasePolicy { Follow=0, Stay=1 }`, `ComparisonOp { Equal, NotEqual, Less, LessOrEqual, Greater, GreaterOrEqual }`. Origin은 Equals/GetHashCode에 포함. `SourceAttribute` 팩토리는 `Origin = Source`만 다르다. 테스트에 origin 기본값(Target)·SourceAttribute 동등성 케이스 추가.
+- Produces: `Operand`(readonly struct — `Kind: OperandKind`, `Value: BigNum`, `AttributeId: ushort`; 팩토리 `Operand.Constant(BigNum)`, `Operand.Attribute(ushort)`, `Operand.Attribute(ushort, BigNum coefficient)`, `Operand.SourceAttribute(ushort)`, `Operand.SourceAttribute(ushort, BigNum coefficient)`; `IEquatable<Operand>`), `OperandKind { Constant=0, Attribute=1, SourceAttribute=2 }`, `AttributeModifierOp { Add=0, Multiply=1, Override=2 }`, `MaxIncreasePolicy { Stay=0, Follow=1 }`, `MaxDecreasePolicy { Follow=0, Stay=1 }`, `ComparisonOp { Equal, NotEqual, Less, LessOrEqual, Greater, GreaterOrEqual }`. 테스트에 `SourceAttribute` kind·`Attribute`와의 비동등 케이스 추가.
 
 - [ ] **Step 1: 실패하는 테스트 작성**
 
@@ -96,8 +96,10 @@ namespace Bun3.Gameplay.Attributes
     {
         /// <summary>상수 BigNum입니다.</summary>
         Constant = 0,
-        /// <summary>속성 Current 참조 × 상수 계수입니다.</summary>
+        /// <summary>대상(target) 속성 Current × 상수 계수입니다.</summary>
         Attribute = 1,
+        /// <summary>시전자(source) 속성 Current × 상수 계수입니다. 소스 미해석 시 0으로 평가됩니다.</summary>
+        SourceAttribute = 2,
     }
 
     /// <summary>수정자 연산 종류입니다.</summary>
@@ -181,12 +183,19 @@ namespace Bun3.Gameplay.Attributes
         /// <summary>상수 피연산자를 만듭니다.</summary>
         public static Operand Constant(BigNum value) => new Operand(OperandKind.Constant, value, 0);
 
-        /// <summary>계수 1의 속성 참조 피연산자를 만듭니다.</summary>
+        /// <summary>계수 1의 대상 속성 참조 피연산자를 만듭니다.</summary>
         public static Operand Attribute(ushort attributeId) => Attribute(attributeId, BigNum.One);
 
-        /// <summary>속성 Current × 계수 피연산자를 만듭니다.</summary>
+        /// <summary>대상 속성 Current × 계수 피연산자를 만듭니다.</summary>
         public static Operand Attribute(ushort attributeId, BigNum coefficient) =>
             new Operand(OperandKind.Attribute, coefficient, attributeId);
+
+        /// <summary>계수 1의 시전자 속성 참조 피연산자를 만듭니다.</summary>
+        public static Operand SourceAttribute(ushort attributeId) => SourceAttribute(attributeId, BigNum.One);
+
+        /// <summary>시전자 속성 Current × 계수 피연산자를 만듭니다.</summary>
+        public static Operand SourceAttribute(ushort attributeId, BigNum coefficient) =>
+            new Operand(OperandKind.SourceAttribute, coefficient, attributeId);
 
         /// <summary>값 동등 비교입니다.</summary>
         public bool Equals(Operand other) =>
@@ -1328,9 +1337,9 @@ public sealed class SeamRegistryTests
 4. Executions는 Instant 또는 `PeriodTicks > 0`에서만.
 5. `Stack.MaxStack == 0`인데 Overflow 정책이 ApplyEffect·`OnReapply == AddStack` → 예외.
 6. 모든 태그 문자열·CalcTag·SelectorTag는 카탈로그·SeamRegistry에서 해석(미해석 = 예외). 시섬 태그 루트는 SeamRegistry가 이미 검증.
-7. 모든 Operand의 속성 참조는 AttributeRegistry에 존재해야 함. `Origin == Source`인
-   Operand가 OngoingConditions에 있으면 예외 (클램프 경계의 Source 금지는 Task 2의
-   AttributeRegistryBuilder.Build가 담당 — min/max Operand의 Origin이 Source면 예외).
+7. 모든 Operand의 속성 참조는 AttributeRegistry에 존재해야 함. `Kind == SourceAttribute`인
+   Operand가 OngoingConditions에 있으면 예외 (클램프 경계의 금지는 Task 2의
+   AttributeRegistryBuilder.Build가 담당 — min/max Operand의 Kind가 SourceAttribute면 예외).
 8. 체인·Overflow의 EffectName 해석(미해석 = 예외).
 9. MagnitudeDef: CalcTag XOR (Base 존재). PerLevel은 Base 있을 때만.
 10. 체인 그래프 순환: OnApplication 엣지만 따라 닫히는 순환 → `BuildWarnings`에 "high" 경고, Duration/Period 보유 스펙 경유 순환 → "low" 경고. 예외 아님.
@@ -1390,7 +1399,7 @@ public void Application_only_cycle_is_a_high_warning_not_an_error()
   - `IEffectTargetResolver { bool TryResolve(TargetId id, out EffectTarget target); IReadOnlyList<TargetId> TargetIds { get; } }` — TargetIds는 오름차순 유지 계약(문서).
   - `EffectPipeline(EffectCatalog catalog, IEffectTargetResolver resolver, IRng rng, int applyBudgetPerTick = 64)` — `long CurrentTick`, `void EnqueueApply(int specId, TargetId source, TargetId target, int level = 1)`, `void Tick()`. 이 태스크 범위: 페이즈 ①만(드레인·면역·적용조건·Instant의 Modifiers Base 가감·Executions 호출) + ③(RebuildDirty). 나머지 페이즈는 Task 9–10.
   - 컨텍스트 실구현: `MagnitudeContext`(readonly ref struct — `BigNum SourceAttr(ushort)`, `BigNum TargetAttr(ushort)`, `bool HasSource`, `int Level`, `int Stack`, `long WorldTick`), `ExecutionContext`(ref struct — Magnitude의 읽기 + `BigNum Input(int)`, `void WriteTarget(ushort, BigNum)`(=`AttributeSet.SetBase` 경유 — 항상 규칙·전파·이벤트 통과), `void ApplyToTarget(int specId)`(파이프라인 큐 적재, source=현재 source), `IRng Rng`), `SelectorContext`(readonly ref struct — `TargetId Source`, `BigNum Param(int)`, `int ParamCount`, `IRng Rng`).
-  - 크기 평가(내부 정적): `Operand` 평가 = Constant→값, Attribute→`Origin`에 따라 대상 또는 소스 EffectTarget의 Current × 계수. **소스 미해석(TryResolve 실패)이면 Source 피연산자는 BigNum.Zero.** `MagnitudeDef` 평가 = Calc 있으면 Calc.Calculate, 아니면 `Base + PerLevel×(level-1)`. Task 8 테스트에 "시전자 공격력 × 1.2 데미지"(Source origin) 케이스 추가: Attacker에 Attack 100 설정 → `Operand.SourceAttribute(Attack, 1.2)` 크기의 Instant로 Defender Hp가 120 감소.
+  - 크기 평가(내부 정적): `Operand` 평가 = Constant→값, Attribute→대상 Current × 계수, SourceAttribute→소스 EffectTarget의 Current × 계수. **소스 미해석(TryResolve 실패)이면 SourceAttribute는 BigNum.Zero.** `MagnitudeDef` 평가 = Calc 있으면 Calc.Calculate, 아니면 `Base + PerLevel×(level-1)`. Task 8 테스트에 "시전자 공격력 × 1.2 데미지"(SourceAttribute) 케이스 추가: Attacker에 Attack 100 설정 → `Operand.SourceAttribute(Attack, 1.2)` 크기의 Instant로 Defender Hp가 120 감소.
   - 면역: 대상 활성 인스턴스의 스펙 ImmunityTags × 신규 스펙 AssetTags를 `TagCatalog.IsAncestorOrSelf(immunity, asset)`로 검사 — 하나라도 참이면 적용 무산(이벤트 없음, 통계 카운터).
 
 - [ ] **Step 1: 실패하는 테스트 작성**
@@ -1819,7 +1828,7 @@ public void Dispel_fires_premature_chain_but_not_normal()
     "chains": [ { "trigger": "OnStackOverflow", "effect": "frozen" } ] } ] }
 ```
 
-  피연산자 JSON: `{"constant":"50"}` | `{"attribute":"Hp","coefficient":"0.3"}` | `{"attribute":"AttackPower","from":"Source","coefficient":"1.2"}` (`from` 생략 = Target, 허용값 `"Target"|"Source"`). magnitude에 추가로 `{"calc":"calc.magnitude.x"}` | `{"base":{...},"perLevel":{...}}`. BigNum 리터럴은 항상 문자열(JSON number 금지 — double 경유 차단).
+  피연산자 JSON — 프로퍼티 이름이 곧 판별자: `{"constant":"50"}` | `{"attribute":"Hp","coefficient":"0.3"}` | `{"sourceAttribute":"AttackPower","coefficient":"1.2"}`. magnitude에 추가로 `{"calc":"calc.magnitude.x"}` | `{"base":{...},"perLevel":{...}}`. BigNum 리터럴은 항상 문자열(JSON number 금지 — double 경유 차단).
 
 - [ ] **Step 1: TryParse 실패 테스트** — `"50"`, `"-1.5"`, `"0.3"`, `"1.23e45"`, `"9999999999999999999999"`(절사) 성공 / `""`, `"abc"`, `"1.2.3"`, `"1e"` 실패. 성공값은 `FromParts` 기대치와 동등 비교.
 - [ ] **Step 2: 실패 확인 → TryParse 구현 → 통과.** 파싱: 부호 → 정수부 자릿수 수집(long, 19자리 초과분은 지수로) → 소수부(지수 감산) → e지수 가산 → `Canonicalize` 경유(`FromParts`).
@@ -1869,4 +1878,4 @@ public void Dispel_fires_premature_chain_but_not_normal()
 
 - 스펙 §4(Operand)→T1, §5(집계·정책)→T2–T5, §6(스펙·스택)→T7·T9, §7(조건·체인)→T10, §8(시섬)→T6·T8, §9(EffectTarget·페이즈)→T8–T11, §10(카탈로그·데이터)→T7·T12, §11(불변식)→T4(무흔적)·T13(스냅샷·이벤트 id는 `EffectLifecycleEvent.InstanceId`), §13(테스트)→T4·T5·T13. 커버리지 갭 없음.
 - 타입 일관성: `Operand`/`MagnitudeDef`/`CompiledEffectSpec`/컨텍스트 시그니처를 Interfaces 블록에 고정 — 태스크 간 참조는 해당 블록 기준.
-- 미결 주의점(구현자가 알아야 할 것): ① 속성 참조 Operand는 `Origin(Target|Source)` 축을 가진다 — 자리별 허용은 Global Constraints 참조, 소스 미해석 = Zero. ② `EffectTestKit`은 T7에서 만들고 T8~13이 확장한다 — 시그니처 변경 시 이전 태스크 테스트도 같이 컴파일되므로 주의.
+- 미결 주의점(구현자가 알아야 할 것): ① Operand는 세 kind(Constant/Attribute/SourceAttribute) — 자리별 허용은 Global Constraints 참조, 소스 미해석 = Zero. ② `EffectTestKit`은 T7에서 만들고 T8~13이 확장한다 — 시그니처 변경 시 이전 태스크 테스트도 같이 컴파일되므로 주의.
