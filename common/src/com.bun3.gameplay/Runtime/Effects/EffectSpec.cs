@@ -1,0 +1,224 @@
+#nullable enable
+using System.Collections.Generic;
+using Bun3.Gameplay.Attributes;
+using Bun3.Gameplay.Numerics;
+
+namespace Bun3.Gameplay.Effects
+{
+    /// <summary>효과의 지속 방식입니다.</summary>
+    public enum EffectDurationType : byte
+    {
+        /// <summary>즉시 적용되고 곧바로 사라집니다.</summary>
+        Instant = 0,
+        /// <summary>정해진 틱 수만큼 지속됩니다.</summary>
+        Duration = 1,
+        /// <summary>명시적으로 제거되기 전까지 무한히 지속됩니다.</summary>
+        Infinite = 2,
+    }
+
+    /// <summary>스택형 효과에 재적용될 때의 동작입니다.</summary>
+    public enum StackReapply : byte
+    {
+        /// <summary>지속시간만 갱신합니다.</summary>
+        Refresh = 0,
+        /// <summary>스택 하나를 추가합니다.</summary>
+        AddStack = 1,
+    }
+
+    /// <summary>스택이 소멸(만료)될 때의 동작입니다.</summary>
+    public enum StackExpiration : byte
+    {
+        /// <summary>모든 스택을 한 번에 제거합니다.</summary>
+        ClearAll = 0,
+        /// <summary>스택 하나만 제거하고 지속시간을 갱신합니다.</summary>
+        RemoveOneAndRefresh = 1,
+    }
+
+    /// <summary>최대 스택 수를 초과해 재적용될 때의 동작입니다.</summary>
+    public enum StackOverflow : byte
+    {
+        /// <summary>재적용을 거부합니다.</summary>
+        Deny = 0,
+        /// <summary>지정된 다른 효과를 대신 적용합니다.</summary>
+        ApplyEffect = 1,
+    }
+
+    /// <summary>체인 효과가 발동하는 시점입니다.</summary>
+    public enum ChainTrigger : byte
+    {
+        /// <summary>원본 효과가 적용되는 시점입니다.</summary>
+        OnApplication = 0,
+        /// <summary>원본 효과가 정상적으로 종료되는 시점입니다.</summary>
+        OnCompleteNormal = 1,
+        /// <summary>원본 효과가 조기(비정상)에 종료되는 시점입니다.</summary>
+        OnCompletePrematurely = 2,
+        /// <summary>원본 효과가 스택 초과를 겪는 시점입니다.</summary>
+        OnStackOverflow = 3,
+    }
+
+    /// <summary>체인으로 발동하는 효과의 레벨을 결정하는 규칙입니다.</summary>
+    public enum ChainLevelRule : byte
+    {
+        /// <summary>원본 효과의 레벨을 그대로 물려받습니다.</summary>
+        Inherit = 0,
+        /// <summary>고정된 레벨을 사용합니다.</summary>
+        Fixed = 1,
+    }
+
+    /// <summary>
+    /// 크기 정의입니다. 상수/속성 기반 <see cref="Base"/>·<see cref="PerLevel"/> 쌍이거나
+    /// SeamRegistry에 등록된 계산 태그(<see cref="CalcTag"/>) 중 하나만 가질 수 있습니다.
+    /// </summary>
+    public sealed class MagnitudeDef
+    {
+        /// <summary>레벨 무관 기본 크기입니다. <see cref="CalcTag"/>와는 배타적입니다.</summary>
+        public Operand? Base { get; set; }
+
+        /// <summary>레벨 1당 추가되는 크기입니다. <see cref="Base"/>가 있을 때만 사용할 수 있습니다.</summary>
+        public Operand? PerLevel { get; set; }
+
+        /// <summary>SeamRegistry에 등록된 크기 계산 태그입니다. <see cref="Base"/>와는 배타적입니다.</summary>
+        public string? CalcTag { get; set; }
+    }
+
+    /// <summary>속성 수정자 정의입니다.</summary>
+    public sealed class ModifierDef
+    {
+        /// <summary>수정할 대상 속성 id입니다.</summary>
+        public ushort AttributeId { get; set; }
+
+        /// <summary>수정자 연산 종류입니다.</summary>
+        public AttributeModifierOp Op { get; set; }
+
+        /// <summary>수정 크기 정의입니다.</summary>
+        public MagnitudeDef Magnitude { get; set; } = new MagnitudeDef();
+
+        /// <summary>스택 수에 비례해 크기를 배율할지 여부입니다. 기본값은 true입니다.</summary>
+        public bool ScaleWithStack { get; set; } = true;
+    }
+
+    /// <summary>효과 실행(부수효과) 정의입니다.</summary>
+    public sealed class ExecutionDef
+    {
+        /// <summary>SeamRegistry에 등록된 실행 태그입니다.</summary>
+        public string CalcTag { get; set; } = string.Empty;
+
+        /// <summary>실행에 전달할 입력 피연산자들입니다.</summary>
+        public List<Operand> Inputs { get; set; } = new List<Operand>();
+    }
+
+    /// <summary>조건 정의 — 좌변과 우변을 비교 연산자로 비교합니다.</summary>
+    public sealed class ConditionDef
+    {
+        /// <summary>좌변 피연산자입니다.</summary>
+        public Operand Left { get; set; }
+
+        /// <summary>비교 연산자입니다.</summary>
+        public ComparisonOp Op { get; set; }
+
+        /// <summary>우변 피연산자입니다.</summary>
+        public Operand Right { get; set; }
+    }
+
+    /// <summary>체인 엣지 정의 — 원본 효과에서 다른 효과로 이어지는 발동 조건입니다.</summary>
+    public sealed class ChainEdgeDef
+    {
+        /// <summary>발동 시점입니다.</summary>
+        public ChainTrigger Trigger { get; set; }
+
+        /// <summary>발동할 대상 효과의 이름입니다.</summary>
+        public string EffectName { get; set; } = string.Empty;
+
+        /// <summary>SeamRegistry에 등록된 대상 선택 태그이며 없으면 null입니다(원본 대상 그대로 사용).</summary>
+        public string? SelectorTag { get; set; }
+
+        /// <summary>대상 선택에 전달할 매개변수들입니다.</summary>
+        public List<BigNum> SelectorParams { get; set; } = new List<BigNum>();
+
+        /// <summary>발동 조건들이며 전부 만족해야 발동합니다.</summary>
+        public List<ConditionDef> Conditions { get; set; } = new List<ConditionDef>();
+
+        /// <summary>대상 효과의 레벨 결정 규칙입니다.</summary>
+        public ChainLevelRule LevelRule { get; set; }
+
+        /// <summary><see cref="LevelRule"/>이 Fixed일 때 사용할 레벨입니다.</summary>
+        public int FixedLevel { get; set; }
+    }
+
+    /// <summary>스택 정책입니다.</summary>
+    public sealed class StackPolicy
+    {
+        /// <summary>최대 스택 수이며 0이면 스택을 사용하지 않는 효과입니다.</summary>
+        public int MaxStack { get; set; }
+
+        /// <summary>스택 가능한 효과가 재적용될 때의 동작입니다.</summary>
+        public StackReapply OnReapply { get; set; }
+
+        /// <summary>재적용마다 추가할 스택 수입니다. 기본값은 1입니다.</summary>
+        public int AddStackCount { get; set; } = 1;
+
+        /// <summary>재적용 시 지속시간을 갱신할지 여부입니다. 기본값은 true입니다.</summary>
+        public bool RefreshDurationOnReapply { get; set; } = true;
+
+        /// <summary>재적용 시 주기 실행 타이머를 리셋할지 여부입니다.</summary>
+        public bool ResetPeriodOnReapply { get; set; }
+
+        /// <summary>스택이 소멸될 때의 동작입니다.</summary>
+        public StackExpiration OnExpiration { get; set; }
+
+        /// <summary>최대 스택 수를 초과할 때의 동작입니다.</summary>
+        public StackOverflow OnOverflow { get; set; }
+
+        /// <summary><see cref="OnOverflow"/>가 ApplyEffect일 때 대신 적용할 효과의 이름입니다.</summary>
+        public string? OverflowEffectName { get; set; }
+
+        /// <summary>초과 적용 시 기존 스택을 모두 지울지 여부입니다.</summary>
+        public bool ClearStacksOnOverflow { get; set; }
+    }
+
+    /// <summary>
+    /// 효과 하나의 저작 스펙입니다. 로더가 채우는 프로퍼티 가방이며,
+    /// <see cref="Effects.EffectCatalogBuilder"/>가 검증한 뒤 컴파일합니다.
+    /// </summary>
+    public sealed class EffectSpec
+    {
+        /// <summary>카탈로그 내에서 고유해야 하는 효과 이름입니다.</summary>
+        public string Name { get; set; } = string.Empty;
+
+        /// <summary>지속 방식입니다.</summary>
+        public EffectDurationType DurationType { get; set; }
+
+        /// <summary>지속 틱 수입니다. Instant/Infinite는 0이어야 합니다.</summary>
+        public int DurationTicks { get; set; }
+
+        /// <summary>주기 실행 간격(틱)이며 0이면 주기 실행이 없습니다.</summary>
+        public int PeriodTicks { get; set; }
+
+        /// <summary>스택 정책입니다.</summary>
+        public StackPolicy Stack { get; set; } = new StackPolicy();
+
+        /// <summary>속성 수정자들입니다.</summary>
+        public List<ModifierDef> Modifiers { get; set; } = new List<ModifierDef>();
+
+        /// <summary>효과 실행(부수효과)들입니다.</summary>
+        public List<ExecutionDef> Executions { get; set; } = new List<ExecutionDef>();
+
+        /// <summary>적용 조건들이며 전부 만족해야 적용됩니다.</summary>
+        public List<ConditionDef> ApplicationConditions { get; set; } = new List<ConditionDef>();
+
+        /// <summary>지속 조건들이며 하나라도 깨지면 효과가 종료됩니다.</summary>
+        public List<ConditionDef> OngoingConditions { get; set; } = new List<ConditionDef>();
+
+        /// <summary>효과가 적용되어 있는 동안 대상에게 부여되는 태그들입니다.</summary>
+        public List<string> GrantedTags { get; set; } = new List<string>();
+
+        /// <summary>효과 자체를 분류하는 자산 태그들입니다.</summary>
+        public List<string> AssetTags { get; set; } = new List<string>();
+
+        /// <summary>대상이 가지고 있으면 이 효과의 적용을 막는 면역 태그들입니다.</summary>
+        public List<string> ImmunityTags { get; set; } = new List<string>();
+
+        /// <summary>다른 효과로 이어지는 체인 엣지들입니다.</summary>
+        public List<ChainEdgeDef> Chains { get; set; } = new List<ChainEdgeDef>();
+    }
+}
