@@ -88,4 +88,20 @@ public sealed class AttributeRegistryTests
         Assert.Throws<InvalidOperationException>(() => sourceMaxBound.Build(),
             "max bound with SourceAttribute should be rejected");
     }
+
+    [Test]
+    public void Evaluation_order_is_level_based_not_greedy_min()
+    {
+        // 레벨별 Kahn과 greedy-min의 차이를 구분:
+        // 속성 1 (독립), 속성 2 (1 참조), 속성 5 (독립)
+        // 레벨별: [1, 5, 2] (레벨 0: 1,5; 레벨 1: 2)
+        // greedy-min: [1, 2, 5] (매 번 최솟값 선택)
+        var builder = new AttributeRegistryBuilder();
+        builder.Register(1);           // 독립
+        builder.Register(2, max: Operand.Attribute(1));  // 1 참조
+        builder.Register(5);           // 독립
+        var registry = builder.Build();
+
+        Assert.That(registry.EvaluationOrder.ToArray(), Is.EqualTo(new ushort[] { 1, 5, 2 }));
+    }
 }

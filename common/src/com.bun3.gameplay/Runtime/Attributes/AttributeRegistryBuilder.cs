@@ -59,7 +59,7 @@ namespace Bun3.Gameplay.Attributes
         {
             if (!bound.HasValue) return;
 
-            // Reject SourceAttribute operands in clamp bounds
+            // 클램프 경계에서 SourceAttribute 피연산자 거부
             if (bound.Value.Kind == OperandKind.SourceAttribute)
                 throw new InvalidOperationException($"속성 {owner}의 클램프 경계는 SourceAttribute를 참조할 수 없습니다.");
 
@@ -78,7 +78,7 @@ namespace Bun3.Gameplay.Attributes
             if (!list.Contains(owner)) list.Add(owner);
         }
 
-        // Kahn — 레벨별로 처리해 동순위 원소를 id 오름차순으로 canonical하게 만든다.
+        /// <summary>평가 순서는 레벨 단위 Kahn 알고리즘으로 계산하며, 같은 레벨 안에서 AttributeId 오름차순입니다.</summary>
         private ushort[] TopologicalOrder(Dictionary<ushort, List<ushort>> dependents)
         {
             var inDegree = new Dictionary<ushort, int>();
