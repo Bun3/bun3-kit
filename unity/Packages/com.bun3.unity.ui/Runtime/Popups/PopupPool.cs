@@ -140,13 +140,8 @@ namespace Bun3.Unity.UI.Popups
 
         private static void Destroy(Popup popup)
         {
-            if (!popup)
-                return;
-
-            if (Application.isPlaying)
-                UnityEngine.Object.Destroy(popup.gameObject);
-            else
-                UnityEngine.Object.DestroyImmediate(popup.gameObject);
+            if (popup)
+                EditorSafeDestroy.Destroy(popup.gameObject);
         }
     }
 }

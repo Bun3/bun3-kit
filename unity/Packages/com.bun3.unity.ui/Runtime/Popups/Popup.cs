@@ -21,6 +21,7 @@ namespace Bun3.Unity.UI.Popups
 
         private UniTaskCompletionSource _closedSource;
         private int _closeGuardCount;
+        private int _closeGuardVersion;
 
         /// <summary>
         /// 딤 배경(레거시 backgroundDimTransform 대응). null이면 딤 없는 팝업.
@@ -79,22 +80,19 @@ namespace Bun3.Unity.UI.Popups
         ///     await PlaySequenceAsync(ct);
         /// </code></example>
         public PopupCloseGuard BlockClose()
-        {
-            AcquireCloseGuard();
-            return new PopupCloseGuard(this);
-        }
+            => new(this, AcquireCloseGuard());
 
         /// <summary>태스크가 끝날 때까지 닫기 잠금을 유지한다. 예외가 나도 잠금은 해제된다.</summary>
         public async UniTask BlockCloseWhile(UniTask task)
         {
-            AcquireCloseGuard();
+            var version = AcquireCloseGuard();
             try
             {
                 await task;
             }
             finally
             {
-                ReleaseCloseGuard();
+                ReleaseCloseGuard(version);
             }
         }
 
@@ -104,14 +102,14 @@ namespace Bun3.Unity.UI.Popups
         /// </summary>
         public async UniTask<T> BlockCloseWhile<T>(UniTask<T> task)
         {
-            AcquireCloseGuard();
+            var version = AcquireCloseGuard();
             try
             {
                 return await task;
             }
             finally
             {
-                ReleaseCloseGuard();
+                ReleaseCloseGuard(version);
             }
         }
 
@@ -121,17 +119,21 @@ namespace Bun3.Unity.UI.Popups
         /// </summary>
         protected virtual void OnCloseBlockedChanged(bool blocked) { }
 
-        internal void AcquireCloseGuard()
+        /// <returns>해제 시 대조할 세대 토큰 — Detach마다 증가해 이전 세션 가드를 무효화한다.</returns>
+        internal int AcquireCloseGuard()
         {
             _closeGuardCount++;
             if (_closeGuardCount == 1)
                 OnCloseBlockedChanged(true);
+
+            return _closeGuardVersion;
         }
 
-        internal void ReleaseCloseGuard()
+        internal void ReleaseCloseGuard(int version)
         {
-            if (_closeGuardCount == 0)
-                return; // 과잉 해제 방어(Clear로 이미 초기화된 뒤의 늦은 Dispose 등)
+            // 이전 세션(Detach 이전)에 잡힌 가드의 늦은 해제가 새 세션 카운트를 훼손하지 않게.
+            if (version != _closeGuardVersion || _closeGuardCount == 0)
+                return;
 
             _closeGuardCount--;
             if (_closeGuardCount > 0)
@@ -186,6 +188,16 @@ namespace Bun3.Unity.UI.Popups
 
         internal void Detach()
         {
+            // 잠금 중 강제 해제(Clear)여도 표현(스피너/레이캐스트 차단)이 켜진 채 남지 않게 통지하고,
+            // 세대를 올려 살아남은 이전 세션 가드의 늦은 Dispose를 무효화한다.
+            if (_closeGuardCount > 0)
+            {
+                _closeGuardCount = 0;
+                OnCloseBlockedChanged(false);
+            }
+
+            _closeGuardVersion++;
+
             Phase = PopupPhase.None;
             Stack = null;
 

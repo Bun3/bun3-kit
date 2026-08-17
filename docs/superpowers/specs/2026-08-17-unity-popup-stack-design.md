@@ -15,7 +15,8 @@
   ui 패키지 설명이 "DEV kits for Unity UI"다. 팝업은 그 정의에 정확히 들어간다.
 - 네임스페이스: `Bun3.Unity.UI.Popups`.
 - 비동기: UniTask (core가 이미 의존, CancellationScope 관례와 일치).
-  `Bun3.Unity.UI.asmdef`에 `UniTask` 참조 추가.
+  `Bun3.Unity.UI.asmdef`에 `UniTask` 참조 추가 (+back 키 라우터의 `#if ENABLE_INPUT_SYSTEM`
+  컴파일용 `Unity.InputSystem` 참조 — 패키지 미설치 시 미해결 참조는 무시됨).
 - 테스트: `Tests/Editor` EditMode (window/gameplay 관례). 전이 완료를
   `UniTaskCompletionSource`로 수동 제어해 플레이어 루프 펌핑 없이 동기 검증.
 
@@ -36,8 +37,8 @@
 - `protected virtual bool OnBackRequested()` — back 키가 이 팝업에 라우팅됐을 때.
   `true`(기본) = 닫기 진행, `false` = 닫기 거부(키는 소비됨).
 - `public void Close()` — 자신을 소유 스택에서 닫는 편의 메서드.
-- `public UniTask WaitUntilClosedAsync(CancellationToken)` — 닫힘까지 대기
-  (확인 다이얼로그/보상 연출 체인용).
+- `public UniTask WaitUntilClosedAsync()` — 닫힘까지 대기(확인 다이얼로그/보상 연출 체인용).
+  무인자 — 취소가 필요하면 게임 쪽에서 `WhenAny`로 감싼다. (구현 시 시그니처 확정)
 
 `PopupPhase`: `None → Opening → Open → Closing → None`.
 
@@ -167,6 +168,21 @@ sibling index/딤 자동 관리 헬퍼.
    스타일 전역 접근 요구 반영. 게임 부트스트랩이 Build 결과를 대입, Dispose 시 자동
    해제, 도메인 리로드 off 대응 SubsystemRegistration 리셋(ButtonInteractableScope
    관례). Build가 자동 대입하지 않는 이유: 다중 매니저(씬별/테스트) 허용.
+
+## 4차 — 최종 코드리뷰(2축) 반영 (2026-08-18)
+
+Standards/Spec 병렬 리뷰에서 확인된 실버그 수정:
+
+1. 열림 연출 중 `Clear()`되면 `PushAsync`가 파괴된 인스턴스 대신 **null 반환**.
+2. 팩토리/`OnPopupArg` 예외 시에도 대기열 드레인 지속(스택 대기열은 finally 드레인,
+   `PopupQueue`는 항목별 catch+LogException 후 다음 항목).
+3. 닫기 잠금 **세대 토큰** 도입 — Detach마다 세대 증가로, Clear 후 살아남은 이전 세션
+   가드의 늦은 Dispose가 새 세션(풀 재사용) 잠금을 훼손하지 못함. Detach가 잠금 중이면
+   `OnCloseBlockedChanged(false)` 통지로 스피너/레이캐스트 표현 누수 방지.
+4. `PopupQueue.Current` 스테일 수정(닫힌 뒤 다음 로딩 동안 null).
+5. Focus 대상이 로딩 중뿐이라 인자가 유실되면 경고 로그로 표면화.
+6. Destroy/DestroyImmediate 분기 3중복 → 내부 `EditorSafeDestroy` 헬퍼로 추출.
+   public 멤버 XML 문서 누락분 보강. 버전 범프는 기존 결정대로 통합 시 사용자 처리.
 
 ## 테스트 전략 (EditMode)
 

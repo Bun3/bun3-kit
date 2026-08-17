@@ -125,6 +125,37 @@ namespace Bun3.Unity.UI.Editor.Tests
         }
 
         [Test]
+        public void Clear_WhileBlocked_NotifiesUnblockAndInvalidatesOldGuards()
+        {
+            var pool = new PopupPool(CreatePopup);
+            pool.MarkPooled(1);
+            var stack = new PopupStack(pool.RentAsync, pool.Return);
+
+            stack.Push(1);
+            var popup = (TestPopup)stack.Top;
+            var staleGuard = popup.BlockClose();
+
+            stack.Clear();
+
+            Assert.IsFalse(popup.IsCloseBlocked);
+            Assert.IsFalse(popup.LastBlocked, "강제 해제 시 잠금 해제 표현 통지가 와야 한다.");
+
+            stack.Push(1); // 풀 재사용 — 같은 인스턴스의 새 세션
+            Assert.AreSame(popup, stack.Top);
+
+            using (popup.BlockClose())
+            {
+                staleGuard.Dispose(); // 이전 세션 가드의 늦은 해제
+                Assert.IsTrue(popup.IsCloseBlocked, "이전 세션 가드가 새 세션 잠금을 풀면 안 된다.");
+            }
+
+            Assert.IsFalse(popup.IsCloseBlocked);
+
+            stack.Dispose();
+            pool.Dispose();
+        }
+
+        [Test]
         public void Clear_IgnoresCloseGuards()
         {
             Stack.Push(1);

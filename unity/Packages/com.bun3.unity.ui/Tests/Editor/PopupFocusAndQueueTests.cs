@@ -1,5 +1,8 @@
+using System.Text.RegularExpressions;
 using Bun3.Unity.UI.Popups;
 using NUnit.Framework;
+using UnityEngine;
+using UnityEngine.TestTools;
 
 namespace Bun3.Unity.UI.Editor.Tests
 {
@@ -117,6 +120,27 @@ namespace Bun3.Unity.UI.Editor.Tests
             queue.EnqueueWithArg(1, arg: 77);
 
             Assert.AreEqual(77, Created[0].ReceivedArg);
+        }
+
+        [Test]
+        public void PopupQueue_EntryThrow_ContinuesToNext()
+        {
+            LogAssert.Expect(LogType.Exception, new Regex("queue load fail"));
+
+            var stack = new PopupStack(
+                (key, ct) => key.Value == 1
+                    ? throw new System.InvalidOperationException("queue load fail")
+                    : CreatePopup(key, ct),
+                ReleasePopup);
+            var queue = new PopupQueue(stack);
+
+            queue.Enqueue(1); // 로드가 던지는 키 — 기록하고 넘어가야 한다
+            queue.Enqueue(2);
+
+            Assert.AreEqual(1, stack.Count, "실패한 항목이 대기열을 정지시키면 안 된다.");
+            Assert.AreEqual(2, stack.Top.Key.Value);
+
+            stack.Dispose();
         }
 
         [Test]

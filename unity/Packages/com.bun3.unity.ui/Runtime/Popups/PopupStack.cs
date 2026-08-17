@@ -354,7 +354,12 @@ namespace Bun3.Unity.UI.Popups
         {
             var popup = FindTopmostOpen(key);
             if (popup == null)
-                return null; // 로딩 중 인스턴스만 있는 경우 — 만질 대상이 없다.
+            {
+                // 로딩 중 인스턴스만 있는 경우 — 만질 대상이 없다. 인자가 실려 있었다면 유실을 표면화.
+                if (hasArg)
+                    Debug.LogWarning($"Focus 대상 팝업(key {key.Value})이 아직 로딩 중이라 인자가 버려졌다.");
+                return null;
+            }
 
             if (hasArg)
                 DeliverArg(popup, arg);
@@ -388,14 +393,19 @@ namespace Bun3.Unity.UI.Popups
             var token = _lifetime.Token;
 
             Popup popup;
+            bool loaded = false;
             _loading.Add(key);
             try
             {
                 popup = await _factory(key, token);
+                loaded = true;
             }
             finally
             {
                 _loading.Remove(key);
+                // 팩토리가 던져도 대기열이 영구 정지하지 않게 드레인을 이어 준다.
+                if (!loaded)
+                    TryDrainQueue();
             }
 
             // 팩토리는 로드 실패를 null로 알릴 수 있다.
@@ -425,6 +435,7 @@ namespace Bun3.Unity.UI.Popups
                 {
                     // OnPopupArg가 던지면 인스턴스가 스택 밖에서 새지 않게 돌려보내고 표면화한다.
                     _releaser(popup);
+                    TryDrainQueue();
                     throw;
                 }
             }
@@ -444,7 +455,7 @@ namespace Bun3.Unity.UI.Popups
             }
 
             if (popup.Stack != this || popup.Phase != PopupPhase.Opening)
-                return popup;
+                return null; // 열림 연출 중 Clear됨 — 이미 해제된 인스턴스를 내보내지 않는다.
 
             popup.SetPhase(PopupPhase.Open);
 
@@ -541,13 +552,8 @@ namespace Bun3.Unity.UI.Popups
 
         private static void DestroyPopup(Popup popup)
         {
-            if (!popup)
-                return;
-
-            if (Application.isPlaying)
-                UnityEngine.Object.Destroy(popup.gameObject);
-            else
-                UnityEngine.Object.DestroyImmediate(popup.gameObject);
+            if (popup)
+                EditorSafeDestroy.Destroy(popup.gameObject);
         }
     }
 }

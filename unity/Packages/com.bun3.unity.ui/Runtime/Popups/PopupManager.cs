@@ -55,13 +55,7 @@ namespace Bun3.Unity.UI.Popups
             if (ReferenceEquals(Instance, this))
                 Instance = null;
 
-            if (BackKeyRouter)
-            {
-                if (Application.isPlaying)
-                    UnityEngine.Object.Destroy(BackKeyRouter);
-                else
-                    UnityEngine.Object.DestroyImmediate(BackKeyRouter);
-            }
+            EditorSafeDestroy.Destroy(BackKeyRouter);
 
             Arranger?.Dispose();
             Stack.Dispose();
@@ -128,6 +122,7 @@ namespace Bun3.Unity.UI.Popups
             return this;
         }
 
+        /// <summary>설정대로 조각들을 만들고 배선해 <see cref="PopupManager"/>를 돌려준다.</summary>
         public PopupManager Build()
         {
             if (_usePool && _releaser != null)

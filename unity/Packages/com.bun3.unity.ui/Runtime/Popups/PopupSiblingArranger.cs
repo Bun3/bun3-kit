@@ -19,6 +19,7 @@ namespace Bun3.Unity.UI.Popups
         private readonly Dictionary<Transform, int> _siblingCounters = new();
         private readonly Action<Popup> _onStackChanged;
 
+        /// <param name="stack">정렬 대상 스택. 열림/닫힘/Focus 이벤트를 구독한다.</param>
         public PopupSiblingArranger(PopupStack stack)
         {
             _stack = stack ?? throw new ArgumentNullException(nameof(stack));
@@ -29,6 +30,7 @@ namespace Bun3.Unity.UI.Popups
             _stack.Focused += _onStackChanged;
         }
 
+        /// <summary>스택 이벤트 구독을 해지한다. 이후 재정렬은 일어나지 않는다.</summary>
         public void Dispose()
         {
             _stack.Opened -= _onStackChanged;

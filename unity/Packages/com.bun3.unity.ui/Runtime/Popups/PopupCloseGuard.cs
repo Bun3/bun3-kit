@@ -13,16 +13,22 @@ namespace Bun3.Unity.UI.Popups
     public struct PopupCloseGuard : IDisposable
     {
         private Popup _popup;
+        private readonly int _version;
 
-        internal PopupCloseGuard(Popup popup) => _popup = popup;
+        internal PopupCloseGuard(Popup popup, int version)
+        {
+            _popup = popup;
+            _version = version;
+        }
 
+        /// <summary>잠금 하나를 해제한다. 팝업이 그 사이 닫혔다면(세대 불일치) 무시된다.</summary>
         public void Dispose()
         {
             var popup = _popup;
             _popup = null;
 
             if (popup != null)
-                popup.ReleaseCloseGuard();
+                popup.ReleaseCloseGuard(_version);
         }
     }
 }

@@ -229,6 +229,50 @@ namespace Bun3.Unity.UI.Editor.Tests
         }
 
         [Test]
+        public void Clear_DuringOpening_PushAsyncReturnsNull()
+        {
+            PendingOpen = true;
+            var pushTask = Stack.PushAsync(1);
+
+            Stack.Clear();
+            Created[0].OpenSource.TrySetResult();
+
+            Assert.IsNull(pushTask.GetAwaiter().GetResult(),
+                "열림 연출 중 Clear되면 이미 해제된 인스턴스 대신 null을 돌려줘야 한다.");
+        }
+
+        [Test]
+        public void Enqueue_FactoryThrow_ContinuesDraining()
+        {
+            // 구독자가 있으면 UniTask 기본 예외 로깅이 대체된다 — 테스트 로그 오염 방지.
+            static void Swallow(System.Exception _) { }
+            UniTaskScheduler.UnobservedTaskException += Swallow;
+            try
+            {
+                var stack = new PopupStack(
+                    (key, ct) => key.Value == 1
+                        ? throw new System.InvalidOperationException("load fail")
+                        : CreatePopup(key, ct),
+                    ReleasePopup);
+
+                stack.Push(9);
+                stack.Enqueue(1); // 로드가 던지는 키
+                stack.Enqueue(2);
+
+                stack.Pop(); // 스택이 비면서 드레인 시작 → 1은 실패, 2로 이어져야 한다
+
+                Assert.AreEqual(1, stack.Count, "실패한 항목 다음이 표시돼야 한다.");
+                Assert.AreEqual(2, stack.Top.Key.Value);
+
+                stack.Dispose();
+            }
+            finally
+            {
+                UniTaskScheduler.UnobservedTaskException -= Swallow;
+            }
+        }
+
+        [Test]
         public void Clear_DuringFactoryLoad_ReleasesLateArrival()
         {
             var source = new UniTaskCompletionSource<Popup>();

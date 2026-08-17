@@ -56,6 +56,7 @@ namespace Bun3.Unity.UI.Popups
         private Popup _current;
         private bool _draining;
 
+        /// <param name="stack">이 큐가 팝업을 열 대상 스택.</param>
         public PopupQueue(PopupStack stack)
             => _stack = stack ?? throw new ArgumentNullException(nameof(stack));
 
@@ -98,7 +99,18 @@ namespace Bun3.Unity.UI.Popups
                     var entry = _entries[0];
                     _entries.RemoveAt(0);
 
-                    var popup = await _stack.OpenQueuedAsync(entry.Key, entry.Layer, entry.Arg);
+                    Popup popup;
+                    try
+                    {
+                        popup = await _stack.OpenQueuedAsync(entry.Key, entry.Layer, entry.Arg);
+                    }
+                    catch (Exception exception)
+                    {
+                        // 항목 하나의 로드 실패가 대기열 전체를 정지시키지 않게 — 기록하고 다음으로.
+                        UnityEngine.Debug.LogException(exception);
+                        continue;
+                    }
+
                     if (popup == null)
                         continue; // 로드 실패/취소 → 다음 항목으로.
 
@@ -106,6 +118,8 @@ namespace Bun3.Unity.UI.Popups
 
                     if (popup.Phase != PopupPhase.None)
                         await popup.WaitUntilClosedAsync();
+
+                    _current = null; // 다음 항목 로딩 동안 닫힌 팝업을 가리키지 않게.
                 }
             }
             finally
