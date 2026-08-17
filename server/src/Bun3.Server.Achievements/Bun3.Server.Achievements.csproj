@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <LangVersion>9.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Bun3.Server.Achievements</RootNamespace>
+    <PackageId>Bun3.Server.Achievements</PackageId>
+    <Version>0.1.0</Version>
+    <Authors>Bun3</Authors>
+    <RepositoryUrl>https://github.com/Bun3/bun3-kit</RepositoryUrl>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <Description>서버 업적 프레임워크 — 정의 카탈로그(id 인터닝), 진행도 추적, 달성/클레임 상태, dirty 연계</Description>
+  </PropertyGroup>
+
+</Project>
