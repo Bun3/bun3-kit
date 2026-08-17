@@ -121,6 +121,17 @@ _stack.HandleBack();                                  // route ESC/Android back 
 _stack.PushWithArg((int)PopupId.ItemDetail, new ItemDetailArgs(itemId));
 _stack.EnqueueWithArg((int)PopupId.Reward, rewardArgs);
 
+// A popup may implement IPopupArg<TArg> for several TArg types to expose multiple
+// initialization routes — e.g. a typed code path plus a designer-data string path.
+// The static type at the call site picks which OnPopupArg runs.
+public sealed class ItemDetailPopup : PopupBehaviour, IPopupArg<int>, IPopupArg<string>
+{
+    public void OnPopupArg(int defId)     { /* from code */ }
+    public void OnPopupArg(string token)  => OnPopupArg(int.Parse(token)); // from table/server data
+}
+// To make the string route mandatory for every popup (like an abstract token method),
+// enforce it in your game's base class: abstract class GamePopup : PopupBehaviour, IPopupArg<string>.
+
 // 5. Block closing while the popup is busy (ref-counted; nested locks compose).
 //    A Close/back during the lock is *deferred*, not lost — it runs when the last lock lifts.
 using (BlockClose())                                   // sequence direction, cutscenes

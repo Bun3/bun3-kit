@@ -77,10 +77,23 @@ namespace Bun3.Unity.UI.Editor.Tests
         {
             LogAssert.Expect(LogType.Error, new Regex("IPopupArg"));
 
-            Stack.PushWithArg(1, arg: "unsupported");
+            Stack.PushWithArg(1, arg: 1.5f); // TestPopup은 IPopupArg<float> 미구현
 
             Assert.AreEqual(1, Stack.Count, "결선 오류여도 팝업 자체는 열려야 한다.");
             Assert.AreEqual(PopupPhase.Open, Created[0].Phase);
+        }
+
+        [Test]
+        public void MultipleArgInterfaces_DispatchByStaticType()
+        {
+            // 같은 팝업이 코드 경로(int)와 데이터 경로(string 토큰)를 함께 노출한다.
+            Stack.PushWithArg(1, arg: 1001);
+            Stack.PushWithArg(2, arg: "1001");
+
+            Assert.AreEqual(1001, Created[0].ReceivedArg);
+            Assert.IsNull(Created[0].ReceivedToken);
+            Assert.AreEqual("1001", Created[1].ReceivedToken);
+            Assert.AreEqual(0, Created[1].ReceivedArg);
         }
     }
 }
