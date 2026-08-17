@@ -147,7 +147,16 @@ ItemError err = container.TryApply(deltas, out int failedIndex);
 | 변경 통지(onChanged) | MarkDirty 연결·OnSaveAsync 직렬화·DB 매핑 |
 | maxStack 숫자 강제 | maxStack 값의 밸런스 결정 |
 
-## 7. 테스트 계획
+## 7. 리뷰 반영 결정 (2026-08-17, idlez·growninja·Steam 대조 후 사용자 확정)
+
+| 질문 | 결정 |
+|---|---|
+| 카탈로그 네이밍 | **ItemCatalog 유지** — TagCatalog 선례·업계 표준(PlayFab/Unity/EOS). 문서에 "idlez ResourceItem 표 포지션" 명시로 소통 문제 해결 |
+| 정의의 정식 키 | **문자열 + 선택적 externalId(long) 역색인** — 저장 데이터에는 문자열 id(등록 순서 내성), ItemId 인덱스는 저장 금지. DB 정수 컬럼·Steam itemdefid 연동은 `Register(..., externalId:)` + `TryGetExternalId`/`TryGetByExternalId` |
+| Steam Inventory 수용 | 가능 — Steam도 "수량 가진 인스턴스(uint64 itemid + uint16 quantity + 플래그) + 원자적 ExchangeItems + 동적 프로퍼티" 모델로, idlez·growninja에 이은 세 번째 수렴 증거. v0.2 요건: 인스턴스 id 발급 시섬(외부 권위 id 수용 경로 포함), externalId 매핑(완료), 권위 경계 명시(컨테이너는 미러, 동기화는 `Items.Steam` 후보 패키지) |
+| 인스턴스 아이템 | v0.1 범위 밖 유지, **v0.2 후보로 승격** — 두 게임이 동일 기계장치(스택/인스턴스 판정·level/exp·만료·상태플래그·per-item dirty·id 발급)를 독립 재구현한 것이 근거. 스코프 확정은 사용자 결정 대기 |
+
+## 8. 테스트 계획
 
 `server/tests/Bun3.Server.Tests`(net10, NUnit)에 추가:
 

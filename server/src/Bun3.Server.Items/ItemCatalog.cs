@@ -5,21 +5,36 @@ namespace Bun3.Server.Items
 {
     /// <summary>
     /// 아이템 정의 카탈로그의 비제네릭 코어 — 기동 시 1회 빌드되는 불변 인터닝 표.
-    /// 문자열 id ↔ <see cref="ItemId"/> 변환과 프레임워크 메타데이터(maxStack)만 안다.
+    /// idlez류의 "ResourceItem 표"에 해당하는 포지션으로, 문자열 id ↔ <see cref="ItemId"/>
+    /// 변환과 프레임워크 메타데이터(maxStack, 외부 숫자 id)만 안다.
+    /// 정식 키는 문자열 id다 — 저장 데이터에는 항상 문자열 id를 쓰고, <see cref="ItemId"/>
+    /// (등록 순서 의존 인덱스)는 절대 저장하지 않는다. DB·Steam(itemdefid) 등 숫자 키
+    /// 체계와의 연동은 선택적 외부 id 역색인(<see cref="TryGetByExternalId"/>)으로 한다.
     /// 게임 정의 스키마는 <see cref="ItemCatalog{TDefinition}"/>이 보관한다.
     /// 컨테이너는 이 코어만 참조한다(수량 로직은 정의 무관).
     /// </summary>
     public class ItemCatalog
     {
+        internal const long NoExternalId = long.MinValue;
+
         private readonly string[] _ids;
         private readonly long[] _maxStacks;
+        private readonly long[] _externalIds;
         private readonly Dictionary<string, int> _lookup;
+        private readonly Dictionary<long, int> _externalLookup;
 
-        internal ItemCatalog(string[] ids, long[] maxStacks, Dictionary<string, int> lookup)
+        internal ItemCatalog(
+            string[] ids,
+            long[] maxStacks,
+            long[] externalIds,
+            Dictionary<string, int> lookup,
+            Dictionary<long, int> externalLookup)
         {
             _ids = ids;
             _maxStacks = maxStacks;
+            _externalIds = externalIds;
             _lookup = lookup;
+            _externalLookup = externalLookup;
         }
 
         /// <summary>등록된 정의 수.</summary>
@@ -72,6 +87,32 @@ namespace Bun3.Server.Items
             }
 
             return _maxStacks[item.Index];
+        }
+
+        /// <summary>외부 숫자 id(DB 컬럼·Steam itemdefid 등)를 반환한다.
+        /// 미등록이면 false. 무효 식별자면 던진다.</summary>
+        public bool TryGetExternalId(ItemId item, out long externalId)
+        {
+            if (!Contains(item))
+            {
+                throw new ArgumentOutOfRangeException(nameof(item), "이 카탈로그의 식별자가 아닙니다.");
+            }
+
+            externalId = _externalIds[item.Index];
+            return externalId != NoExternalId;
+        }
+
+        /// <summary>외부 숫자 id로 역조회한다. 미등록 id면 false, <paramref name="item"/>은 None.</summary>
+        public bool TryGetByExternalId(long externalId, out ItemId item)
+        {
+            if (_externalLookup.TryGetValue(externalId, out var index))
+            {
+                item = new ItemId(index);
+                return true;
+            }
+
+            item = ItemId.None;
+            return false;
         }
     }
 }

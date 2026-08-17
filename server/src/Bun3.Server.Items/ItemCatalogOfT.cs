@@ -16,9 +16,11 @@ namespace Bun3.Server.Items
         internal ItemCatalog(
             string[] ids,
             long[] maxStacks,
+            long[] externalIds,
             Dictionary<string, int> lookup,
+            Dictionary<long, int> externalLookup,
             TDefinition[] definitions)
-            : base(ids, maxStacks, lookup)
+            : base(ids, maxStacks, externalIds, lookup, externalLookup)
         {
             _definitions = definitions;
         }

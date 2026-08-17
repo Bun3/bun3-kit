@@ -68,6 +68,40 @@ public class ItemCatalogTests
     }
 
     [Test]
+    public void External_id_maps_both_directions_and_is_optional()
+    {
+        var catalog = new ItemCatalogBuilder<TestDef>()
+            .Register("potion.small", new TestDef("소형 물약"), externalId: 1021)
+            .Register("gold", new TestDef("골드"))
+            .Build();
+        var potion = catalog.GetRequired("potion.small");
+        var gold = catalog.GetRequired("gold");
+
+        Assert.That(catalog.TryGetExternalId(potion, out var externalId), Is.True);
+        Assert.That(externalId, Is.EqualTo(1021));
+        Assert.That(catalog.TryGetByExternalId(1021, out var resolved), Is.True);
+        Assert.That(resolved, Is.EqualTo(potion));
+
+        Assert.That(catalog.TryGetExternalId(gold, out _), Is.False);
+        Assert.That(catalog.TryGetByExternalId(9999, out var missing), Is.False);
+        Assert.That(missing, Is.EqualTo(ItemId.None));
+        Assert.That(() => catalog.TryGetExternalId(ItemId.None, out _),
+            Throws.TypeOf<ArgumentOutOfRangeException>());
+    }
+
+    [Test]
+    public void Register_rejects_duplicate_and_reserved_external_id()
+    {
+        var builder = new ItemCatalogBuilder<TestDef>()
+            .Register("a", new TestDef("a"), externalId: 7);
+
+        Assert.That(() => builder.Register("b", new TestDef("b"), externalId: 7),
+            Throws.TypeOf<ItemCatalogException>());
+        Assert.That(() => builder.Register("c", new TestDef("c"), externalId: long.MinValue),
+            Throws.TypeOf<ArgumentOutOfRangeException>());
+    }
+
+    [Test]
     public void Build_is_single_use()
     {
         var builder = new ItemCatalogBuilder<TestDef>().Register("gold", new TestDef("골드"));

@@ -14,7 +14,9 @@ namespace Bun3.Server.Items
         private readonly List<string> _ids = new List<string>();
         private readonly List<TDefinition> _definitions = new List<TDefinition>();
         private readonly List<long> _maxStacks = new List<long>();
+        private readonly List<long> _externalIds = new List<long>();
         private readonly Dictionary<string, int> _lookup = new Dictionary<string, int>(StringComparer.Ordinal);
+        private readonly Dictionary<long, int> _externalLookup = new Dictionary<long, int>();
         private readonly List<Action<ItemCatalog<TDefinition>>> _validators = new List<Action<ItemCatalog<TDefinition>>>();
         private bool _built;
 
@@ -22,11 +24,17 @@ namespace Bun3.Server.Items
         /// 정의를 등록한다. id는 카탈로그가 인터닝해 보관하며 이후
         /// <see cref="ItemCatalog.GetIdString"/>이 같은 참조를 돌려준다.
         /// </summary>
-        /// <param name="id">고유 문자열 id(서수 비교). 중복이면 던진다.</param>
+        /// <param name="id">고유 문자열 id(서수 비교) — 정식 키. 중복이면 던진다.</param>
         /// <param name="definition">게임 정의(불투명 보관).</param>
         /// <param name="maxStack">스택 상한. 기본 <see cref="long.MaxValue"/> = 무제한. 0 이하는 거부.</param>
+        /// <param name="externalId">선택적 외부 숫자 id(DB 컬럼·Steam itemdefid 등) — 역색인에
+        /// 등록된다. 중복이면 던진다. <see cref="long.MinValue"/>는 예약값이라 거부.</param>
         /// <returns>체이닝용 빌더 자신.</returns>
-        public ItemCatalogBuilder<TDefinition> Register(string id, TDefinition definition, long maxStack = long.MaxValue)
+        public ItemCatalogBuilder<TDefinition> Register(
+            string id,
+            TDefinition definition,
+            long maxStack = long.MaxValue,
+            long? externalId = null)
         {
             ThrowIfBuilt();
             if (string.IsNullOrWhiteSpace(id))
@@ -39,15 +47,31 @@ namespace Bun3.Server.Items
                 throw new ArgumentOutOfRangeException(nameof(maxStack), maxStack, "maxStack은 1 이상이어야 합니다.");
             }
 
+            if (externalId == ItemCatalog.NoExternalId)
+            {
+                throw new ArgumentOutOfRangeException(nameof(externalId), externalId, "long.MinValue는 예약값입니다.");
+            }
+
             if (_lookup.ContainsKey(id))
             {
                 throw new ItemCatalogException($"중복 등록된 아이템 id: '{id}'");
+            }
+
+            if (externalId.HasValue && _externalLookup.ContainsKey(externalId.Value))
+            {
+                throw new ItemCatalogException($"중복 등록된 외부 id: {externalId.Value} (아이템 '{id}')");
+            }
+
+            if (externalId.HasValue)
+            {
+                _externalLookup.Add(externalId.Value, _ids.Count);
             }
 
             _lookup.Add(id, _ids.Count);
             _ids.Add(id);
             _definitions.Add(definition);
             _maxStacks.Add(maxStack);
+            _externalIds.Add(externalId ?? ItemCatalog.NoExternalId);
             return this;
         }
 
@@ -73,7 +97,9 @@ namespace Bun3.Server.Items
             var catalog = new ItemCatalog<TDefinition>(
                 _ids.ToArray(),
                 _maxStacks.ToArray(),
+                _externalIds.ToArray(),
                 _lookup,
+                _externalLookup,
                 _definitions.ToArray());
 
             foreach (var validator in _validators)
