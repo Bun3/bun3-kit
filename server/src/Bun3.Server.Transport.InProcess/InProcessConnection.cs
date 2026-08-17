@@ -13,7 +13,8 @@ namespace Bun3.Server.Transport.InProcess
         private static readonly byte[] ClosedByPeerSentinel = new byte[1];
 
         // 닫힐 때 슬롯 세마포어에 방출해 백프레셔로 대기 중인 송신자를 전부 깨우는 수량.
-        // 현실적인 동시 대기자 수보다 충분히 크고, Close의 CAS로 1회만 방출되므로 오버플로 없다.
+        // 현실적인 동시 대기자 수보다 충분히 크고, 각 세마포어당 최대 2회(자기 Close + 상대 Close,
+        // 둘 다 CAS 가드)만 방출되므로 오버플로 없다.
         private const int WakeAllSenders = 1 << 20;
 
         private readonly ConcurrentQueue<byte[]> _inbox = new ConcurrentQueue<byte[]>();
@@ -45,10 +46,11 @@ namespace Bun3.Server.Transport.InProcess
                 return default; // 계약: 닫힌 연결에 대한 송신은 no-op
             }
 
-            return _peer.EnqueueFromPeerAsync(packet, ct);
+            return _peer.EnqueueFromPeerAsync(packet, this, ct);
         }
 
-        private async ValueTask EnqueueFromPeerAsync(ReadOnlyMemory<byte> packet, CancellationToken ct)
+        private async ValueTask EnqueueFromPeerAsync(
+            ReadOnlyMemory<byte> packet, InProcessConnection sender, CancellationToken ct)
         {
             if (!IsOpen)
             {
@@ -56,9 +58,9 @@ namespace Bun3.Server.Transport.InProcess
             }
 
             await _slots.WaitAsync(ct).ConfigureAwait(false);
-            if (!IsOpen)
+            if (!IsOpen || !sender.IsOpen)
             {
-                return; // 대기 중 닫힘(WakeAllSenders 방출로 깨어난 경우 포함) — 드롭
+                return; // 대기 중 어느 한쪽이 닫힘(WakeAllSenders 방출로 깨어난 경우 포함) — no-op 계약대로 드롭
             }
 
             // 소유권 계약: OnPacket의 배열은 수신자 소유가 되므로 송신자 버퍼를 여기서 1회 복사한다.
@@ -76,6 +78,11 @@ namespace Bun3.Server.Transport.InProcess
 
             _items.Release();               // 자기 펌프를 깨워 종료·OnClosed 통지로 잇는다
             _slots.Release(WakeAllSenders); // 이 인박스에 블록된 상대 송신자를 전부 깨운다
+            // 상대 인박스에 블록된 내 송신자도 깨운다 — TCP의 로컬 Close가 블록된 write를
+            // dispose로 깨워 no-op 반환시키는 동작에 해당. 깨어난 송신자는 sender.IsOpen으로
+            // 닫힘을 확인하고 드롭한다. 상대가 살아 있어도 이후 내 송신은 전부 IsOpen에서
+            // 걸러지므로 부풀려진 슬롯 카운트는 무해하다.
+            _peer._slots.Release(WakeAllSenders);
             _peer.NotifyPeerClosed();
         }
 

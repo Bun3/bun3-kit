@@ -39,6 +39,9 @@ namespace Bun3.Server.Transport.InProcess
         public ITransportListener Listener { get; }
 
         /// <summary>접속 측. ConnectAsync(clientHandler) 호출마다 새 연결 페어를 만든다.</summary>
+        /// <remarks>ConnectAsync는 서버 핸들러의 OnConnected를 호출 스레드에서 동기 실행한다
+        /// (결정적 순서 보장). 서버 OnConnected가 블록하면 ConnectAsync도 블록되므로,
+        /// OnConnected는 계약대로 빠르게 반환해야 한다.</remarks>
         public IConnector Connector { get; }
 
         internal static long NextConnectionId() => Interlocked.Increment(ref s_nextConnectionId);

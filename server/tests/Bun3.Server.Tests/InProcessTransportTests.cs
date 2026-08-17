@@ -239,10 +239,9 @@ public class InProcessTransportTests
 
         // 서버 OnConnected가 던져도 수락은 계속된다(Tcp의 accept 루프 생존 계약과 동일)
         var secondClient = new RecordingHandler();
-        var second = await transport.Connector.ConnectAsync(secondClient).AsTask().WaitAsync(Timeout);
+        await transport.Connector.ConnectAsync(secondClient).AsTask().WaitAsync(Timeout);
         Assert.That(secondClient.Connected.Task.IsCompletedSuccessfully, Is.True);
         Assert.That(await secondClient.Closed.Task.WaitAsync(Timeout), Is.Null); // 이번에도 거부되지만 수락 자체는 산다
-        _ = second;
     }
 
     [Test]
@@ -286,6 +285,34 @@ public class InProcessTransportTests
         Assert.DoesNotThrowAsync(async () => await blocked.WaitAsync(Timeout));
     }
 
+    [Test]
+    public async Task Local_close_releases_sender_blocked_on_peer_backpressure()
+    {
+        var serverHandler = new BlockingPacketHandler();
+        var transport = new InProcessTransport(maxQueuedPacketsPerConnection: 2);
+        await transport.Listener.StartAsync(serverHandler);
+        var clientConn = await transport.Connector.ConnectAsync(new RecordingHandler()).AsTask().WaitAsync(Timeout);
+
+        await clientConn.SendAsync(new byte[] { 1 }).AsTask().WaitAsync(Timeout);
+        await serverHandler.Entered.Task.WaitAsync(Timeout);
+        await clientConn.SendAsync(new byte[] { 2 }).AsTask().WaitAsync(Timeout);
+        await clientConn.SendAsync(new byte[] { 3 }).AsTask().WaitAsync(Timeout);
+        var blocked = clientConn.SendAsync(new byte[] { 4 }).AsTask();
+        await Task.Delay(100);
+        Assert.That(blocked.IsCompleted, Is.False);
+
+        // 송신자 쪽을 닫는다 — 상대(서버) 펌프가 OnPacket에 갇혀 있어도 블록된 송신은
+        // 예외 없이 no-op으로 풀려야 한다(TCP의 로컬 Close가 블록된 write를 깨우는 동작)
+        clientConn.Close();
+        Assert.DoesNotThrowAsync(async () => await blocked.WaitAsync(Timeout));
+
+        // 펌프를 재개하면 닫기 전 큐잉분(2,3)만 드레인되고 4번째는 드롭된다
+        serverHandler.Unblock.Release(3);
+        var error = await serverHandler.Closed.Task.WaitAsync(Timeout);
+        Assert.That(error, Is.Null);
+        Assert.That(serverHandler.PacketCount, Is.EqualTo(3));
+    }
+
     private sealed class ThrowingConnectHandler : IConnectionHandler
     {
         public void OnConnected(IConnection connection) => throw new InvalidOperationException("reject");
@@ -306,18 +333,24 @@ public class InProcessTransportTests
     private sealed class BlockingPacketHandler : IConnectionHandler
     {
         public readonly TaskCompletionSource Entered = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public readonly TaskCompletionSource<Exception?> Closed =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
         public readonly SemaphoreSlim Unblock = new(0);
         public IConnection? Connection;
+        private int _packetCount;
+
+        public int PacketCount => Volatile.Read(ref _packetCount);
 
         public void OnConnected(IConnection connection) => Connection = connection;
 
         public void OnPacket(IConnection connection, byte[] packet)
         {
+            Interlocked.Increment(ref _packetCount);
             Entered.TrySetResult();
             Unblock.Wait(TimeSpan.FromSeconds(5));
         }
 
-        public void OnClosed(IConnection connection, Exception? error) { }
+        public void OnClosed(IConnection connection, Exception? error) => Closed.TrySetResult(error);
     }
 
     private sealed class CountingClosedHandler : IConnectionHandler
