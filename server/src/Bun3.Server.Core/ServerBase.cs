@@ -144,13 +144,11 @@ namespace Bun3.Server.Core
 
         private void HandlePacket(IConnection connection, byte[] packet)
         {
-            // 참조 동일성 검사: 중복 id로 거부된 연결의 잔여 프레임이 원래 세션에 오폭되지 않게.
-            if (_sessions.TryGetValue(connection.Id, out var entry)
-                && ReferenceEquals(entry.Session.Connection, connection))
+            if (TryGetOwnedEntry(connection, out var entry))
             {
                 entry.Session.EnqueuePacket(packet);
             }
-            else
+            else if (_logger.IsEnabled(LogLevel.Debug))   // 패킷 경로 — 레벨 꺼짐 시 인자 박싱 회피
             {
                 // 정지/킥과의 경합에서도 유입될 수 있으므로 Debug 수준으로만 남긴다.
                 _logger.LogDebug("Packet from unknown connection {ConnectionId}; dropped.", connection.Id);
@@ -159,17 +157,21 @@ namespace Bun3.Server.Core
 
         private void HandleClosed(IConnection connection, Exception? error)
         {
-            // 등록된 엔트리가 이 연결의 것일 때만 제거 — 중복 id 연결의 OnClosed가 원래
-            // 세션을 제거하지 못하게 한다. netstandard2.1에는 TryRemove(KeyValuePair)가
-            // 없어 ICollection.Remove로 값 일치 조건부 제거를 원자적으로 수행한다.
-            if (_sessions.TryGetValue(connection.Id, out var entry)
-                && ReferenceEquals(entry.Session.Connection, connection)
+            // netstandard2.1에는 TryRemove(KeyValuePair)가 없어 ICollection.Remove로
+            // 값 일치 조건부 제거를 원자적으로 수행한다.
+            if (TryGetOwnedEntry(connection, out var entry)
                 && ((ICollection<KeyValuePair<long, SessionEntry>>)_sessions).Remove(
                     new KeyValuePair<long, SessionEntry>(connection.Id, entry)))
             {
                 entry.Session.NotifyClosed(error);
             }
         }
+
+        /// <summary>이 연결 소유의 세션 엔트리만 찾는다 — 중복 id로 거부된 연결의 잔여
+        /// 프레임/OnClosed가 같은 id의 원래 세션에 오폭되지 않게 참조 동일성으로 거른다.</summary>
+        private bool TryGetOwnedEntry(IConnection connection, out SessionEntry entry) =>
+            _sessions.TryGetValue(connection.Id, out entry)
+            && ReferenceEquals(entry.Session.Connection, connection);
 
         private sealed class SessionEntry
         {
