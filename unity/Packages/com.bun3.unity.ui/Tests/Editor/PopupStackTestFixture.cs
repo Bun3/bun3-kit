@@ -13,7 +13,7 @@ namespace Bun3.Unity.UI.Editor.Tests
     /// </summary>
     public abstract class PopupStackTestFixture
     {
-        protected sealed class TestPopup : PopupBehaviour, IPopupArg<int>, IPopupArg<string>
+        protected sealed class TestPopup : Popup, IPopupArg<int>, IPopupArg<string>
         {
             public UniTaskCompletionSource OpenSource;
             public UniTaskCompletionSource CloseSource;
@@ -65,7 +65,7 @@ namespace Bun3.Unity.UI.Editor.Tests
 
         protected PopupStack Stack;
         protected List<TestPopup> Created;
-        protected List<PopupBehaviour> Released;
+        protected List<Popup> Released;
 
         /// <summary>true면 팩토리가 만드는 팝업에 수동 완료 열림 소스를 단다.</summary>
         protected bool PendingOpen;
@@ -73,11 +73,14 @@ namespace Bun3.Unity.UI.Editor.Tests
         /// <summary>true면 팩토리가 만드는 팝업에 수동 완료 닫힘 소스를 단다.</summary>
         protected bool PendingClose;
 
+        /// <summary>true면 팩토리가 만드는 팝업에 딤 자식 오브젝트를 달아 준다.</summary>
+        protected bool WithDim;
+
         [SetUp]
         public void SetUp()
         {
             Created = new List<TestPopup>();
-            Released = new List<PopupBehaviour>();
+            Released = new List<Popup>();
             PendingOpen = false;
             PendingClose = false;
             Stack = new PopupStack(CreatePopup, ReleasePopup);
@@ -95,7 +98,7 @@ namespace Bun3.Unity.UI.Editor.Tests
             }
         }
 
-        protected UniTask<PopupBehaviour> CreatePopup(PopupKey key, CancellationToken cancellationToken)
+        protected UniTask<Popup> CreatePopup(PopupKey key, CancellationToken cancellationToken)
         {
             var popup = new GameObject($"popup-{key.Value}").AddComponent<TestPopup>();
 
@@ -104,11 +107,18 @@ namespace Bun3.Unity.UI.Editor.Tests
             if (PendingClose)
                 popup.CloseSource = new UniTaskCompletionSource();
 
+            if (WithDim)
+            {
+                var dim = new GameObject("dim");
+                dim.transform.SetParent(popup.transform, false);
+                popup.BackgroundDim = dim;
+            }
+
             Created.Add(popup);
-            return UniTask.FromResult<PopupBehaviour>(popup);
+            return UniTask.FromResult<Popup>(popup);
         }
 
-        protected void ReleasePopup(PopupBehaviour popup)
+        protected void ReleasePopup(Popup popup)
         {
             Released.Add(popup);
             if (popup)

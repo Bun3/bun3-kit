@@ -7,7 +7,7 @@ namespace Bun3.Unity.UI.Popups
     /// <summary>대기열 항목에 실린 초기 데이터. 저빈도 경로라 박싱/할당을 허용한다.</summary>
     internal interface IQueuedPopupArg
     {
-        void Deliver(PopupBehaviour popup);
+        void Deliver(Popup popup);
     }
 
     internal sealed class QueuedPopupArg<TArg> : IQueuedPopupArg
@@ -16,7 +16,7 @@ namespace Bun3.Unity.UI.Popups
 
         public QueuedPopupArg(TArg arg) => _arg = arg;
 
-        public void Deliver(PopupBehaviour popup) => PopupStack.DeliverArg(popup, _arg);
+        public void Deliver(Popup popup) => PopupStack.DeliverArg(popup, _arg);
     }
 
     /// <summary>
@@ -53,7 +53,7 @@ namespace Bun3.Unity.UI.Popups
         // 정렬 불변식: (Priority 내림차순, 삽입 순서). 머리 = 다음 표시 대상.
         private readonly List<Entry> _entries = new();
 
-        private PopupBehaviour _current;
+        private Popup _current;
         private bool _draining;
 
         public PopupQueue(PopupStack stack)
@@ -63,7 +63,7 @@ namespace Bun3.Unity.UI.Popups
         public int Count => _entries.Count;
 
         /// <summary>이 큐가 열어 현재 표시 중인 팝업. 없으면 null.</summary>
-        public PopupBehaviour Current => _current;
+        public Popup Current => _current;
 
         /// <summary>대기열에 넣는다. 표시 가능하면 즉시 열린다.</summary>
         public void Enqueue(PopupKey key, int layer = 0, int priority = 0)

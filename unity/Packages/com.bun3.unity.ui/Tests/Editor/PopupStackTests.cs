@@ -231,7 +231,7 @@ namespace Bun3.Unity.UI.Editor.Tests
         [Test]
         public void Clear_DuringFactoryLoad_ReleasesLateArrival()
         {
-            var source = new UniTaskCompletionSource<PopupBehaviour>();
+            var source = new UniTaskCompletionSource<Popup>();
             var released = 0;
             var stack = new PopupStack(
                 (key, ct) => source.Task,
@@ -253,8 +253,8 @@ namespace Bun3.Unity.UI.Editor.Tests
         [Test]
         public void AsyncFactory_BlocksDuplicateAndQueue_UntilLoaded()
         {
-            var source = new UniTaskCompletionSource<PopupBehaviour>();
-            PopupBehaviour created = null;
+            var source = new UniTaskCompletionSource<Popup>();
+            Popup created = null;
             var stack = new PopupStack((key, ct) => source.Task, ReleasePopup);
 
             stack.Push(1);
@@ -277,7 +277,7 @@ namespace Bun3.Unity.UI.Editor.Tests
         [Test]
         public void FactoryReturningNull_LeavesStackUsable()
         {
-            var stack = new PopupStack((key, ct) => UniTask.FromResult<PopupBehaviour>(null), ReleasePopup);
+            var stack = new PopupStack((key, ct) => UniTask.FromResult<Popup>(null), ReleasePopup);
 
             stack.Push(1);
 
@@ -298,8 +298,8 @@ namespace Bun3.Unity.UI.Editor.Tests
         [Test]
         public void Events_RaisedOnOpenAndClose()
         {
-            PopupBehaviour opened = null;
-            PopupBehaviour closed = null;
+            Popup opened = null;
+            Popup closed = null;
             Stack.Opened += popup => opened = popup;
             Stack.Closed += popup => closed = popup;
 

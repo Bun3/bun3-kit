@@ -3,7 +3,7 @@ using System;
 namespace Bun3.Unity.UI.Popups
 {
     /// <summary>
-    /// <see cref="PopupBehaviour.BlockClose"/>가 돌려주는 닫기 잠금 스코프.
+    /// <see cref="Popup.BlockClose"/>가 돌려주는 닫기 잠금 스코프.
     /// Dispose하면 잠금 하나가 해제된다(ref-count). <c>using</c>과 함께 쓸 것.
     /// </summary>
     /// <remarks>
@@ -12,9 +12,9 @@ namespace Bun3.Unity.UI.Popups
     /// </remarks>
     public struct PopupCloseGuard : IDisposable
     {
-        private PopupBehaviour _popup;
+        private Popup _popup;
 
-        internal PopupCloseGuard(PopupBehaviour popup) => _popup = popup;
+        internal PopupCloseGuard(Popup popup) => _popup = popup;
 
         public void Dispose()
         {

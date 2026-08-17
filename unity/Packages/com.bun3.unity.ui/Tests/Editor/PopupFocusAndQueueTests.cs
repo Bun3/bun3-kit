@@ -10,7 +10,7 @@ namespace Bun3.Unity.UI.Editor.Tests
         {
             Stack.Push(1);
             Stack.Push(2);
-            PopupBehaviour focused = null;
+            Popup focused = null;
             Stack.Focused += popup => focused = popup;
 
             var result = Stack.PushAsync(1, duplicate: PopupDuplicatePolicy.Focus)

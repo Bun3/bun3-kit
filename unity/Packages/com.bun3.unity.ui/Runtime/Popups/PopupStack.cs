@@ -52,7 +52,7 @@ namespace Bun3.Unity.UI.Popups
         private readonly PopupReleaser _releaser;
 
         // 정렬 불변식: (Layer 오름차순, 삽입 순서). 끝 = 최상단.
-        private readonly List<PopupBehaviour> _stack = new();
+        private readonly List<Popup> _stack = new();
         private readonly Queue<QueuedPopup> _queue = new();
         private readonly List<PopupKey> _loading = new();
 
@@ -60,13 +60,13 @@ namespace Bun3.Unity.UI.Popups
         private bool _disposed;
 
         /// <summary>팝업이 스택에 삽입된 직후(열림 연출 시작 전) 발화. z-order/딤 연출 연결 지점.</summary>
-        public event Action<PopupBehaviour> Opened;
+        public event Action<Popup> Opened;
 
         /// <summary>팝업이 스택에서 제거된 직후(해제 직전) 발화.</summary>
-        public event Action<PopupBehaviour> Closed;
+        public event Action<Popup> Closed;
 
         /// <summary><see cref="PopupDuplicatePolicy.Focus"/>로 기존 인스턴스가 최상단에 재사용될 때 발화.</summary>
-        public event Action<PopupBehaviour> Focused;
+        public event Action<Popup> Focused;
 
         /// <summary>열려 있거나 전이 중인 팝업 수.</summary>
         public int Count => _stack.Count;
@@ -75,10 +75,10 @@ namespace Bun3.Unity.UI.Popups
         /// 열린 팝업들의 읽기 전용 뷰. 순서 = 아래→위(끝이 최상단). 라이브 뷰이므로
         /// 열거 중 Push/Close를 부르지 말 것 — 스냅샷이 필요하면 복사해서 쓴다.
         /// </summary>
-        public IReadOnlyList<PopupBehaviour> Popups => _stack;
+        public IReadOnlyList<Popup> Popups => _stack;
 
         /// <summary>최상단 팝업. 비어 있으면 null.</summary>
-        public PopupBehaviour Top => _stack.Count > 0 ? _stack[_stack.Count - 1] : null;
+        public Popup Top => _stack.Count > 0 ? _stack[_stack.Count - 1] : null;
 
         /// <summary>순차 대기열에서 표시를 기다리는 항목 수.</summary>
         public int QueuedCount => _queue.Count;
@@ -133,9 +133,9 @@ namespace Bun3.Unity.UI.Popups
         /// <returns>
         /// 열린 인스턴스. 중복 정책으로 무시/큐잉됐거나, 팩토리가 null을 돌려줬거나,
         /// 진행 중 <see cref="Clear"/>로 취소됐으면 null. (열림 직후 예약된 닫기로 이미 닫혔을 수도
-        /// 있으니, 반환 후 계속 쓸 거라면 <see cref="PopupBehaviour.Phase"/>를 확인할 것.)
+        /// 있으니, 반환 후 계속 쓸 거라면 <see cref="Popup.Phase"/>를 확인할 것.)
         /// </returns>
-        public async UniTask<PopupBehaviour> PushAsync(PopupKey key, int layer = 0,
+        public async UniTask<Popup> PushAsync(PopupKey key, int layer = 0,
             PopupDuplicatePolicy duplicate = PopupDuplicatePolicy.Ignore)
         {
             ThrowIfDisposed();
@@ -161,7 +161,7 @@ namespace Bun3.Unity.UI.Popups
         /// 동기 생성해서 초기화할 필요가 없다.
         /// </summary>
         /// <returns><see cref="PushAsync(PopupKey,int,PopupDuplicatePolicy)"/>와 동일.</returns>
-        public async UniTask<PopupBehaviour> PushWithArgAsync<TArg>(PopupKey key, TArg arg, int layer = 0,
+        public async UniTask<Popup> PushWithArgAsync<TArg>(PopupKey key, TArg arg, int layer = 0,
             PopupDuplicatePolicy duplicate = PopupDuplicatePolicy.Ignore)
         {
             ThrowIfDisposed();
@@ -203,7 +203,7 @@ namespace Bun3.Unity.UI.Popups
         /// <returns>
         /// 키를 소비했으면 true. 스택이 비어 있을 때만 false — 게임이 종료 확인 등
         /// 다음 처리를 이어간다. 최상단이 전이 중이거나 닫기 잠금 중이면 아무것도 하지 않고
-        /// 소비하며, <see cref="PopupBehaviour.OnBackRequested"/>가 false를 돌려주면
+        /// 소비하며, <see cref="Popup.OnBackRequested"/>가 false를 돌려주면
         /// 닫지 않고 소비만 한다.
         /// </returns>
         public bool HandleBack()
@@ -236,15 +236,15 @@ namespace Bun3.Unity.UI.Popups
         }
 
         /// <summary>팝업을 닫는다. 닫힘 연출 완료를 기다리지 않는 fire-and-forget 버전.</summary>
-        public void Close(PopupBehaviour popup) => CloseAsync(popup).Forget();
+        public void Close(Popup popup) => CloseAsync(popup).Forget();
 
         /// <summary>
         /// 팝업을 닫고 닫힘 연출·해제 완료까지 대기한다. 이 스택 소속이 아니거나 이미 닫히는
-        /// 중이면 무시. 열림 연출 중이거나 닫기 잠금(<see cref="PopupBehaviour.IsCloseBlocked"/>)
+        /// 중이면 무시. 열림 연출 중이거나 닫기 잠금(<see cref="Popup.IsCloseBlocked"/>)
         /// 중이면 닫기를 예약만 하고 즉시 반환한다 — 열림 완료/마지막 잠금 해제 시 자동으로
-        /// 닫힌다. 실제 닫힘까지 기다리려면 <see cref="PopupBehaviour.WaitUntilClosedAsync"/>를 쓸 것.
+        /// 닫힌다. 실제 닫힘까지 기다리려면 <see cref="Popup.WaitUntilClosedAsync"/>를 쓸 것.
         /// </summary>
-        public async UniTask CloseAsync(PopupBehaviour popup)
+        public async UniTask CloseAsync(Popup popup)
         {
             if (popup == null || popup.Stack != this || popup.Phase == PopupPhase.Closing)
                 return;
@@ -272,6 +272,7 @@ namespace Bun3.Unity.UI.Popups
             _stack.Remove(popup);
             popup.Detach();
             Closed?.Invoke(popup);
+            NotifyStackOrderChanged();
             _releaser(popup);
 
             TryDrainQueue();
@@ -349,7 +350,7 @@ namespace Bun3.Unity.UI.Popups
             TryDrainQueue();
         }
 
-        private PopupBehaviour FocusExisting<TArg>(PopupKey key, TArg arg, bool hasArg)
+        private Popup FocusExisting<TArg>(PopupKey key, TArg arg, bool hasArg)
         {
             var popup = FindTopmostOpen(key);
             if (popup == null)
@@ -361,10 +362,11 @@ namespace Bun3.Unity.UI.Popups
             _stack.Remove(popup);
             InsertSorted(popup, popup.Layer); // 같은 레이어의 최상단으로
             Focused?.Invoke(popup);
+            NotifyStackOrderChanged();
             return popup;
         }
 
-        private PopupBehaviour FindTopmostOpen(PopupKey key)
+        private Popup FindTopmostOpen(PopupKey key)
         {
             for (int i = _stack.Count - 1; i >= 0; i--)
             {
@@ -376,16 +378,16 @@ namespace Bun3.Unity.UI.Popups
         }
 
         /// <summary><see cref="PopupQueue"/> 전용 진입점 — 중복 정책을 거치지 않고 바로 연다.</summary>
-        internal UniTask<PopupBehaviour> OpenQueuedAsync(PopupKey key, int layer, IQueuedPopupArg arg)
+        internal UniTask<Popup> OpenQueuedAsync(PopupKey key, int layer, IQueuedPopupArg arg)
             => arg == null
                 ? OpenAsync(key, layer, (byte)0, ArgMode.None)
                 : OpenAsync(key, layer, arg, ArgMode.Queued);
 
-        private async UniTask<PopupBehaviour> OpenAsync<TArg>(PopupKey key, int layer, TArg arg, ArgMode argMode)
+        private async UniTask<Popup> OpenAsync<TArg>(PopupKey key, int layer, TArg arg, ArgMode argMode)
         {
             var token = _lifetime.Token;
 
-            PopupBehaviour popup;
+            Popup popup;
             _loading.Add(key);
             try
             {
@@ -430,6 +432,7 @@ namespace Bun3.Unity.UI.Popups
             InsertSorted(popup, layer);
             popup.Attach(this, key, layer);
             Opened?.Invoke(popup);
+            NotifyStackOrderChanged();
 
             try
             {
@@ -451,7 +454,7 @@ namespace Bun3.Unity.UI.Popups
             return popup;
         }
 
-        internal static void DeliverArg<TArg>(PopupBehaviour popup, TArg arg)
+        internal static void DeliverArg<TArg>(Popup popup, TArg arg)
         {
             if (popup is IPopupArg<TArg> receiver)
                 receiver.OnPopupArg(arg);
@@ -462,7 +465,36 @@ namespace Bun3.Unity.UI.Popups
                     popup);
         }
 
-        private void InsertSorted(PopupBehaviour popup, int layer)
+        /// <summary>
+        /// 구조 변화(열림/닫힘/Focus) 후 전체 팝업에 순서를 통지하고 딤을 갱신한다.
+        /// 딤 규칙: <see cref="Popup.BackgroundDim"/>을 가진 팝업 중 최상단만 켠다 —
+        /// 딤 없는 팝업이 맨 위여도 그 아래 딤 보유 팝업의 딤이 유지된다.
+        /// </summary>
+        private void NotifyStackOrderChanged()
+        {
+            Popup dimOwner = null;
+            for (int i = _stack.Count - 1; i >= 0; i--)
+            {
+                if (_stack[i].BackgroundDim)
+                {
+                    dimOwner = _stack[i];
+                    break;
+                }
+            }
+
+            var top = Top;
+            for (int i = 0; i < _stack.Count; i++)
+            {
+                var popup = _stack[i];
+
+                if (popup.BackgroundDim)
+                    popup.BackgroundDim.SetActive(ReferenceEquals(popup, dimOwner));
+
+                popup.OnStackOrderChanged(i, ReferenceEquals(popup, top));
+            }
+        }
+
+        private void InsertSorted(Popup popup, int layer)
         {
             int index = _stack.Count;
             while (index > 0 && _stack[index - 1].Layer > layer)
@@ -507,7 +539,7 @@ namespace Bun3.Unity.UI.Popups
                 throw new ObjectDisposedException(nameof(PopupStack));
         }
 
-        private static void DestroyPopup(PopupBehaviour popup)
+        private static void DestroyPopup(Popup popup)
         {
             if (!popup)
                 return;

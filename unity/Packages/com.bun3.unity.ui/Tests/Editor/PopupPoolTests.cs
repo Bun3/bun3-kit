@@ -10,7 +10,7 @@ namespace Bun3.Unity.UI.Editor.Tests
     {
         private int _loads;
 
-        private UniTask<PopupBehaviour> Loader(PopupKey key, CancellationToken cancellationToken)
+        private UniTask<Popup> Loader(PopupKey key, CancellationToken cancellationToken)
         {
             _loads++;
             return CreatePopup(key, cancellationToken);

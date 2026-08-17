@@ -12,11 +12,11 @@ namespace Bun3.Unity.UI.Popups
     /// <see cref="PopupReleaser"/>로 되돌려준다. 취소 토큰은 스택이
     /// <see cref="PopupStack.Clear"/>/<see cref="PopupStack.Dispose"/>될 때 발화한다.
     /// </remarks>
-    public delegate UniTask<PopupBehaviour> PopupFactory(PopupKey key, CancellationToken cancellationToken);
+    public delegate UniTask<Popup> PopupFactory(PopupKey key, CancellationToken cancellationToken);
 
     /// <summary>
     /// 닫힌 팝업 인스턴스를 되돌려받는다. 기본 구현은 <c>Destroy</c>이며,
     /// 풀링을 쓰는 게임은 반납 로직으로 교체한다.
     /// </summary>
-    public delegate void PopupReleaser(PopupBehaviour popup);
+    public delegate void PopupReleaser(Popup popup);
 }

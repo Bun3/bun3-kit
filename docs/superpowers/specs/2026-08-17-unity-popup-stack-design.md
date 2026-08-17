@@ -26,7 +26,7 @@
 `int` 래퍼, `IEquatable<PopupKey>`, `int`에서 암시적 변환. 게임은 enum을 캐스팅해 쓴다.
 문자열 키 금지(무할당 규율 + 오타 방지).
 
-### PopupBehaviour (abstract MonoBehaviour)
+### Popup (abstract MonoBehaviour)
 
 게임 팝업 프리팹의 베이스. 스택이 소유 관계를 주입한다.
 
@@ -44,8 +44,8 @@
 ### 델리게이트 (게임 몫을 여는 지점)
 
 ```csharp
-public delegate UniTask<PopupBehaviour> PopupFactory(PopupKey key, CancellationToken cancellationToken);
-public delegate void PopupReleaser(PopupBehaviour popup);
+public delegate UniTask<Popup> PopupFactory(PopupKey key, CancellationToken cancellationToken);
+public delegate void PopupReleaser(Popup popup);
 ```
 
 - 팩토리: 프리팹 로딩+인스턴스화 방식(Resources/Addressables/풀)은 전부 게임 몫.
@@ -61,9 +61,9 @@ public delegate void PopupReleaser(PopupBehaviour popup);
 - `void Enqueue(PopupKey key, int layer = 0)` — 순차 표시 대기열(보상 연출 등).
   **스택이 비면** 머리부터 하나씩 표시, 닫히면 다음. (기본값 결정 — 아래 참고)
 - `bool HandleBack()` — 최상단 팝업에 라우팅. 소비 여부 반환(스택 비면 false → 게임이 종료 다이얼로그 등 처리).
-- `void Close(PopupBehaviour)`, `void Pop()`(최상단), `void Clear()`(연출 생략 즉시 전부 해제).
-- `int Count`, `PopupBehaviour Top`, `bool IsOpen(PopupKey)`.
-- `event Action<PopupBehaviour> Opened, Closed` — 게임이 z-order/딤/사운드 등 표현 계층 연결.
+- `void Close(Popup)`, `void Pop()`(최상단), `void Clear()`(연출 생략 즉시 전부 해제).
+- `int Count`, `Popup Top`, `bool IsOpen(PopupKey)`.
+- `event Action<Popup> Opened, Closed` — 게임이 z-order/딤/사운드 등 표현 계층 연결.
 
 ### PopupDuplicatePolicy
 
@@ -89,7 +89,7 @@ Input System(`ENABLE_INPUT_SYSTEM`)과 레거시(`ENABLE_LEGACY_INPUT_MANAGER`) 
 - **대기열 드레인**: 팝업이 닫힐 때(그리고 Enqueue 시점에) 스택이 비어 있으면 머리를 Push.
 - **수명**: `Clear()`/`Dispose()`는 내부 CTS를 취소해 로딩/연출을 중단하고 전부 해제.
 - **무할당**: push/pop/back 경로에 클로저·LINQ·문자열 할당 없음. 대기열은 `Queue<struct>`,
-  스택은 `List<PopupBehaviour>` 재사용. 이벤트는 `Action<PopupBehaviour>` 직접 호출.
+  스택은 `List<Popup>` 재사용. 이벤트는 `Action<Popup>` 직접 호출.
   `WaitUntilClosedAsync`는 요청 시에만 `UniTaskCompletionSource` 생성.
 
 ## 기본값으로 결정하고 넘어간 것 (통합 시 재검토 가능)
@@ -103,7 +103,7 @@ Input System(`ENABLE_INPUT_SYSTEM`)과 레거시(`ENABLE_LEGACY_INPUT_MANAGER`) 
 
 레거시 구조와 비교 리뷰 후 사용자 결정으로 반영:
 
-1. **`PushAsync`가 인스턴스를 반환** (`UniTask<PopupBehaviour>`). null = 중복 정책으로
+1. **`PushAsync`가 인스턴스를 반환** (`UniTask<Popup>`). null = 중복 정책으로
    무시/큐잉, 팩토리 실패, Clear 취소.
 2. **초기 데이터 채널** — 레거시의 근본 문제(Show 시점에 데이터를 넘기고 초기화하려면
    팝업을 유니티 스레드에서 동기 생성해야 함 → Addressables `WaitForCompletion` 강제)를
@@ -148,6 +148,21 @@ sibling index/딤 자동 관리 헬퍼.
 5. **`PopupSiblingArranger`** — 열림/닫힘/Focus마다 부모별 sibling index를 스택 순서로
    정렬하고 각 팝업에 `OnStackOrderChanged(index, isTopmost)` 통지(가상 훅 신설).
    "최상단만 딤"은 게임이 훅에서 처리. 팝업 전용 부모 전제.
+
+## 3차 리뷰 반영 (2026-08-18, 사용성 라운드)
+
+1. **네이밍**: `PopupBehaviour` → **`Popup`** (사용자 선택). 파생 시점 가독성
+   (`class ShopPopup : Popup`) 우선, 충돌 시 네임스페이스로 구분.
+2. **순서 통지를 스택으로 이관** — `OnStackOrderChanged(index, isTopmost)`를 arranger가
+   아니라 스택이 구조 변화(열림/닫힘/Focus)마다 직접 호출. arranger는 sibling index
+   정렬만 남음(팝업 전용 부모 전제).
+3. **딤 기본 동작 내장** — `Popup`에 `[SerializeField] GameObject _backgroundDim`
+   (레거시 backgroundDimTransform 대응, null = 딤 없음). 스택이 순서 통지 때
+   **딤 보유 팝업 중 최상단**의 딤만 켠다 — 딤 없는 팝업이 맨 위여도 아래 보유자의
+   딤 유지(idlez와 동일 규칙, 사용자 확인).
+4. **`PopupManager` + `PopupManagerBuilder`** — 풀→스택→back 라우터→정렬 배선과
+   Dispose 순서를 한 곳에. DI 컨테이너화는 하지 않음 — 조각들은 생성자 주입 POCO라
+   게임 쪽 DI에 직접 등록 가능(사용자 제안의 Builder 채택, DI는 게임 몫으로 결정).
 
 ## 테스트 전략 (EditMode)
 

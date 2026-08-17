@@ -6,8 +6,7 @@ namespace Bun3.Unity.UI.Popups
 {
     /// <summary>
     /// 스택 순서가 바뀔 때마다(열림/닫힘/Focus) 팝업들의 sibling index를 스택 순서에 맞춰
-    /// 정렬하고, 각 팝업에 <see cref="PopupBehaviour.OnStackOrderChanged"/>를 통지하는
-    /// 선택 도우미. "최상단 팝업만 딤 표시" 같은 표현은 그 훅에서 게임이 처리한다.
+    /// 정렬하는 선택 도우미. (순서 통지와 딤 토글은 스택이 직접 하므로 여기서는 트랜스폼만.)
     /// </summary>
     /// <remarks>
     /// 팝업 전용 부모를 전제로 한다 — 부모에 팝업 아닌 자식이 섞여 있으면 인덱스 보장이 없다.
@@ -18,7 +17,7 @@ namespace Bun3.Unity.UI.Popups
     {
         private readonly PopupStack _stack;
         private readonly Dictionary<Transform, int> _siblingCounters = new();
-        private readonly Action<PopupBehaviour> _onStackChanged;
+        private readonly Action<Popup> _onStackChanged;
 
         public PopupSiblingArranger(PopupStack stack)
         {
@@ -37,7 +36,7 @@ namespace Bun3.Unity.UI.Popups
             _stack.Focused -= _onStackChanged;
         }
 
-        private void OnStackChanged(PopupBehaviour popup) => Arrange();
+        private void OnStackChanged(Popup popup) => Arrange();
 
         /// <summary>즉시 재정렬한다. 게임이 팝업 부모를 옮긴 직후 등 수동 갱신용.</summary>
         public void Arrange()
@@ -45,21 +44,16 @@ namespace Bun3.Unity.UI.Popups
             _siblingCounters.Clear();
 
             var popups = _stack.Popups;
-            var top = _stack.Top;
 
             for (int i = 0; i < popups.Count; i++)
             {
-                var popup = popups[i];
-                var parent = popup.transform.parent;
+                var parent = popups[i].transform.parent;
+                if (parent == null)
+                    continue;
 
-                if (parent != null)
-                {
-                    _siblingCounters.TryGetValue(parent, out var siblingIndex);
-                    popup.transform.SetSiblingIndex(siblingIndex);
-                    _siblingCounters[parent] = siblingIndex + 1;
-                }
-
-                popup.OnStackOrderChanged(i, ReferenceEquals(popup, top));
+                _siblingCounters.TryGetValue(parent, out var siblingIndex);
+                popups[i].transform.SetSiblingIndex(siblingIndex);
+                _siblingCounters[parent] = siblingIndex + 1;
             }
         }
     }

@@ -20,14 +20,14 @@ namespace Bun3.Unity.UI.Popups
     /// 풀 대상은 옵트인이다: <see cref="PreloadAsync"/> 또는 <see cref="MarkPooled"/>로 등록된
     /// 키만 <see cref="Return"/> 시 풀에 반납(비활성화)되고, 나머지는 파괴된다.
     /// 반납은 비활성화만 한다 — 트랜스폼/상태 원복이 필요하면 게임의
-    /// <see cref="PopupBehaviour"/> 쪽에서 처리한다(매 오픈마다 <see cref="IPopupArg{TArg}"/>가
+    /// <see cref="Popup"/> 쪽에서 처리한다(매 오픈마다 <see cref="IPopupArg{TArg}"/>가
     /// 다시 전달되므로 재초기화 지점은 그쪽이 자연스럽다).
     /// </remarks>
     public sealed class PopupPool : IDisposable
     {
         private readonly PopupFactory _loader;
-        private readonly Dictionary<PopupKey, Queue<PopupBehaviour>> _pooled = new();
-        private readonly Dictionary<PopupBehaviour, PopupKey> _rented = new();
+        private readonly Dictionary<PopupKey, Queue<Popup>> _pooled = new();
+        private readonly Dictionary<Popup, PopupKey> _rented = new();
         private bool _disposed;
 
         /// <param name="loader">키 → 새 인스턴스. 로딩 방식(Resources/Addressables)은 게임 몫.</param>
@@ -38,7 +38,7 @@ namespace Bun3.Unity.UI.Popups
         public void MarkPooled(PopupKey key)
         {
             if (!_pooled.ContainsKey(key))
-                _pooled[key] = new Queue<PopupBehaviour>();
+                _pooled[key] = new Queue<Popup>();
         }
 
         /// <summary>키를 풀 대상으로 등록하고 인스턴스를 미리 만들어 비활성 상태로 쌓아 둔다.</summary>
@@ -63,7 +63,7 @@ namespace Bun3.Unity.UI.Popups
         /// 풀에서 꺼내거나(활성화해서) 없으면 로더로 새로 만든다.
         /// <see cref="PopupFactory"/>로 스택에 꽂는 용도.
         /// </summary>
-        public async UniTask<PopupBehaviour> RentAsync(PopupKey key, CancellationToken cancellationToken)
+        public async UniTask<Popup> RentAsync(PopupKey key, CancellationToken cancellationToken)
         {
             ThrowIfDisposed();
 
@@ -92,7 +92,7 @@ namespace Bun3.Unity.UI.Popups
         /// 인스턴스를 되돌려받는다: 풀 대상 키면 비활성화 후 보관, 아니면 파괴.
         /// <see cref="PopupReleaser"/>로 스택에 꽂는 용도.
         /// </summary>
-        public void Return(PopupBehaviour popup)
+        public void Return(Popup popup)
         {
             if (popup == null)
                 return;
@@ -138,7 +138,7 @@ namespace Bun3.Unity.UI.Popups
                 throw new ObjectDisposedException(nameof(PopupPool));
         }
 
-        private static void Destroy(PopupBehaviour popup)
+        private static void Destroy(Popup popup)
         {
             if (!popup)
                 return;

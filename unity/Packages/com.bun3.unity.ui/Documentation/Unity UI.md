@@ -96,8 +96,8 @@ Arguments are evaluated before `Require` is entered, so the scope cannot prevent
 ```csharp
 using Bun3.Unity.UI.Popups;
 
-// 1. Derive popups from PopupBehaviour (override animation/back hooks as needed).
-public sealed class ShopPopup : PopupBehaviour
+// 1. Derive popups from Popup (override animation/back hooks as needed).
+public sealed class ShopPopup : Popup
 {
     protected override UniTask PlayOpenAsync(CancellationToken ct) => _tween.PlayAsync(ct);
     protected override bool OnBackRequested() => !_isPurchasing; // refuse close mid-purchase
@@ -124,13 +124,13 @@ _stack.EnqueueWithArg((int)PopupId.Reward, rewardArgs);
 // A popup may implement IPopupArg<TArg> for several TArg types to expose multiple
 // initialization routes — e.g. a typed code path plus a designer-data string path.
 // The static type at the call site picks which OnPopupArg runs.
-public sealed class ItemDetailPopup : PopupBehaviour, IPopupArg<int>, IPopupArg<string>
+public sealed class ItemDetailPopup : Popup, IPopupArg<int>, IPopupArg<string>
 {
     public void OnPopupArg(int defId)     { /* from code */ }
     public void OnPopupArg(string token)  => OnPopupArg(int.Parse(token)); // from table/server data
 }
 // To make the string route mandatory for every popup (like an abstract token method),
-// enforce it in your game's base class: abstract class GamePopup : PopupBehaviour, IPopupArg<string>.
+// enforce it in your game's base class: abstract class GamePopup : Popup, IPopupArg<string>.
 
 // 5. Reuse an already-open instance instead of stacking a duplicate (legacy GetOrShowPopup):
 //    moves it to the top of its layer and re-delivers the arg via IPopupArg.
@@ -149,9 +149,22 @@ _pool = new PopupPool(LoadPopupAsync);
 _stack = new PopupStack(_pool.RentAsync, _pool.Return);
 await _pool.PreloadAsync((int)PopupId.Shop);   // marks the key pooled + stocks an instance
 
-// 8. Sibling ordering + "dim only the topmost": optional arranger keeps sibling indices
-//    matching stack order and calls OnStackOrderChanged(index, isTopmost) on every popup.
+// 8. Sibling ordering: optional arranger keeps sibling indices matching stack order
+//    (assumes a popup-only parent). Order notifications and dim handling live in the
+//    stack itself, so this is purely about transform order.
 _arranger = new PopupSiblingArranger(_stack);
+
+// 8b. Dim: assign the popup prefab's dim object to the serialized BackgroundDim field
+//     (leave null for dimless popups). The stack keeps exactly one dim visible — the
+//     topmost popup that HAS a dim — so a dimless popup on top keeps the dim below it.
+
+// 8c. Or wire everything at once and let Dispose() tear it down in order:
+_popups = new PopupManagerBuilder(LoadPopupAsync)
+    .UsePool()                                  // wraps the loader in a PopupPool
+    .UseBackKey(gameObject, ShowQuitDialog)     // attaches PopupBackKeyRouter, injects the stack
+    .UseSiblingArranger()
+    .Build();
+_popups.Stack.Push((int)PopupId.Shop);
 
 // 9. Block closing while the popup is busy (ref-counted; nested locks compose).
 //    A Close/back during the lock is *deferred*, not lost — it runs when the last lock lifts.
@@ -184,7 +197,7 @@ Behavior rules:
 | Location | Description |
 |---|---|
 | `Runtime/Buttons/` | `ButtonInteractableScope`, `DisabledReason`, `IButtonDisabledHandler`, and `ButtonDisabledClickReceiver` source. |
-| `Runtime/Popups/` | `PopupStack`, `PopupBehaviour`, `PopupKey`, `PopupDuplicatePolicy`, `IPopupArg<TArg>`, `PopupCloseGuard`, `PopupQueue`, `PopupPool`, `PopupSiblingArranger`, `PopupBackKeyRouter` source. |
+| `Runtime/Popups/` | `PopupStack`, `Popup`, `PopupKey`, `PopupDuplicatePolicy`, `IPopupArg<TArg>`, `PopupCloseGuard`, `PopupQueue`, `PopupPool`, `PopupSiblingArranger`, `PopupBackKeyRouter`, `PopupManager`(+builder) source. |
 | `Samples/ButtonInteractableScope/` | Sample MonoBehaviour and handler demonstrating typical usage. |
 | `Tests/Runtime/` | PlayMode tests (`Bun3.Unity.UI.Tests`). |
 | `Tests/Editor/` | EditMode tests (`Bun3.Unity.UI.Editor.Tests`), covering the popup stack. |

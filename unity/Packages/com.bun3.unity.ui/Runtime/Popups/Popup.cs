@@ -13,10 +13,25 @@ namespace Bun3.Unity.UI.Popups
     /// 인스턴스 생성(<see cref="PopupFactory"/>)과 해제(<see cref="PopupReleaser"/>)는 게임 몫이므로,
     /// 이 클래스는 트랜스폼/캔버스 배치를 일절 건드리지 않는다.
     /// </remarks>
-    public abstract class PopupBehaviour : MonoBehaviour
+    public abstract class Popup : MonoBehaviour
     {
+        [SerializeField]
+        [Tooltip("최상단 팝업일 때만 켤 딤 배경. 딤이 없는 팝업은 비워 둔다.")]
+        private GameObject _backgroundDim;
+
         private UniTaskCompletionSource _closedSource;
         private int _closeGuardCount;
+
+        /// <summary>
+        /// 딤 배경(레거시 backgroundDimTransform 대응). null이면 딤 없는 팝업.
+        /// 스택이 순서 변화 때마다 <b>딤을 가진 팝업 중 최상단</b>의 딤만 켠다 —
+        /// 딤 없는 팝업이 그 위에 떠도 이 팝업의 딤이 유지된다.
+        /// </summary>
+        public GameObject BackgroundDim
+        {
+            get => _backgroundDim;
+            set => _backgroundDim = value;
+        }
 
         /// <summary>이 인스턴스를 연 키. 스택에 속해 있지 않으면 마지막 값이 남는다.</summary>
         public PopupKey Key { get; private set; }
@@ -149,9 +164,9 @@ namespace Bun3.Unity.UI.Popups
         protected internal virtual bool OnBackRequested() => true;
 
         /// <summary>
-        /// <see cref="PopupSiblingArranger"/>가 스택 순서 변화(열림/닫힘/Focus)를 통지하는 지점.
-        /// "최상단일 때만 딤 배경 표시" 같은 표현을 여기서 처리한다. 기본은 아무것도 안 한다.
-        /// (arranger를 안 쓰면 호출되지 않는다.)
+        /// 스택 순서가 바뀔 때마다(열림/닫힘/Focus) 스택이 모든 팝업에 통지하는 지점.
+        /// 딤 토글(<see cref="BackgroundDim"/>)은 스택이 이 훅과 별개로 처리하므로,
+        /// 여기서는 추가 표현(사운드, 포커스 이동 등)만 얹으면 된다. 기본은 아무것도 안 한다.
         /// </summary>
         /// <param name="stackIndex">스택 내 인덱스(0 = 최하단).</param>
         /// <param name="isTopmost">전체 스택의 최상단인지.</param>
