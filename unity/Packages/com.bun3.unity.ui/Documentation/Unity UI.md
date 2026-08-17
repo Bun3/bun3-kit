@@ -166,6 +166,11 @@ _popups = new PopupManagerBuilder(LoadPopupAsync)
     .Build();
 _popups.Stack.Push((int)PopupId.Shop);
 
+// 8d. Global access (legacy GameManager.Get().ShowPopup style): assign the built manager
+//     to the optional static slot in your bootstrap. Dispose() clears it automatically.
+PopupManager.Instance = _popups;
+PopupManager.Instance.Stack.Push((int)PopupId.Shop);   // from anywhere
+
 // 9. Block closing while the popup is busy (ref-counted; nested locks compose).
 //    A Close/back during the lock is *deferred*, not lost — it runs when the last lock lifts.
 using (BlockClose())                                   // sequence direction, cutscenes

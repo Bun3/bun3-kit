@@ -163,6 +163,10 @@ sibling index/딤 자동 관리 헬퍼.
 4. **`PopupManager` + `PopupManagerBuilder`** — 풀→스택→back 라우터→정렬 배선과
    Dispose 순서를 한 곳에. DI 컨테이너화는 하지 않음 — 조각들은 생성자 주입 POCO라
    게임 쪽 DI에 직접 등록 가능(사용자 제안의 Builder 채택, DI는 게임 몫으로 결정).
+5. **`PopupManager.Instance` 전역 슬롯(선택)** — 레거시 `GameManager.Get().ShowPopup`
+   스타일 전역 접근 요구 반영. 게임 부트스트랩이 Build 결과를 대입, Dispose 시 자동
+   해제, 도메인 리로드 off 대응 SubsystemRegistration 리셋(ButtonInteractableScope
+   관례). Build가 자동 대입하지 않는 이유: 다중 매니저(씬별/테스트) 허용.
 
 ## 테스트 전략 (EditMode)
 

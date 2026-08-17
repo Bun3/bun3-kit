@@ -7,6 +7,9 @@ namespace Bun3.Unity.UI.Editor.Tests
 {
     public class PopupManagerTests : PopupStackTestFixture
     {
+        [TearDown]
+        public void ClearInstance() => PopupManager.Instance = null;
+
         [Test]
         public void Builder_WiresPoolRouterArranger()
         {
@@ -56,6 +59,20 @@ namespace Bun3.Unity.UI.Editor.Tests
             Assert.AreEqual(1, manager.Stack.Count);
 
             manager.Dispose();
+        }
+
+        [Test]
+        public void Instance_ClearedOnDispose_OnlyIfSelf()
+        {
+            var first = new PopupManagerBuilder(CreatePopup).Build();
+            var second = new PopupManagerBuilder(CreatePopup).Build();
+            PopupManager.Instance = first;
+
+            second.Dispose();
+            Assert.AreSame(first, PopupManager.Instance, "다른 인스턴스의 Dispose는 슬롯을 건드리면 안 된다.");
+
+            first.Dispose();
+            Assert.IsNull(PopupManager.Instance, "자기 자신이 슬롯이면 Dispose가 비워야 한다.");
         }
 
         [Test]
