@@ -124,6 +124,9 @@ internal sealed class EffectTestKit
     /// <summary>방어자 대상입니다.</summary>
     public EffectTarget Defender { get; }
 
+    /// <summary>등록된 모든 대상입니다(등록 순서 — Attacker, Defender).</summary>
+    public IReadOnlyList<EffectTarget> AllTargets => _targetIds.ConvertAll(id => _targetsById[id.Value]);
+
     /// <summary>카탈로그·표준 속성 레지스트리·공격자/방어자 두 대상을 조립한 키트를 만듭니다.</summary>
     public static EffectTestKit Create() => new EffectTestKit();
 
@@ -143,6 +146,14 @@ internal sealed class EffectTestKit
     public void RegisterExecutionCalc(string calcTag, IExecutionCalc calc) =>
         _seamRegistryBuilder.RegisterExecutionCalc(_tagCatalog.GetRequired(calcTag), calc);
 
+    /// <summary>대상 선택 계약을 태그에 등록합니다. <see cref="AllTargetsSelector"/>는 등록 시점의
+    /// 대상 목록에 바인딩됩니다. BuildPipeline 전에 호출해야 합니다.</summary>
+    public void RegisterSelector(string selectorTag, ITargetSelector selector)
+    {
+        if (selector is AllTargetsSelector allTargets) allTargets.Bind(_targetIds);
+        _seamRegistryBuilder.RegisterTargetSelector(_tagCatalog.GetRequired(selectorTag), selector);
+    }
+
     /// <summary>공유 카탈로그에서 경로로 태그를 찾습니다.</summary>
     public GameplayTag Tag(string path) => _tagCatalog.GetRequired(path);
 
@@ -153,8 +164,9 @@ internal sealed class EffectTestKit
         _catalog ??= _effectCatalogBuilder.Build(_tagCatalog, _seamRegistryBuilder.Build(_tagCatalog), _attributeRegistry);
 
     /// <summary>지금까지 등록된 스펙·계산으로 카탈로그를 굳히고 파이프라인을 만듭니다.</summary>
-    public EffectPipeline BuildPipeline() =>
-        new EffectPipeline(BuiltCatalog, new DictionaryResolver(_targetsById, _targetIds), new XorShiftRng(12345));
+    public EffectPipeline BuildPipeline(int applyBudgetPerTick = 64) =>
+        new EffectPipeline(
+            BuiltCatalog, new DictionaryResolver(_targetsById, _targetIds), new XorShiftRng(12345), applyBudgetPerTick);
 
     private sealed class DictionaryResolver : IEffectTargetResolver
     {
@@ -176,5 +188,22 @@ internal sealed class EffectTestKit
     public sealed class SubtractHpCalc : IExecutionCalc
     {
         public void Execute(ref ExecutionContext ctx) => ctx.WriteTarget(Hp, ctx.TargetAttr(Hp) - ctx.Input(0));
+    }
+
+    /// <summary>키트에 등록된 모든 대상을 반환하는 테스트용 선택자입니다. <see cref="RegisterSelector"/>가
+    /// 등록 시점의 대상 목록에 바인딩합니다.</summary>
+    public sealed class AllTargetsSelector : ITargetSelector
+    {
+        private List<TargetId>? _allTargetIds;
+
+        internal void Bind(List<TargetId> targetIds) => _allTargetIds = targetIds;
+
+        public int Select(in SelectorContext ctx, Span<TargetId> results)
+        {
+            var ids = _allTargetIds ?? throw new InvalidOperationException("RegisterSelector로 먼저 바인딩해야 합니다.");
+            var count = Math.Min(ids.Count, results.Length);
+            for (var i = 0; i < count; i++) results[i] = ids[i];
+            return count;
+        }
     }
 }

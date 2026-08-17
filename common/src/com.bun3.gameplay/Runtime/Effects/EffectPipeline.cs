@@ -8,9 +8,12 @@ using Bun3.Gameplay.Seams;
 namespace Bun3.Gameplay.Effects
 {
     /// <summary>
-    /// 효과 적용 큐를 드레인하고 Instant/Duration/Infinite 경로를 처리하는 파이프라인입니다.
-    /// 페이즈 ①(드레인·면역·적용조건·적용) → 페이즈 ②(대상별 주기 발화·수명 감소·만료) →
-    /// 페이즈 ③(dirty 속성 재집계) 순으로 한 틱을 처리합니다. 지속 조건 재평가는 후속 확장 몫입니다.
+    /// 효과 적용 큐를 드레인하고 Instant/Duration/Infinite 경로·체인·Ongoing 토글까지 처리하는
+    /// 파이프라인입니다. 한 틱은 여섯 페이즈로 진행됩니다 — ①<see cref="DrainApplications"/>(예산·면역·
+    /// 적용조건·적용, OnApplication/OnStackOverflow 체인 발화) → ②<see cref="AdvanceTime"/>(주기 발화·수명
+    /// 감소·만료, OnCompleteNormal 체인 발화) → ③<see cref="RebuildAll"/>(①②가 표시한 dirty 재집계) →
+    /// ④<see cref="EvaluateOngoing"/>(지속 조건 토글) → ⑤<see cref="RebuildToggled"/>(④가 표시한 dirty
+    /// 재집계) → ⑥이벤트 확정(별도 동작 없음 — 생애주기/속성 변경 이벤트 버퍼는 게임이 직접 드레인).
     /// </summary>
     public sealed class EffectPipeline
     {
@@ -42,10 +45,13 @@ namespace Bun3.Gameplay.Effects
         /// <summary>지금까지 처리된 틱 수입니다.</summary>
         public long CurrentTick { get; private set; }
 
+        /// <summary>예산 초과로 이번 틱에 드레인되지 못하고 큐에 남은 적용 요청 수입니다.</summary>
+        public int PendingApplyCount => _queue.Count;
+
         /// <summary>효과 카탈로그·대상 리졸버·난수 생성기와 틱당 적용 예산으로 파이프라인을 만듭니다.</summary>
         /// <param name="catalog">스펙 조회에 쓸 효과 카탈로그입니다.</param>
         /// <param name="resolver">TargetId를 EffectTarget으로 바꾸는 리졸버입니다.</param>
-        /// <param name="rng">실행 계산에 전달할 난수 생성기입니다.</param>
+        /// <param name="rng">실행 계산·대상 선택에 전달할 난수 생성기입니다.</param>
         /// <param name="applyBudgetPerTick">한 틱에 드레인할 최대 적용 요청 수입니다.</param>
         public EffectPipeline(EffectCatalog catalog, IEffectTargetResolver resolver, IRng rng, int applyBudgetPerTick = 64)
         {
@@ -67,11 +73,24 @@ namespace Bun3.Gameplay.Effects
             _queue.Enqueue(new PendingApply { SpecId = specId, Source = source, Target = target, Level = level });
         }
 
-        /// <summary>
-        /// 한 틱을 처리합니다. ① 적용 큐를 예산만큼 드레인 → ② 대상별 주기 발화·수명 감소·만료 처리 →
-        /// ③ dirty 속성 재집계 순입니다.
-        /// </summary>
+        /// <summary>한 틱을 여섯 페이즈 순서로 처리합니다. 클래스 문서에 각 페이즈의 순서·역할이 정리되어 있습니다.</summary>
         public void Tick()
+        {
+            DrainApplications();
+            AdvanceTime();
+            RebuildAll();
+            EvaluateOngoing();
+            RebuildToggled();
+            // ⑥ 이벤트 확정: 이 페이즈에서 파이프라인이 하는 동작은 없다. 생애주기 이벤트
+            // (EffectTarget.PendingEffectEvents)와 속성 변경 이벤트(AttributeSet.PendingChanges)는
+            // 게임(호출자)이 이번 틱 처리가 끝난 뒤 직접 읽고 Clear*로 드레인한다.
+
+            CurrentTick++;
+        }
+
+        // 페이즈 ①: 적용 큐를 틱당 예산만큼 드레인한다. 체인(OnApplication/OnStackOverflow)이 같은 틱에
+        // 새로 적재한 요청도 예산이 남아있는 한 같은 while에서 이어서 처리된다 — 예산이 유일한 상한이다.
+        private void DrainApplications()
         {
             var budget = _applyBudgetPerTick;
             while (budget > 0 && _queue.Count > 0)
@@ -80,11 +99,6 @@ namespace Bun3.Gameplay.Effects
                 var pending = _queue.Dequeue();
                 ProcessPendingApply(in pending);
             }
-
-            TickActiveEffects();
-            RebuildAllDirty();
-
-            CurrentTick++;
         }
 
         private void ProcessPendingApply(in PendingApply pending)
@@ -105,7 +119,7 @@ namespace Bun3.Gameplay.Effects
 
             var hasSource = _resolver.TryResolve(pending.Source, out var source) && source is not null;
 
-            if (!EvaluateApplicationConditions(spec, target, source, hasSource, pending.Level))
+            if (!EvaluateConditions(spec.ApplicationConditions, target, source, hasSource))
             {
                 ConditionDropCount++;
                 return;
@@ -147,10 +161,9 @@ namespace Bun3.Gameplay.Effects
             return false;
         }
 
-        private static bool EvaluateApplicationConditions(
-            CompiledEffectSpec spec, EffectTarget target, EffectTarget? source, bool hasSource, int level)
+        private static bool EvaluateConditions(
+            CompiledCondition[] conditions, EffectTarget target, EffectTarget? source, bool hasSource)
         {
-            var conditions = spec.ApplicationConditions;
             for (var i = 0; i < conditions.Length; i++)
             {
                 if (!EvaluateCondition(conditions[i], target, source, hasSource))
@@ -225,6 +238,8 @@ namespace Bun3.Gameplay.Effects
             {
                 RunExecution(executions[i], target, source, hasSource, pending.Source, pending.Target, pending.Level, stack: 1);
             }
+
+            FireChain(spec.Chains, ChainTrigger.OnApplication, pending.Source, pending.Level, pending.Target, target);
         }
 
         // Instant는 인스턴스가 없으므로 수정자가 즉시 Base에 반영되는 영구 변경으로 해석한다.
@@ -260,6 +275,41 @@ namespace Bun3.Gameplay.Effects
             execution.Calc.Execute(ref ctx);
         }
 
+        // 체인 발화 공통 헬퍼. trigger가 일치하는 엣지마다: 엣지 조건을 (원 대상 현재 상태 +
+        // 발화 인스턴스의 Source) 기준으로 평가 → Selector 없으면 원 대상 그대로, 있으면
+        // SelectorContext(발화 인스턴스의 Source 승계)로 대상들을 뽑아 → 각 대상에 EnqueueApply
+        // (source 승계, 레벨은 LevelRule Inherit면 발화 레벨 그대로, Fixed면 엣지의 FixedLevel).
+        private void FireChain(
+            CompiledChain[] chains, ChainTrigger trigger, TargetId source, int level,
+            TargetId originTargetId, EffectTarget originTarget)
+        {
+            for (var i = 0; i < chains.Length; i++)
+            {
+                var chain = chains[i];
+                if (chain.Trigger != trigger) continue;
+
+                var hasSource = _resolver.TryResolve(source, out var sourceTarget) && sourceTarget is not null;
+                if (!EvaluateConditions(chain.Conditions, originTarget, sourceTarget, hasSource)) continue;
+
+                var chainLevel = chain.LevelRule == ChainLevelRule.Inherit ? level : chain.FixedLevel;
+
+                if (chain.Selector is null)
+                {
+                    EnqueueApply(chain.EffectId, source, originTargetId, chainLevel);
+                    continue;
+                }
+
+                // ponytail: 대상 수는 저작 스펙 규모라 스택 버퍼 32칸으로 충분 — 넘치면 앞 32개만 적용된다.
+                Span<TargetId> targets = stackalloc TargetId[32];
+                var selectorCtx = new SelectorContext(source, chain.SelectorParams, _rng);
+                var count = chain.Selector.Select(in selectorCtx, targets);
+                for (var k = 0; k < count; k++)
+                {
+                    EnqueueApply(chain.EffectId, source, targets[k], chainLevel);
+                }
+            }
+        }
+
         // Duration/Infinite: 대상에 동일 SpecId 활성 인스턴스가 있으면 스택 정책으로 병합하고,
         // 없으면 새 인스턴스를 만들어 수정자 부착·태그 부여까지 끝낸다.
         private void ApplyDurationOrInfinite(CompiledEffectSpec spec, EffectTarget target, in PendingApply pending)
@@ -285,8 +335,9 @@ namespace Bun3.Gameplay.Effects
             return null;
         }
 
-        // 재적용 병합: AddStack이면 스택을 늘리고(클램프), Refresh/AddStack 공통으로 정책에 따라
-        // 지속시간·주기 타이머를 리셋한다. 스택 값이 실제로 바뀔 때만 StackChanged를 낸다.
+        // 재적용 병합: AddStack이면 스택을 늘리되 초과분은 HandleStackOverflow로 넘기고, Refresh/AddStack
+        // 공통으로 정책에 따라 지속시간·주기 타이머를 리셋한다. 스택 값이 실제로 바뀔 때만 StackChanged를 낸다.
+        // 병합은 신규 적용이 아니므로 OnApplication 체인은 여기서 발화하지 않는다.
         private void MergeReapply(CompiledEffectSpec spec, EffectTarget target, EffectInstance instance)
         {
             var stackPolicy = spec.Stack;
@@ -294,11 +345,13 @@ namespace Bun3.Gameplay.Effects
             {
                 // Build 단계에서 AddStack 정책은 MaxStack > 0을 보장한다.
                 var wouldBe = instance.Stack + stackPolicy.AddStackCount;
-                // ponytail: 초과분(wouldBe > MaxStack)의 오버플로 정책(Deny/ApplyEffect) 처리는 자리만 비워둔다 — 지금은 클램프만.
-                var newStack = wouldBe > stackPolicy.MaxStack ? stackPolicy.MaxStack : wouldBe;
-                if (newStack != instance.Stack)
+                if (wouldBe > stackPolicy.MaxStack)
                 {
-                    instance.Stack = newStack;
+                    HandleStackOverflow(spec, target, instance);
+                }
+                else if (wouldBe != instance.Stack)
+                {
+                    instance.Stack = wouldBe;
                     target.RaiseEffectEvent(new EffectLifecycleEvent(
                         EffectLifecycleKind.StackChanged, instance.Id, instance.SpecId, instance.Stack));
                     MarkDirtyForModifiers(target, spec);
@@ -316,8 +369,31 @@ namespace Bun3.Gameplay.Effects
             }
         }
 
-        // 새 인스턴스: 렌트→Id 오름차순 삽입→(주기 효과가 아니면) 수정자 부착→GrantedTags 부여→Applied.
-        // 주기 효과(PeriodTicks > 0)는 매 주기 Instant와 동일한 경로로 Base에 가감할 뿐 지속 부착 대상이 아니다.
+        // 스택 초과: OnStackOverflow 체인 엣지를 먼저 발화하고, 정책이 ApplyEffect면 OverflowEffectId도
+        // (레벨은 항상 인스턴스 레벨 승계로) 큐에 적재한다. 그 뒤 ClearStacksOnOverflow면 스택을 1로
+        // 리셋(기존 효과·수정자는 유지하고 중첩만 비운다)하고, 아니면 기존처럼 MaxStack으로 클램프한다.
+        private void HandleStackOverflow(CompiledEffectSpec spec, EffectTarget target, EffectInstance instance)
+        {
+            FireChain(spec.Chains, ChainTrigger.OnStackOverflow, instance.Source, instance.Level, target.Id, target);
+
+            if (spec.Stack.OnOverflow == StackOverflow.ApplyEffect)
+            {
+                EnqueueApply(spec.OverflowEffectId, instance.Source, target.Id, instance.Level);
+            }
+
+            var newStack = spec.Stack.ClearStacksOnOverflow ? 1 : spec.Stack.MaxStack;
+            if (newStack != instance.Stack)
+            {
+                instance.Stack = newStack;
+                target.RaiseEffectEvent(new EffectLifecycleEvent(
+                    EffectLifecycleKind.StackChanged, instance.Id, instance.SpecId, instance.Stack));
+                MarkDirtyForModifiers(target, spec);
+            }
+        }
+
+        // 새 인스턴스: 렌트→Id 오름차순 삽입→(주기 효과가 아니면) 수정자 부착→GrantedTags 부여→Applied→
+        // OnApplication 체인 발화. 주기 효과(PeriodTicks > 0)는 매 주기 Instant와 동일한 경로로 Base에
+        // 가감할 뿐 지속 부착 대상이 아니다.
         private void CreateInstance(CompiledEffectSpec spec, EffectTarget target, in PendingApply pending)
         {
             var remainingTicks = spec.DurationType == EffectDurationType.Duration ? spec.DurationTicks : -1;
@@ -346,6 +422,8 @@ namespace Bun3.Gameplay.Effects
             }
 
             target.RaiseEffectEvent(new EffectLifecycleEvent(EffectLifecycleKind.Applied, instance.Id, pending.SpecId, instance.Stack));
+
+            FireChain(spec.Chains, ChainTrigger.OnApplication, pending.Source, pending.Level, target.Id, target);
         }
 
         private static void MarkDirtyForModifiers(EffectTarget target, CompiledEffectSpec spec)
@@ -359,8 +437,9 @@ namespace Bun3.Gameplay.Effects
 
         // 페이즈 ②: 대상을 TargetId 순으로, 인스턴스를 Id 순(활성 목록이 이미 canonical)으로 순회한다.
         // 이번 틱 생성분은 건너뛴다(컨트롤러 룰링). 주기 발화가 만료 검사보다 먼저 처리되므로
-        // 만료되는 그 틱의 마지막 주기 발화도 반영된다.
-        private void TickActiveEffects()
+        // 만료되는 그 틱의 마지막 주기 발화도 반영된다. 정상 만료(ExpireInstance의 완전 제거 경로)는
+        // OnCompleteNormal 체인을 발화하며, 그 적용 요청은 이번 틱 ①을 이미 지났으므로 다음 틱으로 넘어간다.
+        private void AdvanceTime()
         {
             var targetIds = _resolver.TargetIds;
             for (var t = 0; t < targetIds.Count; t++)
@@ -423,8 +502,10 @@ namespace Bun3.Gameplay.Effects
             }
         }
 
-        // 만료: 스택 정책이 RemoveOneAndRefresh고 스택이 남아있으면 하나만 줄이고 지속시간을 리셋,
-        // 아니면 완전 제거(수정자 분리·태그 회수·활성 목록 제거·풀 반환).
+        // 만료: 스택 정책이 RemoveOneAndRefresh고 스택이 남아있으면 하나만 줄이고 지속시간을 리셋한다
+        // (이 경로는 정상 종료가 아니므로 OnCompleteNormal을 발화하지 않는다). 그 외에는 완전 제거
+        // (수정자 분리·태그 회수·활성 목록 제거·풀 반환) 후 OnCompleteNormal 체인을 발화한다.
+        // OnCompletePrematurely(지속 조건 등에 의한 조기 종료)는 아직 이 파이프라인에 없다 — 후속 확장 몫.
         private void ExpireInstance(EffectTarget target, EffectInstance instance)
         {
             var spec = _catalog.GetSpec(instance.SpecId);
@@ -438,6 +519,9 @@ namespace Bun3.Gameplay.Effects
                 return;
             }
 
+            var source = instance.Source;
+            var level = instance.Level;
+
             target.Attributes.DetachModifiers(instance);
             var grantedTags = spec.GrantedTags;
             for (var i = 0; i < grantedTags.Length; i++)
@@ -448,11 +532,18 @@ namespace Bun3.Gameplay.Effects
             target.RemoveActive(instance);
             target.RaiseEffectEvent(new EffectLifecycleEvent(EffectLifecycleKind.Expired, instance.Id, instance.SpecId, instance.Stack));
             EffectInstance.Return(instance);
+
+            FireChain(spec.Chains, ChainTrigger.OnCompleteNormal, source, level, target.Id, target);
         }
 
-        // 페이즈 ③: 대상별로 dirty 속성 슬롯을 재집계한다(부착/분리는 이미 AttachModifier/DetachModifiers가
-        // dirty를 표시하고, 스택 변경 전용 경로는 MarkDirtyForModifiers가 표시한다).
-        private void RebuildAllDirty()
+        // 페이즈 ③: 1차 재계산 — ①②가 표시한 dirty 슬롯만 재집계한다.
+        private void RebuildAll() => RebuildDirtyAttributes();
+
+        // 페이즈 ⑤: 2차 재계산 — ④ Ongoing 토글이 새로 표시한 dirty 슬롯만 재집계한다.
+        // 사실상 RebuildDirty 재호출이며, dirty가 없으면 아무 일도 하지 않는다.
+        private void RebuildToggled() => RebuildDirtyAttributes();
+
+        private void RebuildDirtyAttributes()
         {
             var targetIds = _resolver.TargetIds;
             for (var t = 0; t < targetIds.Count; t++)
@@ -460,6 +551,45 @@ namespace Bun3.Gameplay.Effects
                 if (_resolver.TryResolve(targetIds[t], out var target) && target is not null)
                 {
                     target.Attributes.RebuildDirty();
+                }
+            }
+        }
+
+        // 페이즈 ④: Ongoing 조건을 가진 인스턴스만, 대상을 TargetId 순으로, 인스턴스를 Id 순(활성 목록이
+        // 이미 canonical)으로 평가한다. 평가는 ③에서 재집계된 Current 기준이며 틱당 한 번만 수행한다.
+        // 결과가 바뀔 때만 토글한다 — OFF는 GrantedTags 회수 + 수정자 dirty 표시, ON은 GrantedTags 부여 +
+        // dirty 표시. 인스턴스 자체는 제거하지 않는다(RebuildDirty의 RebuildSlot이 !Enabled 인스턴스의
+        // 수정자를 건너뛰므로 부착 상태 그대로 두어도 집계에서 빠진다). GrantedTags는 카운트 컨테이너라
+        // Add/Remove가 대칭이다.
+        private void EvaluateOngoing()
+        {
+            var targetIds = _resolver.TargetIds;
+            for (var t = 0; t < targetIds.Count; t++)
+            {
+                if (!_resolver.TryResolve(targetIds[t], out var target) || target is null) continue;
+
+                var active = target.ActiveEffects;
+                for (var i = 0; i < active.Count; i++)
+                {
+                    var instance = active[i];
+                    var spec = _catalog.GetSpec(instance.SpecId);
+                    if (spec.OngoingConditions.Length == 0) continue;
+
+                    var satisfied = EvaluateConditions(spec.OngoingConditions, target, source: null, hasSource: false);
+                    if (satisfied == instance.Enabled) continue;
+
+                    instance.Enabled = satisfied;
+                    var grantedTags = spec.GrantedTags;
+                    if (satisfied)
+                    {
+                        for (var g = 0; g < grantedTags.Length; g++) target.Tags.Add(grantedTags[g]);
+                    }
+                    else
+                    {
+                        for (var g = 0; g < grantedTags.Length; g++) target.Tags.Remove(grantedTags[g]);
+                    }
+
+                    MarkDirtyForModifiers(target, spec);
                 }
             }
         }
