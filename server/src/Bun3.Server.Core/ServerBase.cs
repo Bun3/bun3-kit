@@ -55,8 +55,18 @@ namespace Bun3.Server.Core
         /// <remarks>단일 사용: StopAsync 이후 재시작할 수 없다. 새 인스턴스를 생성할 것.</remarks>
         public async Task StartAsync(CancellationToken ct = default)
         {
-            await _transport.StartAsync(_handler, ct).ConfigureAwait(false);
+            // transport 기동 직후(플래그 세팅 전) 유입된 연결이 킥되지 않도록 먼저 올린다.
             _running = true;
+            try
+            {
+                await _transport.StartAsync(_handler, ct).ConfigureAwait(false);
+            }
+            catch
+            {
+                _running = false;
+                throw;
+            }
+
             _logger.LogInformation("Server started.");
         }
 
@@ -76,11 +86,20 @@ namespace Bun3.Server.Core
 
             var drain = Task.WhenAll(entries.Select(e => e.Completion));
             var timeout = drainTimeout ?? DefaultDrainTimeout;
-            var finished = await Task.WhenAny(drain, Task.Delay(timeout, ct)).ConfigureAwait(false);
-            if (finished != drain)
+            using (var delayCts = CancellationTokenSource.CreateLinkedTokenSource(ct))
             {
-                _logger.LogWarning(
-                    "Server stop: {SessionCount} session(s) did not drain within {Timeout}.", entries.Length, timeout);
+                var finished = await Task.WhenAny(drain, Task.Delay(timeout, delayCts.Token)).ConfigureAwait(false);
+                if (finished == drain)
+                {
+                    delayCts.Cancel(); // 드레인 완료 — 잔여 타이머 즉시 정리
+                    await drain.ConfigureAwait(false); // 결과 관찰(Completion은 폴트하지 않지만 규율상)
+                }
+                else
+                {
+                    _logger.LogWarning(
+                        "Server stop: {SessionCount} session(s) did not drain within {Timeout}.",
+                        entries.Length, timeout);
+                }
             }
 
             _logger.LogInformation("Server stopped.");
@@ -88,6 +107,14 @@ namespace Bun3.Server.Core
 
         private void HandleConnected(IConnection connection)
         {
+            if (!_running)
+            {
+                _logger.LogDebug(
+                    "Connection {ConnectionId} arrived while server is not running; closing.", connection.Id);
+                connection.Close();
+                return;
+            }
+
             TSession session;
             try
             {
@@ -102,21 +129,43 @@ namespace Bun3.Server.Core
 
             session.Initialize(_logger, _maxQueuedPackets, _slowWorkWarning);
             var entry = new SessionEntry(session);
-            _sessions[connection.Id] = entry;
+            if (!_sessions.TryAdd(connection.Id, entry))
+            {
+                // 전송 계약 위반(id 중복) — 기존 세션을 보존하고 신규 연결만 닫는다.
+                // 세션은 RunAsync에 바인딩되지 않았으므로 수명주기 콜백 없이 폐기된다.
+                _logger.LogError(
+                    "Duplicate connection id {ConnectionId} from transport; closing new connection.", connection.Id);
+                connection.Close();
+                return;
+            }
+
             entry.BindRunTask(session.RunAsync());
         }
 
         private void HandlePacket(IConnection connection, byte[] packet)
         {
-            if (_sessions.TryGetValue(connection.Id, out var entry))
+            // 참조 동일성 검사: 중복 id로 거부된 연결의 잔여 프레임이 원래 세션에 오폭되지 않게.
+            if (_sessions.TryGetValue(connection.Id, out var entry)
+                && ReferenceEquals(entry.Session.Connection, connection))
             {
                 entry.Session.EnqueuePacket(packet);
+            }
+            else
+            {
+                // 정지/킥과의 경합에서도 유입될 수 있으므로 Debug 수준으로만 남긴다.
+                _logger.LogDebug("Packet from unknown connection {ConnectionId}; dropped.", connection.Id);
             }
         }
 
         private void HandleClosed(IConnection connection, Exception? error)
         {
-            if (_sessions.TryRemove(connection.Id, out var entry))
+            // 등록된 엔트리가 이 연결의 것일 때만 제거 — 중복 id 연결의 OnClosed가 원래
+            // 세션을 제거하지 못하게 한다. netstandard2.1에는 TryRemove(KeyValuePair)가
+            // 없어 ICollection.Remove로 값 일치 조건부 제거를 원자적으로 수행한다.
+            if (_sessions.TryGetValue(connection.Id, out var entry)
+                && ReferenceEquals(entry.Session.Connection, connection)
+                && ((ICollection<KeyValuePair<long, SessionEntry>>)_sessions).Remove(
+                    new KeyValuePair<long, SessionEntry>(connection.Id, entry)))
             {
                 entry.Session.NotifyClosed(error);
             }
