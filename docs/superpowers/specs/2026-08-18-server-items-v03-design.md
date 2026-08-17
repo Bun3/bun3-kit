@@ -81,3 +81,22 @@ DB I/O는 게임의 `OnSaveAsync`(async) 몫 — 프레임워크 인벤토리 �
   소모 정산·중복 지정 Insufficient·잠금 Locked·실패 무변경·낡은 빌더 토큰 거부.
 - 색인: 단일/다중 키 조회·미등록 키 빈 span·Build 전 사용 거부.
 - 무할당: 조회·열거·tx 커밋(인스턴스 미생성 배치) 워밍업 후 0.
+
+## 7. 레시피 (v0.3 추가)
+
+idlez `materialItemGroups`·growninja/Steam `exchange`의 공통 코어만: **재료 목록 →
+결과 목록, 전부-아니면-전무**. 커밋 코어 위의 얇은 조합이다.
+
+```csharp
+var recipe = new Recipe(
+    new[] { new RecipeEntry(gold, 30), new RecipeEntry(ore, 3) },
+    new[] { new RecipeEntry(sword, 1) });
+inventory.TryCraft(recipe, out failedIndex, created, count: 4);   // count = 반복 제작 배수
+```
+
+- 재료 소모가 결과 지급보다 먼저 정산 — 같은 정의가 양쪽에 있는 합성(검 3→1)도 정확.
+- 레시피 데이터는 게임 몫(보통 TDefinition 안) — 카탈로그 검증 델리게이트에서 빌드 시
+  해석·검증. RecipeEntry 생성자가 None·0 이하를 즉시 던져 데이터 오류를 기동에서 잡는다.
+- 게임 몫으로 남긴 것: 대체 재료 분기(OR — 게임이 분기 선택 후 호출), 재료 유효성
+  (레벨 요건), 특정 인스턴스 재료 지정(BeginTransaction 직접 조합), 확률 결과(보상
+  테이블 영역).
