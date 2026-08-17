@@ -20,6 +20,7 @@ namespace Bun3.Server.Items
         private readonly string[] _ids;
         private readonly long[] _maxStacks;
         private readonly long[] _externalIds;
+        private readonly bool[] _unstackables;
         private readonly Dictionary<string, int> _lookup;
         private readonly Dictionary<long, int> _externalLookup;
 
@@ -27,12 +28,14 @@ namespace Bun3.Server.Items
             string[] ids,
             long[] maxStacks,
             long[] externalIds,
+            bool[] unstackables,
             Dictionary<string, int> lookup,
             Dictionary<long, int> externalLookup)
         {
             _ids = ids;
             _maxStacks = maxStacks;
             _externalIds = externalIds;
+            _unstackables = unstackables;
             _lookup = lookup;
             _externalLookup = externalLookup;
         }
@@ -87,6 +90,18 @@ namespace Bun3.Server.Items
             }
 
             return _maxStacks[item.Index];
+        }
+
+        /// <summary>비스택형(인스턴스형) 정의인지 여부 — 스택/인스턴스 판정의 단일 원천.
+        /// 무효 식별자면 던진다.</summary>
+        public bool IsUnstackable(ItemId item)
+        {
+            if (!Contains(item))
+            {
+                throw new ArgumentOutOfRangeException(nameof(item), "이 카탈로그의 식별자가 아닙니다.");
+            }
+
+            return _unstackables[item.Index];
         }
 
         /// <summary>외부 숫자 id(DB 컬럼·Steam itemdefid 등)를 반환한다.

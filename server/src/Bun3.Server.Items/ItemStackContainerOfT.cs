@@ -49,9 +49,10 @@ namespace Bun3.Server.Items
         /// <summary>수량을 추가한다. amount는 양수여야 한다.</summary>
         public ItemError TryAdd(ItemId item, TQuantity amount)
         {
-            if (!_catalog.Contains(item))
+            var itemError = CheckStackable(item);
+            if (itemError != ItemError.None)
             {
-                return ItemError.UnknownItem;
+                return itemError;
             }
 
             if (Ops.Compare(amount, Ops.Zero) <= 0)
@@ -73,9 +74,10 @@ namespace Bun3.Server.Items
         /// <summary>수량을 소모한다. amount는 양수여야 한다.</summary>
         public ItemError TryRemove(ItemId item, TQuantity amount)
         {
-            if (!_catalog.Contains(item))
+            var itemError = CheckStackable(item);
+            if (itemError != ItemError.None)
             {
-                return ItemError.UnknownItem;
+                return itemError;
             }
 
             if (Ops.Compare(amount, Ops.Zero) <= 0)
@@ -111,10 +113,11 @@ namespace Bun3.Server.Items
             for (var i = 0; i < deltas.Length; i++)
             {
                 var delta = deltas[i];
-                if (!_catalog.Contains(delta.Item))
+                var deltaError = CheckStackable(delta.Item);
+                if (deltaError != ItemError.None)
                 {
                     failedIndex = i;
-                    return ItemError.UnknownItem;
+                    return deltaError;
                 }
 
                 if (Ops.Compare(delta.Amount, Ops.Zero) == 0)
@@ -170,9 +173,10 @@ namespace Bun3.Server.Items
                 throw new ArgumentException("이동은 같은 카탈로그의 컨테이너 사이에서만 가능합니다.", nameof(target));
             }
 
-            if (!_catalog.Contains(item))
+            var itemError = CheckStackable(item);
+            if (itemError != ItemError.None)
             {
-                return ItemError.UnknownItem;
+                return itemError;
             }
 
             if (Ops.Compare(amount, Ops.Zero) <= 0)
@@ -213,9 +217,10 @@ namespace Bun3.Server.Items
         /// </summary>
         public ItemError TryLoad(ItemId item, TQuantity quantity)
         {
-            if (!_catalog.Contains(item))
+            var itemError = CheckStackable(item);
+            if (itemError != ItemError.None)
             {
-                return ItemError.UnknownItem;
+                return itemError;
             }
 
             if (Ops.Compare(quantity, Ops.Zero) <= 0)
@@ -247,6 +252,17 @@ namespace Bun3.Server.Items
 
         /// <summary>보유 스택 열거 — foreach 무할당(struct 열거자). 저장 직렬화는 이 열거로 한다.</summary>
         public Enumerator GetEnumerator() => new Enumerator(_stacks.GetEnumerator());
+
+        /// <summary>카탈로그 소속·스택형 여부를 판정한다 — 비스택형 정의는 이 컨테이너가 거부한다.</summary>
+        private ItemError CheckStackable(ItemId item)
+        {
+            if (!_catalog.Contains(item))
+            {
+                return ItemError.UnknownItem;
+            }
+
+            return _catalog.IsUnstackable(item) ? ItemError.NotStackable : ItemError.None;
+        }
 
         /// <summary>current + delta의 결과를 상한·부족·오버플로 순으로 판정한다.</summary>
         private ItemError ValidateDelta(ItemId item, TQuantity current, TQuantity delta, out TQuantity result)

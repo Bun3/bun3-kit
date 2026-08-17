@@ -17,5 +17,17 @@ namespace Bun3.Server.Items
 
         /// <summary>스택 상한(maxStack) 초과 또는 수량 산술 오버플로.</summary>
         ExceedsMaxStack,
+
+        /// <summary>비스택형(인스턴스형) 정의를 스택 컨테이너에서 조작하려 함.</summary>
+        NotStackable,
+
+        /// <summary>인벤토리에 없는 인스턴스 id.</summary>
+        UnknownInstance,
+
+        /// <summary>이미 존재하는 인스턴스 id 또는 스택형 정의의 중복 인스턴스(로드).</summary>
+        DuplicateInstance,
+
+        /// <summary>잠금 플래그(removeBlockingFlags)에 걸린 인스턴스 직접 제거 시도.</summary>
+        Locked,
     }
 }
