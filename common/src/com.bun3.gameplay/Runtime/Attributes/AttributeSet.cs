@@ -20,6 +20,16 @@ namespace Bun3.Gameplay.Attributes
             public BigNum OverrideValue;
             public BigNum Current;
             public bool Dirty;
+            public System.Collections.Generic.List<ModifierEntry>? Modifiers;
+        }
+
+        private struct ModifierEntry
+        {
+            public IAttributeModifierSource Source;
+            public int RowIndex;
+            public AttributeModifierOp Op;
+            public BigNum Magnitude;
+            public bool ScaleWithStack;
         }
 
         private readonly AttributeRegistry _registry;
@@ -147,6 +157,101 @@ namespace Bun3.Gameplay.Attributes
             if (clamped.Equals(old)) return;
             slot.Current = clamped;
             EmitChange(slot.AttributeId, old, clamped);
+        }
+
+        /// <summary>수정자를 부착합니다. (source.Id, rowIndex) 오름차순 삽입 정렬로 canonical 순서를 유지합니다.</summary>
+        internal void AttachModifier(
+            IAttributeModifierSource source, int rowIndex, ushort attributeId,
+            AttributeModifierOp op, BigNum magnitude, bool scaleWithStack)
+        {
+            var index = SlotIndex(attributeId);
+            ref var slot = ref _slots[index];
+            slot.Modifiers ??= new System.Collections.Generic.List<ModifierEntry>(4);
+            var entry = new ModifierEntry
+            {
+                Source = source, RowIndex = rowIndex, Op = op,
+                Magnitude = magnitude, ScaleWithStack = scaleWithStack,
+            };
+            // (Id, RowIndex) 오름차순 삽입 정렬 — 목록이 항상 canonical
+            var position = slot.Modifiers.Count;
+            while (position > 0)
+            {
+                var previous = slot.Modifiers[position - 1];
+                if (previous.Source.Id < source.Id
+                    || (previous.Source.Id == source.Id && previous.RowIndex <= rowIndex)) break;
+                position--;
+            }
+            slot.Modifiers.Insert(position, entry);
+            slot.Dirty = true;
+        }
+
+        /// <summary>해당 소스가 부착한 모든 수정자를 제거합니다.</summary>
+        internal void DetachModifiers(IAttributeModifierSource source)
+        {
+            for (var i = 0; i < _slots.Length; i++)
+            {
+                var modifiers = _slots[i].Modifiers;
+                if (modifiers is null) continue;
+                for (var j = modifiers.Count - 1; j >= 0; j--)
+                {
+                    if (ReferenceEquals(modifiers[j].Source, source))
+                    {
+                        modifiers.RemoveAt(j);
+                        _slots[i].Dirty = true;
+                    }
+                }
+            }
+        }
+
+        /// <summary>해당 속성 슬롯을 dirty로 표시합니다(예: Enabled 토글).</summary>
+        internal void MarkDirty(ushort attributeId) => _slots[SlotIndex(attributeId)].Dirty = true;
+
+        /// <summary>dirty 슬롯을 canonical 순서로 전체 재집계합니다. 호출 순서는 클램프 위상(레지스트리 EvaluationOrder)을 따릅니다.</summary>
+        internal void RebuildDirty()
+        {
+            var order = _registry.EvaluationOrder;
+            for (var i = 0; i < order.Length; i++)
+            {
+                if (!Has(order[i])) continue;
+                var index = _slotByAttributeId[order[i]];
+                if (!_slots[index].Dirty) continue;
+                RebuildSlot(index);
+            }
+        }
+
+        private void RebuildSlot(int index)
+        {
+            ref var slot = ref _slots[index];
+            slot.Dirty = false;
+            slot.SumAdd = BigNum.Zero;
+            slot.SumMulPct = BigNum.Zero;
+            slot.HasOverride = false;
+            slot.OverrideValue = BigNum.Zero;
+            var modifiers = slot.Modifiers;
+            if (modifiers is not null)
+            {
+                for (var i = 0; i < modifiers.Count; i++)   // 목록이 canonical 정렬 유지
+                {
+                    var entry = modifiers[i];
+                    if (!entry.Source.Enabled) continue;
+                    var magnitude = entry.ScaleWithStack ? entry.Magnitude * entry.Source.Stack : entry.Magnitude;
+                    switch (entry.Op)
+                    {
+                        case AttributeModifierOp.Add:
+                            slot.SumAdd += magnitude;
+                            break;
+                        case AttributeModifierOp.Multiply:
+                            slot.SumMulPct += magnitude;
+                            break;
+                        default:   // Override — 목록이 Id 순이라 마지막 활성 항목이 최신
+                            slot.HasOverride = true;
+                            slot.OverrideValue = magnitude;
+                            break;
+                    }
+                }
+            }
+
+            ReapplyFormula(index);
         }
 
         private void EmitChange(ushort attributeId, BigNum oldCurrent, BigNum newCurrent)
