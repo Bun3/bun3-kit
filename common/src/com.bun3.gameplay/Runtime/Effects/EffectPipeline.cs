@@ -44,8 +44,17 @@ namespace Bun3.Gameplay.Effects
         /// <summary>적용 조건 미충족으로 차단된 적용 요청 수입니다.</summary>
         internal long ConditionDropCount { get; private set; }
 
-        /// <summary>지금까지 처리된 틱 수입니다.</summary>
-        public long CurrentTick { get; private set; }
+        /// <summary>지금까지 처리된 틱 수입니다. internal 세터는 스냅샷 복원 재생 결정론 전용입니다.</summary>
+        public long CurrentTick { get; internal set; }
+
+        /// <summary>다음에 발급할 인스턴스 id입니다. 스냅샷 복원 후 재생 결정론을 맞추려면 스냅샷
+        /// 시점의 값을 저장해뒀다가 복원 시 그대로 되돌려야 합니다(대기 큐가 비어있는 시점에서만
+        /// 안전 — 대기 큐 항목이 있으면 그 항목이 발급받을 id까지 함께 재현해야 하므로 범위 밖입니다).</summary>
+        internal ulong NextInstanceId
+        {
+            get => _nextInstanceId;
+            set => _nextInstanceId = value;
+        }
 
         /// <summary>예산 초과로 이번 틱에 드레인되지 못하고 큐에 남은 적용 요청 수입니다.</summary>
         public int PendingApplyCount => _queue.Count;

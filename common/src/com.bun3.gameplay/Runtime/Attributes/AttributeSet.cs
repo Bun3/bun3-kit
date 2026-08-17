@@ -32,6 +32,27 @@ namespace Bun3.Gameplay.Attributes
             public bool ScaleWithStack;
         }
 
+        /// <summary>스냅샷 저장용으로 한 소스가 부착한 수정자 행 하나를 옮겨 담은 값입니다.
+        /// Magnitude는 적용 시점에 평가된 값 그대로이며(재평가하지 않음) 복원 시 그대로 재부착됩니다.</summary>
+        internal readonly struct ModifierSnapshotRow
+        {
+            internal ModifierSnapshotRow(
+                ushort attributeId, int rowIndex, AttributeModifierOp op, BigNum magnitude, bool scaleWithStack)
+            {
+                AttributeId = attributeId;
+                RowIndex = rowIndex;
+                Op = op;
+                Magnitude = magnitude;
+                ScaleWithStack = scaleWithStack;
+            }
+
+            internal ushort AttributeId { get; }
+            internal int RowIndex { get; }
+            internal AttributeModifierOp Op { get; }
+            internal BigNum Magnitude { get; }
+            internal bool ScaleWithStack { get; }
+        }
+
         private readonly AttributeRegistry _registry;
         private readonly Slot[] _slots;                    // AttributeId 오름차순 canonical
         private readonly int[] _slotByAttributeId;         // 희소 → 밀집 (등록 최대 id + 1 크기, -1 = 없음)
@@ -101,6 +122,44 @@ namespace Bun3.Gameplay.Attributes
 
         /// <summary>영구값 Base를 가져옵니다.</summary>
         public BigNum GetBase(ushort attributeId) => _slots[SlotIndex(attributeId)].Base;
+
+        /// <summary>선언된 속성 수입니다(생성자에 전달된 attributeIds 오름차순 슬롯 개수).</summary>
+        internal int DeclaredCount => _slots.Length;
+
+        /// <summary>선언 순서(오름차순 id) 인덱스로 속성 id를 가져옵니다. 스냅샷 저장/복원 전용입니다.</summary>
+        internal ushort DeclaredAttributeIdAt(int index) => _slots[index].AttributeId;
+
+        /// <summary>선언 순서 인덱스로 Base를 가져옵니다. 스냅샷 저장 전용입니다.</summary>
+        internal BigNum DeclaredBaseAt(int index) => _slots[index].Base;
+
+        /// <summary>
+        /// 스냅샷 복원 전용 — 클램프·이벤트·전파 없이 Base를 그대로 쓰고 dirty로 표시합니다.
+        /// 저장된 Base는 원래 <see cref="SetBase"/>로 이미 클램프를 통과한 값이므로 재클램프가
+        /// 불필요합니다. 호출자는 <see cref="DeclaredAttributeIdAt"/> 순서(생성자 전달 순서와 동일)로
+        /// 전체 슬롯을 복원한 뒤 반드시 <see cref="RebuildDirty"/>를 한 번 호출해 Current를 재구성해야 합니다.
+        /// </summary>
+        internal void RestoreDeclaredBase(int index, BigNum rawBase)
+        {
+            _slots[index].Base = rawBase;
+            _slots[index].Dirty = true;
+        }
+
+        /// <summary>스냅샷 저장 전용 — 이 소스가 부착한 수정자 행들을 슬롯 순회로 모아 담습니다.</summary>
+        internal void CollectModifiers(IAttributeModifierSource source, System.Collections.Generic.List<ModifierSnapshotRow> output)
+        {
+            for (var i = 0; i < _slots.Length; i++)
+            {
+                var modifiers = _slots[i].Modifiers;
+                if (modifiers is null) continue;
+                for (var j = 0; j < modifiers.Count; j++)
+                {
+                    var entry = modifiers[j];
+                    if (!ReferenceEquals(entry.Source, source)) continue;
+                    output.Add(new ModifierSnapshotRow(
+                        _slots[i].AttributeId, entry.RowIndex, entry.Op, entry.Magnitude, entry.ScaleWithStack));
+                }
+            }
+        }
 
         /// <summary>집계·클램프가 반영된 Current를 가져옵니다.</summary>
         public BigNum GetCurrent(ushort attributeId) => _slots[SlotIndex(attributeId)].Current;
