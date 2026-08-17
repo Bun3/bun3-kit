@@ -176,6 +176,24 @@ public class InProcessTransportTests
     }
 
     [Test]
+    public async Task Send_with_precanceled_token_throws_and_keeps_connection_open()
+    {
+        var (transport, serverHandler) = await StartTransportAsync();
+        var clientConn = await transport.Connector.ConnectAsync(new RecordingHandler()).AsTask().WaitAsync(Timeout);
+
+        var canceled = new CancellationToken(canceled: true);
+        Assert.CatchAsync<OperationCanceledException>(
+            async () => await clientConn.SendAsync(new byte[] { 1 }, canceled));
+        Assert.That(clientConn.IsOpen, Is.True); // 취소는 연결을 닫지 않는다
+
+        await clientConn.SendAsync(new byte[] { 2 }); // 이후 송신은 정상 동작
+        await serverHandler.PacketSignal.WaitAsync(Timeout);
+        Assert.That(serverHandler.Packets.TryDequeue(out var received), Is.True);
+        Assert.That(received, Is.EqualTo(new byte[] { 2 }));
+        clientConn.Close();
+    }
+
+    [Test]
     public async Task Send_after_close_is_noop()
     {
         var (transport, serverHandler) = await StartTransportAsync();
