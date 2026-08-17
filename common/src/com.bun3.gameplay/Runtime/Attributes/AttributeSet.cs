@@ -155,8 +155,43 @@ namespace Bun3.Gameplay.Attributes
             var clamped = ClampToBounds(slotIndex, value);
             var old = slot.Current;
             if (clamped.Equals(old)) return;
+            var attributeId = slot.AttributeId;
             slot.Current = clamped;
-            EmitChange(slot.AttributeId, old, clamped);
+            EmitChange(attributeId, old, clamped);
+            PropagateToDependents(attributeId, old, clamped);
+        }
+
+        // changedAttributeId의 Current 변화(old→new)를 클램프 경계로 참조하는 후손들에 즉시 전파합니다.
+        // 후손 정의별 OnMaxIncrease/OnMaxDecrease 정책에 따라 Base를 동반 이동시킨 뒤 재적용합니다.
+        // 의존 그래프는 레지스트리 빌드 시 검증된 DAG이므로 재귀 호출이 안전합니다.
+        private void PropagateToDependents(ushort changedAttributeId, BigNum oldValue, BigNum newValue)
+        {
+            var dependents = _registry.GetClampDependents(changedAttributeId);
+            for (var i = 0; i < dependents.Length; i++)
+            {
+                if (!Has(dependents[i])) continue;   // 이 아키타입에 선언되지 않은 후손이면 건너뜀
+                var index = _slotByAttributeId[dependents[i]];
+                var definition = _registry.GetDefinition(dependents[i]);
+                var maxOperand = definition.Max.GetValueOrDefault();
+                var referencesAsMax = definition.Max.HasValue
+                    && maxOperand.Kind == OperandKind.Attribute
+                    && maxOperand.AttributeId == changedAttributeId;
+
+                if (referencesAsMax && newValue > oldValue
+                    && definition.OnMaxIncrease == MaxIncreasePolicy.Follow)
+                {
+                    var delta = (newValue - oldValue) * maxOperand.Value;   // 계수 반영
+                    _slots[index].Base = ClampToBounds(index, _slots[index].Base + delta);
+                }
+
+                if (referencesAsMax && newValue < oldValue
+                    && definition.OnMaxDecrease == MaxDecreasePolicy.Follow)
+                {
+                    _slots[index].Base = ClampToBounds(index, _slots[index].Base);    // 경계로 잘라 기록
+                }
+
+                ReapplyFormula(index);   // Stay는 안전망만 — 재적용이 처리
+            }
         }
 
         /// <summary>수정자를 부착합니다. (source.Id, rowIndex) 오름차순 삽입 정렬로 canonical 순서를 유지합니다.</summary>
