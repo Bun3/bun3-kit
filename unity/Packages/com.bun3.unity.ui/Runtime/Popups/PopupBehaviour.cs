@@ -148,6 +148,15 @@ namespace Bun3.Unity.UI.Popups
         /// </summary>
         protected internal virtual bool OnBackRequested() => true;
 
+        /// <summary>
+        /// <see cref="PopupSiblingArranger"/>가 스택 순서 변화(열림/닫힘/Focus)를 통지하는 지점.
+        /// "최상단일 때만 딤 배경 표시" 같은 표현을 여기서 처리한다. 기본은 아무것도 안 한다.
+        /// (arranger를 안 쓰면 호출되지 않는다.)
+        /// </summary>
+        /// <param name="stackIndex">스택 내 인덱스(0 = 최하단).</param>
+        /// <param name="isTopmost">전체 스택의 최상단인지.</param>
+        protected internal virtual void OnStackOrderChanged(int stackIndex, bool isTopmost) { }
+
         internal void Attach(PopupStack stack, PopupKey key, int layer)
         {
             Stack = stack;

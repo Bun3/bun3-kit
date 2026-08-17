@@ -127,6 +127,28 @@ Input System(`ENABLE_INPUT_SYSTEM`)과 레거시(`ENABLE_LEGACY_INPUT_MANAGER`) 
 리뷰에서 확인된 나머지 갭(미반영, 필요 시 확장): 재사용+전면 이동(GetOrShow/Focus 정책),
 sibling index/딤 자동 관리 헬퍼.
 
+## 2차 리뷰 반영 (2026-08-18, 잔여 갭 + idlez ContentsOpenNotice/획득 아이템 큐 확인 후)
+
+사용자 선택으로 전부 반영:
+
+1. **`PopupDuplicatePolicy.Focus`** — 레거시 `GetOrShowPopup` 대응. 기존 인스턴스를
+   같은 레이어 최상단으로 이동 + 인자 push면 `IPopupArg` 재주입 + `Focused` 이벤트.
+   로딩 중 인스턴스만 있으면 no-op(null 반환).
+2. **`PopupStack.Popups`** — 읽기 전용 라이브 뷰(아래→위). 타입 검색/조건부 일괄 닫기
+   같은 게임 유틸의 기반.
+3. **`PopupQueue`(채널 큐)** — idlez `ZModeManagerLobby.DequeueAcquiredItems`(획득 아이템
+   3단 큐: 승급 > 특별 > 일반) 패턴의 도메인 무관 버전. 드레인 게이트가 스택 전체가 아니라
+   **"이 큐가 연 팝업이 닫혔는가"** — 다른 팝업(우편함) 위에도 뜬다. `priority` 파라미터
+   (내림차순, 동순위 FIFO)로 레거시의 다중 큐를 하나로 대체. `PopupStack.Enqueue`
+   (화면 비면 순차)와 용도 구분해 공존.
+4. **`PopupPool`** — growninja `Scene_Lobby.popupPool`(프리로드+타입별 Queue 재사용)의
+   도메인 무관 버전. `RentAsync`/`Return`이 Factory/Releaser 시그니처와 일치해 스택에
+   그대로 꽂힘. 풀 대상은 `PreloadAsync`/`MarkPooled` 옵트인, 미등록 키는 반납 시 파괴.
+   재초기화는 매 오픈 `IPopupArg` 재전달로 자연 해결(레거시 OnEnable Refresh 우회 불필요).
+5. **`PopupSiblingArranger`** — 열림/닫힘/Focus마다 부모별 sibling index를 스택 순서로
+   정렬하고 각 팝업에 `OnStackOrderChanged(index, isTopmost)` 통지(가상 훅 신설).
+   "최상단만 딤"은 게임이 훅에서 처리. 팝업 전용 부모 전제.
+
 ## 테스트 전략 (EditMode)
 
 수동 완료 `UniTaskCompletionSource`를 반환하는 테스트 팝업으로 전이를 제어:

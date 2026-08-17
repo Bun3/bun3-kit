@@ -19,21 +19,6 @@ namespace Bun3.Unity.UI.Popups
     /// </remarks>
     public sealed class PopupStack : IDisposable
     {
-        /// <summary>대기열 항목에 실린 초기 데이터. 저빈도 경로라 박싱/할당을 허용한다.</summary>
-        private interface IQueuedPopupArg
-        {
-            void Deliver(PopupBehaviour popup);
-        }
-
-        private sealed class QueuedPopupArg<TArg> : IQueuedPopupArg
-        {
-            private readonly TArg _arg;
-
-            public QueuedPopupArg(TArg arg) => _arg = arg;
-
-            public void Deliver(PopupBehaviour popup) => DeliverArg(popup, _arg);
-        }
-
         private readonly struct QueuedPopup
         {
             public readonly PopupKey Key;
@@ -60,6 +45,7 @@ namespace Bun3.Unity.UI.Popups
             Proceed,
             Drop,
             Enqueue,
+            Focus,
         }
 
         private readonly PopupFactory _factory;
@@ -79,8 +65,17 @@ namespace Bun3.Unity.UI.Popups
         /// <summary>팝업이 스택에서 제거된 직후(해제 직전) 발화.</summary>
         public event Action<PopupBehaviour> Closed;
 
+        /// <summary><see cref="PopupDuplicatePolicy.Focus"/>로 기존 인스턴스가 최상단에 재사용될 때 발화.</summary>
+        public event Action<PopupBehaviour> Focused;
+
         /// <summary>열려 있거나 전이 중인 팝업 수.</summary>
         public int Count => _stack.Count;
+
+        /// <summary>
+        /// 열린 팝업들의 읽기 전용 뷰. 순서 = 아래→위(끝이 최상단). 라이브 뷰이므로
+        /// 열거 중 Push/Close를 부르지 말 것 — 스냅샷이 필요하면 복사해서 쓴다.
+        /// </summary>
+        public IReadOnlyList<PopupBehaviour> Popups => _stack;
 
         /// <summary>최상단 팝업. 비어 있으면 null.</summary>
         public PopupBehaviour Top => _stack.Count > 0 ? _stack[_stack.Count - 1] : null;
@@ -152,6 +147,8 @@ namespace Bun3.Unity.UI.Popups
                 case DuplicateDecision.Enqueue:
                     Enqueue(key, layer);
                     return null;
+                case DuplicateDecision.Focus:
+                    return FocusExisting(key, (byte)0, false);
             }
 
             return await OpenAsync(key, layer, (byte)0, ArgMode.None);
@@ -176,6 +173,8 @@ namespace Bun3.Unity.UI.Popups
                 case DuplicateDecision.Enqueue:
                     EnqueueWithArg(key, arg, layer);
                     return null;
+                case DuplicateDecision.Focus:
+                    return FocusExisting(key, arg, true);
             }
 
             return await OpenAsync(key, layer, arg, ArgMode.Typed);
@@ -333,6 +332,9 @@ namespace Bun3.Unity.UI.Popups
                 case PopupDuplicatePolicy.Queue:
                     return DuplicateDecision.Enqueue;
 
+                case PopupDuplicatePolicy.Focus:
+                    return DuplicateDecision.Focus;
+
                 default:
                     // Replace. ponytail: 로딩 중인 같은 키 인스턴스는 건드리지 않는다
                     // (동시 로딩 허용). 필요해지면 로딩 취소로 확장.
@@ -346,6 +348,38 @@ namespace Bun3.Unity.UI.Popups
             _queue.Enqueue(new QueuedPopup(key, layer, arg));
             TryDrainQueue();
         }
+
+        private PopupBehaviour FocusExisting<TArg>(PopupKey key, TArg arg, bool hasArg)
+        {
+            var popup = FindTopmostOpen(key);
+            if (popup == null)
+                return null; // 로딩 중 인스턴스만 있는 경우 — 만질 대상이 없다.
+
+            if (hasArg)
+                DeliverArg(popup, arg);
+
+            _stack.Remove(popup);
+            InsertSorted(popup, popup.Layer); // 같은 레이어의 최상단으로
+            Focused?.Invoke(popup);
+            return popup;
+        }
+
+        private PopupBehaviour FindTopmostOpen(PopupKey key)
+        {
+            for (int i = _stack.Count - 1; i >= 0; i--)
+            {
+                if (_stack[i].Key == key && _stack[i].Phase != PopupPhase.Closing)
+                    return _stack[i];
+            }
+
+            return null;
+        }
+
+        /// <summary><see cref="PopupQueue"/> 전용 진입점 — 중복 정책을 거치지 않고 바로 연다.</summary>
+        internal UniTask<PopupBehaviour> OpenQueuedAsync(PopupKey key, int layer, IQueuedPopupArg arg)
+            => arg == null
+                ? OpenAsync(key, layer, (byte)0, ArgMode.None)
+                : OpenAsync(key, layer, arg, ArgMode.Queued);
 
         private async UniTask<PopupBehaviour> OpenAsync<TArg>(PopupKey key, int layer, TArg arg, ArgMode argMode)
         {
@@ -417,7 +451,7 @@ namespace Bun3.Unity.UI.Popups
             return popup;
         }
 
-        private static void DeliverArg<TArg>(PopupBehaviour popup, TArg arg)
+        internal static void DeliverArg<TArg>(PopupBehaviour popup, TArg arg)
         {
             if (popup is IPopupArg<TArg> receiver)
                 receiver.OnPopupArg(arg);
@@ -464,8 +498,7 @@ namespace Bun3.Unity.UI.Popups
                 return;
 
             var next = _queue.Dequeue();
-            OpenAsync(next.Key, next.Layer, next.Arg, next.Arg == null ? ArgMode.None : ArgMode.Queued)
-                .Forget();
+            OpenQueuedAsync(next.Key, next.Layer, next.Arg).Forget();
         }
 
         private void ThrowIfDisposed()

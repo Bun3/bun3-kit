@@ -47,6 +47,15 @@ namespace Bun3.Unity.UI.Editor.Tests
 
             public void OnPopupArg(string arg) => ReceivedToken = arg;
 
+            public int LastOrderIndex = -1;
+            public bool LastIsTopmost;
+
+            protected override void OnStackOrderChanged(int stackIndex, bool isTopmost)
+            {
+                LastOrderIndex = stackIndex;
+                LastIsTopmost = isTopmost;
+            }
+
             protected override void OnCloseBlockedChanged(bool blocked)
             {
                 BlockedChanges++;

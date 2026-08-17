@@ -132,7 +132,28 @@ public sealed class ItemDetailPopup : PopupBehaviour, IPopupArg<int>, IPopupArg<
 // To make the string route mandatory for every popup (like an abstract token method),
 // enforce it in your game's base class: abstract class GamePopup : PopupBehaviour, IPopupArg<string>.
 
-// 5. Block closing while the popup is busy (ref-counted; nested locks compose).
+// 5. Reuse an already-open instance instead of stacking a duplicate (legacy GetOrShowPopup):
+//    moves it to the top of its layer and re-delivers the arg via IPopupArg.
+var shop = await _stack.PushWithArgAsync((int)PopupId.Shop, shopArgs,
+    duplicate: PopupDuplicatePolicy.Focus);
+
+// 6. Channel queue: show one at a time *within this queue* — on top of other popups.
+//    (PopupStack.Enqueue waits for an empty stack; PopupQueue only waits for its own popup.)
+//    Higher priority shows first; FIFO within the same priority.
+_rewardQueue = new PopupQueue(_stack);
+_rewardQueue.EnqueueWithArg((int)PopupId.Promotion, rankArgs, priority: 2);
+_rewardQueue.EnqueueWithArg((int)PopupId.GotItems, itemArgs);   // priority 0
+
+// 7. Pooling + preload: plug the pool straight into the stack.
+_pool = new PopupPool(LoadPopupAsync);
+_stack = new PopupStack(_pool.RentAsync, _pool.Return);
+await _pool.PreloadAsync((int)PopupId.Shop);   // marks the key pooled + stocks an instance
+
+// 8. Sibling ordering + "dim only the topmost": optional arranger keeps sibling indices
+//    matching stack order and calls OnStackOrderChanged(index, isTopmost) on every popup.
+_arranger = new PopupSiblingArranger(_stack);
+
+// 9. Block closing while the popup is busy (ref-counted; nested locks compose).
 //    A Close/back during the lock is *deferred*, not lost — it runs when the last lock lifts.
 using (BlockClose())                                   // sequence direction, cutscenes
     await PlaySequenceAsync(ct);
@@ -163,7 +184,7 @@ Behavior rules:
 | Location | Description |
 |---|---|
 | `Runtime/Buttons/` | `ButtonInteractableScope`, `DisabledReason`, `IButtonDisabledHandler`, and `ButtonDisabledClickReceiver` source. |
-| `Runtime/Popups/` | `PopupStack`, `PopupBehaviour`, `PopupKey`, `PopupDuplicatePolicy`, `IPopupArg<TArg>`, `PopupCloseGuard`, `PopupBackKeyRouter` source. |
+| `Runtime/Popups/` | `PopupStack`, `PopupBehaviour`, `PopupKey`, `PopupDuplicatePolicy`, `IPopupArg<TArg>`, `PopupCloseGuard`, `PopupQueue`, `PopupPool`, `PopupSiblingArranger`, `PopupBackKeyRouter` source. |
 | `Samples/ButtonInteractableScope/` | Sample MonoBehaviour and handler demonstrating typical usage. |
 | `Tests/Runtime/` | PlayMode tests (`Bun3.Unity.UI.Tests`). |
 | `Tests/Editor/` | EditMode tests (`Bun3.Unity.UI.Editor.Tests`), covering the popup stack. |
