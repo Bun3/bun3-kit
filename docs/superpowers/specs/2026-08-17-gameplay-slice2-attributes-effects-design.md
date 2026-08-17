@@ -44,8 +44,10 @@ GameplayEffect에 자유 훅(OnApplied/OnEvent류)을 두지 않는다. 로직�
 | L1 재배선 | 어떤 calc/selector/스펙을 쓸지 교체 | 태그 참조 (redirect로 리네임도 생존) |
 | L2 신규 로직 | 새 공식·새 선택기 | 시섬 구현 = 바이너리. 미래: 결정론 스크립트 백엔드가 같은 시섬 ABI에 등록 |
 
-EffectSpec은 로직 필드가 없는 순수 데이터 형태로 강제한다. JSON/proto 로더는 v1에 만들지
-않되(첫 소비자는 Steam — 바이너리 패치 무료) 형태가 데이터이므로 나중에 기계적으로 붙는다.
+EffectSpec은 로직 필드가 없는 순수 데이터 형태로 강제하며, **직렬화 가능한 데이터
+스키마가 정본이다.** JSON 저작 스키마와 로더를 본 슬라이스에서 함께 출하한다 —
+직렬화 대응을 미루면 스키마에 맞지 않는 설계가 먼저 굳는 위험이 있고, 데이터 시트
+파이프라인(시트 → JSON 생성)이 첫 게임부터 전제된다. 상세는 §10.1.
 
 ## 4. Operand — 3용도 공용 피연산자 어휘
 
@@ -314,6 +316,24 @@ Infinite는 디스펠·Ongoing 미충족 제거·소유 소스 소멸(슬라이�
 - **체인 순환 = 경고**: OnApplication만으로 닫히는 순환은 높은 심각도, Duration/Period
   경유(감쇠 루프 가능성)는 낮은 심각도.
 
+### 10.1 데이터 스키마와 로더
+
+- **스펙 식별자는 문자열 이름**(태그 아님 — 스펙 수는 콘텐츠에 비례해 수백~수천으로
+  자라므로 태그 공간을 쓰지 않는다). 체인의 스펙 참조도 이름이며, Build에서 밀집 id로
+  인터닝된다. 런타임에 문자열 없음은 §10 본문과 동일.
+- **JSON 저작 스키마**: Operand는 kind 판별 객체, 시섬 참조는 태그 경로 문자열,
+  enum(스택 정책 등)은 이름 문자열. strict 검증은 태그 Source에서 확립한 방식 재사용
+  (`StrictJsonSyntax`, 중복 키 거부, 줄·열 진단).
+- **로더는 저작 어셈블리**(`Bun3.Gameplay.Catalog` / Authoring 패키지) — Newtonsoft
+  의존 격리를 유지해 런타임 패키지는 계속 무의존이다. 코드 빌더 등록과 JSON 로드는
+  **동일한 EffectCatalogBuilder 검증 경로**를 지난다(정의 방식과 무관하게 같은 오류,
+  같은 보증).
+- 소비 형태: 서버는 기동 시 Authoring 로더로 JSON을 직접 읽어도 된다(서버는 Newtonsoft
+  제약이 없다). Unity 플레이어용 컴파일 바이너리 산출물(+fingerprint, B3DK 유사)은
+  후속 — §12.
+- EffectInstance의 필드는 전부 원시 값으로 설계되어 있어(§6) 슬라이스 4의 상태
+  직렬화(proto)가 스키마 변경 없이 얹힌다.
+
 기동 Build 순서(뒤가 앞을 참조): **TagCatalog → SeamRegistry → AttributeRegistry →
 EffectCatalog → World/EffectTarget.** 전부 조립 루트가 주입한다 — static Instance는
 두지 않는다(프레임워크 스펙 §5 "전역 상태 없음", Unity 에디터의 다중 카탈로그 현실,
@@ -338,8 +358,8 @@ FPredictionKey류 기계는 만들지 않는다(복제 계층 몫, 모델 미정
 | 반응형 콘텐츠(이벤트→발동·반사·흡혈), 이벤트 라우팅 | 슬라이스 3 Ability |
 | TargetSelector 호출 배선(인터페이스는 본 슬라이스 출하) | 슬라이스 3 World |
 | 아이템·스킬의 EffectTarget 보유 여부 | 슬라이스 4 안건 |
-| 스펙·인스턴스 proto 직렬화, dirty 추적 | 슬라이스 4 |
-| EffectSpec JSON 로더(패치 데이터 출하) | 모바일 소비자 발생 시 |
+| 인스턴스 상태 proto 직렬화, dirty 추적 | 슬라이스 4 (필드는 §6에서 원시 값으로 준비됨) |
+| EffectSpec 컴파일 바이너리 산출물(+fingerprint) | 출하 최적화 수요 시 — 저작 JSON이 정본, Unity 플레이어 소비 시점에 |
 | Expression 노드(결정론 수식 트리), 스크립트 백엔드 | 로드맵 — Operand kind·시섬 ABI가 자리 |
 | MaxChange `Scale`(비율 보존) 정책 | 첫 수요 시 |
 | 시간 소스 아날라이저(WorldTick 강제) | 백로그 |
@@ -358,6 +378,10 @@ FPredictionKey류 기계는 만들지 않는다(복제 계층 몫, 모델 미정
 **기계별**: 이동 정책 매트릭스(버프 사이클링 힐 포함), 즉시 전파(클램프 불변식 창 회귀),
 스택 규칙·만감 체인, Normal/Prematurely 구분, 조건 토글 틱당 1회, 큐 예산·이월,
 Build 예외 전 경로(오류 하나당 테스트 하나).
+
+**직렬화 라운드트립**: 같은 스펙 집합을 ① 코드 빌더 ② JSON 로드 두 경로로 Build했을 때
+결과 카탈로그가 동등한지(오라클 3 시나리오 해시 일치로 검증). JSON 오류 진단(줄·열)
+케이스는 태그 Source 테스트 패턴 재사용.
 
 **무할당 스모크**: 정착 상태 틱 반복에서 `GC.GetAllocatedBytesForCurrentThread` == 0.
 적용·만료 순간은 풀 왕복만 허용.
