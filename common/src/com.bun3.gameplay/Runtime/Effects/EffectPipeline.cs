@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using Bun3.Gameplay.Attributes;
 using Bun3.Gameplay.Numerics;
 using Bun3.Gameplay.Seams;
+using Bun3.Gameplay.Tags;
 
 namespace Bun3.Gameplay.Effects
 {
@@ -31,6 +32,7 @@ namespace Bun3.Gameplay.Effects
         private readonly int _applyBudgetPerTick;
         private readonly Queue<PendingApply> _queue = new Queue<PendingApply>();
         private readonly List<EffectInstance> _expiryScratch = new List<EffectInstance>();
+        private readonly List<EffectInstance> _removalScratch = new List<EffectInstance>();
         private ulong _nextInstanceId = 1;
 
         /// <summary>대상 해석 실패로 조용히 드롭된 적용 요청 수입니다.</summary>
@@ -87,6 +89,84 @@ namespace Bun3.Gameplay.Effects
 
             CurrentTick++;
         }
+
+        /// <summary>
+        /// 대상의 활성 인스턴스 중 query의 태그 하나라도 인스턴스 스펙의 자산 태그를 자신-또는-조상으로 갖는
+        /// 것을 전부 즉시 제거합니다(Id 오름차순). 제거는 만료와 같은 정리 경로를 타되
+        /// <see cref="EffectLifecycleKind.RemovedPrematurely"/> 이벤트와 <see cref="ChainTrigger.OnCompletePrematurely"/>
+        /// 체인을 발화합니다(OnCompleteNormal은 발화하지 않습니다).
+        /// </summary>
+        /// <param name="target">대상 식별자입니다.</param>
+        /// <param name="query">디스펠 질의 태그 컨테이너입니다.</param>
+        /// <returns>제거된 인스턴스 수입니다. 대상이 해석되지 않으면 0입니다.</returns>
+        public int RemoveByTags(TargetId target, TagContainer query)
+        {
+            if (query is null) throw new ArgumentNullException(nameof(query));
+            if (!_resolver.TryResolve(target, out var effectTarget) || effectTarget is null) return 0;
+
+            var queryCount = query.ExactKindCount;
+            Span<GameplayTag> queryTags = stackalloc GameplayTag[queryCount];
+            query.CopyExactTags(queryTags);
+
+            var tagCatalog = effectTarget.Tags.Catalog;
+            var active = effectTarget.ActiveEffects;
+            _removalScratch.Clear();
+            for (var i = 0; i < active.Count; i++)
+            {
+                var instance = active[i];
+                if (MatchesDispelQuery(_catalog.GetSpec(instance.SpecId).AssetTags, queryTags, tagCatalog))
+                    _removalScratch.Add(instance);
+            }
+
+            var removed = _removalScratch.Count;
+            for (var i = 0; i < removed; i++)
+            {
+                RemoveInstancePrematurely(effectTarget, _removalScratch[i]);
+            }
+
+            _removalScratch.Clear();
+            return removed;
+        }
+
+        /// <summary>대상의 활성 인스턴스 하나를 id로 즉시 제거합니다. 제거 경로·이벤트·체인은
+        /// <see cref="RemoveByTags"/>와 같습니다(<see cref="ChainTrigger.OnCompletePrematurely"/>).</summary>
+        /// <param name="target">대상 식별자입니다.</param>
+        /// <param name="instanceId">제거할 인스턴스 id입니다.</param>
+        /// <returns>인스턴스를 찾아 제거했으면 <see langword="true"/>이고, 대상이 해석되지 않거나
+        /// 해당 id가 없으면 <see langword="false"/>입니다.</returns>
+        public bool RemoveById(TargetId target, ulong instanceId)
+        {
+            if (!_resolver.TryResolve(target, out var effectTarget) || effectTarget is null) return false;
+
+            var active = effectTarget.ActiveEffects;
+            for (var i = 0; i < active.Count; i++)
+            {
+                if (active[i].Id != instanceId) continue;
+                RemoveInstancePrematurely(effectTarget, active[i]);
+                return true;
+            }
+
+            return false;
+        }
+
+        // query의 명시 태그 하나라도 스펙 자산 태그 하나를 자신-또는-조상으로 가지면 매칭.
+        private static bool MatchesDispelQuery(GameplayTag[] assetTags, ReadOnlySpan<GameplayTag> queryTags, TagCatalog tagCatalog)
+        {
+            for (var q = 0; q < queryTags.Length; q++)
+            {
+                for (var a = 0; a < assetTags.Length; a++)
+                {
+                    if (tagCatalog.IsAncestorOrSelf(queryTags[q], assetTags[a])) return true;
+                }
+            }
+
+            return false;
+        }
+
+        private void RemoveInstancePrematurely(EffectTarget target, EffectInstance instance) =>
+            RemoveInstanceCompletely(
+                target, instance, _catalog.GetSpec(instance.SpecId),
+                EffectLifecycleKind.RemovedPrematurely, ChainTrigger.OnCompletePrematurely);
 
         // 페이즈 ①: 적용 큐를 틱당 예산만큼 드레인한다. 체인(OnApplication/OnStackOverflow)이 같은 틱에
         // 새로 적재한 요청도 예산이 남아있는 한 같은 while에서 이어서 처리된다 — 예산이 유일한 상한이다.
@@ -503,9 +583,9 @@ namespace Bun3.Gameplay.Effects
         }
 
         // 만료: 스택 정책이 RemoveOneAndRefresh고 스택이 남아있으면 하나만 줄이고 지속시간을 리셋한다
-        // (이 경로는 정상 종료가 아니므로 OnCompleteNormal을 발화하지 않는다). 그 외에는 완전 제거
-        // (수정자 분리·태그 회수·활성 목록 제거·풀 반환) 후 OnCompleteNormal 체인을 발화한다.
-        // OnCompletePrematurely(지속 조건 등에 의한 조기 종료)는 아직 이 파이프라인에 없다 — 후속 확장 몫.
+        // (이 경로는 정상 종료가 아니므로 OnCompleteNormal을 발화하지 않는다). 그 외에는 RemoveInstanceCompletely로
+        // 완전 제거 후 OnCompleteNormal 체인을 발화한다. RemoveByTags/RemoveById로 인한 조기 제거는
+        // OnCompletePrematurely로 같은 헬퍼를 탄다(RemoveInstancePrematurely).
         private void ExpireInstance(EffectTarget target, EffectInstance instance)
         {
             var spec = _catalog.GetSpec(instance.SpecId);
@@ -519,6 +599,16 @@ namespace Bun3.Gameplay.Effects
                 return;
             }
 
+            RemoveInstanceCompletely(target, instance, spec, EffectLifecycleKind.Expired, ChainTrigger.OnCompleteNormal);
+        }
+
+        // 완전 제거 공용 경로 — 정상 만료(ExpireInstance)와 조기 제거(RemoveByTags/RemoveById)가 공유한다.
+        // 수정자 분리·GrantedTags 회수·활성 목록 제거·풀 반환까지 마친 뒤 eventKind로 생애주기 이벤트를
+        // 올리고 chainTrigger 체인을 발화한다. 발화 인스턴스의 Source·Level을 그대로 승계한다.
+        private void RemoveInstanceCompletely(
+            EffectTarget target, EffectInstance instance, CompiledEffectSpec spec,
+            EffectLifecycleKind eventKind, ChainTrigger chainTrigger)
+        {
             var source = instance.Source;
             var level = instance.Level;
 
@@ -530,10 +620,10 @@ namespace Bun3.Gameplay.Effects
             }
 
             target.RemoveActive(instance);
-            target.RaiseEffectEvent(new EffectLifecycleEvent(EffectLifecycleKind.Expired, instance.Id, instance.SpecId, instance.Stack));
+            target.RaiseEffectEvent(new EffectLifecycleEvent(eventKind, instance.Id, instance.SpecId, instance.Stack));
             EffectInstance.Return(instance);
 
-            FireChain(spec.Chains, ChainTrigger.OnCompleteNormal, source, level, target.Id, target);
+            FireChain(spec.Chains, chainTrigger, source, level, target.Id, target);
         }
 
         // 페이즈 ③: 1차 재계산 — ①②가 표시한 dirty 슬롯만 재집계한다.

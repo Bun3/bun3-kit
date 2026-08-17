@@ -157,6 +157,9 @@ internal sealed class EffectTestKit
     /// <summary>공유 카탈로그에서 경로로 태그를 찾습니다.</summary>
     public GameplayTag Tag(string path) => _tagCatalog.GetRequired(path);
 
+    /// <summary>공유 태그 카탈로그입니다.</summary>
+    public TagCatalog TagCatalog => _tagCatalog;
+
     /// <summary>등록된 효과 이름의 카탈로그 id를 가져옵니다. BuildPipeline 이후에 호출해야 합니다.</summary>
     public int SpecId(string name) => BuiltCatalog.GetRequiredId(name);
 
