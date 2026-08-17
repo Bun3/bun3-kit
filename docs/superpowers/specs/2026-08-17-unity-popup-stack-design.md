@@ -99,6 +99,34 @@ Input System(`ENABLE_INPUT_SYSTEM`)과 레거시(`ENABLE_LEGACY_INPUT_MANAGER`) 
 2. `Replace`가 로딩 중 인스턴스와 겹치면 열린 인스턴스만 닫는다(동시 로딩 허용).
 3. 버전 범프/퍼블리시는 통합 시 사용자 처리 (브리프 지시).
 
+## 1차 리뷰 반영 (2026-08-17, idlez-client/growninja UIPopup 비교 후)
+
+레거시 구조와 비교 리뷰 후 사용자 결정으로 반영:
+
+1. **`PushAsync`가 인스턴스를 반환** (`UniTask<PopupBehaviour>`). null = 중복 정책으로
+   무시/큐잉, 팩토리 실패, Clear 취소.
+2. **초기 데이터 채널** — 레거시의 근본 문제(Show 시점에 데이터를 넘기고 초기화하려면
+   팝업을 유니티 스레드에서 동기 생성해야 함 → Addressables `WaitForCompletion` 강제)를
+   해결. 팝업이 `IPopupArg<TArg>`를 구현하면 `PushWithArg(Async)`/`EnqueueWithArg`로
+   전달된 데이터가 **비동기 로딩 완료 직후, 스택 삽입·열림 연출 전**에
+   `OnPopupArg(arg)`로 도착한다. 직접 push 경로는 제네릭이라 무할당(박싱 없음),
+   대기열 경유만 저빈도라 보관 객체 할당 허용.
+   - `Push<TArg>(key, arg)` 오버로드로 만들지 않은 이유: `Push(key, x)`의 x가
+     기존 layer 인자와 겹쳐 int 데이터가 조용히 layer로 해석되는 사고 방지.
+3. **back 기본값은 "닫힘" 유지** — 레거시의 `cancelable=false` 기본이 오히려 불편했다는
+   사용자 피드백.
+4. **닫기 잠금(Close Guard)** — 레거시 `blockHide`(bool)의 고도화. ref-count 잠금:
+   - `popup.BlockClose()` → `using` 스코프(`PopupCloseGuard`), 중첩 가능.
+   - `popup.BlockCloseWhile(task)` / `BlockCloseWhile<T>(task)` — 팝업 초기 로딩,
+     서버 데이터 패치, 서버 요청-응답 대기를 한 줄로 감싼다. 예외에도 해제 보장.
+   - 잠금 중 `Close`/back은 **거부가 아니라 예약**(`CloseRequested`) — 마지막 잠금이
+     풀릴 때 자동으로 닫힌다("응답 오면 닫히다"가 공짜). back 키는 소비만.
+   - `OnCloseBlockedChanged(bool)` 가상 훅으로 게임이 raycast 차단/스피너 연결.
+   - `Clear()`는 잠금 무시(씬 전환 강제 정리 우선). 풀 재사용 대비 Attach 시 카운트 리셋.
+
+리뷰에서 확인된 나머지 갭(미반영, 필요 시 확장): 재사용+전면 이동(GetOrShow/Focus 정책),
+sibling index/딤 자동 관리 헬퍼.
+
 ## 테스트 전략 (EditMode)
 
 수동 완료 `UniTaskCompletionSource`를 반환하는 테스트 팝업으로 전이를 제어:

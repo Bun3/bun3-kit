@@ -110,11 +110,22 @@ _stack = new PopupStack(
 
 // 3. Drive it.
 _stack.Push((int)PopupId.Shop);                       // fire-and-forget
-await _stack.PushAsync((int)PopupId.Shop);            // await open animation
+var popup = await _stack.PushAsync((int)PopupId.Shop); // await open animation, get the instance
 _stack.Push((int)PopupId.Shop, layer: 10);            // higher layer stays on top
 _stack.Push((int)PopupId.Shop, duplicate: PopupDuplicatePolicy.Replace);
 _stack.Enqueue((int)PopupId.Reward);                  // shows when the stack is empty, one at a time
 _stack.HandleBack();                                  // route ESC/Android back to the top popup
+
+// 4. Pass initial data without synchronous instantiation: implement IPopupArg<TArg>
+//    and it arrives right after the async load, before the open animation.
+_stack.PushWithArg((int)PopupId.ItemDetail, new ItemDetailArgs(itemId));
+_stack.EnqueueWithArg((int)PopupId.Reward, rewardArgs);
+
+// 5. Block closing while the popup is busy (ref-counted; nested locks compose).
+//    A Close/back during the lock is *deferred*, not lost — it runs when the last lock lifts.
+using (BlockClose())                                   // sequence direction, cutscenes
+    await PlaySequenceAsync(ct);
+var res = await BlockCloseWhile(SendPacketAsync(req, ct)); // server round-trip
 ```
 
 Behavior rules:
@@ -123,8 +134,9 @@ Behavior rules:
 - `PopupDuplicatePolicy` decides what happens when the same `PopupKey` is already open or loading: `Ignore` (default), `Queue` (append to the sequential queue), or `Replace` (close the existing instance, open a new one).
 - `Enqueue` items display one at a time, each waiting until the stack is completely empty — the pattern for reward chains. `popup.WaitUntilClosedAsync()` awaits an individual popup's dismissal.
 - `HandleBack()` consumes the key whenever any popup is present. A top popup in transition swallows the input; `OnBackRequested()` returning `false` refuses the close. Only an empty stack returns `false`, letting the game show its own quit dialog. Attach the optional `PopupBackKeyRouter` component (assign its `Stack`) to poll ESC/Android back automatically under both input backends.
-- `Clear()` skips animations, cancels in-flight loads, and releases everything — for scene transitions.
-- The push/pop/back paths allocate no closures, LINQ, or strings.
+- `Clear()` skips animations, cancels in-flight loads, ignores close locks, and releases everything — for scene transitions.
+- While `IsCloseBlocked` (any `BlockClose`/`BlockCloseWhile` lock held), back keys are consumed without routing and `Close` requests are deferred until the last lock releases. Hook `OnCloseBlockedChanged(bool)` to drive raycast blocking or spinners.
+- The push/pop/back paths allocate no closures, LINQ, or strings. (`*WithArg` uses generics — no boxing on the direct path; only queued args allocate a small holder, and that queue is a cold path.)
 
 # Technical details
 
@@ -140,7 +152,7 @@ Behavior rules:
 | Location | Description |
 |---|---|
 | `Runtime/Buttons/` | `ButtonInteractableScope`, `DisabledReason`, `IButtonDisabledHandler`, and `ButtonDisabledClickReceiver` source. |
-| `Runtime/Popups/` | `PopupStack`, `PopupBehaviour`, `PopupKey`, `PopupDuplicatePolicy`, `PopupBackKeyRouter` source. |
+| `Runtime/Popups/` | `PopupStack`, `PopupBehaviour`, `PopupKey`, `PopupDuplicatePolicy`, `IPopupArg<TArg>`, `PopupCloseGuard`, `PopupBackKeyRouter` source. |
 | `Samples/ButtonInteractableScope/` | Sample MonoBehaviour and handler demonstrating typical usage. |
 | `Tests/Runtime/` | PlayMode tests (`Bun3.Unity.UI.Tests`). |
 | `Tests/Editor/` | EditMode tests (`Bun3.Unity.UI.Editor.Tests`), covering the popup stack. |

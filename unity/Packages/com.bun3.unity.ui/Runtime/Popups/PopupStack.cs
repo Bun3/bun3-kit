@@ -8,8 +8,9 @@ namespace Bun3.Unity.UI.Popups
 {
     /// <summary>
     /// 도메인 무관 팝업/모달 스택. push/pop, 레이어 정렬, 중복 정책, 순차 대기열,
-    /// back 키 라우팅을 담당한다. 팝업 인스턴스 생성/해제와 표현(부모 배치, 딤, 사운드)은
-    /// <see cref="PopupFactory"/>/<see cref="PopupReleaser"/>/<see cref="Opened"/> 훅으로 게임이 채운다.
+    /// back 키 라우팅, 초기 데이터 전달을 담당한다. 팝업 인스턴스 생성/해제와 표현(부모 배치,
+    /// 딤, 사운드)은 <see cref="PopupFactory"/>/<see cref="PopupReleaser"/>/<see cref="Opened"/>
+    /// 훅으로 게임이 채운다.
     /// </summary>
     /// <remarks>
     /// MonoBehaviour가 아니다 — 씬 구조를 강제하지 않고 게임이 생성해 보관한다.
@@ -18,16 +19,47 @@ namespace Bun3.Unity.UI.Popups
     /// </remarks>
     public sealed class PopupStack : IDisposable
     {
+        /// <summary>대기열 항목에 실린 초기 데이터. 저빈도 경로라 박싱/할당을 허용한다.</summary>
+        private interface IQueuedPopupArg
+        {
+            void Deliver(PopupBehaviour popup);
+        }
+
+        private sealed class QueuedPopupArg<TArg> : IQueuedPopupArg
+        {
+            private readonly TArg _arg;
+
+            public QueuedPopupArg(TArg arg) => _arg = arg;
+
+            public void Deliver(PopupBehaviour popup) => DeliverArg(popup, _arg);
+        }
+
         private readonly struct QueuedPopup
         {
             public readonly PopupKey Key;
             public readonly int Layer;
+            public readonly IQueuedPopupArg Arg;
 
-            public QueuedPopup(PopupKey key, int layer)
+            public QueuedPopup(PopupKey key, int layer, IQueuedPopupArg arg)
             {
                 Key = key;
                 Layer = layer;
+                Arg = arg;
             }
+        }
+
+        private enum ArgMode : byte
+        {
+            None,
+            Typed,
+            Queued,
+        }
+
+        private enum DuplicateDecision : byte
+        {
+            Proceed,
+            Drop,
+            Enqueue,
         }
 
         private readonly PopupFactory _factory;
@@ -88,34 +120,65 @@ namespace Bun3.Unity.UI.Popups
         }
 
         /// <summary>
-        /// 팝업을 열고 열림 연출 완료까지 대기한다. 같은 키가 이미 열려 있거나 로딩 중이면
-        /// <paramref name="duplicate"/> 정책을 따른다.
+        /// 초기 데이터를 실어 연다. 팝업은 <see cref="IPopupArg{TArg}"/>를 구현해야 한다.
+        /// (<c>Push(key, x)</c>의 x가 layer로 해석되는 사고를 막으려고 이름을 분리했다 —
+        /// int 데이터도 안전하게 싣는다.)
         /// </summary>
-        public async UniTask PushAsync(PopupKey key, int layer = 0,
+        public void PushWithArg<TArg>(PopupKey key, TArg arg, int layer = 0,
+            PopupDuplicatePolicy duplicate = PopupDuplicatePolicy.Ignore)
+        {
+            ThrowIfDisposed();
+            PushWithArgAsync(key, arg, layer, duplicate).Forget();
+        }
+
+        /// <summary>
+        /// 팝업을 열고 열림 연출 완료까지 대기한 뒤 인스턴스를 돌려준다.
+        /// 같은 키가 이미 열려 있거나 로딩 중이면 <paramref name="duplicate"/> 정책을 따른다.
+        /// </summary>
+        /// <returns>
+        /// 열린 인스턴스. 중복 정책으로 무시/큐잉됐거나, 팩토리가 null을 돌려줬거나,
+        /// 진행 중 <see cref="Clear"/>로 취소됐으면 null. (열림 직후 예약된 닫기로 이미 닫혔을 수도
+        /// 있으니, 반환 후 계속 쓸 거라면 <see cref="PopupBehaviour.Phase"/>를 확인할 것.)
+        /// </returns>
+        public async UniTask<PopupBehaviour> PushAsync(PopupKey key, int layer = 0,
             PopupDuplicatePolicy duplicate = PopupDuplicatePolicy.Ignore)
         {
             ThrowIfDisposed();
 
-            if (IsOpen(key) || IsLoading(key))
+            switch (ResolveDuplicate(key, duplicate))
             {
-                switch (duplicate)
-                {
-                    case PopupDuplicatePolicy.Ignore:
-                        return;
-
-                    case PopupDuplicatePolicy.Queue:
-                        Enqueue(key, layer);
-                        return;
-
-                    case PopupDuplicatePolicy.Replace:
-                        // ponytail: 로딩 중인 같은 키 인스턴스는 건드리지 않는다(동시 로딩 허용).
-                        // 필요해지면 로딩 취소로 확장.
-                        CloseAllOf(key);
-                        break;
-                }
+                case DuplicateDecision.Drop:
+                    return null;
+                case DuplicateDecision.Enqueue:
+                    Enqueue(key, layer);
+                    return null;
             }
 
-            await OpenAsync(key, layer);
+            return await OpenAsync(key, layer, (byte)0, ArgMode.None);
+        }
+
+        /// <summary>
+        /// 초기 데이터를 실어 열고 열림 연출 완료까지 대기한 뒤 인스턴스를 돌려준다.
+        /// 데이터는 팩토리 로딩이 끝난 직후, 열림 연출 전에
+        /// <see cref="IPopupArg{TArg}.OnPopupArg"/>로 전달된다 — 레거시처럼 인스턴스를
+        /// 동기 생성해서 초기화할 필요가 없다.
+        /// </summary>
+        /// <returns><see cref="PushAsync(PopupKey,int,PopupDuplicatePolicy)"/>와 동일.</returns>
+        public async UniTask<PopupBehaviour> PushWithArgAsync<TArg>(PopupKey key, TArg arg, int layer = 0,
+            PopupDuplicatePolicy duplicate = PopupDuplicatePolicy.Ignore)
+        {
+            ThrowIfDisposed();
+
+            switch (ResolveDuplicate(key, duplicate))
+            {
+                case DuplicateDecision.Drop:
+                    return null;
+                case DuplicateDecision.Enqueue:
+                    EnqueueWithArg(key, arg, layer);
+                    return null;
+            }
+
+            return await OpenAsync(key, layer, arg, ArgMode.Typed);
         }
 
         /// <summary>
@@ -125,8 +188,14 @@ namespace Bun3.Unity.UI.Popups
         public void Enqueue(PopupKey key, int layer = 0)
         {
             ThrowIfDisposed();
-            _queue.Enqueue(new QueuedPopup(key, layer));
-            TryDrainQueue();
+            EnqueueCore(key, layer, null);
+        }
+
+        /// <summary>초기 데이터를 실어 순차 대기열에 넣는다. (저빈도 경로 — 데이터 보관 할당 허용)</summary>
+        public void EnqueueWithArg<TArg>(PopupKey key, TArg arg, int layer = 0)
+        {
+            ThrowIfDisposed();
+            EnqueueCore(key, layer, new QueuedPopupArg<TArg>(arg));
         }
 
         /// <summary>
@@ -134,8 +203,9 @@ namespace Bun3.Unity.UI.Popups
         /// </summary>
         /// <returns>
         /// 키를 소비했으면 true. 스택이 비어 있을 때만 false — 게임이 종료 확인 등
-        /// 다음 처리를 이어간다. 최상단이 전이 중이면 아무것도 하지 않고 소비하며(연출 중 입력 무시),
-        /// <see cref="PopupBehaviour.OnBackRequested"/>가 false를 돌려주면 닫지 않고 소비만 한다.
+        /// 다음 처리를 이어간다. 최상단이 전이 중이거나 닫기 잠금 중이면 아무것도 하지 않고
+        /// 소비하며, <see cref="PopupBehaviour.OnBackRequested"/>가 false를 돌려주면
+        /// 닫지 않고 소비만 한다.
         /// </returns>
         public bool HandleBack()
         {
@@ -143,7 +213,7 @@ namespace Bun3.Unity.UI.Popups
             if (top == null)
                 return false;
 
-            if (top.Phase != PopupPhase.Open)
+            if (top.Phase != PopupPhase.Open || top.IsCloseBlocked)
                 return true;
 
             if (!top.OnBackRequested())
@@ -171,15 +241,16 @@ namespace Bun3.Unity.UI.Popups
 
         /// <summary>
         /// 팝업을 닫고 닫힘 연출·해제 완료까지 대기한다. 이 스택 소속이 아니거나 이미 닫히는
-        /// 중이면 무시. 열림 연출 중이면 닫기를 예약만 하고 즉시 반환한다(열림 완료 후 닫힘) —
-        /// 실제 닫힘까지 기다리려면 <see cref="PopupBehaviour.WaitUntilClosedAsync"/>를 쓸 것.
+        /// 중이면 무시. 열림 연출 중이거나 닫기 잠금(<see cref="PopupBehaviour.IsCloseBlocked"/>)
+        /// 중이면 닫기를 예약만 하고 즉시 반환한다 — 열림 완료/마지막 잠금 해제 시 자동으로
+        /// 닫힌다. 실제 닫힘까지 기다리려면 <see cref="PopupBehaviour.WaitUntilClosedAsync"/>를 쓸 것.
         /// </summary>
         public async UniTask CloseAsync(PopupBehaviour popup)
         {
             if (popup == null || popup.Stack != this || popup.Phase == PopupPhase.Closing)
                 return;
 
-            if (popup.Phase == PopupPhase.Opening)
+            if (popup.Phase == PopupPhase.Opening || popup.IsCloseBlocked)
             {
                 popup.CloseRequested = true;
                 return;
@@ -208,8 +279,8 @@ namespace Bun3.Unity.UI.Popups
         }
 
         /// <summary>
-        /// 연출을 생략하고 전부 즉시 해제한다. 진행 중인 로딩/연출은 취소되고,
-        /// 순차 대기열도 비운다. 씬 전환 등 강제 정리용.
+        /// 연출을 생략하고 전부 즉시 해제한다. 진행 중인 로딩/연출은 취소되고, 순차 대기열도
+        /// 비우며, 닫기 잠금도 무시한다. 씬 전환 등 강제 정리용.
         /// </summary>
         public void Clear()
         {
@@ -249,7 +320,34 @@ namespace Bun3.Unity.UI.Popups
             _lifetime.Dispose();
         }
 
-        private async UniTask OpenAsync(PopupKey key, int layer)
+        private DuplicateDecision ResolveDuplicate(PopupKey key, PopupDuplicatePolicy duplicate)
+        {
+            if (!IsOpen(key) && !IsLoading(key))
+                return DuplicateDecision.Proceed;
+
+            switch (duplicate)
+            {
+                case PopupDuplicatePolicy.Ignore:
+                    return DuplicateDecision.Drop;
+
+                case PopupDuplicatePolicy.Queue:
+                    return DuplicateDecision.Enqueue;
+
+                default:
+                    // Replace. ponytail: 로딩 중인 같은 키 인스턴스는 건드리지 않는다
+                    // (동시 로딩 허용). 필요해지면 로딩 취소로 확장.
+                    CloseAllOf(key);
+                    return DuplicateDecision.Proceed;
+            }
+        }
+
+        private void EnqueueCore(PopupKey key, int layer, IQueuedPopupArg arg)
+        {
+            _queue.Enqueue(new QueuedPopup(key, layer, arg));
+            TryDrainQueue();
+        }
+
+        private async UniTask<PopupBehaviour> OpenAsync<TArg>(PopupKey key, int layer, TArg arg, ArgMode argMode)
         {
             var token = _lifetime.Token;
 
@@ -268,14 +366,31 @@ namespace Bun3.Unity.UI.Popups
             if (popup == null)
             {
                 TryDrainQueue();
-                return;
+                return null;
             }
 
             if (token.IsCancellationRequested)
             {
                 // Clear/Dispose 이후 도착한 인스턴스 — 스택에 넣지 않고 바로 돌려보낸다.
                 _releaser(popup);
-                return;
+                return null;
+            }
+
+            if (argMode != ArgMode.None)
+            {
+                try
+                {
+                    if (argMode == ArgMode.Typed)
+                        DeliverArg(popup, arg);
+                    else
+                        ((IQueuedPopupArg)(object)arg).Deliver(popup);
+                }
+                catch
+                {
+                    // OnPopupArg가 던지면 인스턴스가 스택 밖에서 새지 않게 돌려보내고 표면화한다.
+                    _releaser(popup);
+                    throw;
+                }
             }
 
             InsertSorted(popup, layer);
@@ -292,12 +407,25 @@ namespace Bun3.Unity.UI.Popups
             }
 
             if (popup.Stack != this || popup.Phase != PopupPhase.Opening)
-                return;
+                return popup;
 
             popup.SetPhase(PopupPhase.Open);
 
-            if (popup.CloseRequested)
+            if (popup.CloseRequested && !popup.IsCloseBlocked)
                 await CloseAsync(popup);
+
+            return popup;
+        }
+
+        private static void DeliverArg<TArg>(PopupBehaviour popup, TArg arg)
+        {
+            if (popup is IPopupArg<TArg> receiver)
+                receiver.OnPopupArg(arg);
+            else
+                // 게임 코드 결선 오류 — 저빈도 경로라 문자열 할당 허용.
+                Debug.LogError(
+                    $"팝업 {popup.GetType().Name}이(가) IPopupArg<{typeof(TArg).Name}>를 구현하지 않아 초기 데이터를 버린다.",
+                    popup);
         }
 
         private void InsertSorted(PopupBehaviour popup, int layer)
@@ -336,7 +464,8 @@ namespace Bun3.Unity.UI.Popups
                 return;
 
             var next = _queue.Dequeue();
-            OpenAsync(next.Key, next.Layer).Forget();
+            OpenAsync(next.Key, next.Layer, next.Arg, next.Arg == null ? ArgMode.None : ArgMode.Queued)
+                .Forget();
         }
 
         private void ThrowIfDisposed()

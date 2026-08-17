@@ -13,12 +13,18 @@ namespace Bun3.Unity.UI.Editor.Tests
     /// </summary>
     public abstract class PopupStackTestFixture
     {
-        protected sealed class TestPopup : PopupBehaviour
+        protected sealed class TestPopup : PopupBehaviour, IPopupArg<int>
         {
             public UniTaskCompletionSource OpenSource;
             public UniTaskCompletionSource CloseSource;
             public bool RejectBack;
             public int BackRequests;
+
+            public int ReceivedArg;
+            public PopupPhase PhaseAtArg = (PopupPhase)(-1);
+
+            public int BlockedChanges;
+            public bool LastBlocked;
 
             protected override UniTask PlayOpenAsync(CancellationToken cancellationToken)
                 => OpenSource?.Task ?? UniTask.CompletedTask;
@@ -30,6 +36,18 @@ namespace Bun3.Unity.UI.Editor.Tests
             {
                 BackRequests++;
                 return !RejectBack;
+            }
+
+            public void OnPopupArg(int arg)
+            {
+                ReceivedArg = arg;
+                PhaseAtArg = Phase;
+            }
+
+            protected override void OnCloseBlockedChanged(bool blocked)
+            {
+                BlockedChanges++;
+                LastBlocked = blocked;
             }
         }
 
