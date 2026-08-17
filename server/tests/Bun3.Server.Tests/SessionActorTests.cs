@@ -249,6 +249,134 @@ public class SessionActorTests
     }
 
     [Test]
+    public async Task Queued_packets_before_close_are_dropped()
+    {
+        var transport = new FakeTransport();
+        var processed = new List<byte>();
+        var firstPacketEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var server = new TestServer(transport, conn => new ScriptedSession(conn, async (_, packet) =>
+        {
+            processed.Add(packet.Span[0]);
+            firstPacketEntered.TrySetResult();
+            await release.Task; // 첫 패킷에서 블록 — 뒤 패킷들이 큐에 남게 한다
+        }));
+        await server.StartAsync();
+
+        var conn = transport.Connect(1);
+        var session = server.Sessions.Single();
+        conn.ReceivePacket(new byte[] { 1 });
+        await firstPacketEntered.Task.WaitAsync(Timeout);
+        conn.ReceivePacket(new byte[] { 2 });
+        conn.ReceivePacket(new byte[] { 3 });
+
+        conn.Close(); // 종료 신호 — 큐에 남은 2, 3은 처리되지 않아야 한다
+        release.TrySetResult();
+
+        await session.Disconnected.Task.WaitAsync(Timeout);
+        Assert.That(processed, Is.EqualTo(new byte[] { 1 }));
+    }
+
+    [Test]
+    public async Task Throwing_OnHandlerError_closes_session()
+    {
+        var transport = new FakeTransport();
+        var server = new TestServer(transport, conn => new ScriptedSession(
+            conn,
+            (_, _) => throw new InvalidOperationException("boom"),
+            onError: _ => throw new InvalidOperationException("hook failure")));
+        await server.StartAsync();
+
+        var conn = transport.Connect(1);
+        var session = server.Sessions.Single();
+        conn.ReceivePacket(new byte[] { 1 });
+
+        await session.Disconnected.Task.WaitAsync(Timeout);
+        Assert.That(conn.IsOpen, Is.False);
+        Assert.That(server.Sessions, Is.Empty);
+    }
+
+    [Test]
+    public async Task Duplicate_connection_id_closes_new_connection_and_keeps_existing()
+    {
+        var transport = new FakeTransport();
+        var processed = new List<byte>();
+        var done = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var server = new TestServer(transport, conn => new ScriptedSession(conn, (_, packet) =>
+        {
+            processed.Add(packet.Span[0]);
+            done.TrySetResult();
+            return default;
+        }));
+        await server.StartAsync();
+
+        var first = transport.Connect(1);
+        var session = server.Sessions.Single();
+        var duplicate = transport.Connect(1); // 전송 계약 위반 시뮬레이션 — 같은 id 재사용
+
+        Assert.That(duplicate.IsOpen, Is.False); // 신규 연결만 거부
+        Assert.That(first.IsOpen, Is.True);
+        Assert.That(server.Sessions.Single(), Is.SameAs(session)); // 기존 세션 유지
+
+        first.ReceivePacket(new byte[] { 7 }); // 기존 세션은 계속 동작
+        await done.Task.WaitAsync(Timeout);
+        Assert.That(processed, Is.EqualTo(new byte[] { 7 }));
+    }
+
+    [Test]
+    public async Task Double_OnClosed_notifies_session_once_and_is_harmless()
+    {
+        var transport = new FakeTransport();
+        var server = new TestServer(transport, conn => new ScriptedSession(conn, (_, _) => default));
+        await server.StartAsync();
+
+        var conn = transport.Connect(1);
+        var session = server.Sessions.Single();
+
+        conn.Close(); // 1차 OnClosed
+        await session.Disconnected.Task.WaitAsync(Timeout);
+        Assert.DoesNotThrow(() => transport.RaiseClosed(conn, new IOException("late"))); // 2차 — 무해해야 한다
+        Assert.That(server.Sessions, Is.Empty);
+        Assert.That(await session.Disconnected.Task, Is.Null); // 1차 결과(null)가 유지된다
+    }
+
+    [Test]
+    public async Task Connection_after_stop_is_closed_immediately()
+    {
+        var transport = new FakeTransport();
+        var server = new TestServer(transport, conn => new ScriptedSession(conn, (_, _) => default));
+        await server.StartAsync();
+        await server.StopAsync();
+
+        var conn = transport.Connect(1);
+
+        Assert.That(conn.IsOpen, Is.False);
+        Assert.That(server.Sessions, Is.Empty);
+    }
+
+    [Test]
+    public async Task StopAsync_returns_when_ct_cancels_during_drain()
+    {
+        var transport = new FakeTransport();
+        var firstPacketEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var server = new TestServer(transport, conn => new ScriptedSession(conn, async (_, _) =>
+        {
+            firstPacketEntered.TrySetResult();
+            await release.Task; // 드레인 불가 세션
+        }));
+        await server.StartAsync();
+        var conn = transport.Connect(1);
+        conn.ReceivePacket(new byte[] { 1 });
+        await firstPacketEntered.Task.WaitAsync(Timeout);
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
+        await server.StopAsync(TimeSpan.FromSeconds(30), cts.Token).WaitAsync(Timeout); // 30초 대기 대신 취소로 반환
+
+        release.TrySetResult(); // 블록된 핸들러 정리
+    }
+
+    [Test]
     public async Task Kick_during_OnConnected_still_disconnects_cleanly()
     {
         var transport = new FakeTransport();

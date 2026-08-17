@@ -14,10 +14,11 @@ namespace Bun3.Server.Transport.Tcp
     {
         private readonly TcpTransportOptions _options;
         private readonly ILogger _logger;
+        private readonly CancellationTokenSource _stopCts = new CancellationTokenSource();
         private TcpListener? _listener;
         private Task? _acceptLoop;
         private long _nextConnectionId;
-        private int? _boundPort;
+        private int _boundPort = -1; // int?는 토런 리드 가능 — 센티널 int + Volatile로 원자 보장
         private volatile bool _stopping;
         private int _activeConnections;
         private volatile bool _capacityLogged;
@@ -30,7 +31,14 @@ namespace Bun3.Server.Transport.Tcp
         }
 
         /// <summary>실제 바인딩된 포트. Options.Port가 0이면 시작 후 여기서 확인한다. Stop 이후에도 유효.</summary>
-        public int? BoundPort => _boundPort;
+        public int? BoundPort
+        {
+            get
+            {
+                var port = Volatile.Read(ref _boundPort);
+                return port < 0 ? (int?)null : port;
+            }
+        }
 
         /// <remarks>단일 사용: StopAsync 이후 재시작할 수 없다. 새 인스턴스를 생성할 것.</remarks>
         public Task StartAsync(IConnectionHandler handler, CancellationToken ct = default)
@@ -47,7 +55,7 @@ namespace Bun3.Server.Transport.Tcp
 
             _listener = new TcpListener(_options.BindAddress ?? IPAddress.Any, _options.Port);
             _listener.Start(_options.Backlog);
-            _boundPort = ((IPEndPoint)_listener.LocalEndpoint).Port;
+            Volatile.Write(ref _boundPort, ((IPEndPoint)_listener.LocalEndpoint).Port);
             _logger.LogInformation("TCP listening on port {Port}.", BoundPort);
             _acceptLoop = Task.Run(() => AcceptLoopAsync(handler));
             return Task.CompletedTask;
@@ -57,6 +65,7 @@ namespace Bun3.Server.Transport.Tcp
         public async Task StopAsync(CancellationToken ct = default)
         {
             _stopping = true;
+            _stopCts.Cancel(); // accept 실패 백오프(100ms) 대기 중이어도 즉시 깨운다
             _listener?.Stop(); // AcceptTcpClientAsync를 깨운다
             if (_acceptLoop != null)
             {
@@ -82,7 +91,15 @@ namespace Bun3.Server.Transport.Tcp
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, "Accept failed.");
-                    await Task.Delay(100).ConfigureAwait(false); // 지속 실패 시 핫스핀 방지
+                    try
+                    {
+                        await Task.Delay(100, _stopCts.Token).ConfigureAwait(false); // 지속 실패 시 핫스핀 방지
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        break; // StopAsync — 백오프를 기다리지 않고 즉시 종료
+                    }
+
                     continue;
                 }
 
@@ -110,9 +127,15 @@ namespace Bun3.Server.Transport.Tcp
                         Interlocked.Increment(ref _nextConnectionId), client, _options, counted, _logger);
 
                     // 계약: OnConnected 반환 전에는 OnPacket/OnClosed가 발생하지 않도록
-                    // 수신 루프는 OnConnected 이후에 시작한다.
+                    // 수신 루프는 OnConnected 이후에 시작한다. 루프는 내부에서 예외를 삼키지만
+                    // finally의 OnClosed(핸들러 코드)가 던질 수 있으므로 폴트를 관찰해 로그로 남긴다.
                     counted.OnConnected(connection);
-                    _ = Task.Run(connection.RunReceiveLoopAsync);
+                    var connectionId = connection.Id;
+                    _ = Task.Run(connection.RunReceiveLoopAsync).ContinueWith(
+                        t => _logger.LogError(t.Exception, "Connection {ConnectionId}: receive loop faulted.", connectionId),
+                        CancellationToken.None,
+                        TaskContinuationOptions.OnlyOnFaulted,
+                        TaskScheduler.Default);
                 }
                 catch (Exception ex)
                 {

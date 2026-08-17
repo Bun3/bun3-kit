@@ -16,7 +16,8 @@ public static class RpcServiceCollectionExtensions
     /// TSession은 IConnection을 받는 public 생성자가 필요하며 나머지 인자는 DI로 주입된다.
     /// </summary>
     /// <remarks>제약(v0/v1 동일): 세션 생성자 의존성은 루트 컨테이너에서 해석되고(스코프 금지),
-    /// 호스트당 1회만 호출한다(AddServer와 리스너 싱글턴을 공유하지 않도록 함께 쓰지 말 것).</remarks>
+    /// 호스트당 1회만 호출한다 — 서버 등록 확장을 중복·혼용하면 등록 시점에
+    /// <see cref="InvalidOperationException"/>으로 실패한다.</remarks>
     public static IServiceCollection AddRpcServer<TSession, TRequest, TResponse, TUpdate>(
         this IServiceCollection services,
         Action<RpcConfig<TSession>> configure,
