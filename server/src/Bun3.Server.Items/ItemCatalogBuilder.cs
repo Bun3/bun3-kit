@@ -19,6 +19,7 @@ namespace Bun3.Server.Items
         private readonly Dictionary<string, int> _lookup = new Dictionary<string, int>(StringComparer.Ordinal);
         private readonly Dictionary<long, int> _externalLookup = new Dictionary<long, int>();
         private readonly List<Action<ItemCatalog<TDefinition>>> _validators = new List<Action<ItemCatalog<TDefinition>>>();
+        private readonly List<Action> _indexBuilders = new List<Action>();
         private bool _built;
 
         /// <summary>
@@ -31,8 +32,8 @@ namespace Bun3.Server.Items
         /// 기본 <see cref="long.MaxValue"/> = 무제한. 0 이하는 거부.</param>
         /// <param name="externalId">선택적 외부 숫자 id(DB 컬럼·Steam itemdefid 등) — 역색인에
         /// 등록된다. 중복이면 던진다. <see cref="long.MinValue"/>는 예약값이라 거부.</param>
-        /// <param name="unstackable">true면 비스택형(인스턴스형) — 수량 병합 대신 개별
-        /// 인스턴스로 보유하며 <see cref="ItemStackContainer{TQuantity,TOps}"/>가 거부한다.</param>
+        /// <param name="unstackable">true면 비스택형(인스턴스형) — 수량 병합 대신
+        /// 수량 1 인스턴스 N개로 보유하며 maxStack이 최대 인스턴스 수가 된다.</param>
         /// <returns>체이닝용 빌더 자신.</returns>
         public ItemCatalogBuilder<TDefinition> Register(
             string id,
@@ -94,6 +95,80 @@ namespace Bun3.Server.Items
             return this;
         }
 
+        /// <summary>
+        /// 단일 키 보조 색인을 선언한다(타입·카테고리 등). 색인은 <see cref="Build"/> 시
+        /// 1회 구축되며, 그전 조회는 던진다. 검증 델리게이트보다 먼저 구축되므로
+        /// 검증기에서 색인을 사용할 수 있다.
+        /// </summary>
+        /// <typeparam name="TKey">색인 키 타입.</typeparam>
+        /// <param name="keySelector">정의에서 키를 뽑는 셀렉터(빌드 시에만 호출).</param>
+        /// <returns>빌드 후 조회 가능한 색인 핸들.</returns>
+        public ItemCatalogIndex<TKey> CreateIndex<TKey>(Func<TDefinition, TKey> keySelector)
+            where TKey : notnull
+        {
+            ThrowIfBuilt();
+            if (keySelector == null)
+            {
+                throw new ArgumentNullException(nameof(keySelector));
+            }
+
+            var index = new ItemCatalogIndex<TKey>();
+            _indexBuilders.Add(() =>
+            {
+                var entries = new Dictionary<TKey, List<ItemId>>();
+                for (var i = 0; i < _definitions.Count; i++)
+                {
+                    AddIndexEntry(entries, keySelector(_definitions[i]), new ItemId(i));
+                }
+
+                index.Build(entries);
+            });
+            return index;
+        }
+
+        /// <summary>다중 키 보조 색인을 선언한다(태그 목록 등). 동작은
+        /// <see cref="CreateIndex{TKey}"/>와 동일하되 정의당 키 여러 개를 허용한다.</summary>
+        /// <typeparam name="TKey">색인 키 타입.</typeparam>
+        /// <param name="keysSelector">정의에서 키들을 뽑는 셀렉터(빌드 시에만 호출).</param>
+        /// <returns>빌드 후 조회 가능한 색인 핸들.</returns>
+        public ItemCatalogIndex<TKey> CreateMultiIndex<TKey>(Func<TDefinition, IEnumerable<TKey>> keysSelector)
+            where TKey : notnull
+        {
+            ThrowIfBuilt();
+            if (keysSelector == null)
+            {
+                throw new ArgumentNullException(nameof(keysSelector));
+            }
+
+            var index = new ItemCatalogIndex<TKey>();
+            _indexBuilders.Add(() =>
+            {
+                var entries = new Dictionary<TKey, List<ItemId>>();
+                for (var i = 0; i < _definitions.Count; i++)
+                {
+                    foreach (var key in keysSelector(_definitions[i]))
+                    {
+                        AddIndexEntry(entries, key, new ItemId(i));
+                    }
+                }
+
+                index.Build(entries);
+            });
+            return index;
+        }
+
+        private static void AddIndexEntry<TKey>(Dictionary<TKey, List<ItemId>> entries, TKey key, ItemId item)
+            where TKey : notnull
+        {
+            if (!entries.TryGetValue(key, out var list))
+            {
+                list = new List<ItemId>();
+                entries.Add(key, list);
+            }
+
+            list.Add(item);
+        }
+
         /// <summary>카탈로그를 빌드하고 검증을 실행한다. 빌더당 1회만 호출할 수 있다.</summary>
         public ItemCatalog<TDefinition> Build()
         {
@@ -108,6 +183,11 @@ namespace Bun3.Server.Items
                 _lookup,
                 _externalLookup,
                 _definitions.ToArray());
+
+            foreach (var indexBuilder in _indexBuilders)
+            {
+                indexBuilder();
+            }
 
             foreach (var validator in _validators)
             {

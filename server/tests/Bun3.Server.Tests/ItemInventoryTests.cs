@@ -1,3 +1,4 @@
+using Bun3.Gameplay.Numerics;
 using Bun3.Server.Items;
 using NUnit.Framework;
 
@@ -53,12 +54,12 @@ public class ItemInventoryTests
     [Test]
     public void Stackable_merges_into_singleton_instance()
     {
-        Assert.That(_inventory.TryAdd(_gold, 100), Is.EqualTo(ItemError.None));
-        Assert.That(_inventory.TryAdd(_gold, 50), Is.EqualTo(ItemError.None));
+        Assert.That(_inventory.TryAdd(_gold, 100), Is.EqualTo(InventoryError.None));
+        Assert.That(_inventory.TryAdd(_gold, 50), Is.EqualTo(InventoryError.None));
 
-        Assert.That(_inventory.GetQuantity(_gold), Is.EqualTo(150));
+        Assert.That(_inventory.GetQuantity(_gold), Is.EqualTo((BigNum)150));
         Assert.That(_inventory.InstanceCount, Is.EqualTo(1));
-        Assert.That(_inventory.TryRemove(_gold, 150), Is.EqualTo(ItemError.None));
+        Assert.That(_inventory.TryRemove(_gold, 150), Is.EqualTo(InventoryError.None));
         Assert.That(_inventory.InstanceCount, Is.EqualTo(0));
     }
 
@@ -67,9 +68,42 @@ public class ItemInventoryTests
     {
         _inventory.TryAdd(_potion, 8);
 
-        Assert.That(_inventory.TryAdd(_potion, 3), Is.EqualTo(ItemError.ExceedsMaxStack));
-        Assert.That(_inventory.TryRemove(_potion, 9), Is.EqualTo(ItemError.Insufficient));
-        Assert.That(_inventory.GetQuantity(_potion), Is.EqualTo(8));
+        Assert.That(_inventory.TryAdd(_potion, 3), Is.EqualTo(InventoryError.ExceedsMaxStack));
+        Assert.That(_inventory.TryRemove(_potion, 9), Is.EqualTo(InventoryError.Insufficient));
+        Assert.That(_inventory.GetQuantity(_potion), Is.EqualTo((BigNum)8));
+    }
+
+    // ---- BigNum 수량 (재화 = 아이템 행) ----
+
+    [Test]
+    public void Stackable_holds_astronomical_quantities()
+    {
+        var huge = BigNum.FromParts(5, 1000);   // 5e1000
+
+        Assert.That(_inventory.TryAdd(_gold, huge), Is.EqualTo(InventoryError.None));
+        Assert.That(_inventory.TryRemove(_gold, BigNum.FromParts(6, 1000)), Is.EqualTo(InventoryError.Insufficient));
+        // 전량 소모 — BigNum 뺄셈이 정확히 Zero를 돌려주고 엔트리가 제거된다
+        Assert.That(_inventory.TryRemove(_gold, huge), Is.EqualTo(InventoryError.None));
+        Assert.That(_inventory.InstanceCount, Is.EqualTo(0));
+    }
+
+    [Test]
+    public void Stackable_addition_is_lossy_by_contract()
+    {
+        var huge = BigNum.FromParts(1, 30);   // 1e30
+
+        _inventory.TryAdd(_gold, huge);
+        _inventory.TryAdd(_gold, 1);          // 유효 자릿수 밖 — 흡수된다
+
+        Assert.That(_inventory.GetQuantity(_gold), Is.EqualTo(huge));
+    }
+
+    [Test]
+    public void Unstackable_amounts_must_be_small_integers()
+    {
+        Assert.That(_inventory.TryAdd(_relic, 1001), Is.EqualTo(InventoryError.InvalidAmount));
+        Assert.That(_inventory.TryAdd(_relic, (BigNum)0.5), Is.EqualTo(InventoryError.InvalidAmount));
+        Assert.That(_inventory.InstanceCount, Is.EqualTo(0));
     }
 
     // ---- 판정 내부 흡수: 비스택형 ----
@@ -79,11 +113,11 @@ public class ItemInventoryTests
     {
         var created = new List<ItemInstance<ItemState>>();
 
-        Assert.That(_inventory.TryAdd(_sword, 2, created), Is.EqualTo(ItemError.None));
+        Assert.That(_inventory.TryAdd(_sword, 2, created), Is.EqualTo(InventoryError.None));
         Assert.That(created, Has.Count.EqualTo(2));
-        Assert.That(created[0].Quantity, Is.EqualTo(1));
+        Assert.That(created[0].Quantity, Is.EqualTo(BigNum.One));
         Assert.That(created[0].InstanceId, Is.Not.EqualTo(created[1].InstanceId));
-        Assert.That(_inventory.GetQuantity(_sword), Is.EqualTo(2));
+        Assert.That(_inventory.GetQuantity(_sword), Is.EqualTo((BigNum)2));
         Assert.That(_inventory.InstanceCount, Is.EqualTo(2));
     }
 
@@ -92,15 +126,8 @@ public class ItemInventoryTests
     {
         _inventory.TryAdd(_sword, 3);
 
-        Assert.That(_inventory.TryAdd(_sword, 1), Is.EqualTo(ItemError.ExceedsMaxStack));
+        Assert.That(_inventory.TryAdd(_sword, 1), Is.EqualTo(InventoryError.ExceedsMaxStack));
         Assert.That(_inventory.InstanceCount, Is.EqualTo(3));
-    }
-
-    [Test]
-    public void Unstackable_bulk_grant_is_capped_per_operation()
-    {
-        Assert.That(_inventory.TryAdd(_relic, 1001), Is.EqualTo(ItemError.InvalidAmount));
-        Assert.That(_inventory.InstanceCount, Is.EqualTo(0));
     }
 
     // ---- 잠금 ----
@@ -112,11 +139,11 @@ public class ItemInventoryTests
         _inventory.TryAdd(_sword, 2, created);
         created[0].Flags = FlagInUse;
 
-        Assert.That(_inventory.TryRemove(_sword, 2), Is.EqualTo(ItemError.Insufficient));
-        Assert.That(_inventory.TryRemove(_sword, 1), Is.EqualTo(ItemError.None));
+        Assert.That(_inventory.TryRemove(_sword, 2), Is.EqualTo(InventoryError.Insufficient));
+        Assert.That(_inventory.TryRemove(_sword, 1), Is.EqualTo(InventoryError.None));
         Assert.That(_inventory.TryGetInstance(created[0].InstanceId, out _), Is.True,
             "잠긴 인스턴스가 남아야 한다");
-        Assert.That(_inventory.TryRemoveByInstance(created[0].InstanceId, 1), Is.EqualTo(ItemError.Locked));
+        Assert.That(_inventory.TryRemoveByInstance(created[0].InstanceId, 1), Is.EqualTo(InventoryError.Locked));
     }
 
     [Test]
@@ -126,9 +153,9 @@ public class ItemInventoryTests
         _inventory.TryAdd(_gold, 100, created);
         created[0].Flags = FlagUserLocked;
 
-        Assert.That(_inventory.TryRemove(_gold, 1), Is.EqualTo(ItemError.Insufficient));
-        Assert.That(_inventory.TryAdd(_gold, 50), Is.EqualTo(ItemError.None));
-        Assert.That(_inventory.GetQuantity(_gold), Is.EqualTo(150));
+        Assert.That(_inventory.TryRemove(_gold, 1), Is.EqualTo(InventoryError.Insufficient));
+        Assert.That(_inventory.TryAdd(_gold, 50), Is.EqualTo(InventoryError.None));
+        Assert.That(_inventory.GetQuantity(_gold), Is.EqualTo((BigNum)150));
     }
 
     [Test]
@@ -138,14 +165,14 @@ public class ItemInventoryTests
         _inventory.TryAdd(_gold, 100, created);
         _inventory.TryAdd(_sword, 1, created);
 
-        Assert.That(_inventory.TryRemoveByInstance(created[0].InstanceId, 40), Is.EqualTo(ItemError.None));
-        Assert.That(_inventory.GetQuantity(_gold), Is.EqualTo(60));
-        Assert.That(_inventory.TryRemoveByInstance(created[1].InstanceId, 1), Is.EqualTo(ItemError.None));
-        Assert.That(_inventory.GetQuantity(_sword), Is.EqualTo(0));
-        Assert.That(_inventory.TryRemoveByInstance(9999, 1), Is.EqualTo(ItemError.UnknownInstance));
+        Assert.That(_inventory.TryRemoveByInstance(created[0].InstanceId, 40), Is.EqualTo(InventoryError.None));
+        Assert.That(_inventory.GetQuantity(_gold), Is.EqualTo((BigNum)60));
+        Assert.That(_inventory.TryRemoveByInstance(created[1].InstanceId, 1), Is.EqualTo(InventoryError.None));
+        Assert.That(_inventory.GetQuantity(_sword), Is.EqualTo(BigNum.Zero));
+        Assert.That(_inventory.TryRemoveByInstance(9999, 1), Is.EqualTo(InventoryError.UnknownInstance));
     }
 
-    // ---- 트랜잭션 ----
+    // ---- 트랜잭션 (델타 span 경로) ----
 
     [Test]
     public void Apply_mixes_stack_and_instance_deltas_atomically()
@@ -153,15 +180,15 @@ public class ItemInventoryTests
         _inventory.TryAdd(_gold, 500);
         var created = new List<ItemInstance<ItemState>>();
 
-        Span<ItemDelta<long>> deltas = stackalloc ItemDelta<long>[3];
-        deltas[0] = new ItemDelta<long>(_gold, -300);   // 재화 소모
-        deltas[1] = new ItemDelta<long>(_sword, 1);     // 장비 지급
-        deltas[2] = new ItemDelta<long>(_potion, 5);    // 소모품 지급
+        Span<ItemDelta> deltas = stackalloc ItemDelta[3];
+        deltas[0] = new ItemDelta(_gold, -300);
+        deltas[1] = new ItemDelta(_sword, 1);
+        deltas[2] = new ItemDelta(_potion, 5);
 
-        Assert.That(_inventory.TryApply(deltas, out _, created), Is.EqualTo(ItemError.None));
-        Assert.That(_inventory.GetQuantity(_gold), Is.EqualTo(200));
-        Assert.That(_inventory.GetQuantity(_sword), Is.EqualTo(1));
-        Assert.That(_inventory.GetQuantity(_potion), Is.EqualTo(5));
+        Assert.That(_inventory.TryApply(deltas, out _, created), Is.EqualTo(InventoryError.None));
+        Assert.That(_inventory.GetQuantity(_gold), Is.EqualTo((BigNum)200));
+        Assert.That(_inventory.GetQuantity(_sword), Is.EqualTo(BigNum.One));
+        Assert.That(_inventory.GetQuantity(_potion), Is.EqualTo((BigNum)5));
         Assert.That(created, Has.Count.EqualTo(2));   // 검 인스턴스 + 물약 싱글턴
     }
 
@@ -171,28 +198,41 @@ public class ItemInventoryTests
         _inventory.TryAdd(_gold, 100);
         var idsBefore = _nextId;
 
-        Span<ItemDelta<long>> deltas = stackalloc ItemDelta<long>[3];
-        deltas[0] = new ItemDelta<long>(_sword, 2);
-        deltas[1] = new ItemDelta<long>(_gold, -50);
-        deltas[2] = new ItemDelta<long>(_gold, -60);    // 잔량 50 < 60
+        Span<ItemDelta> deltas = stackalloc ItemDelta[3];
+        deltas[0] = new ItemDelta(_sword, 2);
+        deltas[1] = new ItemDelta(_gold, -50);
+        deltas[2] = new ItemDelta(_gold, -60);    // 잔량 50 < 60
 
-        Assert.That(_inventory.TryApply(deltas, out var failedIndex), Is.EqualTo(ItemError.Insufficient));
+        Assert.That(_inventory.TryApply(deltas, out var failedIndex), Is.EqualTo(InventoryError.Insufficient));
         Assert.That(failedIndex, Is.EqualTo(2));
-        Assert.That(_inventory.GetQuantity(_gold), Is.EqualTo(100));
-        Assert.That(_inventory.GetQuantity(_sword), Is.EqualTo(0));
+        Assert.That(_inventory.GetQuantity(_gold), Is.EqualTo((BigNum)100));
+        Assert.That(_inventory.GetQuantity(_sword), Is.EqualTo(BigNum.Zero));
         Assert.That(_nextId, Is.EqualTo(idsBefore), "실패한 배치는 id 발급자를 호출하면 안 된다");
     }
 
     [Test]
     public void Apply_accumulates_duplicate_unstackable_deltas()
     {
-        Span<ItemDelta<long>> deltas = stackalloc ItemDelta<long>[2];
-        deltas[0] = new ItemDelta<long>(_sword, 2);
-        deltas[1] = new ItemDelta<long>(_sword, 2);   // 누적 4 > 최대 3
+        Span<ItemDelta> deltas = stackalloc ItemDelta[2];
+        deltas[0] = new ItemDelta(_sword, 2);
+        deltas[1] = new ItemDelta(_sword, 2);   // 누적 4 > 최대 3
 
-        Assert.That(_inventory.TryApply(deltas, out var failedIndex), Is.EqualTo(ItemError.ExceedsMaxStack));
+        Assert.That(_inventory.TryApply(deltas, out var failedIndex), Is.EqualTo(InventoryError.ExceedsMaxStack));
         Assert.That(failedIndex, Is.EqualTo(1));
         Assert.That(_inventory.InstanceCount, Is.EqualTo(0));
+    }
+
+    [Test]
+    public void Apply_rejects_zero_delta_and_empty_batch_is_success()
+    {
+        var container = _inventory;
+
+        Span<ItemDelta> deltas = stackalloc ItemDelta[1];
+        deltas[0] = new ItemDelta(_gold, 0);
+        Assert.That(container.TryApply(deltas, out var failedIndex), Is.EqualTo(InventoryError.InvalidAmount));
+        Assert.That(failedIndex, Is.EqualTo(0));
+
+        Assert.That(container.TryApply(ReadOnlySpan<ItemDelta>.Empty, out _), Is.EqualTo(InventoryError.None));
     }
 
     // ---- 변경 추적 ----
@@ -209,7 +249,6 @@ public class ItemInventoryTests
         Assert.That(buffer, Has.Count.EqualTo(2));
         Assert.That(_inventory.HasChanges, Is.False);
 
-        // 갱신 + 제거
         created[0].State.Level = 5;
         created[0].MarkChanged();
         _inventory.TryRemoveByInstance(created[1].InstanceId, 1);
@@ -254,16 +293,15 @@ public class ItemInventoryTests
     [Test]
     public void Load_accepts_external_ids_without_tracking()
     {
-        Assert.That(_inventory.TryLoadInstance(777, _gold, 500, 0, new ItemState()), Is.EqualTo(ItemError.None));
-        Assert.That(_inventory.TryLoadInstance(778, _sword, 1, FlagInUse, new ItemState()), Is.EqualTo(ItemError.None));
+        Assert.That(_inventory.TryLoadInstance(777, _gold, 500, 0, new ItemState()), Is.EqualTo(InventoryError.None));
+        Assert.That(_inventory.TryLoadInstance(778, _sword, 1, FlagInUse, new ItemState()), Is.EqualTo(InventoryError.None));
 
-        Assert.That(_inventory.GetQuantity(_gold), Is.EqualTo(500));
+        Assert.That(_inventory.GetQuantity(_gold), Is.EqualTo((BigNum)500));
         Assert.That(_inventory.HasChanges, Is.False);
         Assert.That(_changed, Is.EqualTo(0));
 
-        // 로드된 스택 싱글턴에 이어서 병합된다
-        Assert.That(_inventory.TryAdd(_gold, 1), Is.EqualTo(ItemError.None));
-        Assert.That(_inventory.GetQuantity(_gold), Is.EqualTo(501));
+        Assert.That(_inventory.TryAdd(_gold, 1), Is.EqualTo(InventoryError.None));
+        Assert.That(_inventory.GetQuantity(_gold), Is.EqualTo((BigNum)501));
         Assert.That(_inventory.InstanceCount, Is.EqualTo(2));
     }
 
@@ -273,30 +311,13 @@ public class ItemInventoryTests
         _inventory.TryLoadInstance(1, _gold, 10, 0, new ItemState());
 
         Assert.That(_inventory.TryLoadInstance(1, _sword, 1, 0, new ItemState()),
-            Is.EqualTo(ItemError.DuplicateInstance));
+            Is.EqualTo(InventoryError.DuplicateInstance));
         Assert.That(_inventory.TryLoadInstance(2, _gold, 10, 0, new ItemState()),
-            Is.EqualTo(ItemError.DuplicateInstance), "스택형 정의의 두 번째 인스턴스");
+            Is.EqualTo(InventoryError.DuplicateInstance), "스택형 정의의 두 번째 인스턴스");
         Assert.That(_inventory.TryLoadInstance(3, _sword, 2, 0, new ItemState()),
-            Is.EqualTo(ItemError.InvalidAmount), "비스택형은 수량 1만");
+            Is.EqualTo(InventoryError.InvalidAmount), "비스택형은 수량 1만");
         Assert.That(_inventory.TryLoadInstance(4, _potion, 11, 0, new ItemState()),
-            Is.EqualTo(ItemError.ExceedsMaxStack));
-    }
-
-    // ---- 스택 컨테이너 계약 강제 ----
-
-    [Test]
-    public void Stack_container_rejects_unstackable_definitions()
-    {
-        var container = new ItemStackContainer(_catalog);
-
-        Assert.That(container.TryAdd(_sword, 1), Is.EqualTo(ItemError.NotStackable));
-        Assert.That(container.TryRemove(_sword, 1), Is.EqualTo(ItemError.NotStackable));
-        Assert.That(container.TryLoad(_sword, 1), Is.EqualTo(ItemError.NotStackable));
-
-        Span<ItemDelta<long>> deltas = stackalloc ItemDelta<long>[1];
-        deltas[0] = new ItemDelta<long>(_sword, 1);
-        Assert.That(container.TryApply(deltas, out var failedIndex), Is.EqualTo(ItemError.NotStackable));
-        Assert.That(failedIndex, Is.EqualTo(0));
+            Is.EqualTo(InventoryError.ExceedsMaxStack));
     }
 
     // ---- 무할당 ----
@@ -306,9 +327,9 @@ public class ItemInventoryTests
     {
         _inventory.TryAdd(_gold, 1000);
         _inventory.TryAdd(_sword, 2);
-        Span<ItemDelta<long>> deltas = stackalloc ItemDelta<long>[2];
-        deltas[0] = new ItemDelta<long>(_gold, 10);
-        deltas[1] = new ItemDelta<long>(_gold, -10);
+        Span<ItemDelta> deltas = stackalloc ItemDelta[2];
+        deltas[0] = new ItemDelta(_gold, 10);
+        deltas[1] = new ItemDelta(_gold, -10);
 
         for (var i = 0; i < 3; i++)   // 워밍업 (열거 포함 — Dictionary.Values 지연 할당 1회 소화)
         {

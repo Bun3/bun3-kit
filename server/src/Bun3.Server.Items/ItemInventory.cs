@@ -1,13 +1,14 @@
 using System;
 using System.Collections.Generic;
+using Bun3.Gameplay.Numerics;
 
 namespace Bun3.Server.Items
 {
     /// <summary>
-    /// 스택/인스턴스 통합 인벤토리 — 스택형·비스택형 판정을 카탈로그 메타로 내부에서
-    /// 정확히 한 번 수행한다(호출자는 몰라도 된다). 스택형 정의는 정의당 싱글턴
-    /// 인스턴스로 자동 병합, 비스택형은 수량 1 인스턴스 N개. 수량은 long 고정 —
-    /// BigNum 대수량 재화는 <see cref="BigNumItemStackContainer"/> 몫.
+    /// 스택/인스턴스 통합 인벤토리 — 유일한 플레이어 아이템 컨테이너. 재화도 스택형
+    /// 정의의 아이템 행으로 처리한다(idlez 실물 구조). 스택형·비스택형 판정은 카탈로그
+    /// 메타로 내부에서 정확히 한 번 수행하며, 스택형은 정의당 싱글턴 인스턴스로 자동
+    /// 병합, 비스택형은 수량 1 인스턴스 N개. 수량은 <see cref="BigNum"/>(long 암시 변환).
     /// 모든 변경 연산은 원자적이며 실패 시 완전 무변경. 락 없음(세션 액터 단일 스레드 계약).
     /// 조회·열거·소모 경로는 무할당, 인스턴스 생성만 본질적 할당(저빈도).
     /// 파일 구성: 이 파일(생성·조회) / Operations(지급·소모·트랜잭션) / Tracking(변경 추적·로드).
@@ -15,7 +16,7 @@ namespace Bun3.Server.Items
     /// <typeparam name="TState">게임이 정의하는 인스턴스 상태 타입.</typeparam>
     public sealed partial class ItemInventory<TState>
     {
-        // ponytail: 비스택형 1회 지급 인스턴스 수 상한 — 무제한 maxStack 정의에 대량 지급 시
+        // ponytail: 비스택형 1회 연산 인스턴스 수 상한 — 무제한 maxStack 정의에 대량 지급 시
         // 생성 루프 폭주를 막는다. 정당한 대량 지급이 필요해지면 옵션으로 승격.
         internal const int MaxInstancesPerOperation = 1000;
 
@@ -30,7 +31,16 @@ namespace Bun3.Server.Items
         private readonly List<ItemInstance<TState>> _removeScratch = new List<ItemInstance<TState>>();
         private bool _hasChanges;
 
-        private static LongQuantityOps Ops => default;
+        // 트랜잭션 스크래치 — 전부 생성 시 1회 할당 후 재사용(커밋 경로 무할당).
+        private readonly List<TxOp> _txOps = new List<TxOp>();
+        private readonly List<TxOp> _applyOps = new List<TxOp>();
+        private readonly List<long> _txUnstackableTargets = new List<long>();
+        private readonly List<long> _txConsumedTargets = new List<long>();
+        private readonly List<BigNum> _txResolved = new List<BigNum>();
+        private readonly List<ItemId> _txNetIds = new List<ItemId>();
+        private readonly List<BigNum> _txNetTotal = new List<BigNum>();
+        private readonly List<BigNum> _txNetPool = new List<BigNum>();
+        private int _txToken;
 
         /// <summary>인벤토리를 만든다.</summary>
         /// <param name="catalog">아이템 카탈로그.</param>
@@ -66,24 +76,24 @@ namespace Bun3.Server.Items
         public int InstanceCount => _instances.Count;
 
         /// <summary>정의의 총 보유 수량 — 스택형은 싱글턴 수량, 비스택형은 인스턴스 수. 미보유면 0.</summary>
-        public long GetQuantity(ItemId item)
+        public BigNum GetQuantity(ItemId item)
         {
             if (_stackSingletons.TryGetValue(item, out var singletonId))
             {
                 return _instances[singletonId].Quantity;
             }
 
-            long total = 0;
+            long count = 0;
             // ponytail: 정의별 색인 없이 전체 스캔(O(인스턴스 수)) — 플레이어 인벤 수백 규모 전제.
             foreach (var entry in _instances)
             {
                 if (entry.Value.Item == item)
                 {
-                    total += entry.Value.Quantity;
+                    count++;
                 }
             }
 
-            return total;
+            return count;
         }
 
         /// <summary>인스턴스 id로 조회한다.</summary>

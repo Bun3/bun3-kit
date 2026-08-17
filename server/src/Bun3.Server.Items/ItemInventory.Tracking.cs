@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Bun3.Gameplay.Numerics;
 
 namespace Bun3.Server.Items
 {
@@ -11,61 +12,65 @@ namespace Bun3.Server.Items
 
         /// <summary>
         /// 저장 로드용 — 기존 인스턴스 id(DB·Steam 권위)를 그대로 수용하고 추적·통지하지
-        /// 않는다. 중복 id·스택형 정의의 두 번째 인스턴스는 <see cref="ItemError.DuplicateInstance"/>,
-        /// 비스택형에 수량 1 외는 <see cref="ItemError.InvalidAmount"/>, maxStack 검사 수행.
+        /// 않는다. 중복 id·스택형 정의의 두 번째 인스턴스는 <see cref="InventoryError.DuplicateInstance"/>,
+        /// 비스택형에 수량 1 외는 <see cref="InventoryError.InvalidAmount"/>, maxStack 검사 수행.
         /// </summary>
-        public ItemError TryLoadInstance(long instanceId, ItemId item, long quantity, uint flags, TState state)
+        public InventoryError TryLoadInstance(long instanceId, ItemId item, BigNum quantity, uint flags, TState state)
         {
             if (!_catalog.Contains(item))
             {
-                return ItemError.UnknownItem;
+                return InventoryError.UnknownItem;
             }
 
-            if (quantity <= 0)
+            if (quantity.Sign <= 0)
             {
-                return ItemError.InvalidAmount;
+                return InventoryError.InvalidAmount;
             }
 
             if (_instances.ContainsKey(instanceId))
             {
-                return ItemError.DuplicateInstance;
+                return InventoryError.DuplicateInstance;
             }
 
             var maxStack = _catalog.GetMaxStack(item);
             if (_catalog.IsUnstackable(item))
             {
-                if (quantity != 1)
+                if (quantity.CompareTo(BigNum.One) != 0)
                 {
-                    return ItemError.InvalidAmount;
+                    return InventoryError.InvalidAmount;
                 }
 
-                if (maxStack != long.MaxValue && GetQuantity(item) + 1 > maxStack)
+                if (maxStack != long.MaxValue && GetQuantity(item).CompareTo(maxStack - 1) > 0)
                 {
-                    return ItemError.ExceedsMaxStack;
+                    return InventoryError.ExceedsMaxStack;
                 }
             }
             else
             {
                 if (_stackSingletons.ContainsKey(item))
                 {
-                    return ItemError.DuplicateInstance;
+                    return InventoryError.DuplicateInstance;
                 }
 
-                if (maxStack != long.MaxValue && quantity > maxStack)
+                if (maxStack != long.MaxValue && quantity.CompareTo(maxStack) > 0)
                 {
-                    return ItemError.ExceedsMaxStack;
+                    return InventoryError.ExceedsMaxStack;
                 }
 
                 _stackSingletons.Add(item, instanceId);
             }
 
             _instances.Add(instanceId, new ItemInstance<TState>(this, instanceId, item, quantity, flags, state));
-            return ItemError.None;
+            return InventoryError.None;
         }
 
-        /// <summary>마지막 드레인 이후의 변경(Created/Updated/Removed)을 버퍼에 담고 추적을
-        /// 초기화한다. 버퍼는 호출자 소유(재사용 시 무할당) — 비우지 않고 이어 담는다.
-        /// 순서는 Removed 먼저, 이후 순서 미보장.</summary>
+        /// <summary>
+        /// 마지막 드레인 이후의 변경(Created/Updated/Removed)을 버퍼에 담고 추적을
+        /// 초기화한다. 순서는 Removed 먼저, 이후 순서 미보장. 드레인은 인메모리 스냅샷이며
+        /// 파괴적이다 — <b>버퍼가 변경 집합의 소유권을 넘겨받으므로</b> 게임은 영속화 성공
+        /// 전까지 버퍼를 유지하고, 실패 시 같은 버퍼로 재시도한다(Created/Updated는 인스턴스
+        /// 참조라 재시도 시점의 최신 상태가 나간다). DB I/O는 게임의 async 저장 훅 몫.
+        /// </summary>
         public void DrainChanges(List<ItemChange<TState>> buffer)
         {
             if (buffer == null)

@@ -102,6 +102,27 @@ public class ItemCatalogTests
     }
 
     [Test]
+    public void Indexes_are_declared_before_build_and_queried_after()
+    {
+        var builder = new ItemCatalogBuilder<TestDef>();
+        var byName = builder.CreateIndex(def => def.DisplayName);
+        var byChar = builder.CreateMultiIndex(def => def.DisplayName.ToCharArray().Distinct());
+
+        Assert.That(() => byName.Get("골드"), Throws.InvalidOperationException, "Build 전 조회 금지");
+
+        builder.Register("gold", new TestDef("골드"))
+            .Register("gold2", new TestDef("골드"))
+            .Register("gem", new TestDef("보석"))
+            .Build();
+
+        Assert.That(byName.Get("골드").Length, Is.EqualTo(2));
+        Assert.That(byName.Get("보석").Length, Is.EqualTo(1));
+        Assert.That(byName.Get("없음").Length, Is.EqualTo(0), "미등록 키는 빈 span");
+        Assert.That(byChar.Get('골').Length, Is.EqualTo(2));
+        Assert.That(byChar.Contains('석'), Is.True);
+    }
+
+    [Test]
     public void Build_is_single_use()
     {
         var builder = new ItemCatalogBuilder<TestDef>().Register("gold", new TestDef("골드"));

@@ -1,203 +1,334 @@
 using System;
 using System.Collections.Generic;
+using Bun3.Gameplay.Numerics;
 
 namespace Bun3.Server.Items
 {
-    // 지급·소모·트랜잭션 — 스택/인스턴스 판정과 원자적 적용의 본체.
+    // 지급·소모·트랜잭션 — 모든 변경 API가 단일 커밋 코어(CommitOps)를 지난다.
     public sealed partial class ItemInventory<TState>
     {
-        /// <summary>수량을 지급한다. amount는 양수여야 한다. 비스택형은 amount개 인스턴스가
-        /// 생성되며 <paramref name="created"/>에 담긴다(스택 싱글턴 신규 생성 포함).</summary>
-        public ItemError TryAdd(ItemId item, long amount, List<ItemInstance<TState>>? created = null)
+        private static readonly BigNum MaxInstancesPerOperationQuantity = MaxInstancesPerOperation;
+
+        internal enum TxOpKind : byte
         {
-            if (amount <= 0)
+            Add,
+            RemoveByItem,
+            RemoveInstanceAll,
+            RemoveInstanceAmount,
+        }
+
+        internal readonly struct TxOp
+        {
+            internal TxOp(TxOpKind kind, ItemId item, long instanceId, BigNum amount)
             {
-                return ItemError.InvalidAmount;
+                Kind = kind;
+                Item = item;
+                InstanceId = instanceId;
+                Amount = amount;
             }
 
-            Span<ItemDelta<long>> delta = stackalloc ItemDelta<long>[1];
-            delta[0] = new ItemDelta<long>(item, amount);
-            return TryApply(delta, out _, created);
+            internal TxOpKind Kind { get; }
+            internal ItemId Item { get; }
+            internal long InstanceId { get; }
+            internal BigNum Amount { get; }
+        }
+
+        /// <summary>
+        /// 트랜잭션 빌더를 시작한다 — 정의 단위와 인스턴스 지정 연산을 섞은 원자 배치.
+        /// 동시 배치는 1개: 새 Begin은 이전 미커밋 배치를 버리고, 낡은 빌더 사용은 던진다.
+        /// </summary>
+        public InventoryTransaction<TState> BeginTransaction()
+        {
+            _txOps.Clear();
+            _txToken++;
+            return new InventoryTransaction<TState>(this, _txToken);
+        }
+
+        internal void TxRecord(int token, TxOp op)
+        {
+            if (token != _txToken)
+            {
+                throw new InvalidOperationException("낡은 트랜잭션 빌더입니다 — BeginTransaction 이후의 빌더만 유효합니다.");
+            }
+
+            _txOps.Add(op);
+        }
+
+        internal InventoryError TxCommit(int token, out int failedIndex, List<ItemInstance<TState>>? created)
+        {
+            if (token != _txToken)
+            {
+                throw new InvalidOperationException("낡은 트랜잭션 빌더입니다 — BeginTransaction 이후의 빌더만 유효합니다.");
+            }
+
+            _txToken++;   // 커밋 후 빌더 재사용 차단
+            var error = CommitOps(_txOps, out failedIndex, created);
+            _txOps.Clear();
+            return error;
+        }
+
+        /// <summary>수량을 지급한다. amount는 양수여야 한다. 비스택형은 amount개(정수·상한
+        /// <see cref="MaxInstancesPerOperation"/>) 인스턴스가 생성되며 <paramref name="created"/>에
+        /// 담긴다(스택 싱글턴 신규 생성 포함).</summary>
+        public InventoryError TryAdd(ItemId item, BigNum amount, List<ItemInstance<TState>>? created = null)
+        {
+            _applyOps.Clear();
+            _applyOps.Add(new TxOp(TxOpKind.Add, item, 0, amount));
+            return CommitOps(_applyOps, out _, created);
         }
 
         /// <summary>수량을 소모한다. amount는 양수여야 한다. 비스택형은 잠금 아닌 인스턴스
         /// amount개가 제거된다(순서 미보장 — 특정 인스턴스는 <see cref="TryRemoveByInstance"/>).</summary>
-        public ItemError TryRemove(ItemId item, long amount)
+        public InventoryError TryRemove(ItemId item, BigNum amount)
         {
-            if (amount <= 0)
-            {
-                return ItemError.InvalidAmount;
-            }
-
-            Span<ItemDelta<long>> delta = stackalloc ItemDelta<long>[1];
-            delta[0] = new ItemDelta<long>(item, -amount);
-            return TryApply(delta, out _, null);
+            _applyOps.Clear();
+            _applyOps.Add(new TxOp(TxOpKind.RemoveByItem, item, 0, amount));
+            return CommitOps(_applyOps, out _, null);
         }
 
-        /// <summary>특정 인스턴스에서 수량을 소모한다. 잠금 인스턴스는 <see cref="ItemError.Locked"/>.
+        /// <summary>특정 인스턴스에서 수량을 소모한다. 잠금 인스턴스는 <see cref="InventoryError.Locked"/>.
         /// 비스택형은 수량이 1이므로 amount 1로 인스턴스 자체가 제거된다.</summary>
-        public ItemError TryRemoveByInstance(long instanceId, long amount)
+        public InventoryError TryRemoveByInstance(long instanceId, BigNum amount)
         {
-            if (!_instances.TryGetValue(instanceId, out var instance))
-            {
-                return ItemError.UnknownInstance;
-            }
-
-            if (amount <= 0)
-            {
-                return ItemError.InvalidAmount;
-            }
-
-            if ((instance.Flags & _removeBlockingFlags) != 0)
-            {
-                return ItemError.Locked;
-            }
-
-            if (amount > instance.Quantity)
-            {
-                return ItemError.Insufficient;
-            }
-
-            if (amount == instance.Quantity)
-            {
-                RemoveInstance(instance);
-            }
-            else
-            {
-                instance.Quantity -= amount;
-                MarkChangedNoNotify(instance);
-            }
-
-            _hasChanges = true;
-            _onChanged?.Invoke();
-            return ItemError.None;
+            _applyOps.Clear();
+            _applyOps.Add(new TxOp(TxOpKind.RemoveInstanceAmount, ItemId.None, instanceId, amount));
+            return CommitOps(_applyOps, out _, null);
         }
 
         /// <summary>
         /// 복수 델타를 전부-아니면-전무로 적용한다. 스택형·비스택형 혼합 가능 — 판정은
         /// 내부에서 1회. 순차 판정(같은 정의의 앞선 델타 누적 반영)이며 실패 시 완전
-        /// 무변경, <paramref name="failedIndex"/>가 원인 델타를 가리킨다. id 발급자·상태
-        /// 팩토리는 검증 통과 후에만 호출된다. 성공 시 onChanged는 배치당 1회.
+        /// 무변경, <paramref name="failedIndex"/>가 원인 델타를 가리킨다.
         /// </summary>
-        public ItemError TryApply(
-            ReadOnlySpan<ItemDelta<long>> deltas,
+        public InventoryError TryApply(
+            ReadOnlySpan<ItemDelta> deltas,
             out int failedIndex,
             List<ItemInstance<TState>>? created = null)
         {
-            failedIndex = -1;
-            if (deltas.Length == 0)
-            {
-                return ItemError.None;
-            }
-
+            _applyOps.Clear();
             for (var i = 0; i < deltas.Length; i++)
             {
                 var delta = deltas[i];
-                if (!_catalog.Contains(delta.Item))
+                _applyOps.Add(delta.Amount.Sign >= 0
+                    ? new TxOp(TxOpKind.Add, delta.Item, 0, delta.Amount)
+                    : new TxOp(TxOpKind.RemoveByItem, delta.Item, 0, -delta.Amount));
+            }
+
+            return CommitOps(_applyOps, out failedIndex, created);
+        }
+
+        /// <summary>
+        /// 커밋 코어 — 검증 패스(수량 시뮬레이션)에서 전 연산이 통과해야만 적용 패스로
+        /// 넘어간다. 배치 내 인스턴스 지정 소모가 가리키는 비스택형 인스턴스는 정의 단위
+        /// 소모의 후보 풀에서 배치 전체에 걸쳐 제외된다(순서 무관). id 발급자·상태 팩토리는
+        /// 검증 통과 후에만 호출되고, 성공 시 onChanged는 배치당 1회다.
+        /// </summary>
+        private InventoryError CommitOps(List<TxOp> ops, out int failedIndex, List<ItemInstance<TState>>? created)
+        {
+            failedIndex = -1;
+            if (ops.Count == 0)
+            {
+                return InventoryError.None;
+            }
+
+            // 지정 대상 수집 — 비스택형 지정 인스턴스는 정의 단위 소모 풀에서 전역 제외.
+            _txUnstackableTargets.Clear();
+            for (var i = 0; i < ops.Count; i++)
+            {
+                var op = ops[i];
+                if (op.Kind != TxOpKind.RemoveInstanceAll && op.Kind != TxOpKind.RemoveInstanceAmount)
                 {
-                    failedIndex = i;
-                    return ItemError.UnknownItem;
+                    continue;
                 }
 
-                if (delta.Amount == 0)
+                if (_instances.TryGetValue(op.InstanceId, out var target) && _catalog.IsUnstackable(target.Item))
                 {
-                    failedIndex = i;
-                    return ItemError.InvalidAmount;
+                    _txUnstackableTargets.Add(op.InstanceId);
                 }
+            }
 
-                // ponytail: 같은 정의의 앞선 델타를 재스캔(O(n²)) — 배치가 커지면 스크래치 맵 도입.
-                long priorNet = 0;
-                for (var j = 0; j < i; j++)
-                {
-                    if (deltas[j].Item == delta.Item)
-                    {
-                        priorNet += deltas[j].Amount;
-                    }
-                }
-
-                var error = ValidateDelta(delta.Item, priorNet, delta.Amount);
-                if (error != ItemError.None)
+            // 검증 패스 — 정의별 (총량, 가용 풀) 시뮬레이션 + 인스턴스 지정 소모량 확정.
+            _txConsumedTargets.Clear();
+            _txResolved.Clear();
+            _txNetIds.Clear();
+            _txNetTotal.Clear();
+            _txNetPool.Clear();
+            for (var i = 0; i < ops.Count; i++)
+            {
+                var error = ValidateOp(ops[i], out var resolved);
+                _txResolved.Add(resolved);
+                if (error != InventoryError.None)
                 {
                     failedIndex = i;
                     return error;
                 }
             }
 
-            for (var i = 0; i < deltas.Length; i++)
+            // 적용 패스 — 실패 불가능 상태에서 순서대로 반영.
+            for (var i = 0; i < ops.Count; i++)
             {
-                var delta = deltas[i];
-                if (delta.Amount > 0)
-                {
-                    ApplyGrant(delta.Item, delta.Amount, created);
-                }
-                else
-                {
-                    ApplyConsume(delta.Item, -delta.Amount);
-                }
+                ApplyOp(ops[i], _txResolved[i], created);
             }
 
             _hasChanges = true;
             _onChanged?.Invoke();
-            return ItemError.None;
+            return InventoryError.None;
         }
 
-        /// <summary>델타 1건을 순차 시뮬레이션 상태(priorNet)에서 판정한다.</summary>
-        private ItemError ValidateDelta(ItemId item, long priorNet, long amount)
+        private InventoryError ValidateOp(TxOp op, out BigNum resolved)
         {
-            if (amount > 0)
+            resolved = BigNum.Zero;
+            switch (op.Kind)
             {
-                if (_catalog.IsUnstackable(item) && amount > MaxInstancesPerOperation)
+                case TxOpKind.Add:
+                case TxOpKind.RemoveByItem:
                 {
-                    return ItemError.InvalidAmount;
+                    if (!_catalog.Contains(op.Item))
+                    {
+                        return InventoryError.UnknownItem;
+                    }
+
+                    if (op.Amount.Sign <= 0)
+                    {
+                        return InventoryError.InvalidAmount;
+                    }
+
+                    if (_catalog.IsUnstackable(op.Item) && !TryToInstanceCount(op.Amount, out _))
+                    {
+                        return InventoryError.InvalidAmount;
+                    }
+
+                    var net = NetIndexOf(op.Item);
+                    if (op.Kind == TxOpKind.Add)
+                    {
+                        if (!TryAddQuantity(_txNetTotal[net], op.Amount, out var total))
+                        {
+                            return InventoryError.ExceedsMaxStack;
+                        }
+
+                        var maxStack = _catalog.GetMaxStack(op.Item);
+                        if (maxStack != long.MaxValue && total.CompareTo(maxStack) > 0)
+                        {
+                            return InventoryError.ExceedsMaxStack;
+                        }
+
+                        _txNetTotal[net] = total;
+                        _txNetPool[net] += op.Amount;   // 신규 지급분은 잠금 없음 — 가용
+                        return InventoryError.None;
+                    }
+
+                    if (_txNetPool[net].CompareTo(op.Amount) < 0)
+                    {
+                        return InventoryError.Insufficient;
+                    }
+
+                    _txNetPool[net] -= op.Amount;
+                    _txNetTotal[net] -= op.Amount;
+                    return InventoryError.None;
                 }
 
-                var total = GetQuantity(item) + priorNet;
-                if (!Ops.TryAdd(total, amount, out var result))
+                default:
                 {
-                    return ItemError.ExceedsMaxStack;
-                }
+                    if (!_instances.TryGetValue(op.InstanceId, out var target))
+                    {
+                        return InventoryError.UnknownInstance;
+                    }
 
-                var maxStack = _catalog.GetMaxStack(item);
-                if (maxStack != long.MaxValue && result > maxStack)
-                {
-                    return ItemError.ExceedsMaxStack;
-                }
+                    if (op.Kind == TxOpKind.RemoveInstanceAmount && op.Amount.Sign <= 0)
+                    {
+                        return InventoryError.InvalidAmount;
+                    }
 
-                return ItemError.None;
+                    if ((target.Flags & _removeBlockingFlags) != 0)
+                    {
+                        return InventoryError.Locked;
+                    }
+
+                    if (_catalog.IsUnstackable(target.Item))
+                    {
+                        if (op.Kind == TxOpKind.RemoveInstanceAmount)
+                        {
+                            var comparison = op.Amount.CompareTo(BigNum.One);
+                            if (comparison > 0)
+                            {
+                                return InventoryError.Insufficient;
+                            }
+
+                            if (comparison < 0)
+                            {
+                                return InventoryError.InvalidAmount;
+                            }
+                        }
+
+                        for (var i = 0; i < _txConsumedTargets.Count; i++)
+                        {
+                            if (_txConsumedTargets[i] == op.InstanceId)
+                            {
+                                return InventoryError.Insufficient;   // 같은 인스턴스 중복 지정
+                            }
+                        }
+
+                        _txConsumedTargets.Add(op.InstanceId);
+                        var netUnstackable = NetIndexOf(target.Item);
+                        _txNetTotal[netUnstackable] -= BigNum.One;   // 풀은 이미 전역 제외됨
+                        resolved = BigNum.One;
+                        return InventoryError.None;
+                    }
+
+                    // 스택 싱글턴 지정 — 정의 단위 소모와 같은 풀로 정산한다.
+                    var netSingleton = NetIndexOf(target.Item);
+                    var amount = op.Kind == TxOpKind.RemoveInstanceAll ? _txNetPool[netSingleton] : op.Amount;
+                    if (amount.Sign <= 0 || _txNetPool[netSingleton].CompareTo(amount) < 0)
+                    {
+                        return InventoryError.Insufficient;
+                    }
+
+                    _txNetPool[netSingleton] -= amount;
+                    _txNetTotal[netSingleton] -= amount;
+                    resolved = amount;
+                    return InventoryError.None;
+                }
             }
-
-            // 소모 — 잠금 인스턴스를 제외한 가용 수량 기준. 앞선 지급분은 잠금 없이 생성되므로 가용.
-            var removable = GetRemovableQuantity(item) + priorNet;
-            return removable + amount < 0 ? ItemError.Insufficient : ItemError.None;
         }
 
-        private long GetRemovableQuantity(ItemId item)
+        private void ApplyOp(TxOp op, BigNum resolved, List<ItemInstance<TState>>? created)
         {
-            if (_stackSingletons.TryGetValue(item, out var singletonId))
+            switch (op.Kind)
             {
-                var singleton = _instances[singletonId];
-                return (singleton.Flags & _removeBlockingFlags) != 0 ? 0 : singleton.Quantity;
-            }
+                case TxOpKind.Add:
+                    ApplyGrant(op.Item, op.Amount, created);
+                    return;
 
-            long total = 0;
-            foreach (var entry in _instances)
-            {
-                if (entry.Value.Item == item && (entry.Value.Flags & _removeBlockingFlags) == 0)
+                case TxOpKind.RemoveByItem:
+                    ApplyConsume(op.Item, op.Amount);
+                    return;
+
+                default:
                 {
-                    total += entry.Value.Quantity;
+                    var target = _instances[op.InstanceId];
+                    if (target.Quantity.CompareTo(resolved) == 0)
+                    {
+                        RemoveInstance(target);
+                    }
+                    else
+                    {
+                        target.Quantity -= resolved;
+                        MarkChangedNoNotify(target);
+                    }
+
+                    return;
                 }
             }
-
-            return total;
         }
 
-        private void ApplyGrant(ItemId item, long amount, List<ItemInstance<TState>>? created)
+        private void ApplyGrant(ItemId item, BigNum amount, List<ItemInstance<TState>>? created)
         {
             if (_catalog.IsUnstackable(item))
             {
-                for (long i = 0; i < amount; i++)
+                TryToInstanceCount(amount, out var count);   // 검증 통과분 — 실패 불가
+                for (var i = 0; i < count; i++)
                 {
-                    var instance = CreateInstance(item, 1);
+                    var instance = CreateInstance(item, BigNum.One);
                     created?.Add(instance);
                 }
 
@@ -218,12 +349,12 @@ namespace Bun3.Server.Items
             }
         }
 
-        private void ApplyConsume(ItemId item, long amount)
+        private void ApplyConsume(ItemId item, BigNum amount)
         {
             if (_stackSingletons.TryGetValue(item, out var singletonId))
             {
                 var singleton = _instances[singletonId];
-                if (singleton.Quantity == amount)
+                if (singleton.Quantity.CompareTo(amount) == 0)
                 {
                     RemoveInstance(singleton);
                 }
@@ -236,16 +367,19 @@ namespace Bun3.Server.Items
                 return;
             }
 
-            // 비스택형 — 잠금 아닌 인스턴스를 amount개 수집 후 제거(열거 중 변경 회피).
+            // 비스택형 — 잠금·배치 지정 대상이 아닌 인스턴스를 count개 수집 후 제거.
+            TryToInstanceCount(amount, out var count);   // 검증 통과분 — 실패 불가
             _removeScratch.Clear();
             foreach (var entry in _instances)
             {
-                if (_removeScratch.Count >= (int)amount)
+                if (_removeScratch.Count >= count)
                 {
                     break;
                 }
 
-                if (entry.Value.Item == item && (entry.Value.Flags & _removeBlockingFlags) == 0)
+                if (entry.Value.Item == item
+                    && (entry.Value.Flags & _removeBlockingFlags) == 0
+                    && !IsUnstackableTarget(entry.Key))
                 {
                     _removeScratch.Add(entry.Value);
                 }
@@ -259,7 +393,60 @@ namespace Bun3.Server.Items
             _removeScratch.Clear();
         }
 
-        private ItemInstance<TState> CreateInstance(ItemId item, long quantity)
+        /// <summary>정의별 시뮬레이션 엔트리를 찾거나 만든다 — (총량, 가용 풀) 시작값은
+        /// 현재 보유량과 잠금·지정 대상 제외 가용량.</summary>
+        private int NetIndexOf(ItemId item)
+        {
+            for (var i = 0; i < _txNetIds.Count; i++)
+            {
+                if (_txNetIds[i] == item)
+                {
+                    return i;
+                }
+            }
+
+            _txNetIds.Add(item);
+            _txNetTotal.Add(GetQuantity(item));
+            _txNetPool.Add(GetRemovablePoolBase(item));
+            return _txNetIds.Count - 1;
+        }
+
+        private BigNum GetRemovablePoolBase(ItemId item)
+        {
+            if (_stackSingletons.TryGetValue(item, out var singletonId))
+            {
+                var singleton = _instances[singletonId];
+                return (singleton.Flags & _removeBlockingFlags) != 0 ? BigNum.Zero : singleton.Quantity;
+            }
+
+            long count = 0;
+            foreach (var entry in _instances)
+            {
+                if (entry.Value.Item == item
+                    && (entry.Value.Flags & _removeBlockingFlags) == 0
+                    && !IsUnstackableTarget(entry.Key))
+                {
+                    count++;
+                }
+            }
+
+            return count;
+        }
+
+        private bool IsUnstackableTarget(long instanceId)
+        {
+            for (var i = 0; i < _txUnstackableTargets.Count; i++)
+            {
+                if (_txUnstackableTargets[i] == instanceId)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private ItemInstance<TState> CreateInstance(ItemId item, BigNum quantity)
         {
             var instance = new ItemInstance<TState>(
                 this, _instanceIdIssuer(), item, quantity, 0, _stateFactory(item))
@@ -287,5 +474,39 @@ namespace Bun3.Server.Items
         }
 
         private static void MarkChangedNoNotify(ItemInstance<TState> instance) => instance.Changed = true;
+
+        /// <summary>BigNum 덧셈 — 지수 한계 초과는 false(전부-아니면-전무 판정용).</summary>
+        private static bool TryAddQuantity(BigNum a, BigNum b, out BigNum result)
+        {
+            try
+            {
+                result = a + b;
+                return true;
+            }
+            catch (BigNumOverflowException)
+            {
+                result = BigNum.Zero;
+                return false;
+            }
+        }
+
+        /// <summary>비스택형 수량 변환 — 양수·정수·<see cref="MaxInstancesPerOperation"/> 이하만 허용.</summary>
+        private static bool TryToInstanceCount(BigNum amount, out int count)
+        {
+            count = 0;
+            if (amount.Exponent < 0 || amount.CompareTo(MaxInstancesPerOperationQuantity) > 0)
+            {
+                return false;
+            }
+
+            long value = amount.Mantissa;
+            for (var i = 0; i < amount.Exponent; i++)
+            {
+                value *= 10;
+            }
+
+            count = (int)value;
+            return true;
+        }
     }
 }

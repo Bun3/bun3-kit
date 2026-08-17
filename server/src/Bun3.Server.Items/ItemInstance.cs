@@ -1,8 +1,12 @@
+using Bun3.Gameplay.Numerics;
+
 namespace Bun3.Server.Items
 {
     /// <summary>
     /// 인벤토리가 보유하는 아이템 인스턴스. 비스택형 정의는 인스턴스당 수량 1,
-    /// 스택형 정의는 정의당 싱글턴 인스턴스에 수량이 병합된다.
+    /// 스택형 정의(재화 포함)는 정의당 싱글턴 인스턴스에 수량이 병합된다.
+    /// 수량은 <see cref="BigNum"/> — long은 암시 변환되며, BigNum 덧셈은 유효 자릿수
+    /// 밖 항을 흡수하는 손실 연산이다(방치형 수량 의미론, 전량 소모는 정확히 Zero).
     /// <see cref="State"/>는 게임 소유의 불투명 상태(레벨·경험치·옵션 등) —
     /// 변경 후 <see cref="MarkChanged"/>를 호출해야 저장/전송 추적에 잡힌다.
     /// </summary>
@@ -11,7 +15,7 @@ namespace Bun3.Server.Items
     {
         private uint _flags;
 
-        internal ItemInstance(ItemInventory<TState> owner, long instanceId, ItemId item, long quantity, uint flags, TState state)
+        internal ItemInstance(ItemInventory<TState> owner, long instanceId, ItemId item, BigNum quantity, uint flags, TState state)
         {
             _owner = owner;
             InstanceId = instanceId;
@@ -32,7 +36,7 @@ namespace Bun3.Server.Items
         public ItemId Item { get; }
 
         /// <summary>보유 수량. 비스택형은 항상 1. 프레임워크만 변경한다.</summary>
-        public long Quantity { get; internal set; }
+        public BigNum Quantity { get; internal set; }
 
         /// <summary>상태 비트 플래그 — 의미는 게임/플랫폼 몫(예: 사용 중, 잠금, 거래 불가).
         /// 인벤토리의 removeBlockingFlags 마스크에 걸리면 소모가 차단된다.
