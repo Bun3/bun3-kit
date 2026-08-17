@@ -205,6 +205,55 @@ public class AchievementTests
         Assert.That(tracker.Add(0, 0), Is.EqualTo(1));     // 재평가로 달성 발화
     }
 
+    // ── Reset (일간/주간 사이클) ─────────────────────────────────────────
+
+    [Test]
+    public void Reset_후_반복_업적이_재달성된다()
+    {
+        var catalog = Catalog(new GameDef("daily_kill", 10, repeatable: true));
+        var tracker = new AchievementTracker<GameDef>(catalog);
+
+        Assert.That(tracker.Add(0, 10), Is.EqualTo(1));    // 1일차 달성
+        tracker.TryClaim(0);
+        tracker.Reset(0);                                  // 자정 리셋
+
+        ref readonly var state = ref tracker.GetState(0);
+        Assert.That(state.Progress, Is.EqualTo(0));
+        Assert.That(state.CompletedCount, Is.EqualTo(0));
+        Assert.That(state.ClaimedCount, Is.EqualTo(0));
+        Assert.That(state.LastCompletedAtUtcTicks, Is.EqualTo(0));
+        Assert.That(tracker.Add(0, 10), Is.EqualTo(1));    // 2일차 재달성 — Set(0)으로는 불가능한 시나리오
+        Assert.That(tracker.TryClaim(0), Is.True);
+    }
+
+    [Test]
+    public void Reset_후_비반복_업적도_재달성된다()
+    {
+        var catalog = Catalog(new GameDef("daily_once", 5));
+        var tracker = new AchievementTracker<GameDef>(catalog);
+
+        tracker.Add(0, 5);
+        tracker.Reset(0);
+        Assert.That(tracker.Add(0, 5), Is.EqualTo(1));
+    }
+
+    [Test]
+    public void Reset은_변경_시에만_dirty이고_훅을_발화하지_않는다()
+    {
+        var catalog = Catalog(new GameDef("daily", 10, repeatable: true));
+        var dirtyCount = 0;
+        var tracker = new AchievementTracker<GameDef>(catalog, () => dirtyCount++);
+
+        tracker.Reset(0);                                  // 이미 0 — 변경 없음
+        Assert.That(dirtyCount, Is.EqualTo(0));
+
+        tracker.Add(0, 10);
+        dirtyCount = 0;
+        tracker.OnCompleted = (_, _, _) => Assert.Fail("Reset이 훅을 발화했습니다");
+        tracker.Reset(0);
+        Assert.That(dirtyCount, Is.EqualTo(1));
+    }
+
     // ── dirty 연계 ───────────────────────────────────────────────────────
 
     [Test]

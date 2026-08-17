@@ -146,7 +146,9 @@ namespace Bun3.Server.Achievements
 
         /// <summary>로드 복원 — 훅과 dirty를 발화하지 않는다. 불변식 위반(음수, 수령 &gt;
         /// 달성, 비반복 다회 달성)은 예외로 저장 데이터 손상을 표면화하고, 비반복 업적의
-        /// 초과 진행도만 목표치로 클램프한다(밸런스 패치로 목표 하향 대응).</summary>
+        /// 초과 진행도만 목표치로 클램프한다(밸런스 패치로 목표 하향 대응).
+        /// 달성 횟수가 진행도 대비 모자란 상태를 복원하면 다음 Add/Set에서 차액만큼
+        /// 몰아 발화한다(at-least-once — 달성 처리 도중 크래시 복구에 안전한 방향).</summary>
         /// <exception cref="ArgumentException">상태가 불변식을 위반할 때.</exception>
         public void Restore(int index, in AchievementState state)
         {
@@ -170,6 +172,22 @@ namespace Bun3.Server.Achievements
             {
                 _states[index].Progress = def.Target;
             }
+        }
+
+        /// <summary>상태 전체(진행도·달성·수령·시각)를 0으로 되감는다 — 일간/주간 사이클
+        /// 교체용. 달성 횟수는 단조라 <see cref="Set"/>(0)으로는 재달성이 불가능하므로,
+        /// 카운터를 함께 되감는 지점은 여기뿐이다. 변경이 있었으면 dirty 1회, 훅 없음.
+        /// 미수령 보상 정산(우편 발송 등)은 게임이 Reset 전에 처리할 것.</summary>
+        public void Reset(int index)
+        {
+            ref var state = ref _states[index];
+            if (state.Progress == 0 && state.CompletedCount == 0 && state.ClaimedCount == 0 && state.LastCompletedAtUtcTicks == 0)
+            {
+                return;
+            }
+
+            state = default;
+            _onDirty?.Invoke();
         }
     }
 }

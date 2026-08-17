@@ -83,6 +83,13 @@ API (핫패스는 전부 인덱스 기반·무할당):
 | `int GetClaimableCount(int index)` | 수령 가능 횟수 |
 | `ref readonly AchievementState GetState(int index)` | 상태 열람(복사 없음) — 저장 직렬화용 |
 | `void Restore(int index, in AchievementState state)` | 로드 복원 — 훅·dirty 없음. 불변식 위반(음수, Claimed>Completed)은 예외, 비반복 초과 진행도는 Target으로 클램프(밸런스 패치로 목표 하향 대응) |
+| `void Reset(int index)` | 상태 전체(진행도·달성·수령·시각)를 0으로 — 일간/주간 사이클 교체용. 변경이 있었으면 dirty, 훅 없음. 미수령 보상 정산(우편 등)은 게임이 Reset 전에 처리 |
+
+**Reset이 프레임워크 몫인 이유**: 달성 횟수는 단조라 `Set(i, 0)`으로는 재달성이
+불가능하다(누적 몫 − CompletedCount 산식). 일간/주간 리셋은 idlez(DayReset)와
+growninja(InvalidateDailyWeekly) 모두의 핵심 실수요인데 카운터 산식이 프레임워크
+내부 사정이므로 게임이 우회할 수 없다 — 카운터를 함께 되감는 유일한 지점을 연다.
+언제 무엇을 리셋할지(로테이션·선발·시즌)는 여전히 게임 몫.
 
 달성 판정(단조 — 같은 달성이 두 번 발화하지 않음):
 
@@ -119,14 +126,31 @@ public sealed class MyPlayer : Player
 - 저장 자체는 게임 몫: `OnSaveAsync`에서 `GetState(i)` 순회 직렬화, 로더에서
   `Restore`. 프레임워크는 DB를 모른다(Players와 동일 원칙).
 
-## 6. 무할당 규율
+## 6. 플랫폼 업적(Steam 등)과의 관계 — 원본 → 프로젝션
+
+**트래커가 항상 원본(source of truth), 플랫폼 업적은 단방향 미러다.** Steam 모델은
+1회성 언락 + 진행도 스탯뿐이라(반복·클레임·리셋 없음) 왕복 변환이 안 되고, Steam
+없는 타깃에서도 프레임워크는 동작해야 한다. 코어는 플랫폼을 모른다 — 접합점은
+기존 seam 둘로 충분하다:
+
+- **언락 미러**: `OnCompleted` 훅에서 토폴로지별 Steam 쓰기 경로 호출 —
+  클라 호스트는 클라 API(`SetAchievement`, 오프라인 캐시 공짜), 데디 서버는
+  `ISteamGameServerStats`(업적을 "Set By: GS"로 잠가 클라 위조 차단), 백엔드는
+  Web API `SetUserStatsForGame`(퍼블리셔 키). 재발화는 무해(재언락 no-op).
+- **진행도 스탯 미러**: 저장 경로(`OnSaveAsync`의 `GetState` 순회)에 피기백.
+
+미러 대상 선택(Steam 초기 100개 제한, 반복/일간 업적은 표현 불가)은 게임이 TDef
+파생 필드로 고른다. 어댑터 패키지(백엔드 Web API는 `server/`, 클라 API는
+`unity/` — Auth.Steam 패턴)는 실수요 시점에 별도 신설, 지금은 비범위.
+
+## 7. 무할당 규율
 
 - 핫패스(`Add`/`Set`/`TryClaim`): 배열 인덱싱 + 정수 연산 + 캐시된 델리게이트
   호출뿐 — 클로저·LINQ·문자열·박싱 없음. 상태는 `AchievementState[]` 1개(생성 시
   1회 할당).
 - 문자열 → 인덱스 변환은 기동 시 1회(§3). 예외 메시지 등 문자열은 오류 경로에만.
 
-## 7. 검증 (완료 조건)
+## 8. 검증 (완료 조건)
 
 | 종류 | 대상 |
 |---|---|
@@ -136,14 +160,17 @@ public sealed class MyPlayer : Player
 | 단위 | Set — 상향 달성, 하향 시 달성 수 유지(단조) |
 | 단위 | 클레임 — Completed 전 false, 횟수만큼 true 후 false, 반복 업적 다회 클레임 |
 | 단위 | Restore — 훅·dirty 미발화, 불변식 위반 예외, 목표 하향 클램프 |
+| 단위 | Reset — 전 카운터 0, 이후 재달성 가능(반복·비반복 모두), 변경 시에만 dirty, 훅 없음 |
 | 단위 | dirty — 실제 변경 시에만 onDirty, Add(0)·변경 없는 Set은 미호출 |
 | 단위 | OnCompleted 훅 안에서 타 업적 Add(체인) 동작 |
 | 단위 | 오버플로 — long.MaxValue 근처 Add 클램프 |
 
-## 8. 비범위 (예약)
+## 9. 비범위 (예약)
 
 - 티어 내장 모델(체인 훅으로 충분 — 실수요 재발 시 재검토), 조건 판정(게임/향후
   Gameplay 어댑터), 보상 지급(게임/Items), 호스팅 DI 통합(AddAchievements — 카탈로그
   생성자 호출로 충분), 기간 한정(StartAt/UntilAt — 게임 TDef + 라우팅에서 거름),
-  일간/주간 리셋(게임 몫 — 필요 시 `Set(i, 0)` + 게임 상태로 구성), BigNum 진행도
-  (long 상한 9.2e18로 방치형 카운터 충분 — 부족 실증 시 재검토).
+  리셋 로테이션·선발 정책(프레임워크는 `Reset(i)` 프리미티브만 — §4), 2축 진행
+  (growninja completeParam1+2 — 실데이터 대부분 1축, 업적 2개 합성으로 커버),
+  업적별 게임 페이로드 슬롯(굴린 보상 id 등 — 게임 병렬 배열로), Steam 어댑터
+  패키지(§6 — seam만 확보), BigNum 진행도(long 상한 9.2e18로 방치형 카운터 충분).
