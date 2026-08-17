@@ -89,6 +89,43 @@ Arguments are evaluated before `Require` is entered, so the scope cannot prevent
 - Pass a cached `Action` field, not a method group or lambda — `Require(cond, OpenPopup)` and `Require(cond, () => OpenPopup())` allocate a delegate every frame. Assign `_openPopup = OpenPopup;` once in `Awake()`.
 - Prefer constant strings — `Require(gold >= price, $"Need {price - gold} more gold")` allocates a string every frame. Build interpolated messages only when the value changes, and cache them.
 
+## Popup stack
+
+`Bun3.Unity.UI.Popups` provides a domain-agnostic popup/modal stack: push/pop with layer ordering, duplicate policies, a sequential display queue, back-key routing, and animation await points. Everything game-specific — prefab loading, parenting, dim/sound presentation — is injected through delegates and virtual methods.
+
+```csharp
+using Bun3.Unity.UI.Popups;
+
+// 1. Derive popups from PopupBehaviour (override animation/back hooks as needed).
+public sealed class ShopPopup : PopupBehaviour
+{
+    protected override UniTask PlayOpenAsync(CancellationToken ct) => _tween.PlayAsync(ct);
+    protected override bool OnBackRequested() => !_isPurchasing; // refuse close mid-purchase
+}
+
+// 2. Create one stack, supplying how popups are created and released.
+_stack = new PopupStack(
+    factory: (key, ct) => LoadAndInstantiateAsync(key, ct), // Resources/Addressables/pool — your call
+    releaser: popup => Destroy(popup.gameObject));           // omit for default Destroy
+
+// 3. Drive it.
+_stack.Push((int)PopupId.Shop);                       // fire-and-forget
+await _stack.PushAsync((int)PopupId.Shop);            // await open animation
+_stack.Push((int)PopupId.Shop, layer: 10);            // higher layer stays on top
+_stack.Push((int)PopupId.Shop, duplicate: PopupDuplicatePolicy.Replace);
+_stack.Enqueue((int)PopupId.Reward);                  // shows when the stack is empty, one at a time
+_stack.HandleBack();                                  // route ESC/Android back to the top popup
+```
+
+Behavior rules:
+
+- The stack is ordered by (layer ascending, push order); `Top` is the end. Back-key routing, `Pop()`, and `HandleBack()` always target the top.
+- `PopupDuplicatePolicy` decides what happens when the same `PopupKey` is already open or loading: `Ignore` (default), `Queue` (append to the sequential queue), or `Replace` (close the existing instance, open a new one).
+- `Enqueue` items display one at a time, each waiting until the stack is completely empty — the pattern for reward chains. `popup.WaitUntilClosedAsync()` awaits an individual popup's dismissal.
+- `HandleBack()` consumes the key whenever any popup is present. A top popup in transition swallows the input; `OnBackRequested()` returning `false` refuses the close. Only an empty stack returns `false`, letting the game show its own quit dialog. Attach the optional `PopupBackKeyRouter` component (assign its `Stack`) to poll ESC/Android back automatically under both input backends.
+- `Clear()` skips animations, cancels in-flight loads, and releases everything — for scene transitions.
+- The push/pop/back paths allocate no closures, LINQ, or strings.
+
 # Technical details
 
 ## Requirements
@@ -96,18 +133,22 @@ Arguments are evaluated before `Require` is entered, so the scope cannot prevent
 - Unity 6000.3
 - `UnityEngine.UI` and `UnityEngine.EventSystems` (built-in)
 - `com.bun3.unity.core` 0.3.0
+- `com.cysharp.unitask` (popup lifecycle awaits)
 
 ## Package contents
 
 | Location | Description |
 |---|---|
 | `Runtime/Buttons/` | `ButtonInteractableScope`, `DisabledReason`, `IButtonDisabledHandler`, and `ButtonDisabledClickReceiver` source. |
+| `Runtime/Popups/` | `PopupStack`, `PopupBehaviour`, `PopupKey`, `PopupDuplicatePolicy`, `PopupBackKeyRouter` source. |
 | `Samples/ButtonInteractableScope/` | Sample MonoBehaviour and handler demonstrating typical usage. |
 | `Tests/Runtime/` | PlayMode tests (`Bun3.Unity.UI.Tests`). |
+| `Tests/Editor/` | EditMode tests (`Bun3.Unity.UI.Editor.Tests`), covering the popup stack. |
 
 ## Document revision history
 
 | Date | Reason |
 |---|---|
+| 2026-08-17 | Added the popup/modal stack (`Bun3.Unity.UI.Popups`). |
 | 2026-07-26 | Reworked for click-time reason replay. Matches package version 0.2.0. |
 | 2026-05-08 | Document created. Matches package version 0.1.0. |

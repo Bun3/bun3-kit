@@ -2,7 +2,9 @@
     "name": "Bun3.Unity.UI",
     "rootNamespace": "Bun3.Unity.UI",
     "references": [
-        "GUID:81b292a52cda21947979315e38fe5ae8"
+        "GUID:81b292a52cda21947979315e38fe5ae8",
+        "UniTask",
+        "Unity.InputSystem"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

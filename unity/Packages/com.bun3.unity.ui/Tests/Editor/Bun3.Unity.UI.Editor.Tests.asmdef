@@ -1,0 +1,25 @@
+{
+    "name": "Bun3.Unity.UI.Editor.Tests",
+    "rootNamespace": "Bun3.Unity.UI.Editor.Tests",
+    "references": [
+        "Bun3.Unity.UI",
+        "UniTask",
+        "UnityEngine.TestRunner",
+        "UnityEditor.TestRunner"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
