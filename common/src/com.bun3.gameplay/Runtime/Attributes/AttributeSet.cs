@@ -52,6 +52,30 @@ namespace Bun3.Gameplay.Attributes
                 _slots[i].AttributeId = ids[i];
                 _slotByAttributeId[ids[i]] = i;
             }
+
+            // 클램프 경계 검증 — Min/Max의 속성 참조는 반드시 선언되어야 함
+            for (var i = 0; i < ids.Length; i++)
+            {
+                var id = ids[i];
+                var definition = registry.GetDefinition(id);
+                if (definition.Min.HasValue && definition.Min.Value.Kind == OperandKind.Attribute)
+                {
+                    var refId = definition.Min.Value.AttributeId;
+                    if (!Has(refId))
+                        throw new ArgumentException(
+                            $"속성 {id}의 클램프가 참조하는 {refId}이(가) 아키타입 선언에 없습니다.",
+                            nameof(attributeIds));
+                }
+
+                if (definition.Max.HasValue && definition.Max.Value.Kind == OperandKind.Attribute)
+                {
+                    var refId = definition.Max.Value.AttributeId;
+                    if (!Has(refId))
+                        throw new ArgumentException(
+                            $"속성 {id}의 클램프가 참조하는 {refId}이(가) 아키타입 선언에 없습니다.",
+                            nameof(attributeIds));
+                }
+            }
         }
 
         /// <summary>이 집합이 해당 속성을 선언했는지 확인합니다.</summary>
@@ -89,10 +113,8 @@ namespace Bun3.Gameplay.Attributes
         private BigNum ResolveBound(Operand bound)
         {
             if (bound.Kind == OperandKind.Constant) return bound.Value;
-            // 클램프 경계의 속성 참조는 등록 시 검증됨 — 미선언이면 경계 없음으로 취급
-            return Has(bound.AttributeId)
-                ? _slots[_slotByAttributeId[bound.AttributeId]].Current * bound.Value
-                : bound.Value * 0;
+            // 클램프 경계의 속성 참조는 생성자에서 검증됨 — 존재 보장
+            return _slots[_slotByAttributeId[bound.AttributeId]].Current * bound.Value;
         }
 
         private BigNum ClampToBounds(int slotIndex, BigNum value)

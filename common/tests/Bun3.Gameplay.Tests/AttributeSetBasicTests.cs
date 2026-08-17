@@ -73,4 +73,18 @@ public sealed class AttributeSetBasicTests
         Assert.Throws<ArgumentOutOfRangeException>(() => set.GetCurrent(999));
         Assert.Throws<ArgumentOutOfRangeException>(() => set.SetBase(999, 1));
     }
+
+    [Test]
+    public void Clamp_bound_reference_must_be_declared()
+    {
+        // 레지스트리: Hp(max→MaxHp), MaxHp(클램프 없음)
+        var builder = new AttributeRegistryBuilder();
+        builder.Register(MaxHp);
+        builder.Register(Hp, min: Operand.Constant(0), max: Operand.Attribute(MaxHp));
+        var registry = builder.Build();
+
+        // AttributeSet이 MaxHp를 포함하지 않으면 생성 실패
+        var ids = new ushort[] { Hp };
+        Assert.Throws<ArgumentException>(() => new AttributeSet(registry, ids));
+    }
 }
