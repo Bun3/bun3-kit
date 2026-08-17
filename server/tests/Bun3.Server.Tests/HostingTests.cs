@@ -85,6 +85,15 @@ public class HostingTests
     }
 
     [Test]
+    public void Duplicate_server_registration_fails_at_registration_time()
+    {
+        var services = new ServiceCollection();
+        services.AddServer<EchoSession>();
+
+        Assert.Throws<InvalidOperationException>(() => services.AddServer<EchoSession>());
+    }
+
+    [Test]
     public void Options_bind_from_Bun3_Server_configuration_section()
     {
         var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings { DisableDefaults = true });
