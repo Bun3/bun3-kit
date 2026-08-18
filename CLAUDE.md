@@ -27,6 +27,13 @@
   플랜(`docs/superpowers/plans/`) → SDD 실행. 스펙이 결정의 원본이다.
 - 패키지 코드: netstandard2.1 + C#9(블록 네임스페이스), 모든 public 멤버 한국어
   XML 문서, 빌드 경고 0, 라이브러리 await에는 `ConfigureAwait(false)`.
+- 코드 구성: 기능 묶음은 패키지 안에서 하위 폴더로 분류한다
+  (예: `Popups/Core|Stack|Services|Manager`). 역할이 여러 개인 클래스는
+  `타입.역할.cs` partial로 나누고(예: `PopupStack.Push.cs`, `Util.Component.cs`),
+  각 partial 파일 머리에 담당 역할 주석 한 줄, 본체 XML 문서에 partial 구성을 적는다.
+- 범용 헬퍼는 패키지 로컬 클래스가 아니라 아래 계층의 Util로 내린다 — Unity 범용은
+  `Bun3.Unity.Core.Utils.Util` partial 확장 메서드(`Util.<주제>.cs`, 예: `SafeDestroy`),
+  클라+서버 범용은 `Bun3.Common`.
 - **런타임 문자열 할당 최소화**: 프레임워크 코어는 핫패스에서 문자열을 만들지 않는다 —
   포맷은 `TryFormat(Span<char>)` 패턴, 식별자는 기동 시 1회 인터닝, 로그는 저빈도 경로만.
   Unity 계층은 ZString + TMP `SetText` 적극 사용(목표: Unity에서 `.text` 문자열 할당 제로).
