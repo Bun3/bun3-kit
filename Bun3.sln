@@ -66,6 +66,7 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Bun3.Server.GameplayTags", "server\src\Bun3.Server.GameplayTags\Bun3.Server.GameplayTags.csproj", "{7828FBF7-3EE4-469A-A4C1-4DFD1F254621}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Bun3.Server.Achievements", "server\src\Bun3.Server.Achievements\Bun3.Server.Achievements.csproj", "{AD24CBE8-3D1B-447B-8B97-B2C0BF81C35F}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Bun3.Server.Transport.InProcess", "server\src\Bun3.Server.Transport.InProcess\Bun3.Server.Transport.InProcess.csproj", "{20D888B4-B1DF-4828-BC6F-43EB52F13087}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -353,6 +354,18 @@ Global
 		{AD24CBE8-3D1B-447B-8B97-B2C0BF81C35F}.Release|x64.Build.0 = Release|Any CPU
 		{AD24CBE8-3D1B-447B-8B97-B2C0BF81C35F}.Release|x86.ActiveCfg = Release|Any CPU
 		{AD24CBE8-3D1B-447B-8B97-B2C0BF81C35F}.Release|x86.Build.0 = Release|Any CPU
+		{20D888B4-B1DF-4828-BC6F-43EB52F13087}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{20D888B4-B1DF-4828-BC6F-43EB52F13087}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{20D888B4-B1DF-4828-BC6F-43EB52F13087}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{20D888B4-B1DF-4828-BC6F-43EB52F13087}.Debug|x64.Build.0 = Debug|Any CPU
+		{20D888B4-B1DF-4828-BC6F-43EB52F13087}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{20D888B4-B1DF-4828-BC6F-43EB52F13087}.Debug|x86.Build.0 = Debug|Any CPU
+		{20D888B4-B1DF-4828-BC6F-43EB52F13087}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{20D888B4-B1DF-4828-BC6F-43EB52F13087}.Release|Any CPU.Build.0 = Release|Any CPU
+		{20D888B4-B1DF-4828-BC6F-43EB52F13087}.Release|x64.ActiveCfg = Release|Any CPU
+		{20D888B4-B1DF-4828-BC6F-43EB52F13087}.Release|x64.Build.0 = Release|Any CPU
+		{20D888B4-B1DF-4828-BC6F-43EB52F13087}.Release|x86.ActiveCfg = Release|Any CPU
+		{20D888B4-B1DF-4828-BC6F-43EB52F13087}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -388,5 +401,6 @@ Global
 		{7AA25507-9977-431F-850A-AAEFCD0F1483} = {13AACEBB-5F00-79C1-2D14-6EA8B5DDD1FE}
 		{7828FBF7-3EE4-469A-A4C1-4DFD1F254621} = {2132E9AA-A8A6-6DB3-1CCB-FE240A8CB002}
 		{AD24CBE8-3D1B-447B-8B97-B2C0BF81C35F} = {2132E9AA-A8A6-6DB3-1CCB-FE240A8CB002}
+		{20D888B4-B1DF-4828-BC6F-43EB52F13087} = {2132E9AA-A8A6-6DB3-1CCB-FE240A8CB002}
 	EndGlobalSection
 EndGlobal

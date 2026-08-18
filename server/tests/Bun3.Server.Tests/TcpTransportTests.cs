@@ -166,6 +166,55 @@ public class TcpTransportTests
     }
 
     [Test]
+    public async Task Remote_reset_raises_OnClosed_with_non_null_error()
+    {
+        var (listener, handler) = await StartListenerAsync();
+        try
+        {
+            var client = await ConnectAsync(listener);
+            await handler.Connected.Task.WaitAsync(Timeout);
+
+            // TcpClient.Close는 GetStream 미호출 시 Shutdown(FIN)을 먼저 보내 EOF가 되므로,
+            // 소켓을 직접 linger 0으로 닫아 RST를 강제한다.
+            client.Client.LingerState = new LingerOption(true, 0);
+            client.Client.Close();
+
+            var error = await handler.Closed.Task.WaitAsync(Timeout);
+            Assert.That(error, Is.Not.Null);
+        }
+        finally
+        {
+            await listener.StopAsync();
+        }
+    }
+
+    [Test]
+    public async Task Send_with_precanceled_token_throws_and_keeps_connection_open()
+    {
+        var (listener, handler) = await StartListenerAsync();
+        try
+        {
+            using var client = await ConnectAsync(listener);
+            var connection = await handler.Connected.Task.WaitAsync(Timeout);
+
+            var canceled = new CancellationToken(canceled: true);
+            Assert.CatchAsync<OperationCanceledException>(
+                async () => await connection.SendAsync(new byte[] { 1 }, canceled));
+            Assert.That(connection.IsOpen, Is.True); // 취소는 연결을 닫지 않는다
+
+            var payload = Encoding.UTF8.GetBytes("still alive");
+            await connection.SendAsync(payload); // 이후 송신은 정상 동작
+            var received = await PacketFormat.ReadPacketAsync(client.GetStream(), 1024 * 1024)
+                .AsTask().WaitAsync(Timeout);
+            Assert.That(received, Is.EqualTo(payload));
+        }
+        finally
+        {
+            await listener.StopAsync();
+        }
+    }
+
+    [Test]
     public async Task Oversize_packet_closes_connection_with_InvalidDataException()
     {
         var (listener, handler) = await StartListenerAsync(maxPacketSize: 16);

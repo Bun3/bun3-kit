@@ -20,9 +20,9 @@ public static class ServerServiceCollectionExtensions
     /// <item>세션 생성 시 추가 생성자 의존성은 항상 루트 컨테이너에서 해석된다 —
     /// scoped 서비스를 세션에 주입하면 세션별 인스턴스가 아니라 예외(ValidateScopes 시)
     /// 또는 루트에 고정된 사실상의 싱글턴이 된다. 세션 의존성은 싱글턴/트랜지언트만 사용할 것.</item>
-    /// <item>호스트당 1회만 호출할 것. 두 번 등록하면(예: 세션 타입 2개) 마지막
-    /// TcpTransportListener 싱글턴을 공유하게 되어 두 번째 서버의 StartAsync가
-    /// "Listener is already started."로 기동 시점에 실패한다. 다중 세션 타입/포트는 v1 범위.</item>
+    /// <item>호스트당 1회만 호출할 것. 서버 등록 확장(AddServer/AddRpcServer/AddPlayerServer)을
+    /// 중복·혼용하면 TCP 리스너 싱글턴을 공유할 수 없으므로 등록 시점에
+    /// <see cref="InvalidOperationException"/>으로 실패한다. 다중 세션 타입/포트는 이후 범위.</item>
     /// </list>
     /// </remarks>
     public static IServiceCollection AddServer<TSession>(
@@ -59,8 +59,18 @@ public static class ServerServiceCollectionExtensions
         ?? (ILogger)Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance;
 
     /// <summary>ServerOptions("Bun3:Server" 바인딩 + 람다) 파이프라인과 TCP 리스너 싱글턴 등록 — 세 서버 확장의 공통 앞부분.</summary>
+    /// <exception cref="InvalidOperationException">서버 등록 확장이 이미 호출된 경우(중복/혼용).</exception>
     internal static void AddServerTransport(this IServiceCollection services, Action<ServerOptions>? serverOptions)
     {
+        // 리스너 싱글턴은 서버 1개만 감당한다 — 중복 등록을 기동 시 "Listener is already
+        // started." 크래시로 미루지 않고 등록 시점에 명확히 실패시킨다.
+        if (services.Any(d => d.ServiceType == typeof(TcpTransportListener)))
+        {
+            throw new InvalidOperationException(
+                "Bun3 서버는 호스트당 1회만 등록할 수 있습니다 — AddServer/AddRpcServer/AddPlayerServer가 "
+                + "이미 호출되었습니다. 다중 서버(세션 타입/포트 복수)는 아직 지원하지 않습니다.");
+        }
+
         var optionsBuilder = services.AddOptions<ServerOptions>()
             .BindConfiguration(ServerOptions.SectionName);
         if (serverOptions != null)
