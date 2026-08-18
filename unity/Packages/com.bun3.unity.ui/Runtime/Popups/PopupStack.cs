@@ -198,18 +198,66 @@ namespace Bun3.Unity.UI.Popups
             PopupDuplicatePolicy duplicate = PopupDuplicatePolicy.Ignore, TResult defaultResult = default)
             => await WaitForResultCore(await PushWithArgAsync(key, arg, layer, duplicate), defaultResult);
 
-        /// <summary>
-        /// 타입 키 버전 — <typeparamref name="TResult"/>가 키에서 추론돼 호출부 타입 명시가 없고,
-        /// 잘못된 결과 타입은 컴파일 에러가 된다.
-        /// </summary>
-        public UniTask<TResult> PushForResultAsync<TResult>(PopupKey<TResult> key, int layer = 0,
-            PopupDuplicatePolicy duplicate = PopupDuplicatePolicy.Ignore, TResult defaultResult = default)
-            => PushForResultAsync(key.Key, layer, duplicate, defaultResult);
+        // ── 타입 = 키 (기본 기조, 레거시 ShowPopup<T> 대응) ──
+        // popupName은 같은 클래스로 다른 프리팹을 띄우는 변형용 — null이면 클래스 이름이 키.
 
-        /// <summary>타입 키 + 초기 데이터 버전 — 두 타입 모두 추론된다.</summary>
-        public UniTask<TResult> PushForResultAsync<TArg, TResult>(PopupKey<TResult> key, TArg arg, int layer = 0,
-            PopupDuplicatePolicy duplicate = PopupDuplicatePolicy.Ignore, TResult defaultResult = default)
-            => PushForResultAsync<TArg, TResult>(key.Key, arg, layer, duplicate, defaultResult);
+        /// <summary>타입을 키로 연다. fire-and-forget.</summary>
+        public void Push<TPopup>(string popupName = null, int layer = 0,
+            PopupDuplicatePolicy duplicate = PopupDuplicatePolicy.Ignore) where TPopup : Popup
+            => Push(PopupKey.Of<TPopup>(popupName), layer, duplicate);
+
+        /// <summary>타입을 키로 열고, 열림 완료 후 <b>타입된 인스턴스</b>를 돌려준다(캐스팅 불필요).</summary>
+        public async UniTask<TPopup> PushAsync<TPopup>(string popupName = null, int layer = 0,
+            PopupDuplicatePolicy duplicate = PopupDuplicatePolicy.Ignore) where TPopup : Popup
+            => CastOrNull<TPopup>(await PushAsync(PopupKey.Of<TPopup>(popupName), layer, duplicate));
+
+        /// <summary>타입을 키로, 초기 데이터를 실어 연다. fire-and-forget.</summary>
+        public void PushWithArg<TPopup, TArg>(TArg arg, string popupName = null, int layer = 0,
+            PopupDuplicatePolicy duplicate = PopupDuplicatePolicy.Ignore) where TPopup : Popup
+            => PushWithArg(PopupKey.Of<TPopup>(popupName), arg, layer, duplicate);
+
+        /// <summary>타입을 키로, 초기 데이터를 실어 열고 타입된 인스턴스를 돌려준다.</summary>
+        public async UniTask<TPopup> PushWithArgAsync<TPopup, TArg>(TArg arg, string popupName = null,
+            int layer = 0, PopupDuplicatePolicy duplicate = PopupDuplicatePolicy.Ignore) where TPopup : Popup
+            => CastOrNull<TPopup>(await PushWithArgAsync(PopupKey.Of<TPopup>(popupName), arg, layer, duplicate));
+
+        /// <summary>
+        /// 결과 팝업을 타입 키로 열고 결과까지 대기한다. <c>where TPopup : Popup&lt;TResult&gt;</c>
+        /// 제약이라 팝업↔결과 타입 불일치는 <b>컴파일 에러</b>다:
+        /// <c>PushForResultAsync&lt;ConfirmPopup, bool&gt;()</c>.
+        /// </summary>
+        public async UniTask<TResult> PushForResultAsync<TPopup, TResult>(string popupName = null,
+            int layer = 0, PopupDuplicatePolicy duplicate = PopupDuplicatePolicy.Ignore,
+            TResult defaultResult = default) where TPopup : Popup<TResult>
+            => await WaitForResultCore(
+                await PushAsync(PopupKey.Of<TPopup>(popupName), layer, duplicate), defaultResult);
+
+        /// <summary>결과 팝업을 타입 키 + 초기 데이터로 연다. 세 타입 모두 명시한다.</summary>
+        public async UniTask<TResult> PushForResultAsync<TPopup, TArg, TResult>(TArg arg,
+            string popupName = null, int layer = 0,
+            PopupDuplicatePolicy duplicate = PopupDuplicatePolicy.Ignore,
+            TResult defaultResult = default) where TPopup : Popup<TResult>
+            => await WaitForResultCore(
+                await PushWithArgAsync(PopupKey.Of<TPopup>(popupName), arg, layer, duplicate), defaultResult);
+
+        /// <summary>타입 키로 열려 있는지 확인한다.</summary>
+        public bool IsOpen<TPopup>(string popupName = null) where TPopup : Popup
+            => IsOpen(PopupKey.Of<TPopup>(popupName));
+
+        private static TPopup CastOrNull<TPopup>(Popup popup) where TPopup : Popup
+        {
+            if (popup == null)
+                return null;
+
+            if (popup is TPopup typed)
+                return typed;
+
+            // 게임 코드 결선 오류(키 이름과 프리팹 타입 불일치) — 저빈도 경로라 문자열 할당 허용.
+            Debug.LogError(
+                $"키 {popup.Key.Name}의 인스턴스가 {popup.GetType().Name}이라 {typeof(TPopup).Name}로 열 수 없다.",
+                popup);
+            return null;
+        }
 
         private static async UniTask<TResult> WaitForResultCore<TResult>(Popup popup, TResult defaultResult)
         {
@@ -403,7 +451,7 @@ namespace Bun3.Unity.UI.Popups
             {
                 // 로딩 중 인스턴스만 있는 경우 — 만질 대상이 없다. 인자가 실려 있었다면 유실을 표면화.
                 if (hasArg)
-                    Debug.LogWarning($"Focus 대상 팝업(key {key.Value})이 아직 로딩 중이라 인자가 버려졌다.");
+                    Debug.LogWarning($"Focus 대상 팝업({key.Name})이 아직 로딩 중이라 인자가 버려졌다.");
                 return null;
             }
 

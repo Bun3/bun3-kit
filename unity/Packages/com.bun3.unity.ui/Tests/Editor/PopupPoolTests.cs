@@ -24,9 +24,9 @@ namespace Bun3.Unity.UI.Editor.Tests
         {
             var pool = new PopupPool(Loader);
             var stack = new PopupStack(pool.RentAsync, pool.Return);
-            pool.MarkPooled(1);
+            pool.MarkPooled("p1");
 
-            stack.Push(1);
+            stack.Push("p1");
             var first = stack.Top;
             Assert.AreEqual(1, _loads);
 
@@ -35,7 +35,7 @@ namespace Bun3.Unity.UI.Editor.Tests
             Assert.IsTrue(first, "풀 대상 키는 파괴되지 않아야 한다.");
             Assert.IsFalse(first.gameObject.activeSelf, "반납된 인스턴스는 비활성화돼야 한다.");
 
-            stack.Push(1);
+            stack.Push("p1");
 
             Assert.AreEqual(1, _loads, "풀 히트면 로더가 다시 불리면 안 된다.");
             Assert.AreSame(first, stack.Top);
@@ -52,7 +52,7 @@ namespace Bun3.Unity.UI.Editor.Tests
             var pool = new PopupPool(Loader);
             var stack = new PopupStack(pool.RentAsync, pool.Return);
 
-            stack.Push(1);
+            stack.Push("p1");
             var first = stack.Top;
 
             stack.Pop();
@@ -69,12 +69,12 @@ namespace Bun3.Unity.UI.Editor.Tests
             var pool = new PopupPool(Loader);
             var stack = new PopupStack(pool.RentAsync, pool.Return);
 
-            pool.PreloadAsync(1).GetAwaiter().GetResult();
+            pool.PreloadAsync("p1").GetAwaiter().GetResult();
 
             Assert.AreEqual(1, _loads);
             Assert.IsFalse(Created[0].gameObject.activeSelf, "프리로드 인스턴스는 비활성 보관돼야 한다.");
 
-            stack.Push(1);
+            stack.Push("p1");
 
             Assert.AreEqual(1, _loads, "프리로드된 인스턴스를 써야 한다.");
             Assert.AreSame(Created[0], stack.Top);
@@ -89,13 +89,13 @@ namespace Bun3.Unity.UI.Editor.Tests
         {
             var pool = new PopupPool(Loader);
             var stack = new PopupStack(pool.RentAsync, pool.Return);
-            pool.MarkPooled(1);
+            pool.MarkPooled("p1");
 
-            stack.PushWithArg(1, arg: 10);
+            stack.PushWithArg("p1", arg: 10);
             var popup = (TestPopup)stack.Top;
             stack.Pop();
 
-            stack.PushWithArg(1, arg: 20);
+            stack.PushWithArg("p1", arg: 20);
 
             Assert.AreSame(popup, stack.Top);
             Assert.AreEqual(20, popup.ReceivedArg, "재사용 세션에도 인자가 다시 전달돼야 한다.");
@@ -108,7 +108,7 @@ namespace Bun3.Unity.UI.Editor.Tests
         public void Dispose_DestroysStoredInstances()
         {
             var pool = new PopupPool(Loader);
-            pool.PreloadAsync(1, 2).GetAwaiter().GetResult();
+            pool.PreloadAsync("p1", 2).GetAwaiter().GetResult();
 
             pool.Dispose();
 
@@ -125,9 +125,9 @@ namespace Bun3.Unity.UI.Editor.Tests
             var parent = new GameObject("popup-parent").transform;
             try
             {
-                Stack.Push(1, layer: 0);
-                Stack.Push(2, layer: 10);
-                Stack.Push(3, layer: 0);
+                Stack.Push("p1", layer: 0);
+                Stack.Push("p2", layer: 10);
+                Stack.Push("p3", layer: 0);
 
                 foreach (var popup in Created)
                     popup.transform.SetParent(parent, false);

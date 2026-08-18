@@ -11,7 +11,7 @@ namespace Bun3.Unity.UI.Editor.Tests
         [Test]
         public void PushAsync_ReturnsOpenedInstance()
         {
-            var popup = Stack.PushAsync(1).GetAwaiter().GetResult();
+            var popup = Stack.PushAsync("p1").GetAwaiter().GetResult();
 
             Assert.AreSame(Created[0], popup);
             Assert.AreEqual(PopupPhase.Open, popup.Phase);
@@ -20,9 +20,9 @@ namespace Bun3.Unity.UI.Editor.Tests
         [Test]
         public void PushAsync_DuplicateIgnore_ReturnsNull()
         {
-            Stack.Push(1);
+            Stack.Push("p1");
 
-            var second = Stack.PushAsync(1).GetAwaiter().GetResult();
+            var second = Stack.PushAsync("p1").GetAwaiter().GetResult();
 
             Assert.IsNull(second);
         }
@@ -30,7 +30,7 @@ namespace Bun3.Unity.UI.Editor.Tests
         [Test]
         public void PushArg_DeliveredAfterLoad_BeforeAttach()
         {
-            Stack.PushWithArg(1, arg: 42);
+            Stack.PushWithArg("p1", arg: 42);
 
             Assert.AreEqual(42, Created[0].ReceivedArg);
             Assert.AreEqual(PopupPhase.None, Created[0].PhaseAtArg,
@@ -41,7 +41,7 @@ namespace Bun3.Unity.UI.Editor.Tests
         [Test]
         public void PushAsyncArg_ReturnsInstance()
         {
-            var popup = Stack.PushWithArgAsync(1, arg: 7).GetAwaiter().GetResult();
+            var popup = Stack.PushWithArgAsync("p1", arg: 7).GetAwaiter().GetResult();
 
             Assert.AreSame(Created[0], popup);
             Assert.AreEqual(7, Created[0].ReceivedArg);
@@ -50,8 +50,8 @@ namespace Bun3.Unity.UI.Editor.Tests
         [Test]
         public void EnqueueArg_DeliveredOnDrain()
         {
-            Stack.Push(1);
-            Stack.EnqueueWithArg(2, arg: 7);
+            Stack.Push("p1");
+            Stack.EnqueueWithArg("p2", arg: 7);
 
             Assert.AreEqual(1, Stack.QueuedCount);
 
@@ -64,8 +64,8 @@ namespace Bun3.Unity.UI.Editor.Tests
         [Test]
         public void PushArg_QueuePolicy_PreservesArg()
         {
-            Stack.Push(1);
-            Stack.PushWithArg(1, arg: 9, duplicate: PopupDuplicatePolicy.Queue);
+            Stack.Push("p1");
+            Stack.PushWithArg("p1", arg: 9, duplicate: PopupDuplicatePolicy.Queue);
 
             Stack.Pop();
 
@@ -77,7 +77,7 @@ namespace Bun3.Unity.UI.Editor.Tests
         {
             LogAssert.Expect(LogType.Error, new Regex("IPopupArg"));
 
-            Stack.PushWithArg(1, arg: 1.5f); // TestPopup은 IPopupArg<float> 미구현
+            Stack.PushWithArg("p1", arg: 1.5f); // TestPopup은 IPopupArg<float> 미구현
 
             Assert.AreEqual(1, Stack.Count, "결선 오류여도 팝업 자체는 열려야 한다.");
             Assert.AreEqual(PopupPhase.Open, Created[0].Phase);
@@ -87,8 +87,8 @@ namespace Bun3.Unity.UI.Editor.Tests
         public void MultipleArgInterfaces_DispatchByStaticType()
         {
             // 같은 팝업이 코드 경로(int)와 데이터 경로(string 토큰)를 함께 노출한다.
-            Stack.PushWithArg(1, arg: 1001);
-            Stack.PushWithArg(2, arg: "1001");
+            Stack.PushWithArg("p1", arg: 1001);
+            Stack.PushWithArg("p2", arg: "1001");
 
             Assert.AreEqual(1001, Created[0].ReceivedArg);
             Assert.IsNull(Created[0].ReceivedToken);

@@ -108,18 +108,22 @@ _stack = new PopupStack(
     factory: (key, ct) => LoadAndInstantiateAsync(key, ct), // Resources/Addressables/pool — your call
     releaser: popup => Destroy(popup.gameObject));           // omit for default Destroy
 
-// 3. Drive it.
-_stack.Push((int)PopupId.Shop);                       // fire-and-forget
-var popup = await _stack.PushAsync((int)PopupId.Shop); // await open animation, get the instance
-_stack.Push((int)PopupId.Shop, layer: 10);            // higher layer stays on top
-_stack.Push((int)PopupId.Shop, duplicate: PopupDuplicatePolicy.Replace);
-_stack.Enqueue((int)PopupId.Reward);                  // shows when the stack is empty, one at a time
-_stack.HandleBack();                                  // route ESC/Android back to the top popup
+// 3. Drive it. The popup TYPE is the key (legacy ShowPopup<T> style) — the class name
+//    becomes the load address your factory receives. A string name is only for
+//    (a) prefab variants of the same class and (b) data-driven opens.
+_stack.Push<ShopPopup>();                              // fire-and-forget
+var shop = await _stack.PushAsync<ShopPopup>();        // await open animation, get the TYPED instance
+_stack.Push<ShopPopup>("ShopPopup_Halloween");         // same class, different prefab = distinct popup
+_stack.Push("ShopPopup");                              // data-driven (server/table string) — same key
+_stack.Push<SystemAlertPopup>(layer: 100);             // higher layer stays on top
+_stack.Push<ShopPopup>(duplicate: PopupDuplicatePolicy.Replace);
+_stack.Enqueue<LevelUpPopup>();                        // shows when the stack is empty, one at a time
+_stack.HandleBack();                                   // route ESC/Android back to the top popup
 
 // 4. Pass initial data without synchronous instantiation: implement IPopupArg<TArg>
 //    and it arrives right after the async load, before the open animation.
-_stack.PushWithArg((int)PopupId.ItemDetail, new ItemDetailArgs(itemId));
-_stack.EnqueueWithArg((int)PopupId.Reward, rewardArgs);
+_stack.PushWithArg<ItemDetailPopup, ItemDetailArgs>(new ItemDetailArgs(itemId));
+_stack.EnqueueWithArg("RewardPopup", rewardArgs);      // string-key form for data-driven paths
 
 // A popup may implement IPopupArg<TArg> for several TArg types to expose multiple
 // initialization routes — e.g. a typed code path plus a designer-data string path.
@@ -134,20 +138,20 @@ public sealed class ItemDetailPopup : Popup, IPopupArg<int>, IPopupArg<string>
 
 // 5. Reuse an already-open instance instead of stacking a duplicate (legacy GetOrShowPopup):
 //    moves it to the top of its layer and re-delivers the arg via IPopupArg.
-var shop = await _stack.PushWithArgAsync((int)PopupId.Shop, shopArgs,
+var shop = await _stack.PushWithArgAsync<ShopPopup, ShopArgs>(shopArgs,
     duplicate: PopupDuplicatePolicy.Focus);
 
 // 6. Channel queue: show one at a time *within this queue* — on top of other popups.
 //    (PopupStack.Enqueue waits for an empty stack; PopupQueue only waits for its own popup.)
 //    Higher priority shows first; FIFO within the same priority.
 _rewardQueue = new PopupQueue(_stack);
-_rewardQueue.EnqueueWithArg((int)PopupId.Promotion, rankArgs, priority: 2);
-_rewardQueue.EnqueueWithArg((int)PopupId.GotItems, itemArgs);   // priority 0
+_rewardQueue.EnqueueWithArg<PromotionPopup, RankArgs>(rankArgs, priority: 2);
+_rewardQueue.EnqueueWithArg<GotItemsPopup, ItemArgs>(itemArgs);       // priority 0
 
 // 7. Pooling + preload: plug the pool straight into the stack.
 _pool = new PopupPool(LoadPopupAsync);
 _stack = new PopupStack(_pool.RentAsync, _pool.Return);
-await _pool.PreloadAsync((int)PopupId.Shop);   // marks the key pooled + stocks an instance
+await _pool.PreloadAsync<ShopPopup>();         // marks the key pooled + stocks an instance
 
 // 8. Sibling ordering: optional arranger keeps sibling indices matching stack order
 //    (assumes a popup-only parent). Order notifications and dim handling live in the
@@ -164,15 +168,15 @@ _popups = new PopupManagerBuilder(LoadPopupAsync)
     .UseBackKey(gameObject, ShowQuitDialog)     // attaches PopupBackKeyRouter, injects the stack
     .UseSiblingArranger()
     .Build();
-_popups.Stack.Push((int)PopupId.Shop);
+_popups.Stack.Push<ShopPopup>();
 
 // 8d. Global access (legacy GameManager.Get().ShowPopup style): assign the built manager
 //     to the optional static slot in your bootstrap. Dispose() clears it automatically.
 //     The manager mirrors the common stack verbs, so no .Stack hop is needed day to day.
 PopupManager.Instance = _popups;
-PopupManager.Instance.Push((int)PopupId.Shop);                    // from anywhere
-PopupManager.Instance.PushWithArg((int)PopupId.ItemDetail, args);
-PopupManager.Instance.Enqueue((int)PopupId.Reward);
+PopupManager.Instance.Push<ShopPopup>();                          // from anywhere
+PopupManager.Instance.PushWithArg<ItemDetailPopup, ItemDetailArgs>(args);
+PopupManager.Instance.Enqueue("RewardPopup");
 
 // 8e. Result popups (legacy Callback(int result)): derive from Popup<TResult>, call
 //     SetResult before closing. Closing without SetResult (back key, cancel) yields
@@ -183,16 +187,11 @@ public sealed class ConfirmPopup : Popup<bool>, IPopupArg<string>
     void OnYes() { SetResult(true); Close(); }
     void OnNo()  => Close();
 }
-// Prefer typed keys: declare the key↔result contract once, and every call site is
-// inferred AND compile-checked (a raw int key can only be checked at runtime).
-public static class PopupIds
-{
-    public static readonly PopupKey<bool>         Confirm  = new((int)PopupId.Confirm);
-    public static readonly PopupKey<ItemInstance> ItemPick = new((int)PopupId.ItemPick);
-}
-bool ok     = await _stack.PushForResultAsync(PopupIds.Confirm, "Delete this?");
-var picked  = await _stack.PushForResultAsync(PopupIds.ItemPick);   // null = cancelled
-_stack.Push(PopupIds.Confirm);   // implicit conversion — same key works on every API
+// The where TPopup : Popup<TResult> constraint checks the popup↔result pairing at
+// COMPILE time — no key declarations needed at all:
+bool ok    = await _stack.PushForResultAsync<ConfirmPopup, string, bool>("Delete this?");
+var picked = await _stack.PushForResultAsync<ItemPickPopup, ItemInstance>(); // null = cancelled
+// (string-key overloads remain for data-driven opens; those are checked at runtime.)
 
 // 9. Block closing while the popup is busy (ref-counted; nested locks compose).
 //    A Close/back during the lock is *deferred*, not lost — it runs when the last lock lifts.

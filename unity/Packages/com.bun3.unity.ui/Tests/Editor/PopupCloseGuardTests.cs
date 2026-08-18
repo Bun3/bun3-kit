@@ -9,7 +9,7 @@ namespace Bun3.Unity.UI.Editor.Tests
         [Test]
         public void BlockClose_DefersClose_UntilRelease()
         {
-            Stack.Push(1);
+            Stack.Push("p1");
             var popup = Created[0];
 
             var guard = popup.BlockClose();
@@ -27,7 +27,7 @@ namespace Bun3.Unity.UI.Editor.Tests
         [Test]
         public void BlockClose_Nested_ClosesOnlyAtZero()
         {
-            Stack.Push(1);
+            Stack.Push("p1");
             var popup = Created[0];
 
             var outer = popup.BlockClose();
@@ -46,7 +46,7 @@ namespace Bun3.Unity.UI.Editor.Tests
         [Test]
         public void BlockClose_WithoutCloseRequest_JustUnlocks()
         {
-            Stack.Push(1);
+            Stack.Push("p1");
             var popup = Created[0];
 
             using (popup.BlockClose())
@@ -61,7 +61,7 @@ namespace Bun3.Unity.UI.Editor.Tests
         [Test]
         public void HandleBack_WhileBlocked_ConsumedWithoutRouting()
         {
-            Stack.Push(1);
+            Stack.Push("p1");
             var popup = Created[0];
 
             using (popup.BlockClose())
@@ -76,7 +76,7 @@ namespace Bun3.Unity.UI.Editor.Tests
         [Test]
         public void BlockCloseWhile_ReleasesOnCompletion_ThenRunsRequestedClose()
         {
-            Stack.Push(1);
+            Stack.Push("p1");
             var popup = Created[0];
             var work = new UniTaskCompletionSource();
 
@@ -93,7 +93,7 @@ namespace Bun3.Unity.UI.Editor.Tests
         [Test]
         public void BlockCloseWhile_Result_ReleasesOnException()
         {
-            Stack.Push(1);
+            Stack.Push("p1");
             var popup = Created[0];
             var work = new UniTaskCompletionSource<int>();
 
@@ -108,7 +108,7 @@ namespace Bun3.Unity.UI.Editor.Tests
         public void BlockClose_DuringOpening_ClosesAfterOpenAndRelease()
         {
             PendingOpen = true;
-            Stack.Push(1);
+            Stack.Push("p1");
             var popup = Created[0];
 
             var guard = popup.BlockClose();
@@ -128,10 +128,10 @@ namespace Bun3.Unity.UI.Editor.Tests
         public void Clear_WhileBlocked_NotifiesUnblockAndInvalidatesOldGuards()
         {
             var pool = new PopupPool(CreatePopup);
-            pool.MarkPooled(1);
+            pool.MarkPooled("p1");
             var stack = new PopupStack(pool.RentAsync, pool.Return);
 
-            stack.Push(1);
+            stack.Push("p1");
             var popup = (TestPopup)stack.Top;
             var staleGuard = popup.BlockClose();
 
@@ -140,7 +140,7 @@ namespace Bun3.Unity.UI.Editor.Tests
             Assert.IsFalse(popup.IsCloseBlocked);
             Assert.IsFalse(popup.LastBlocked, "강제 해제 시 잠금 해제 표현 통지가 와야 한다.");
 
-            stack.Push(1); // 풀 재사용 — 같은 인스턴스의 새 세션
+            stack.Push("p1"); // 풀 재사용 — 같은 인스턴스의 새 세션
             Assert.AreSame(popup, stack.Top);
 
             using (popup.BlockClose())
@@ -158,7 +158,7 @@ namespace Bun3.Unity.UI.Editor.Tests
         [Test]
         public void Clear_IgnoresCloseGuards()
         {
-            Stack.Push(1);
+            Stack.Push("p1");
             var popup = Created[0];
             var guard = popup.BlockClose();
 

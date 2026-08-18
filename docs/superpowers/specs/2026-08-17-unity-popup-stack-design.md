@@ -204,6 +204,27 @@ Standards/Spec 병렬 리뷰에서 확인된 실버그 수정:
    기존 런타임 LogError가 계속 담당. 원시 키로의 암시적 변환으로 결과 없는 API에도
    같은 키를 그대로 사용.
 
+## 6차 — 키 기조 전환: 타입 = 키 (2026-08-18, 사용자 지시)
+
+레거시(idlez/growninja)의 실제 기조 — `ShowPopup<PopupType>()`이 기본, 같은 클래스로
+다른 프리팹을 쓸 때만 문자열 이름 — 를 채택. int `PopupKey`와 5차의
+`PopupKey<TResult>` 타입 키를 **대체**한다.
+
+- **`PopupKey` = (Name: string, PopupType: Type 메타)**. 동등성은 Name(ordinal)만 —
+  타입 경로와 데이터 경로(서버/테이블 문자열, 암시적 변환)가 같은 키로 중복 판정된다.
+  비교 무할당, 타입 키 이름은 제네릭 정적 캐시로 기동 시 1회 인터닝(관례 준수).
+  클래스 이름이 곧 식별자이므로 동명 팝업 클래스 금지(레거시와 동일 제약).
+- **타입 제네릭 API**: `Push<TPopup>()`/`PushAsync<TPopup>()`(타입된 인스턴스 반환, 캐스팅
+  불필요)/`PushWithArg<TPopup,TArg>`/`IsOpen<TPopup>()` + `PopupQueue.Enqueue<TPopup>`,
+  `PopupPool.PreloadAsync<TPopup>`, 매니저 파사드 동일 미러. 전부
+  `popupName` 선택 인자로 변형 프리팹 지원.
+- **결과 검증은 제약으로**: `PushForResultAsync<TPopup, TResult>() where TPopup :
+  Popup<TResult>` — 키 선언부조차 없이 팝업↔결과 타입이 컴파일 검증된다.
+  문자열 키 오버로드(데이터 경로)는 런타임 LogError 검증 유지.
+- 팩토리는 `key.Name`을 그대로 로드 주소로 사용 — 게임 쪽 키→주소 매핑 자체가 사라짐.
+- 초기 스펙의 "문자열 키 금지" 결정은 이 기조로 대체됨(타입 경로가 오타를 원천 차단하고,
+  문자열은 변형/데이터 경로 한정).
+
 ## 테스트 전략 (EditMode)
 
 수동 완료 `UniTaskCompletionSource`를 반환하는 테스트 팝업으로 전이를 제어:

@@ -70,9 +70,19 @@ namespace Bun3.Unity.UI.Popups
         public void Enqueue(PopupKey key, int layer = 0, int priority = 0)
             => EnqueueCore(key, layer, priority, null);
 
+        /// <summary>타입을 키로 대기열에 넣는다.</summary>
+        public void Enqueue<TPopup>(string popupName = null, int layer = 0, int priority = 0)
+            where TPopup : Popup
+            => EnqueueCore(PopupKey.Of<TPopup>(popupName), layer, priority, null);
+
         /// <summary>초기 데이터를 실어 대기열에 넣는다. 팝업은 <see cref="IPopupArg{TArg}"/>를 구현해야 한다.</summary>
         public void EnqueueWithArg<TArg>(PopupKey key, TArg arg, int layer = 0, int priority = 0)
             => EnqueueCore(key, layer, priority, new QueuedPopupArg<TArg>(arg));
+
+        /// <summary>타입을 키로, 초기 데이터를 실어 대기열에 넣는다.</summary>
+        public void EnqueueWithArg<TPopup, TArg>(TArg arg, string popupName = null, int layer = 0, int priority = 0)
+            where TPopup : Popup
+            => EnqueueCore(PopupKey.Of<TPopup>(popupName), layer, priority, new QueuedPopupArg<TArg>(arg));
 
         /// <summary>대기 항목을 전부 버린다. 이미 표시 중인 팝업은 건드리지 않는다.</summary>
         public void Clear() => _entries.Clear();

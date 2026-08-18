@@ -100,7 +100,7 @@ namespace Bun3.Unity.UI.Editor.Tests
 
         protected UniTask<Popup> CreatePopup(PopupKey key, CancellationToken cancellationToken)
         {
-            var popup = new GameObject($"popup-{key.Value}").AddComponent<TestPopup>();
+            var popup = new GameObject($"popup-{key.Name}").AddComponent<TestPopup>();
 
             if (PendingOpen)
                 popup.OpenSource = new UniTaskCompletionSource();

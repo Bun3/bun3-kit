@@ -26,7 +26,7 @@ namespace Bun3.Unity.UI.Editor.Tests
 
         private UniTask<Popup> CreateChoicePopup(PopupKey key, CancellationToken cancellationToken)
         {
-            var popup = new GameObject($"choice-{key.Value}").AddComponent<ChoicePopup>();
+            var popup = new GameObject($"choice-{key.Name}").AddComponent<ChoicePopup>();
             _choices.Add(popup);
             return UniTask.FromResult<Popup>(popup);
         }
@@ -55,7 +55,7 @@ namespace Bun3.Unity.UI.Editor.Tests
         [Test]
         public void SetResultThenClose_DeliversValue()
         {
-            _resultStack.Push(1);
+            _resultStack.Push("p1");
             var popup = (ChoicePopup)_resultStack.Top;
             var waiting = popup.WaitForResultAsync(defaultResult: -1);
 
@@ -67,7 +67,7 @@ namespace Bun3.Unity.UI.Editor.Tests
         [Test]
         public void ClosedWithoutResult_ReturnsDefault()
         {
-            _resultStack.Push(1);
+            _resultStack.Push("p1");
             var popup = (ChoicePopup)_resultStack.Top;
             var waiting = popup.WaitForResultAsync(defaultResult: -1);
 
@@ -79,7 +79,7 @@ namespace Bun3.Unity.UI.Editor.Tests
         [Test]
         public void PushForResultAsync_EndToEnd()
         {
-            var task = _resultStack.PushForResultAsync<int>(1, defaultResult: -1);
+            var task = _resultStack.PushForResultAsync<int>("p1", defaultResult: -1);
 
             ((ChoicePopup)_resultStack.Top).Choose(42);
 
@@ -87,18 +87,38 @@ namespace Bun3.Unity.UI.Editor.Tests
         }
 
         [Test]
-        public void TypedKey_InfersResultType_AndFlowsThroughAllApis()
+        public void TypeAsKey_ConstraintChecksResultType_AtCompileTime()
         {
-            var confirmKey = new PopupKey<int>(1);
+            // where TPopup : Popup<TResult> — 잘못된 결과 타입 조합은 컴파일 에러가 된다.
+            var task = _resultStack.PushForResultAsync<ChoicePopup, int>(defaultResult: -1);
 
-            // 타입 명시 없이 추론 — 잘못된 결과 타입은 컴파일 에러가 된다.
-            var task = _resultStack.PushForResultAsync(confirmKey, defaultResult: -1);
-
-            Assert.IsTrue(_resultStack.IsOpen(confirmKey), "암시적 변환으로 결과 없는 API에도 그대로 쓰인다.");
+            Assert.IsTrue(_resultStack.IsOpen<ChoicePopup>(), "타입 키의 기본 이름은 클래스 이름이다.");
+            Assert.IsTrue(_resultStack.IsOpen("ChoicePopup"), "데이터 경로 문자열과 같은 키로 판정된다.");
 
             ((ChoicePopup)_resultStack.Top).Choose(9);
 
             Assert.AreEqual(9, task.GetAwaiter().GetResult());
+        }
+
+        [Test]
+        public void TypeAsKey_PushAsyncReturnsTypedInstance()
+        {
+            var popup = _resultStack.PushAsync<ChoicePopup>().GetAwaiter().GetResult();
+
+            Assert.IsNotNull(popup);
+            Assert.AreSame(_resultStack.Top, popup);
+            Assert.AreEqual("ChoicePopup", popup.Key.Name);
+        }
+
+        [Test]
+        public void TypeAsKey_VariantName_IsDistinctPopup()
+        {
+            _resultStack.Push<ChoicePopup>();
+            _resultStack.Push<ChoicePopup>("ChoiceVariant"); // 같은 클래스, 다른 프리팹 격
+
+            Assert.AreEqual(2, _resultStack.Count, "변형 이름은 별도 팝업으로 식별돼야 한다.");
+            Assert.IsTrue(_resultStack.IsOpen<ChoicePopup>("ChoiceVariant"));
+            Assert.IsFalse(_resultStack.IsOpen("SomethingElse"));
         }
 
         [Test]
@@ -107,7 +127,7 @@ namespace Bun3.Unity.UI.Editor.Tests
             LogAssert.Expect(LogType.Error, new Regex("Popup<Int32>"));
 
             // 픽스처 기본 Stack의 TestPopup은 Popup<int>가 아니다.
-            var task = Stack.PushForResultAsync<int>(1, defaultResult: -1);
+            var task = Stack.PushForResultAsync<int>("p1", defaultResult: -1);
 
             Assert.AreEqual(-1, task.GetAwaiter().GetResult());
         }
@@ -115,13 +135,13 @@ namespace Bun3.Unity.UI.Editor.Tests
         [Test]
         public void PoolReuse_ResetsResultPerSession()
         {
-            _pool.MarkPooled(1);
+            _pool.MarkPooled("p1");
 
-            _resultStack.Push(1);
+            _resultStack.Push("p1");
             var popup = (ChoicePopup)_resultStack.Top;
             popup.Choose(5); // 결과 남기고 닫힘 → 풀 반납
 
-            _resultStack.Push(1); // 같은 인스턴스 재사용
+            _resultStack.Push("p1"); // 같은 인스턴스 재사용
             Assert.AreSame(popup, _resultStack.Top);
             var waiting = popup.WaitForResultAsync(defaultResult: 0);
 

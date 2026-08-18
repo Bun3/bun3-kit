@@ -89,15 +89,41 @@ namespace Bun3.Unity.UI.Popups
             PopupDuplicatePolicy duplicate = PopupDuplicatePolicy.Ignore, TResult defaultResult = default)
             => Stack.PushForResultAsync(key, arg, layer, duplicate, defaultResult);
 
-        /// <summary>타입 키 <see cref="PopupStack.PushForResultAsync{TResult}(PopupKey{TResult},int,PopupDuplicatePolicy,TResult)"/> 위임.</summary>
-        public UniTask<TResult> PushForResultAsync<TResult>(PopupKey<TResult> key, int layer = 0,
-            PopupDuplicatePolicy duplicate = PopupDuplicatePolicy.Ignore, TResult defaultResult = default)
-            => Stack.PushForResultAsync(key, layer, duplicate, defaultResult);
+        /// <summary>타입 키 <c>Push&lt;TPopup&gt;</c> 위임.</summary>
+        public void Push<TPopup>(string popupName = null, int layer = 0,
+            PopupDuplicatePolicy duplicate = PopupDuplicatePolicy.Ignore) where TPopup : Popup
+            => Stack.Push<TPopup>(popupName, layer, duplicate);
 
-        /// <summary>타입 키 + 초기 데이터 <see cref="PopupStack.PushForResultAsync{TArg,TResult}(PopupKey{TResult},TArg,int,PopupDuplicatePolicy,TResult)"/> 위임.</summary>
-        public UniTask<TResult> PushForResultAsync<TArg, TResult>(PopupKey<TResult> key, TArg arg, int layer = 0,
+        /// <summary>타입 키 <c>PushAsync&lt;TPopup&gt;</c> 위임 — 타입된 인스턴스 반환.</summary>
+        public UniTask<TPopup> PushAsync<TPopup>(string popupName = null, int layer = 0,
+            PopupDuplicatePolicy duplicate = PopupDuplicatePolicy.Ignore) where TPopup : Popup
+            => Stack.PushAsync<TPopup>(popupName, layer, duplicate);
+
+        /// <summary>타입 키 <c>PushWithArg&lt;TPopup, TArg&gt;</c> 위임.</summary>
+        public void PushWithArg<TPopup, TArg>(TArg arg, string popupName = null, int layer = 0,
+            PopupDuplicatePolicy duplicate = PopupDuplicatePolicy.Ignore) where TPopup : Popup
+            => Stack.PushWithArg<TPopup, TArg>(arg, popupName, layer, duplicate);
+
+        /// <summary>타입 키 <c>PushWithArgAsync&lt;TPopup, TArg&gt;</c> 위임.</summary>
+        public UniTask<TPopup> PushWithArgAsync<TPopup, TArg>(TArg arg, string popupName = null,
+            int layer = 0, PopupDuplicatePolicy duplicate = PopupDuplicatePolicy.Ignore) where TPopup : Popup
+            => Stack.PushWithArgAsync<TPopup, TArg>(arg, popupName, layer, duplicate);
+
+        /// <summary>타입 키 <c>PushForResultAsync&lt;TPopup, TResult&gt;</c> 위임 — 팝업↔결과 타입 컴파일 검증.</summary>
+        public UniTask<TResult> PushForResultAsync<TPopup, TResult>(string popupName = null, int layer = 0,
             PopupDuplicatePolicy duplicate = PopupDuplicatePolicy.Ignore, TResult defaultResult = default)
-            => Stack.PushForResultAsync(key, arg, layer, duplicate, defaultResult);
+            where TPopup : Popup<TResult>
+            => Stack.PushForResultAsync<TPopup, TResult>(popupName, layer, duplicate, defaultResult);
+
+        /// <summary>타입 키 + 초기 데이터 <c>PushForResultAsync&lt;TPopup, TArg, TResult&gt;</c> 위임.</summary>
+        public UniTask<TResult> PushForResultAsync<TPopup, TArg, TResult>(TArg arg, string popupName = null,
+            int layer = 0, PopupDuplicatePolicy duplicate = PopupDuplicatePolicy.Ignore,
+            TResult defaultResult = default) where TPopup : Popup<TResult>
+            => Stack.PushForResultAsync<TPopup, TArg, TResult>(arg, popupName, layer, duplicate, defaultResult);
+
+        /// <summary>타입 키 <c>IsOpen&lt;TPopup&gt;</c> 위임.</summary>
+        public bool IsOpen<TPopup>(string popupName = null) where TPopup : Popup
+            => Stack.IsOpen<TPopup>(popupName);
 
         /// <summary><see cref="PopupStack.Enqueue"/> 위임.</summary>
         public void Enqueue(PopupKey key, int layer = 0) => Stack.Enqueue(key, layer);
@@ -105,6 +131,15 @@ namespace Bun3.Unity.UI.Popups
         /// <summary><see cref="PopupStack.EnqueueWithArg{TArg}"/> 위임.</summary>
         public void EnqueueWithArg<TArg>(PopupKey key, TArg arg, int layer = 0)
             => Stack.EnqueueWithArg(key, arg, layer);
+
+        /// <summary>타입 키 <c>Enqueue&lt;TPopup&gt;</c> 위임(스택 대기열 — 화면 비면 순차).</summary>
+        public void Enqueue<TPopup>(string popupName = null, int layer = 0) where TPopup : Popup
+            => Stack.Enqueue(PopupKey.Of<TPopup>(popupName), layer);
+
+        /// <summary>타입 키 <c>EnqueueWithArg&lt;TPopup, TArg&gt;</c> 위임.</summary>
+        public void EnqueueWithArg<TPopup, TArg>(TArg arg, string popupName = null, int layer = 0)
+            where TPopup : Popup
+            => Stack.EnqueueWithArg(PopupKey.Of<TPopup>(popupName), arg, layer);
 
         /// <summary><see cref="PopupStack.Pop"/> 위임.</summary>
         public void Pop() => Stack.Pop();

@@ -27,18 +27,18 @@ namespace Bun3.Unity.UI.Editor.Tests
                 Assert.IsTrue(manager.BackKeyRouter);
                 Assert.AreSame(manager.Stack, manager.BackKeyRouter.Stack, "라우터에 스택이 주입돼야 한다.");
 
-                manager.Pool.MarkPooled(1);
-                manager.Stack.Push(1);
+                manager.Pool.MarkPooled("p1");
+                manager.Stack.Push("p1");
                 var first = manager.Stack.Top;
                 manager.Stack.Pop();
-                manager.Stack.Push(1);
+                manager.Stack.Push("p1");
 
                 Assert.AreSame(first, manager.Stack.Top, "풀이 스택에 배선돼 인스턴스가 재사용돼야 한다.");
 
                 manager.Dispose();
 
                 Assert.IsFalse((bool)manager.BackKeyRouter, "Dispose가 라우터 컴포넌트를 제거해야 한다.");
-                Assert.Throws<ObjectDisposedException>(() => manager.Stack.Push(1));
+                Assert.Throws<ObjectDisposedException>(() => manager.Stack.Push("p1"));
             }
             finally
             {
@@ -55,7 +55,7 @@ namespace Bun3.Unity.UI.Editor.Tests
             Assert.IsNull(manager.Arranger);
             Assert.IsNull((object)manager.BackKeyRouter);
 
-            manager.Stack.Push(1);
+            manager.Stack.Push("p1");
             Assert.AreEqual(1, manager.Stack.Count);
 
             manager.Dispose();
@@ -66,11 +66,11 @@ namespace Bun3.Unity.UI.Editor.Tests
         {
             var manager = new PopupManagerBuilder(CreatePopup).Build();
 
-            manager.Push(1);
+            manager.Push("p1");
 
             Assert.AreEqual(1, manager.Count);
             Assert.AreSame(manager.Stack.Top, manager.Top);
-            Assert.IsTrue(manager.IsOpen(1));
+            Assert.IsTrue(manager.IsOpen("p1"));
             Assert.IsTrue(manager.HandleBack());
             Assert.AreEqual(0, manager.Count);
 
@@ -108,11 +108,11 @@ namespace Bun3.Unity.UI.Editor.Tests
         public void Dim_OnlyTopmostDimOwnerShows()
         {
             WithDim = true;
-            Stack.Push(1);
+            Stack.Push("p1");
 
             Assert.IsTrue(Created[0].BackgroundDim.activeSelf, "혼자 있으면 자기 딤이 켜진다.");
 
-            Stack.Push(2);
+            Stack.Push("p2");
 
             Assert.IsFalse(Created[0].BackgroundDim.activeSelf);
             Assert.IsTrue(Created[1].BackgroundDim.activeSelf, "딤은 항상 한 장 — 최상단 소유자만.");
@@ -126,10 +126,10 @@ namespace Bun3.Unity.UI.Editor.Tests
         public void Dim_DimlessTopmost_KeepsLowerOwnersDim()
         {
             WithDim = true;
-            Stack.Push(1);
+            Stack.Push("p1");
 
             WithDim = false;
-            Stack.Push(2); // 딤 없는 팝업이 최상단
+            Stack.Push("p2"); // 딤 없는 팝업이 최상단
 
             Assert.IsNull(Created[1].BackgroundDim);
             Assert.IsTrue(Created[0].BackgroundDim.activeSelf,

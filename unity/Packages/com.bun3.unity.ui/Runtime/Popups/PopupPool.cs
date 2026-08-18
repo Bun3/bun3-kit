@@ -41,6 +41,15 @@ namespace Bun3.Unity.UI.Popups
                 _pooled[key] = new Queue<Popup>();
         }
 
+        /// <summary>타입을 키로 풀 대상 등록한다.</summary>
+        public void MarkPooled<TPopup>(string popupName = null) where TPopup : Popup
+            => MarkPooled(PopupKey.Of<TPopup>(popupName));
+
+        /// <summary>타입을 키로 프리로드한다.</summary>
+        public UniTask PreloadAsync<TPopup>(int count = 1, string popupName = null,
+            CancellationToken cancellationToken = default) where TPopup : Popup
+            => PreloadAsync(PopupKey.Of<TPopup>(popupName), count, cancellationToken);
+
         /// <summary>키를 풀 대상으로 등록하고 인스턴스를 미리 만들어 비활성 상태로 쌓아 둔다.</summary>
         public async UniTask PreloadAsync(PopupKey key, int count = 1,
             CancellationToken cancellationToken = default)
