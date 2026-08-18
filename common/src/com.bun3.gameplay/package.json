@@ -1,7 +1,7 @@
 {
   "name": "com.bun3.gameplay",
   "displayName": "Bun3 Gameplay",
-  "version": "0.12.0",
+  "version": "0.13.0",
   "unity": "2022.3",
   "description": "Generic gameplay framework with a Unity authoring adapter. The netstandard2.1 core has no UnityEngine dependency.",
   "dependencies": {
