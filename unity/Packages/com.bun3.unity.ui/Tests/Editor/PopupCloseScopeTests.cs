@@ -4,7 +4,7 @@ using NUnit.Framework;
 
 namespace Bun3.Unity.UI.Editor.Tests
 {
-    public class PopupCloseGuardTests : PopupStackTestFixture
+    public class PopupCloseScopeTests : PopupStackTestFixture
     {
         [Test]
         public void BlockClose_DefersClose_UntilRelease()
@@ -12,13 +12,13 @@ namespace Bun3.Unity.UI.Editor.Tests
             Stack.Push("p1");
             var popup = Created[0];
 
-            var guard = popup.BlockClose();
+            var scope = popup.BlockClose();
             Stack.Close(popup);
 
             Assert.AreEqual(PopupPhase.Open, popup.Phase, "잠금 중 닫기는 예약만 돼야 한다.");
             Assert.AreEqual(1, Stack.Count);
 
-            guard.Dispose();
+            scope.Dispose();
 
             Assert.AreEqual(PopupPhase.None, popup.Phase, "마지막 잠금 해제 시 예약된 닫기가 실행돼야 한다.");
             Assert.AreEqual(0, Stack.Count);
@@ -111,13 +111,13 @@ namespace Bun3.Unity.UI.Editor.Tests
             Stack.Push("p1");
             var popup = Created[0];
 
-            var guard = popup.BlockClose();
+            var scope = popup.BlockClose();
             Stack.Close(popup);
             popup.OpenSource.TrySetResult();
 
             Assert.AreEqual(PopupPhase.Open, popup.Phase, "열림은 완료되지만 잠금 중이라 닫히면 안 된다.");
 
-            guard.Dispose();
+            scope.Dispose();
 
             Assert.AreEqual(PopupPhase.None, popup.Phase);
             CollectionAssert.Contains(Released, popup);
@@ -125,7 +125,7 @@ namespace Bun3.Unity.UI.Editor.Tests
         }
 
         [Test]
-        public void Clear_WhileBlocked_NotifiesUnblockAndInvalidatesOldGuards()
+        public void Clear_WhileBlocked_NotifiesUnblockAndInvalidatesOldScopes()
         {
             var pool = new PopupPool(CreatePopup);
             pool.MarkPooled("p1");
@@ -133,7 +133,7 @@ namespace Bun3.Unity.UI.Editor.Tests
 
             stack.Push("p1");
             var popup = (TestPopup)stack.Top;
-            var staleGuard = popup.BlockClose();
+            var staleScope = popup.BlockClose();
 
             stack.Clear();
 
@@ -145,8 +145,8 @@ namespace Bun3.Unity.UI.Editor.Tests
 
             using (popup.BlockClose())
             {
-                staleGuard.Dispose(); // 이전 세션 가드의 늦은 해제
-                Assert.IsTrue(popup.IsCloseBlocked, "이전 세션 가드가 새 세션 잠금을 풀면 안 된다.");
+                staleScope.Dispose(); // 이전 세션 스코프의 늦은 해제
+                Assert.IsTrue(popup.IsCloseBlocked, "이전 세션 스코프가 새 세션 잠금을 풀면 안 된다.");
             }
 
             Assert.IsFalse(popup.IsCloseBlocked);
@@ -156,18 +156,18 @@ namespace Bun3.Unity.UI.Editor.Tests
         }
 
         [Test]
-        public void Clear_IgnoresCloseGuards()
+        public void Clear_IgnoresCloseScopes()
         {
             Stack.Push("p1");
             var popup = Created[0];
-            var guard = popup.BlockClose();
+            var scope = popup.BlockClose();
 
             Stack.Clear();
 
             Assert.AreEqual(PopupPhase.None, popup.Phase, "Clear는 잠금을 무시하고 강제 해제한다.");
             Assert.AreEqual(0, Stack.Count);
 
-            guard.Dispose(); // 늦은 해제가 예외 없이 무시되는지
+            scope.Dispose(); // 늦은 해제가 예외 없이 무시되는지
         }
     }
 }

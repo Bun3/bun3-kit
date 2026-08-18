@@ -238,6 +238,19 @@ Standards/Spec 병렬 리뷰에서 확인된 실버그 수정:
    CloseGuard(닫기 잠금). `PopupManager` → 코어(조립·수명·전역 슬롯)/Facade(위임),
    Builder는 별도 파일.
 
+## 8차 — 분류 방법론·네이밍 (2026-08-19, 사용자 리뷰)
+
+1. **분류 방법론 확정(CLAUDE.md 반영)**: 폴더도 partial도 "역할 묶음" 한 원리 —
+   폴더는 여러 타입의 역할 묶음, partial은 한 타입 안의 역할 축. 타입 종류별
+   폴더(enum 모음/Config)는 채택하지 않음: 계약 enum은 주 소비자 옆
+   (`PopupDuplicatePolicy` → `Stack/`으로 이동, `PopupPhase`는 Popup 옆 유지).
+   같은 역할 3파일부터 폴더 승격.
+2. **`PopupCloseGuard` → `PopupCloseScope`** — 레포 어휘 정합(using 수명 타입 =
+   `~Scope`: CancellationScope, ButtonInteractableScope). 내부 멤버·partial 파일명
+   (`Popup.CloseScope.cs`)·테스트 동반 개명.
+3. **`PopupResult.cs` → `Popup{TResult}.cs`** — 파일명이 "결과 값 컨텍스트"로
+   오독되던 것을 클래스명 그대로로. 제네릭 변형 파일명 `타입{TParam}.cs` 관례 확정.
+
 ## 테스트 전략 (EditMode)
 
 수동 완료 `UniTaskCompletionSource`를 반환하는 테스트 팝업으로 전이를 제어:

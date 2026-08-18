@@ -13,7 +13,7 @@ namespace Bun3.Unity.UI.Popups
     /// 인스턴스 생성(<see cref="PopupFactory"/>)과 해제(<see cref="PopupReleaser"/>)는 게임 몫이므로,
     /// 이 클래스는 트랜스폼/캔버스 배치를 일절 건드리지 않는다.
     /// <br/>
-    /// partial 구성: 이 파일(생명주기·훅) / CloseGuard(닫기 잠금).
+    /// partial 구성: 이 파일(생명주기·훅) / CloseScope(닫기 잠금).
     /// </remarks>
     public abstract partial class Popup : MonoBehaviour
     {
@@ -101,7 +101,7 @@ namespace Bun3.Unity.UI.Popups
             Layer = layer;
             Phase = PopupPhase.Opening;
             CloseRequested = false;
-            _closeGuardCount = 0; // 풀 재사용 시 이전 세션 잠금이 새 세션을 오염시키지 않게
+            _closeScopeCount = 0; // 풀 재사용 시 이전 세션 잠금이 새 세션을 오염시키지 않게
 
             OnAttached();
         }
@@ -114,14 +114,14 @@ namespace Bun3.Unity.UI.Popups
         internal void Detach()
         {
             // 잠금 중 강제 해제(Clear)여도 표현(스피너/레이캐스트 차단)이 켜진 채 남지 않게 통지하고,
-            // 세대를 올려 살아남은 이전 세션 가드의 늦은 Dispose를 무효화한다.
-            if (_closeGuardCount > 0)
+            // 세대를 올려 살아남은 이전 세션 스코프의 늦은 Dispose를 무효화한다.
+            if (_closeScopeCount > 0)
             {
-                _closeGuardCount = 0;
+                _closeScopeCount = 0;
                 OnCloseBlockedChanged(false);
             }
 
-            _closeGuardVersion++;
+            _closeScopeVersion++;
 
             Phase = PopupPhase.None;
             Stack = null;
