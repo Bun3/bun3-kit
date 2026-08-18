@@ -122,3 +122,19 @@ growninja가 티켓을 자동 리젠(count)/보상 획득(param3) 두 필드로 
 - 결과: 던전 티켓 = 정의 1개, 호출부는 GetQuantity/TryRemove 그대로. §8의 두 정의 +
   TryRemoveAcross 패턴은 풀이 관찰상 실제로 다를 때(만료 상이·유/무상 회계·리젠 우선
   소모 정책)만 쓰는 선택지로 강등.
+
+## 10. MaxCount/MaxRegen 분리 (2026-08-19 — 사용자 정식화, §9 대체)
+
+§9의 "maxStack 의미 과적"(비리젠=하드캡, 리젠=목표선)을 사용자 제안대로 명시적 두 노브로
+분리하고 Stack 네이밍 제거:
+
+- **maxCount** — 하드 보유 상한(스택 수량/인스턴스 수). `maxStack`에서 개명.
+- **maxRegen** — 리젠 목표선. 리젠 정의 필수, 리젠 주기 없이 지정하면 데이터 오류.
+- **불변식: maxRegen ≤ maxCount** (위반은 기동 예외).
+- **미지정 규칙(사용자 제안)**: maxCount 0(미지정) + maxRegen ≥ 1 → maxCount를
+  maxRegen으로 덮음(엄격 기본 — 목표선 초과 적립은 명시적 maxCount 선언으로만 허용).
+  미지정 + 리젠 없음 → 무제한.
+- 표현력 확장: "목표선 5 + 하드캡 99"(§9로는 불가) 표현 가능. growninja 패턴은
+  maxCount: long.MaxValue 명시.
+- `ExceedsMaxStack` → `ExceedsMaxCount` 개명. 하드캡 검사는 전 정의 일관 복원
+  (리젠 예외 제거), SettleRegen 목표선은 GetMaxRegen 사용.

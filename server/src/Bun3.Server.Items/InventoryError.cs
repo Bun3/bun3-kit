@@ -16,8 +16,8 @@ namespace Bun3.Server.Items
         /// <summary>가용(잠금 제외) 수량 부족. 같은 인스턴스 중복 지정 소모도 여기로 수렴.</summary>
         Insufficient,
 
-        /// <summary>정의당 보유 상한(maxStack) 초과 또는 수량 산술 오버플로.</summary>
-        ExceedsMaxStack,
+        /// <summary>정의당 보유 상한(maxCount) 초과 또는 수량 산술 오버플로.</summary>
+        ExceedsMaxCount,
 
         /// <summary>인벤토리에 없는 인스턴스 id.</summary>
         UnknownInstance,

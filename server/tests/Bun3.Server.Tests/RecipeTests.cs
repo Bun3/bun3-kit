@@ -12,7 +12,7 @@ public class RecipeTests
     private ItemCatalog<string> _catalog = null!;
     private ItemId _gold;      // 스택형
     private ItemId _ore;       // 스택형
-    private ItemId _potion;    // 스택형, maxStack 10
+    private ItemId _potion;    // 스택형, maxCount 10
     private ItemId _sword;     // 비스택형
     private long _nextId;
     private ItemInventory<ItemState> _inventory = null!;
@@ -23,7 +23,7 @@ public class RecipeTests
         _catalog = new ItemCatalogBuilder<string>()
             .Register("gold", "골드")
             .Register("ore", "광석")
-            .Register("potion", "물약", maxStack: 10)
+            .Register("potion", "물약", maxCount: 10)
             .Register("sword", "검", unstackable: true)
             .Build();
         _gold = _catalog.GetRequired("gold");
@@ -71,7 +71,7 @@ public class RecipeTests
         var potionRecipe = new Recipe(
             new[] { new RecipeEntry(_ore, 1) },
             new[] { new RecipeEntry(_potion, 5) });   // 9+5 > 10
-        Assert.That(_inventory.TryCraft(potionRecipe, out failedIndex), Is.EqualTo(InventoryError.ExceedsMaxStack));
+        Assert.That(_inventory.TryCraft(potionRecipe, out failedIndex), Is.EqualTo(InventoryError.ExceedsMaxCount));
         Assert.That(failedIndex, Is.EqualTo(1));
         Assert.That(_inventory.GetQuantity(_ore), Is.EqualTo((BigNum)3));
     }

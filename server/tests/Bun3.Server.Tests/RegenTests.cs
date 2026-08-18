@@ -51,8 +51,8 @@ public class RegenTests
     public void SettleRegen_charges_all_regen_definitions_from_catalog_meta()
     {
         var catalog = new ItemCatalogBuilder<string>()
-            .Register("ticket", "티켓", maxStack: 5, regenPeriodTicks: 10)
-            .Register("energy", "에너지", maxStack: 100, regenPeriodTicks: 100)
+            .Register("ticket", "티켓", regenPeriodTicks: 10, maxRegen: 5)
+            .Register("energy", "에너지", regenPeriodTicks: 100, maxRegen: 100)
             .Register("gold", "골드")
             .Build();
         var ticket = catalog.GetRequired("ticket");
@@ -76,14 +76,18 @@ public class RegenTests
     }
 
     [Test]
-    public void Regen_max_stack_is_a_target_line_not_a_hard_cap()
+    public void Regen_target_and_hard_cap_are_separate_knobs()
     {
-        // 단일 정의로 growninja의 count/param3 분리를 대체 — 보상 지급은 목표선(5)을 넘고,
-        // 리젠은 총량이 목표선 아래일 때만 찬다.
+        // 단일 정의로 growninja의 count/param3 분리를 대체 — 보상 지급은 목표선(5)을 넘어
+        // maxCount(무제한)까지 쌓이고, 리젠은 총량이 목표선 아래일 때만 찬다.
         var catalog = new ItemCatalogBuilder<string>()
-            .Register("ticket", "던전 티켓", maxStack: 5, regenPeriodTicks: 10)
+            .Register("ticket", "던전 티켓", maxCount: long.MaxValue, regenPeriodTicks: 10, maxRegen: 5)
+            .Register("strict", "엄격 티켓", regenPeriodTicks: 10, maxRegen: 5)   // maxCount 미지정 → 5로 덮임
             .Build();
         var ticket = catalog.GetRequired("ticket");
+        var strict = catalog.GetRequired("strict");
+        Assert.That(catalog.GetMaxCount(strict), Is.EqualTo(5), "미지정 maxCount는 maxRegen으로");
+        Assert.That(catalog.GetMaxRegen(ticket), Is.EqualTo(5));
         long nextId = 0;
         var inventory = new ItemInventory<ItemState>(catalog, () => ++nextId, _ => new ItemState());
 
@@ -98,11 +102,14 @@ public class RegenTests
         Assert.That(inventory.SettleRegen(530), Is.EqualTo(1), "500 기준 30경과 → 2장");
         Assert.That(inventory.GetQuantity(ticket), Is.EqualTo((Bun3.Gameplay.Numerics.BigNum)5));
 
-        // 클램프 지급도 리젠 정의에선 하드캡 없음 — 전량 지급
+        // 클램프 지급은 maxCount 기준 — 무제한이면 전량
         Assert.That(inventory.TryAddUpTo(ticket, 100, out var granted), Is.EqualTo(InventoryError.None));
         Assert.That(granted, Is.EqualTo((Bun3.Gameplay.Numerics.BigNum)100));
 
-        // 목표선 초과 보유 로드도 정상
+        // 엄격 정의(maxCount == maxRegen)는 목표선 초과 지급이 하드캡에 걸린다
+        Assert.That(inventory.TryAdd(strict, 6), Is.EqualTo(InventoryError.ExceedsMaxCount));
+
+        // 목표선 초과 보유 로드도 maxCount 안이면 정상
         var reloaded = new ItemInventory<ItemState>(catalog, () => ++nextId, _ => new ItemState());
         Assert.That(reloaded.TryLoadInstance(1, ticket, 12, 0, new ItemState()), Is.EqualTo(InventoryError.None));
     }
@@ -111,7 +118,7 @@ public class RegenTests
     public void SettleRegen_basis_persists_via_load_roundtrip()
     {
         var catalog = new ItemCatalogBuilder<string>()
-            .Register("ticket", "티켓", maxStack: 5, regenPeriodTicks: 10)
+            .Register("ticket", "티켓", regenPeriodTicks: 10, maxRegen: 5)
             .Build();
         var ticket = catalog.GetRequired("ticket");
         long nextId = 0;
@@ -133,14 +140,20 @@ public class RegenTests
     public void Regen_definitions_enforce_integer_quantities_and_valid_meta()
     {
         Assert.That(() => new ItemCatalogBuilder<string>()
-                .Register("x", "x", maxStack: 5, unstackable: true, regenPeriodTicks: 10),
+                .Register("x", "x", maxCount: 5, unstackable: true, regenPeriodTicks: 10, maxRegen: 5),
             Throws.TypeOf<ItemCatalogException>(), "비스택형 리젠 미지원");
         Assert.That(() => new ItemCatalogBuilder<string>()
                 .Register("x", "x", regenPeriodTicks: 10),
-            Throws.TypeOf<ItemCatalogException>(), "무제한 maxStack 리젠 금지");
+            Throws.TypeOf<ItemCatalogException>(), "리젠 정의는 maxRegen 필수");
+        Assert.That(() => new ItemCatalogBuilder<string>()
+                .Register("x", "x", maxRegen: 5),
+            Throws.TypeOf<ItemCatalogException>(), "maxRegen은 리젠 주기 없이 무의미");
+        Assert.That(() => new ItemCatalogBuilder<string>()
+                .Register("x", "x", maxCount: 3, regenPeriodTicks: 10, maxRegen: 5),
+            Throws.TypeOf<ItemCatalogException>(), "maxRegen > maxCount 금지");
 
         var catalog = new ItemCatalogBuilder<string>()
-            .Register("ticket", "티켓", maxStack: 5, regenPeriodTicks: 10)
+            .Register("ticket", "티켓", regenPeriodTicks: 10, maxRegen: 5)
             .Build();
         var ticket = catalog.GetRequired("ticket");
         long nextId = 0;

@@ -16,7 +16,7 @@ namespace Bun3.Server.Items
     /// <typeparam name="TState">게임이 정의하는 인스턴스 상태 타입.</typeparam>
     public sealed partial class ItemInventory<TState>
     {
-        // ponytail: 비스택형 1회 연산 인스턴스 수 상한 — 무제한 maxStack 정의에 대량 지급 시
+        // ponytail: 비스택형 1회 연산 인스턴스 수 상한 — 무제한 maxCount 정의에 대량 지급 시
         // 생성 루프 폭주를 막는다. 정당한 대량 지급이 필요해지면 옵션으로 승격.
         internal const int MaxInstancesPerOperation = 1000;
 

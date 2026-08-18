@@ -29,19 +29,19 @@ namespace Bun3.Server.Items
             {
                 var item = regenItems[i];
                 _regenBasis.TryGetValue(item, out var basis);
-                var maxStack = _catalog.GetMaxStack(item);
+                var maxRegen = _catalog.GetMaxRegen(item);
                 var quantity = GetQuantity(item);
-                if (quantity.CompareTo(maxStack) >= 0)
+                if (quantity.CompareTo(maxRegen) >= 0)
                 {
-                    // 목표선 이상(초과 보유 포함) — 리젠 정지, 적립 제거. long 변환 없이 판정
-                    // (목표선 초과 수량은 long 범위를 넘을 수 있다).
+                    // 목표선 이상(maxCount까지의 초과 보유 포함) — 리젠 정지, 적립 제거.
+                    // long 변환 없이 판정(목표선 초과 수량은 long 범위를 넘을 수 있다).
                     _regenBasis[item] = nowTicksUtc;
                     continue;
                 }
 
                 var current = ToInt64Exact(quantity);
                 var granted = Regen.SettlePeriodic(
-                    current, maxStack, _catalog.GetRegenPeriodTicks(item), nowTicksUtc, ref basis);
+                    current, maxRegen, _catalog.GetRegenPeriodTicks(item), nowTicksUtc, ref basis);
                 if (granted > 0)
                 {
                     // 지급 성공 후에만 기준을 전진시킨다 — 실패 시 다음 정산에서 재시도.
@@ -93,7 +93,7 @@ namespace Bun3.Server.Items
         }
 
         /// <summary>정수 수량을 long으로 변환한다 — 리젠 정의는 정수 수량이 강제되고
-        /// maxStack(long) 이하이므로 정확 변환이 보장된다.</summary>
+        /// maxCount(long) 이하이므로 정확 변환이 보장된다.</summary>
         private static long ToInt64Exact(Bun3.Gameplay.Numerics.BigNum value)
         {
             var result = value.Mantissa;

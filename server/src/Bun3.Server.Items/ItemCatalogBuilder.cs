@@ -13,10 +13,11 @@ namespace Bun3.Server.Items
     {
         private readonly List<string> _ids = new List<string>();
         private readonly List<TDefinition> _definitions = new List<TDefinition>();
-        private readonly List<long> _maxStacks = new List<long>();
+        private readonly List<long> _maxCounts = new List<long>();
         private readonly List<long> _externalIds = new List<long>();
         private readonly List<bool> _unstackables = new List<bool>();
         private readonly List<long> _regenPeriods = new List<long>();
+        private readonly List<long> _maxRegens = new List<long>();
         private readonly Dictionary<string, int> _lookup = new Dictionary<string, int>(StringComparer.Ordinal);
         private readonly Dictionary<long, int> _externalLookup = new Dictionary<long, int>();
         private readonly List<Action<ItemCatalog<TDefinition>>> _validators = new List<Action<ItemCatalog<TDefinition>>>();
@@ -29,25 +30,28 @@ namespace Bun3.Server.Items
         /// </summary>
         /// <param name="id">고유 문자열 id(서수 비교) — 정식 키. 중복이면 던진다.</param>
         /// <param name="definition">게임 정의(불투명 보관).</param>
-        /// <param name="maxStack">정의당 최대 보유량(스택형=스택 상한, 비스택형=최대 인스턴스 수).
-        /// 단, 리젠 정의(regenPeriodTicks &gt; 0)에서는 하드 상한이 아니라 <b>리젠 목표선</b> —
-        /// 명시적 지급은 목표선을 넘어 쌓이고 리젠만 목표선까지 찬다.
-        /// 기본 <see cref="long.MaxValue"/> = 무제한. 0 이하는 거부.</param>
+        /// <param name="maxCount">정의당 최대 보유량 하드 상한(스택형=수량, 비스택형=인스턴스 수).
+        /// 0 = 미지정 — 리젠 정의면 <paramref name="maxRegen"/>으로 덮이고(목표선 초과 적립을
+        /// 명시적으로만 허용), 아니면 무제한. 명시적 무제한은 <see cref="long.MaxValue"/>.</param>
         /// <param name="externalId">선택적 외부 숫자 id(DB 컬럼·Steam itemdefid 등) — 역색인에
         /// 등록된다. 중복이면 던진다. <see cref="long.MinValue"/>는 예약값이라 거부.</param>
         /// <param name="unstackable">true면 비스택형(인스턴스형) — 수량 병합 대신
-        /// 수량 1 인스턴스 N개로 보유하며 maxStack이 최대 인스턴스 수가 된다.</param>
+        /// 수량 1 인스턴스 N개로 보유하며 maxCount가 최대 인스턴스 수가 된다.</param>
         /// <param name="regenPeriodTicks">리젠 주기(ticks). 0 = 리젠 없음. 지정 시
         /// <see cref="ItemInventory{TState}.SettleRegen"/>이 이 정의를 자동 정산한다 —
-        /// 스택형 + 유한 maxStack(상한) 필수이며, 수량은 정수만 허용된다.</param>
+        /// 스택형 + <paramref name="maxRegen"/> 필수이며, 수량은 정수만 허용된다.</param>
+        /// <param name="maxRegen">리젠 목표선 — 리젠은 총량이 이 값 미만일 때만 채운다.
+        /// 반드시 maxCount 이하(위반은 데이터 오류로 던짐). 명시적 지급은 목표선을 넘어
+        /// maxCount까지 쌓일 수 있다(growninja 보상 티켓 패턴).</param>
         /// <returns>체이닝용 빌더 자신.</returns>
         public ItemCatalogBuilder<TDefinition> Register(
             string id,
             TDefinition definition,
-            long maxStack = long.MaxValue,
+            long maxCount = 0,
             long? externalId = null,
             bool unstackable = false,
-            long regenPeriodTicks = 0)
+            long regenPeriodTicks = 0,
+            long maxRegen = 0)
         {
             ThrowIfBuilt();
             if (string.IsNullOrWhiteSpace(id))
@@ -55,9 +59,14 @@ namespace Bun3.Server.Items
                 throw new ArgumentException("아이템 id는 비어 있을 수 없습니다.", nameof(id));
             }
 
-            if (maxStack <= 0)
+            if (maxCount < 0)
             {
-                throw new ArgumentOutOfRangeException(nameof(maxStack), maxStack, "maxStack은 1 이상이어야 합니다.");
+                throw new ArgumentOutOfRangeException(nameof(maxCount), maxCount, "maxCount는 0(미지정) 이상이어야 합니다.");
+            }
+
+            if (maxRegen < 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(maxRegen), maxRegen, "maxRegen은 0(없음) 이상이어야 합니다.");
             }
 
             if (externalId == ItemCatalog.NoExternalId)
@@ -75,9 +84,25 @@ namespace Bun3.Server.Items
                 throw new ItemCatalogException($"비스택형 정의는 리젠을 지원하지 않습니다: '{id}'");
             }
 
-            if (regenPeriodTicks > 0 && maxStack == long.MaxValue)
+            if (regenPeriodTicks > 0 && maxRegen <= 0)
             {
-                throw new ItemCatalogException($"리젠 정의는 유한한 maxStack(상한)이 필요합니다: '{id}'");
+                throw new ItemCatalogException($"리젠 정의는 maxRegen(목표선)이 필요합니다: '{id}'");
+            }
+
+            if (maxRegen > 0 && regenPeriodTicks <= 0)
+            {
+                throw new ItemCatalogException($"maxRegen은 리젠 주기 없이는 의미가 없습니다: '{id}'");
+            }
+
+            // 미지정 maxCount 정규화 — 리젠 정의는 목표선으로 덮어(엄격 기본), 아니면 무제한.
+            if (maxCount == 0)
+            {
+                maxCount = maxRegen > 0 ? maxRegen : long.MaxValue;
+            }
+
+            if (maxRegen > maxCount)
+            {
+                throw new ItemCatalogException($"maxRegen({maxRegen})은 maxCount({maxCount}) 이하여야 합니다: '{id}'");
             }
 
             if (_lookup.ContainsKey(id))
@@ -98,10 +123,11 @@ namespace Bun3.Server.Items
             _lookup.Add(id, _ids.Count);
             _ids.Add(id);
             _definitions.Add(definition);
-            _maxStacks.Add(maxStack);
+            _maxCounts.Add(maxCount);
             _externalIds.Add(externalId ?? ItemCatalog.NoExternalId);
             _unstackables.Add(unstackable);
             _regenPeriods.Add(regenPeriodTicks);
+            _maxRegens.Add(maxRegen);
             return this;
         }
 
@@ -209,10 +235,11 @@ namespace Bun3.Server.Items
 
             var catalog = new ItemCatalog<TDefinition>(
                 _ids.ToArray(),
-                _maxStacks.ToArray(),
+                _maxCounts.ToArray(),
                 _externalIds.ToArray(),
                 _unstackables.ToArray(),
                 _regenPeriods.ToArray(),
+                _maxRegens.ToArray(),
                 regenItems.ToArray(),
                 _lookup,
                 _externalLookup,

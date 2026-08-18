@@ -17,7 +17,7 @@ public class ItemInventoryTests
 
     private ItemCatalog<string> _catalog = null!;
     private ItemId _gold;      // 스택형, 무제한
-    private ItemId _potion;    // 스택형, maxStack 10
+    private ItemId _potion;    // 스택형, maxCount 10
     private ItemId _sword;     // 비스택형, 최대 3개 보유
     private ItemId _relic;     // 비스택형, 무제한
 
@@ -30,8 +30,8 @@ public class ItemInventoryTests
     {
         _catalog = new ItemCatalogBuilder<string>()
             .Register("gold", "골드")
-            .Register("potion", "물약", maxStack: 10)
-            .Register("sword", "검", maxStack: 3, unstackable: true)
+            .Register("potion", "물약", maxCount: 10)
+            .Register("sword", "검", maxCount: 3, unstackable: true)
             .Register("relic", "유물", unstackable: true)
             .Build();
         _gold = _catalog.GetRequired("gold");
@@ -68,7 +68,7 @@ public class ItemInventoryTests
     {
         _inventory.TryAdd(_potion, 8);
 
-        Assert.That(_inventory.TryAdd(_potion, 3), Is.EqualTo(InventoryError.ExceedsMaxStack));
+        Assert.That(_inventory.TryAdd(_potion, 3), Is.EqualTo(InventoryError.ExceedsMaxCount));
         Assert.That(_inventory.TryRemove(_potion, 9), Is.EqualTo(InventoryError.Insufficient));
         Assert.That(_inventory.GetQuantity(_potion), Is.EqualTo((BigNum)8));
     }
@@ -126,7 +126,7 @@ public class ItemInventoryTests
     {
         _inventory.TryAdd(_sword, 3);
 
-        Assert.That(_inventory.TryAdd(_sword, 1), Is.EqualTo(InventoryError.ExceedsMaxStack));
+        Assert.That(_inventory.TryAdd(_sword, 1), Is.EqualTo(InventoryError.ExceedsMaxCount));
         Assert.That(_inventory.InstanceCount, Is.EqualTo(3));
     }
 
@@ -217,7 +217,7 @@ public class ItemInventoryTests
         deltas[0] = new ItemDelta(_sword, 2);
         deltas[1] = new ItemDelta(_sword, 2);   // 누적 4 > 최대 3
 
-        Assert.That(_inventory.TryApply(deltas, out var failedIndex), Is.EqualTo(InventoryError.ExceedsMaxStack));
+        Assert.That(_inventory.TryApply(deltas, out var failedIndex), Is.EqualTo(InventoryError.ExceedsMaxCount));
         Assert.That(failedIndex, Is.EqualTo(1));
         Assert.That(_inventory.InstanceCount, Is.EqualTo(0));
     }
@@ -317,7 +317,7 @@ public class ItemInventoryTests
         Assert.That(_inventory.TryLoadInstance(3, _sword, 2, 0, new ItemState()),
             Is.EqualTo(InventoryError.InvalidAmount), "비스택형은 수량 1만");
         Assert.That(_inventory.TryLoadInstance(4, _potion, 11, 0, new ItemState()),
-            Is.EqualTo(InventoryError.ExceedsMaxStack));
+            Is.EqualTo(InventoryError.ExceedsMaxCount));
     }
 
     // ---- 무할당 ----

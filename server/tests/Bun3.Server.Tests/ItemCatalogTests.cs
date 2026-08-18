@@ -10,7 +10,7 @@ public class ItemCatalogTests
 
     private static ItemCatalog<TestDef> BuildSample() =>
         new ItemCatalogBuilder<TestDef>()
-            .Register("potion.small", new TestDef("소형 물약"), maxStack: 999)
+            .Register("potion.small", new TestDef("소형 물약"), maxCount: 999)
             .Register("gold", new TestDef("골드"))
             .Build();
 
@@ -26,8 +26,8 @@ public class ItemCatalogTests
         // 인터닝 — 같은 참조를 돌려준다
         Assert.That(ReferenceEquals(catalog.GetIdString(potion), catalog.GetIdString(potion)), Is.True);
         Assert.That(catalog.GetDefinition(potion).DisplayName, Is.EqualTo("소형 물약"));
-        Assert.That(catalog.GetMaxStack(potion), Is.EqualTo(999));
-        Assert.That(catalog.GetMaxStack(catalog.GetRequired("gold")), Is.EqualTo(long.MaxValue));
+        Assert.That(catalog.GetMaxCount(potion), Is.EqualTo(999));
+        Assert.That(catalog.GetMaxCount(catalog.GetRequired("gold")), Is.EqualTo(long.MaxValue));
     }
 
     [Test]
@@ -50,7 +50,7 @@ public class ItemCatalogTests
 
         Assert.That(() => builder.Register("gold", new TestDef("중복")), Throws.TypeOf<ItemCatalogException>());
         Assert.That(() => builder.Register("  ", new TestDef("공백")), Throws.ArgumentException);
-        Assert.That(() => builder.Register("x", new TestDef("x"), maxStack: 0),
+        Assert.That(() => builder.Register("x", new TestDef("x"), maxCount: -1),
             Throws.TypeOf<ArgumentOutOfRangeException>());
     }
 

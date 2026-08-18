@@ -12,7 +12,7 @@ public class ItemInventoryExtrasTests
 
     private ItemCatalog<string> _catalog = null!;
     private ItemId _gold;      // 스택형, 무제한
-    private ItemId _potion;    // 스택형, maxStack 10
+    private ItemId _potion;    // 스택형, maxCount 10
     private ItemId _sword;     // 비스택형, 최대 3개
     private long _nextId;
 
@@ -21,8 +21,8 @@ public class ItemInventoryExtrasTests
     {
         _catalog = new ItemCatalogBuilder<string>()
             .Register("gold", "골드")
-            .Register("potion", "물약", maxStack: 10)
-            .Register("sword", "검", maxStack: 3, unstackable: true)
+            .Register("potion", "물약", maxCount: 10)
+            .Register("sword", "검", maxCount: 3, unstackable: true)
             .Build();
         _gold = _catalog.GetRequired("gold");
         _potion = _catalog.GetRequired("potion");
@@ -130,7 +130,7 @@ public class ItemInventoryExtrasTests
     public void Split_pool_tickets_regen_and_bonus_work_together()
     {
         var catalog = new ItemCatalogBuilder<string>()
-            .Register("ticket.regen", "리젠 티켓", maxStack: 5, regenPeriodTicks: 10)
+            .Register("ticket.regen", "리젠 티켓", regenPeriodTicks: 10, maxRegen: 5)
             .Register("ticket.bonus", "보상 티켓")
             .Build();
         var regen = catalog.GetRequired("ticket.regen");

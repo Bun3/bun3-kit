@@ -13,7 +13,7 @@ namespace Bun3.Server.Items
         /// <summary>
         /// 저장 로드용 — 기존 인스턴스 id(DB·Steam 권위)를 그대로 수용하고 추적·통지하지
         /// 않는다. 중복 id·스택형 정의의 두 번째 인스턴스는 <see cref="InventoryError.DuplicateInstance"/>,
-        /// 비스택형에 수량 1 외는 <see cref="InventoryError.InvalidAmount"/>, maxStack 검사 수행.
+        /// 비스택형에 수량 1 외는 <see cref="InventoryError.InvalidAmount"/>, maxCount 검사 수행.
         /// </summary>
         public InventoryError TryLoadInstance(
             long instanceId,
@@ -38,7 +38,7 @@ namespace Bun3.Server.Items
                 return InventoryError.DuplicateInstance;
             }
 
-            var maxStack = _catalog.GetMaxStack(item);
+            var maxCount = _catalog.GetMaxCount(item);
             if (_catalog.IsUnstackable(item))
             {
                 if (quantity.CompareTo(BigNum.One) != 0)
@@ -46,9 +46,9 @@ namespace Bun3.Server.Items
                     return InventoryError.InvalidAmount;
                 }
 
-                if (maxStack != long.MaxValue && GetQuantity(item).CompareTo(maxStack - 1) > 0)
+                if (maxCount != long.MaxValue && GetQuantity(item).CompareTo(maxCount - 1) > 0)
                 {
-                    return InventoryError.ExceedsMaxStack;
+                    return InventoryError.ExceedsMaxCount;
                 }
             }
             else
@@ -58,16 +58,14 @@ namespace Bun3.Server.Items
                     return InventoryError.DuplicateInstance;
                 }
 
-                var isRegen = _catalog.GetRegenPeriodTicks(item) > 0;
-                if (isRegen && quantity.Exponent < 0)
+                if (_catalog.GetRegenPeriodTicks(item) > 0 && quantity.Exponent < 0)
                 {
                     return InventoryError.InvalidAmount;   // 리젠 정의는 정수 수량만
                 }
 
-                // 리젠 정의의 maxStack은 리젠 목표선 — 목표선 초과 보유는 정상이라 로드 허용.
-                if (maxStack != long.MaxValue && !isRegen && quantity.CompareTo(maxStack) > 0)
+                if (maxCount != long.MaxValue && quantity.CompareTo(maxCount) > 0)
                 {
-                    return InventoryError.ExceedsMaxStack;
+                    return InventoryError.ExceedsMaxCount;
                 }
 
                 _stackSingletons.Add(item, instanceId);
