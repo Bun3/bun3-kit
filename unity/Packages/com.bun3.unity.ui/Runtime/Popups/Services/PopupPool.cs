@@ -1,8 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Threading;
+using Bun3.Unity.Core.Utils;
 using Cysharp.Threading.Tasks;
-using UnityEngine;
 
 namespace Bun3.Unity.UI.Popups
 {
@@ -150,7 +150,7 @@ namespace Bun3.Unity.UI.Popups
         private static void Destroy(Popup popup)
         {
             if (popup)
-                EditorSafeDestroy.Destroy(popup.gameObject);
+                popup.gameObject.SafeDestroy();
         }
     }
 }

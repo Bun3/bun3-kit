@@ -224,7 +224,10 @@ Behavior rules:
 | Location | Description |
 |---|---|
 | `Runtime/Buttons/` | `ButtonInteractableScope`, `DisabledReason`, `IButtonDisabledHandler`, and `ButtonDisabledClickReceiver` source. |
-| `Runtime/Popups/` | `PopupStack`, `Popup`, `Popup<TResult>`, `PopupKey`, `PopupDuplicatePolicy`, `IPopupArg<TArg>`, `PopupCloseGuard`, `PopupQueue`, `PopupPool`, `PopupSiblingArranger`, `PopupBackKeyRouter`, `PopupManager`(+builder) source. |
+| `Runtime/Popups/Core/` | `Popup`(+`.CloseGuard` partial), `Popup<TResult>`, `PopupKey`, `PopupPhase`, `PopupDuplicatePolicy`, `IPopupArg<TArg>`, `PopupCloseGuard`, delegates. |
+| `Runtime/Popups/Stack/` | `PopupStack` partials: core state/lifetime, `.Push`, `.Close`, `.Result`, `.Queue`. |
+| `Runtime/Popups/Services/` | `PopupQueue`, `PopupPool`, `PopupSiblingArranger`, `PopupBackKeyRouter`. |
+| `Runtime/Popups/Manager/` | `PopupManager`(+`.Facade` partial), `PopupManagerBuilder`. |
 | `Samples/ButtonInteractableScope/` | Sample MonoBehaviour and handler demonstrating typical usage. |
 | `Tests/Runtime/` | PlayMode tests (`Bun3.Unity.UI.Tests`). |
 | `Tests/Editor/` | EditMode tests (`Bun3.Unity.UI.Editor.Tests`), covering the popup stack. |

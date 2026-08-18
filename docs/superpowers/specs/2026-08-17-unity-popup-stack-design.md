@@ -225,6 +225,19 @@ Standards/Spec 병렬 리뷰에서 확인된 실버그 수정:
 - 초기 스펙의 "문자열 키 금지" 결정은 이 기조로 대체됨(타입 경로가 오타를 원천 차단하고,
   문자열은 변형/데이터 경로 한정).
 
+## 7차 — 구조 정리 (2026-08-18)
+
+1. `EditorSafeDestroy` → **core 패키지 `Util.SafeDestroy(this Object)` 확장 메서드**로 이동
+   (`com.bun3.unity.core/Runtime/Utils/Util.Object.cs`, 기존 Util partial 관례).
+   플레이/에디터 Destroy 분기가 팝업 전용이 아니라 범용이라는 판단.
+2. **폴더 구조화**: `Runtime/Popups/` → `Core/`(팝업·키·정책·인터페이스) /
+   `Stack/`(PopupStack partial들) / `Services/`(큐·풀·정렬·back 라우터) /
+   `Manager/`(매니저·빌더).
+3. **partial 분할**: `PopupStack` → 코어(상태·수명·정렬)/Push(열기·중복 정책)/
+   Close(닫기·back)/Result(결과)/Queue(순차 대기열). `Popup` → 코어(생명주기·훅)/
+   CloseGuard(닫기 잠금). `PopupManager` → 코어(조립·수명·전역 슬롯)/Facade(위임),
+   Builder는 별도 파일.
+
 ## 테스트 전략 (EditMode)
 
 수동 완료 `UniTaskCompletionSource`를 반환하는 테스트 팝업으로 전이를 제어:
