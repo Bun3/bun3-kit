@@ -268,6 +268,34 @@ Standards/Spec 병렬 리뷰에서 확인된 실버그 수정:
 3. partial `타입.역할.cs`와 타입 폴더 회피(Angular 공식 등 feature 계열 공통 권고)는
    1차 사료로 뒷받침 확인 — 유지.
 
+## 10차 — 갭 완충 (2026-08-19, 레거시 전수 비교 + 라이브러리 4종 조사 후 사용자 전체 채택)
+
+레거시(idlez/growninja) 잔여 갭과 라이브러리(UnityScreenNavigator 등) 교차 검증에서
+확인된 항목 전부 반영:
+
+1. **입력 보호(Popup.Interaction)** — 전환 중 raycast 차단(기본 on) + 열림 후 유예
+   (`postOpenInteractionDelay`, 레거시 ignoreInteractDuration), 딤 클릭 닫기
+   (`closeOnDimClick`, 레거시 HideIfClickedOutside의 폴링 없는 대체 — 닫기 스코프 존중),
+   열림 시 EventSystem 선택 해제(기본 on), `OnBecameTopmost`/`OnCovered` 훅
+   (USN 가려짐/드러남 생명주기 대응).
+2. **내장 연출(Popup.Animation)** — 레거시 animated/faded/animDuration 대응 직렬화
+   플래그(스케일 팝 0.7→1, 페이드, 이징 커브). 기본 PlayOpen/CloseAsync가 실행,
+   오버라이드하면 대체. DOTween 무의존(unscaled UniTask 루프).
+3. **일괄 조작·빈 상태 시그널** — `CloseAll(except)`/`CloseAll(predicate)`(정상 닫기
+   경로, 레거시 HideAllPopups 대응 — Clear는 연출 생략이라 별개), `IsEmpty`/`Emptied`/
+   `WaitUntilEmptyAsync`(레거시 UISequence 예약 플래그 대체).
+4. **MessageBoxPopup** — "제목+본문+버튼N → 인덱스 await" 프리셋 + `ShowMessageBoxAsync`
+   /`ConfirmAsync` 확장. 취소(-1)는 defaultResult로 수렴.
+5. **ToastQueue<TData>** (`Runtime/Toasts`, 신규 네임스페이스) — 순차 표시·대기 상한·
+   중복 억제(comparer 옵트인)·force 끼어들기·뷰 1회 생성 재사용. 팝업 스택과 무관
+   (back/딤/정렬 비참여). 레거시 Toast 정적 큐 대응.
+6. **LoadingOverlay** (`Runtime/Loading`, 신규 네임스페이스) — ref-count(`LoadingScope`,
+   ~Scope 관례) + 지연 표시(플래시 방지, 레거시 0.2s) + `During(task)` 래핑 + 진행률.
+   레거시 Popup_Loading 대응.
+
+불채택(조사 근거): DI 통합(델리게이트로 이미 개방), Sheet/씬 히스토리(팝업 밖),
+Timeline 전환 에셋(훅으로 충분), UI Toolkit 백엔드(uGUI 기조).
+
 ## 테스트 전략 (EditMode)
 
 수동 완료 `UniTaskCompletionSource`를 반환하는 테스트 팝업으로 전이를 제어:

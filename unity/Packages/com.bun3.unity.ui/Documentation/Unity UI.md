@@ -193,7 +193,37 @@ bool ok    = await _stack.PushForResultAsync<ConfirmPopup, string, bool>("Delete
 var picked = await _stack.PushForResultAsync<ItemPickPopup, ItemInstance>(); // null = cancelled
 // (string-key overloads remain for data-driven opens; those are checked at runtime.)
 
-// 9. Block closing while the popup is busy (ref-counted; nested locks compose).
+// 9. Input protection (all serialized flags on Popup, on by default where safe):
+//    - raycasts are blocked during open/close transitions (+optional post-open delay)
+//    - EventSystem selection is cleared on open
+//    - closeOnDimClick: clicking the dim closes the popup (respects close scopes)
+//    Built-in scale-pop/fade animations (legacy animated/faded/animDuration) run from the
+//    default PlayOpen/CloseAsync — overriding those hooks replaces them.
+//    OnBecameTopmost()/OnCovered() fire as popups stack over each other.
+
+// 9b. Whole-stack signals and bulk close:
+_stack.CloseAll(except: settingsPopup);        // normal close path (animations run) — Clear() skips them
+_stack.CloseAll(p => p.Layer == 0);
+await _stack.WaitUntilEmptyAsync();            // auto-landing/tutorial gate (legacy UISequence)
+_stack.Emptied += TryStartAutoLanding;
+
+// 9c. Message box (legacy Callback(int)): derive one MessageBoxPopup prefab, then:
+int picked = await _stack.ShowMessageBoxAsync<MyMessageBox>("Title", "Body", "Yes", "No", "Later");
+bool ok    = await _stack.ConfirmAsync<MyMessageBox>("Title", "Body", "OK", "Cancel"); // first button only
+
+// 9d. Toasts (Bun3.Unity.UI.Toasts) — independent of the popup stack, one at a time:
+_toasts = new ToastQueue<string>(CreateToastViewAsync, defaultDuration: 2f, capacity: 10,
+    duplicateComparer: StringComparer.Ordinal);
+_toasts.Show("Item acquired");
+_toasts.Show("Server error", force: true);     // jumps the queue, skips the current toast
+
+// 9e. Loading overlay (Bun3.Unity.UI.Loading) — ref-counted, flash-free (delayed show):
+_loading = new LoadingOverlay(CreateLoadingViewAsync, showDelay: 0.2f);
+using (_loading.Begin()) await SendPacketAsync(req, ct);
+var data = await _loading.During(FetchAsync(ct));
+_loading.SetProgress(0.7f);
+
+// 10. Block closing while the popup is busy (ref-counted; nested locks compose).
 //    A Close/back during the lock is *deferred*, not lost — it runs when the last lock lifts.
 using (BlockClose())                                   // sequence direction, cutscenes
     await PlaySequenceAsync(ct);
@@ -225,6 +255,8 @@ Behavior rules:
 |---|---|
 | `Runtime/Buttons/` | `ButtonInteractableScope`, `DisabledReason`, `IButtonDisabledHandler`, and `ButtonDisabledClickReceiver` source. |
 | `Runtime/Popups/` | One flat folder = one namespace (`Bun3.Unity.UI.Popups`). `Popup`(+`Popup<TResult>` in the same file, +`.CloseScope` partial), `PopupStack` partials (`.Push`/`.Close`/`.Result`/`.Queue`), `PopupKey`, `PopupPhase`, `PopupDuplicatePolicy`, `IPopupArg<TArg>`, `PopupCloseScope`, `PopupQueue`, `PopupPool`, `PopupSiblingArranger`, `PopupBackKeyRouter`, `PopupManager`(+`.Facade`), `PopupManagerBuilder`, delegates. |
+| `Runtime/Toasts/` | `ToastQueue<TData>`, `ToastView<TData>` — sequential toast display independent of the popup stack. |
+| `Runtime/Loading/` | `LoadingOverlay`(+`LoadingScope`), `LoadingView` — ref-counted, flash-free loading indicator. |
 | `Samples/ButtonInteractableScope/` | Sample MonoBehaviour and handler demonstrating typical usage. |
 | `Tests/Runtime/` | PlayMode tests (`Bun3.Unity.UI.Tests`). |
 | `Tests/Editor/` | EditMode tests (`Bun3.Unity.UI.Editor.Tests`), covering the popup stack. |
