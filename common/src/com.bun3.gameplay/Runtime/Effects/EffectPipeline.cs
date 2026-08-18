@@ -44,6 +44,12 @@ namespace Bun3.Gameplay.Effects
         /// <summary>적용 조건 미충족으로 차단된 적용 요청 수입니다.</summary>
         internal long ConditionDropCount { get; private set; }
 
+        /// <summary>ChanceToApply 롤 실패로 조용히 무산된 적용 요청 수입니다.</summary>
+        internal long ChanceDropCount { get; private set; }
+
+        // G2: [0,1) 결정론 롤 스케일 — _rng.NextUInt32()의 치역(2^32)을 BigNum 정수 비교로 다루기 위한 상수.
+        private static readonly BigNum RngRollRange = (BigNum)4_294_967_296L;
+
         /// <summary>지금까지 처리된 틱 수입니다. internal 세터는 스냅샷 복원 재생 결정론 전용입니다.</summary>
         public long CurrentTick { get; internal set; }
 
@@ -210,11 +216,19 @@ namespace Bun3.Gameplay.Effects
 
             var hasSource = _resolver.TryResolve(pending.Source, out var source) && source is not null;
 
+            if (!RollChance(spec, target, source, hasSource, pending.Level))
+            {
+                ChanceDropCount++;
+                return;
+            }
+
             if (!EvaluateConditions(spec.ApplicationConditions, target, source, hasSource))
             {
                 ConditionDropCount++;
                 return;
             }
+
+            RemoveOnApply(target, spec, pending.SpecId);
 
             if (spec.DurationType == EffectDurationType.Instant)
             {
@@ -224,6 +238,48 @@ namespace Bun3.Gameplay.Effects
             {
                 ApplyDurationOrInfinite(spec, target, in pending);
             }
+        }
+
+        // G2: ChanceToApply 롤 — null이면 항상 통과. 평가값 chance를 [0,1] 정수 스케일(×2^32)로 올려
+        // NextUInt32() 롤과 BigNum 정수 비교한다(부동소수 없이 chance<=0/chance>=1 양끝도 같은 식으로 자연히 처리됨).
+        private bool RollChance(
+            CompiledEffectSpec spec, EffectTarget target, EffectTarget? source, bool hasSource, int level)
+        {
+            var chance = spec.ChanceToApply;
+            if (chance is null) return true;
+
+            var probability = EvaluateMagnitudeCore(
+                chance.Base, chance.PerLevel, chance.Calc, chance.ByLevel, chance.Tail, chance.Increment,
+                target, source, hasSource, level, stack: 1);
+            var roll = (BigNum)(long)_rng.NextUInt32();
+            return roll < probability * RngRollRange;
+        }
+
+        // G1: RemoveOnApplyTags — 적용 직전, 대상의 활성 인스턴스 중 스펙 AssetTags가 이 태그들과
+        // 계층 매칭되는 것을 전부 조기 제거한다. 같은 스펙(곧 병합될 인스턴스)은 제외한다.
+        private void RemoveOnApply(EffectTarget target, CompiledEffectSpec spec, int incomingSpecId)
+        {
+            if (spec.RemoveOnApplyTags.Length == 0) return;
+            var active = target.ActiveEffects;
+            if (active.Count == 0) return;
+
+            var tagCatalog = target.Tags.Catalog;
+            _removalScratch.Clear();
+            for (var i = 0; i < active.Count; i++)
+            {
+                var instance = active[i];
+                if (instance.SpecId == incomingSpecId) continue;   // 병합이 우선 — 제거 대상 제외
+                var otherAssetTags = _catalog.GetSpec(instance.SpecId).AssetTags;
+                if (MatchesDispelQuery(otherAssetTags, spec.RemoveOnApplyTags, tagCatalog))
+                    _removalScratch.Add(instance);
+            }
+
+            for (var i = 0; i < _removalScratch.Count; i++)
+            {
+                RemoveInstancePrematurely(target, _removalScratch[i]);
+            }
+
+            _removalScratch.Clear();
         }
 
         // 대상의 활성 인스턴스가 가진 면역 태그가 신규 스펙의 자산 태그를 (자신 포함) 조상으로 갖는지 검사한다.
@@ -296,23 +352,32 @@ namespace Bun3.Gameplay.Effects
         }
 
         private BigNum EvaluateMagnitude(
-            CompiledModifier modifier, EffectTarget target, EffectTarget? source, bool hasSource, int level, int stack)
+            CompiledModifier modifier, EffectTarget target, EffectTarget? source, bool hasSource, int level, int stack) =>
+            EvaluateMagnitudeCore(
+                modifier.Base, modifier.PerLevel, modifier.Calc, modifier.ByLevel, modifier.Tail, modifier.Increment,
+                target, source, hasSource, level, stack);
+
+        // CompiledModifier(속성 소유)와 CompiledMagnitude(G2 ChanceToApply 등 속성 무관 크기)가 공유하는
+        // 표기 ①~④·CalcTag 평가 로직.
+        private BigNum EvaluateMagnitudeCore(
+            Operand? @base, Operand? perLevel, IMagnitudeCalc? calc, BigNum[]? byLevel, LevelTail tail, BigNum increment,
+            EffectTarget target, EffectTarget? source, bool hasSource, int level, int stack)
         {
-            if (modifier.Calc != null)
+            if (calc != null)
             {
                 var ctx = new MagnitudeContext(target, source, hasSource, level, stack, CurrentTick);
-                return modifier.Calc.Calculate(in ctx);
+                return calc.Calculate(in ctx);
             }
 
-            if (modifier.ByLevel != null)
+            if (byLevel != null)
             {
-                return EvaluateByLevel(modifier.ByLevel, modifier.Tail, modifier.Increment, level);
+                return EvaluateByLevel(byLevel, tail, increment, level);
             }
 
-            var value = EvaluateOperand(modifier.Base!.Value, target, source, hasSource);
-            if (modifier.PerLevel.HasValue)
+            var value = EvaluateOperand(@base!.Value, target, source, hasSource);
+            if (perLevel.HasValue)
             {
-                value += EvaluateOperand(modifier.PerLevel.Value, target, source, hasSource) * (level - 1);
+                value += EvaluateOperand(perLevel.Value, target, source, hasSource) * (level - 1);
             }
 
             return value;
@@ -466,10 +531,19 @@ namespace Bun3.Gameplay.Effects
                     target.RaiseEffectEvent(new EffectLifecycleEvent(
                         EffectLifecycleKind.StackChanged, instance.Id, instance.SpecId, instance.Stack));
                     MarkDirtyForModifiers(target, spec);
+                    SyncLevelFromStack(spec, target, instance);
                 }
             }
+            else if (stackPolicy.OnReapply == StackReapply.ExtendCapped)
+            {
+                // G5: 스택은 건드리지 않고 지속시간만 연장한다 — 판데믹 상한 = DurationTicks × ExtendCapMultiplier.
+                var cap = ToTicksFloor((BigNum)spec.DurationTicks * stackPolicy.ExtendCapMultiplier);
+                var extended = instance.RemainingTicks + spec.DurationTicks;
+                instance.RemainingTicks = extended < cap ? extended : cap;
+            }
 
-            if (stackPolicy.RefreshDurationOnReapply && spec.DurationType == EffectDurationType.Duration)
+            if (stackPolicy.OnReapply != StackReapply.ExtendCapped
+                && stackPolicy.RefreshDurationOnReapply && spec.DurationType == EffectDurationType.Duration)
             {
                 instance.RemainingTicks = spec.DurationTicks;
             }
@@ -478,6 +552,51 @@ namespace Bun3.Gameplay.Effects
             {
                 instance.PeriodCountdown = spec.PeriodTicks;
             }
+        }
+
+        // G4: LevelFromStack — Stack이 바뀐 뒤 Level을 동기화하고, 적용 시점 스냅샷이던 수정자를
+        // 새 Level로 재평가·재부착한다(주기 효과는 매 주기 Level을 직접 평가하므로 대상이 아니다).
+        private void SyncLevelFromStack(CompiledEffectSpec spec, EffectTarget target, EffectInstance instance)
+        {
+            if (!spec.Stack.LevelFromStack || instance.Level == instance.Stack) return;
+
+            instance.Level = instance.Stack;
+            if (spec.PeriodTicks > 0) return;
+
+            target.Attributes.DetachModifiers(instance);
+            var hasSource = _resolver.TryResolve(instance.Source, out var source) && source is not null;
+            var modifiers = spec.Modifiers;
+            for (var i = 0; i < modifiers.Length; i++)
+            {
+                var modifier = modifiers[i];
+                var magnitude = EvaluateMagnitude(modifier, target, source, hasSource, instance.Level, instance.Stack);
+                target.Attributes.AttachModifier(instance, i, modifier.AttributeId, modifier.Op, magnitude, modifier.ScaleWithStack);
+            }
+        }
+
+        // G5: BigNum → 틱(int) 0 방향 절사. Exponent는 DurationTicks×ExtendCapMultiplier 규모라 작지만,
+        // 저작 실수로 극단값이 들어와도 무한 루프 없이 int.MaxValue로 포화되도록 반복 횟수를 자릿수 상한으로 막는다.
+        private static int ToTicksFloor(BigNum value)
+        {
+            if (value.Sign <= 0) return 0;
+
+            var mantissa = value.Mantissa;
+            if (value.Exponent >= 0)
+            {
+                var steps = value.Exponent > 10 ? 10 : value.Exponent;
+                for (var i = 0; i < steps; i++)
+                {
+                    if (mantissa > int.MaxValue) return int.MaxValue;
+                    mantissa *= 10;
+                }
+            }
+            else
+            {
+                var steps = -value.Exponent > 19 ? 19 : -value.Exponent;
+                for (var i = 0; i < steps; i++) mantissa /= 10;
+            }
+
+            return mantissa > int.MaxValue ? int.MaxValue : (int)mantissa;
         }
 
         // 스택 초과: OnStackOverflow 체인 엣지를 먼저 발화하고, 정책이 ApplyEffect면 OverflowEffectId도
@@ -499,6 +618,7 @@ namespace Bun3.Gameplay.Effects
                 target.RaiseEffectEvent(new EffectLifecycleEvent(
                     EffectLifecycleKind.StackChanged, instance.Id, instance.SpecId, instance.Stack));
                 MarkDirtyForModifiers(target, spec);
+                SyncLevelFromStack(spec, target, instance);
             }
         }
 

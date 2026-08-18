@@ -23,6 +23,9 @@ namespace Bun3.Gameplay.Effects
         Refresh = 0,
         /// <summary>스택 하나를 추가합니다.</summary>
         AddStack = 1,
+        /// <summary>스택은 그대로 두고 남은 지속시간에 신규 지속시간을 더하되, 상한(신규 지속시간 ×
+        /// <see cref="StackPolicy.ExtendCapMultiplier"/>)을 넘지 않게 절사합니다(판데믹 관례).</summary>
+        ExtendCapped = 2,
     }
 
     /// <summary>스택이 소멸(만료)될 때의 동작입니다.</summary>
@@ -213,6 +216,14 @@ namespace Bun3.Gameplay.Effects
 
         /// <summary>초과 적용 시 기존 스택을 모두 지울지 여부입니다.</summary>
         public bool ClearStacksOnOverflow { get; set; }
+
+        /// <summary>true면 병합(재적용) 시 인스턴스 Level을 Stack 값으로 동기화합니다. 레벨 테이블과
+        /// 결합해 스택별 비선형 크기를 표현할 때 씁니다. MaxStack이 0이면 Build에서 거부됩니다.</summary>
+        public bool LevelFromStack { get; set; }
+
+        /// <summary><see cref="StackReapply.ExtendCapped"/>에서 지속시간 상한을 정하는 배수입니다.
+        /// 상한 = DurationTicks × 이 값. 기본값 1.3(WoW 판데믹 관례). 1 미만이면 Build에서 거부됩니다.</summary>
+        public BigNum ExtendCapMultiplier { get; set; } = BigNum.FromParts(13, -1);
     }
 
     /// <summary>
@@ -264,5 +275,14 @@ namespace Bun3.Gameplay.Effects
 
         /// <summary>다른 효과로 이어지는 체인 엣지들입니다.</summary>
         public List<ChainEdgeDef> Chains { get; set; } = new List<ChainEdgeDef>();
+
+        /// <summary>이 효과가 성공적으로 적용될 때, 대상의 활성 효과 중 AssetTags가 이 태그들의
+        /// 자손-또는-자신인 것을 적용 직전에 즉시 제거합니다(상위 티어가 하위 티어를 교체하는 등).
+        /// 병합 대상(같은 스펙)은 제외됩니다.</summary>
+        public List<string> RemoveOnApplyTags { get; set; } = new List<string>();
+
+        /// <summary>적용 확률을 정하는 크기 정의입니다. null이면 항상 적용됩니다. 평가값은 [0,1]로
+        /// 해석하며(0 이하 무산, 1 이상 통과) World 시드 Rng로 결정론 롤을 굴립니다.</summary>
+        public MagnitudeDef? ChanceToApply { get; set; }
     }
 }

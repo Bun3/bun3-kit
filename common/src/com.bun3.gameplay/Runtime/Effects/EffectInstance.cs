@@ -34,8 +34,8 @@ namespace Bun3.Gameplay.Effects
         /// <summary>현재 스택 수입니다.</summary>
         public int Stack { get; internal set; }
 
-        /// <summary>효과 레벨입니다.</summary>
-        public int Level { get; private set; }
+        /// <summary>효과 레벨입니다. internal 세터는 LevelFromStack 병합 동기화 전용입니다.</summary>
+        public int Level { get; internal set; }
 
         /// <summary>이 효과를 적용한 시전자입니다.</summary>
         public TargetId Source { get; private set; }

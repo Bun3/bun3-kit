@@ -65,10 +65,12 @@ namespace Bun3.Gameplay.Effects
             ValidateExecutionEligibility(spec);
             ValidateStackOverflowConsistency(spec);
             ValidateInstantOrPeriodicModifierOps(spec);
+            ValidateStackVocabConsistency(spec);
 
             var grantedTags = ResolveTags(spec.GrantedTags, spec.Name, tags, "부여");
             var assetTags = ResolveTags(spec.AssetTags, spec.Name, tags, "자산");
             var immunityTags = ResolveTags(spec.ImmunityTags, spec.Name, tags, "면역");
+            var removeOnApplyTags = ResolveTags(spec.RemoveOnApplyTags, spec.Name, tags, "RemoveOnApply");
 
             var modifiers = new CompiledModifier[spec.Modifiers.Count];
             for (var i = 0; i < spec.Modifiers.Count; i++)
@@ -123,10 +125,20 @@ namespace Bun3.Gameplay.Effects
                 }
             }
 
+            CompiledMagnitude? chanceToApply = null;
+            if (spec.ChanceToApply != null)
+            {
+                var (chanceBase, chancePerLevel, chanceCalc, chanceByLevel, chanceTail, chanceIncrement) =
+                    ResolveMagnitude(spec.ChanceToApply, spec, tags, seams, attributes);
+                chanceToApply = new CompiledMagnitude(
+                    chanceBase, chancePerLevel, chanceCalc, chanceByLevel, chanceTail, chanceIncrement);
+            }
+
             return new CompiledEffectSpec(
                 spec.Name, spec.DurationType, spec.DurationTicks, spec.PeriodTicks, spec.Stack,
                 modifiers, executions, applicationConditions, ongoingConditions,
-                grantedTags, assetTags, immunityTags, chains, overflowEffectId);
+                grantedTags, assetTags, immunityTags, chains, overflowEffectId,
+                removeOnApplyTags, chanceToApply);
         }
 
         // 규칙 2·3: DurationType별 필드 제약.
@@ -221,6 +233,31 @@ namespace Bun3.Gameplay.Effects
             {
                 throw new InvalidOperationException(
                     $"효과 '{spec.Name}': Stack.MaxStack이 0이면 ApplyEffect/AddStack 정책을 쓸 수 없습니다.");
+            }
+        }
+
+        // G4·G5: LevelFromStack/ExtendCapped 어휘의 자체 정합 규칙.
+        private static void ValidateStackVocabConsistency(EffectSpec spec)
+        {
+            if (spec.Stack.LevelFromStack && spec.Stack.MaxStack == 0)
+            {
+                throw new InvalidOperationException(
+                    $"효과 '{spec.Name}': LevelFromStack은 Stack.MaxStack이 0보다 커야 합니다.");
+            }
+
+            if (spec.Stack.OnReapply == StackReapply.ExtendCapped)
+            {
+                if (spec.DurationType != EffectDurationType.Duration)
+                {
+                    throw new InvalidOperationException(
+                        $"효과 '{spec.Name}': StackReapply.ExtendCapped는 DurationType이 Duration이어야 합니다.");
+                }
+
+                if (spec.Stack.ExtendCapMultiplier < BigNum.One)
+                {
+                    throw new InvalidOperationException(
+                        $"효과 '{spec.Name}': Stack.ExtendCapMultiplier는 1 이상이어야 합니다.");
+                }
             }
         }
 
@@ -355,6 +392,13 @@ namespace Bun3.Gameplay.Effects
                     throw new InvalidOperationException(
                         $"효과 '{spec.Name}': CurveKeys는 레벨 오름차순이어야 하며 중복을 허용하지 않습니다.");
                 }
+            }
+
+            if (keys[keys.Count - 1].Level > spec.MaxLevel)
+            {
+                throw new InvalidOperationException(
+                    $"효과 '{spec.Name}': CurveKeys의 마지막 키 레벨({keys[keys.Count - 1].Level})이 "
+                    + $"MaxLevel({spec.MaxLevel})을 초과합니다.");
             }
 
             var byLevel = new BigNum[spec.MaxLevel];

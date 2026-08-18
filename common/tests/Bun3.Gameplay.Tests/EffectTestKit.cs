@@ -23,6 +23,7 @@ internal sealed class EffectTestKit
     public const ushort MaxHp = 2;
     public const ushort Mp = 3;
     public const ushort Attack = 5;
+    public const ushort Resistance = 6;
 
     private const string CatalogJson = """
     {
@@ -60,6 +61,7 @@ internal sealed class EffectTestKit
         builder.Register(Hp, min: Operand.Constant(0), max: Operand.Attribute(MaxHp));
         builder.Register(Attack, min: Operand.Constant(0));
         builder.Register(Mp);
+        builder.Register(Resistance);
         return builder.Build();
     }
 
@@ -133,7 +135,7 @@ internal sealed class EffectTestKit
 
     private EffectTarget CreateTarget(ulong id)
     {
-        Span<ushort> ids = stackalloc ushort[] { Hp, MaxHp, Mp, Attack };
+        Span<ushort> ids = stackalloc ushort[] { Hp, MaxHp, Mp, Attack, Resistance };
         var target = new EffectTarget(new TargetId(id), _attributeRegistry, ids, _tagCatalog);
         _targetsById.Add(id, target);
         _targetIds.Add(target.Id);

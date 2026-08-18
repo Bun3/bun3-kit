@@ -99,6 +99,41 @@ namespace Bun3.Gameplay.Effects
         internal bool ScaleWithStack { get; }
     }
 
+    /// <summary>CompiledModifier와 같은 표기(①~④·CalcTag)로 해석된, 속성 소유 없는 단독 크기입니다.
+    /// ChanceToApply처럼 특정 AttributeId에 매이지 않는 크기 정의에 씁니다.</summary>
+    internal sealed class CompiledMagnitude
+    {
+        internal CompiledMagnitude(
+            Operand? @base, Operand? perLevel, IMagnitudeCalc? calc,
+            BigNum[]? byLevel, LevelTail tail, BigNum increment)
+        {
+            Base = @base;
+            PerLevel = perLevel;
+            Calc = calc;
+            ByLevel = byLevel;
+            Tail = tail;
+            Increment = increment;
+        }
+
+        /// <summary>레벨 무관 기본 크기이며 <see cref="Calc"/>·<see cref="ByLevel"/>이 있으면 null입니다.</summary>
+        internal Operand? Base { get; }
+
+        /// <summary>레벨당 추가 크기입니다.</summary>
+        internal Operand? PerLevel { get; }
+
+        /// <summary>해석된 크기 계산 계약이며 상수/속성/레벨 테이블 기반 크기면 null입니다.</summary>
+        internal IMagnitudeCalc? Calc { get; }
+
+        /// <summary>레벨 테이블(표기 ②③④가 컴파일된 밀집 배열)이며, 없으면(표기 ①·Calc) null입니다.</summary>
+        internal BigNum[]? ByLevel { get; }
+
+        /// <summary><see cref="ByLevel"/>의 길이(MaxLevel)를 넘는 레벨을 다루는 방식입니다.</summary>
+        internal LevelTail Tail { get; }
+
+        /// <summary>Tail이 Extrapolate일 때 레벨당 증분입니다.</summary>
+        internal BigNum Increment { get; }
+    }
+
     /// <summary>컴파일된 효과 실행입니다.</summary>
     internal sealed class CompiledExecution
     {
@@ -190,7 +225,9 @@ namespace Bun3.Gameplay.Effects
             GameplayTag[] assetTags,
             GameplayTag[] immunityTags,
             CompiledChain[] chains,
-            int overflowEffectId)
+            int overflowEffectId,
+            GameplayTag[] removeOnApplyTags,
+            CompiledMagnitude? chanceToApply)
         {
             Name = name;
             DurationType = durationType;
@@ -206,6 +243,8 @@ namespace Bun3.Gameplay.Effects
             ImmunityTags = immunityTags;
             Chains = chains;
             OverflowEffectId = overflowEffectId;
+            RemoveOnApplyTags = removeOnApplyTags;
+            ChanceToApply = chanceToApply;
         }
 
         /// <summary>효과 이름입니다.</summary>
@@ -249,5 +288,12 @@ namespace Bun3.Gameplay.Effects
 
         /// <summary>스택 초과 시 대신 적용할 효과의 id이며 -1이면 없습니다.</summary>
         internal int OverflowEffectId { get; }
+
+        /// <summary>해석된 RemoveOnApply 태그들입니다. 이 효과가 적용될 때 매칭되는 대상의 활성
+        /// 효과를 즉시 제거합니다.</summary>
+        internal GameplayTag[] RemoveOnApplyTags { get; }
+
+        /// <summary>적용 확률을 정하는 컴파일된 크기이며 null이면 항상 적용됩니다.</summary>
+        internal CompiledMagnitude? ChanceToApply { get; }
     }
 }
