@@ -284,5 +284,29 @@ namespace Bun3.Gameplay.Effects
         /// <summary>적용 확률을 정하는 크기 정의입니다. null이면 항상 적용됩니다. 평가값은 [0,1]로
         /// 해석하며(0 이하 무산, 1 이상 통과) World 시드 Rng로 결정론 롤을 굴립니다.</summary>
         public MagnitudeDef? ChanceToApply { get; set; }
+
+        /// <summary>레벨별 지속 틱입니다(표기 ②만 지원 — 스펙 §15 G3). 길이가 <see cref="MaxLevel"/>과
+        /// 같아야 하고 <see cref="DurationTicks"/>와는 상호 배타입니다(하나가 있으면 다른 하나는 0).
+        /// <see cref="DurationType"/>이 Duration일 때만 쓸 수 있습니다.</summary>
+        public List<BigNum>? DurationPerLevel { get; set; }
+
+        /// <summary>적용(신규 인스턴스 생성) 시 1회 평가되는 지속시간 배수입니다(스펙 §15 G3). 최종
+        /// 지속 = (<see cref="DurationPerLevel"/>?[level-1] ?? <see cref="DurationTicks"/>) × 이 값을
+        /// 정수 틱으로 절사한 뒤 최소 1틱으로 클램프합니다(DR이 없을 때). <see cref="DurationType"/>이
+        /// Duration일 때만 쓸 수 있습니다.</summary>
+        public MagnitudeDef? DurationScale { get; set; }
+
+        /// <summary>체감 저항(DR) 계열을 식별하는 분류 태그 경로입니다(스펙 §15 G6). null이면 이 효과는
+        /// DR을 쓰지 않습니다. <see cref="DurationType"/>이 Duration일 때만 쓸 수 있습니다.</summary>
+        public string? DrCategory { get; set; }
+
+        /// <summary>DR 적용 횟수가 리셋되는 창(틱)입니다. <see cref="DrCategory"/>가 있으면 1 이상이어야
+        /// 합니다 — 대상의 이 계열 마지막 적용 이후 이 틱 수가 지나면 카운트가 0으로 리셋됩니다.</summary>
+        public int DrWindowTicks { get; set; }
+
+        /// <summary>DR 단계별 지속시간 배수입니다(예: ["0.5","0.25","0"]). 첫 적용은 항상 배수 1이고,
+        /// n번째(n≥1) 적용은 이 배열의 min(n-1, 길이-1) 번째 값을 씁니다. 마지막 값 0은 면역을 뜻합니다.
+        /// <see cref="DrCategory"/>가 있으면 비어있을 수 없고 전부 0 이상이어야 합니다.</summary>
+        public List<BigNum> DrStageMultipliers { get; set; } = new List<BigNum>();
     }
 }

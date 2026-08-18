@@ -15,6 +15,21 @@ namespace Bun3.Gameplay.Effects
         private readonly List<EffectInstance> _activeEffects = new List<EffectInstance>();
         private EffectLifecycleEvent[] _events = new EffectLifecycleEvent[4];
         private int _eventCount;
+        private DrHistoryEntry[] _drHistory = Array.Empty<DrHistoryEntry>();
+        private int _drHistoryCount;
+
+        /// <summary>DR(체감 저항, 스펙 §15 G6) 계열 태그 하나의 적용 이력 한 행입니다.</summary>
+        internal struct DrHistoryEntry
+        {
+            /// <summary>DR 계열을 식별하는 태그의 카탈로그 인덱스입니다.</summary>
+            internal ushort CategoryTagIndex;
+
+            /// <summary>리셋 창 안에서 누적된 적용 횟수입니다(면역으로 무산된 적용도 포함).</summary>
+            internal int AppliedCount;
+
+            /// <summary>이 계열이 마지막으로 적용(무산 포함)된 파이프라인 틱입니다.</summary>
+            internal long LastAppliedTick;
+        }
 
         /// <summary>대상 식별자입니다.</summary>
         public TargetId Id { get; }
@@ -68,6 +83,30 @@ namespace Bun3.Gameplay.Effects
             _events[_eventCount++] = evt;
         }
 
+        /// <summary>DR 계열 태그의 이력 슬롯을 찾거나(없으면 카운트 0으로) 새로 만들어 인덱스를 반환합니다.</summary>
+        internal int FindOrCreateDrHistory(ushort categoryTagIndex)
+        {
+            for (var i = 0; i < _drHistoryCount; i++)
+            {
+                if (_drHistory[i].CategoryTagIndex == categoryTagIndex) return i;
+            }
+
+            if (_drHistoryCount == _drHistory.Length)
+            {
+                Array.Resize(ref _drHistory, _drHistory.Length == 0 ? 4 : _drHistory.Length * 2);
+            }
+
+            _drHistory[_drHistoryCount] = new DrHistoryEntry
+            {
+                CategoryTagIndex = categoryTagIndex, AppliedCount = 0, LastAppliedTick = long.MinValue,
+            };
+            return _drHistoryCount++;
+        }
+
+        /// <summary>DR 이력 슬롯을 인덱스로 직접(가변) 참조합니다. <see cref="FindOrCreateDrHistory"/>가
+        /// 반환한 인덱스로만 호출해야 합니다.</summary>
+        internal ref DrHistoryEntry DrHistoryAt(int index) => ref _drHistory[index];
+
         /// <summary>
         /// 이 대상의 결정론적 상태(속성 Base·활성 효과 인스턴스)를 깊은 복사한 스냅샷을 만듭니다.
         /// Current·보유 태그·대기 적용 큐·파이프라인 틱 카운터는 포함하지 않습니다 —
@@ -100,7 +139,15 @@ namespace Bun3.Gameplay.Effects
                     modifiers);
             }
 
-            return new EffectTargetSnapshot(Id, bases, instances);
+            var drHistory = new EffectTargetSnapshot.DrHistoryRow[_drHistoryCount];
+            for (var i = 0; i < _drHistoryCount; i++)
+            {
+                var entry = _drHistory[i];
+                drHistory[i] = new EffectTargetSnapshot.DrHistoryRow(
+                    entry.CategoryTagIndex, entry.AppliedCount, entry.LastAppliedTick);
+            }
+
+            return new EffectTargetSnapshot(Id, bases, instances, drHistory);
         }
 
         /// <summary>
@@ -165,6 +212,19 @@ namespace Bun3.Gameplay.Effects
             }
 
             Attributes.RebuildDirty();
+
+            // G6: DR 이력도 스냅샷 시점으로 되돌린다 — 결정론 재생에는 지속시간 계산에 쓰이는 이 이력이
+            // 필수다. 기존 슬롯은 논리적으로만 비우고(카운트 0) 배열은 재사용한다.
+            _drHistoryCount = 0;
+            var drRows = snapshot.DrHistory;
+            for (var i = 0; i < drRows.Length; i++)
+            {
+                var row = drRows[i];
+                var index = FindOrCreateDrHistory(row.CategoryTagIndex);
+                ref var entry = ref DrHistoryAt(index);
+                entry.AppliedCount = row.AppliedCount;
+                entry.LastAppliedTick = row.LastAppliedTick;
+            }
         }
     }
 }

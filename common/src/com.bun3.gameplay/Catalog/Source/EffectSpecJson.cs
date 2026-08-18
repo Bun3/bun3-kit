@@ -111,7 +111,8 @@ namespace Bun3.Gameplay.Effects.Catalog
             RequireAllowedProperties(
                 spec, "name", "maxLevel", "duration", "stack", "modifiers", "executions",
                 "applicationConditions", "ongoingConditions", "grantedTags", "assetTags",
-                "immunityTags", "chains");
+                "immunityTags", "chains", "removeOnApplyTags", "chanceToApply",
+                "durationPerLevel", "durationScale", "drCategory", "drWindowTicks", "drStageMultipliers");
 
             var name = RequireString(spec, "name");
             var maxLevel = ReadOptionalInt(spec, "maxLevel", 0);
@@ -156,6 +157,48 @@ namespace Bun3.Gameplay.Effects.Catalog
                 chains.Add(ReadChain(AsObject(item, "chains의 항목은 객체여야 합니다."), attributeNames));
             }
 
+            var removeOnApplyTags = spec.Property("removeOnApplyTags", StringComparison.Ordinal) != null
+                ? ReadStringArray(RequireArray(spec, "removeOnApplyTags"))
+                : new List<string>();
+
+            MagnitudeDef? chanceToApply = null;
+            if (spec.Property("chanceToApply", StringComparison.Ordinal) is { } chanceToApplyProperty)
+            {
+                chanceToApply = ReadMagnitude(
+                    AsObject(chanceToApplyProperty.Value, "chanceToApply는 객체여야 합니다."), attributeNames);
+            }
+
+            List<BigNum>? durationPerLevel = null;
+            if (spec.Property("durationPerLevel", StringComparison.Ordinal) != null)
+            {
+                durationPerLevel = new List<BigNum>();
+                foreach (var item in RequireArray(spec, "durationPerLevel"))
+                {
+                    durationPerLevel.Add(RequireBigNumToken(item));
+                }
+            }
+
+            MagnitudeDef? durationScale = null;
+            if (spec.Property("durationScale", StringComparison.Ordinal) is { } durationScaleProperty)
+            {
+                durationScale = ReadMagnitude(
+                    AsObject(durationScaleProperty.Value, "durationScale는 객체여야 합니다."), attributeNames);
+            }
+
+            var drCategory = spec.Property("drCategory", StringComparison.Ordinal) != null
+                ? RequireString(spec, "drCategory")
+                : null;
+            var drWindowTicks = ReadOptionalInt(spec, "drWindowTicks", 0);
+
+            var drStageMultipliers = new List<BigNum>();
+            if (spec.Property("drStageMultipliers", StringComparison.Ordinal) != null)
+            {
+                foreach (var item in RequireArray(spec, "drStageMultipliers"))
+                {
+                    drStageMultipliers.Add(RequireBigNumToken(item));
+                }
+            }
+
             return new EffectSpec
             {
                 Name = name,
@@ -172,6 +215,13 @@ namespace Bun3.Gameplay.Effects.Catalog
                 AssetTags = assetTags,
                 ImmunityTags = immunityTags,
                 Chains = chains,
+                RemoveOnApplyTags = removeOnApplyTags,
+                ChanceToApply = chanceToApply,
+                DurationPerLevel = durationPerLevel,
+                DurationScale = durationScale,
+                DrCategory = drCategory,
+                DrWindowTicks = drWindowTicks,
+                DrStageMultipliers = drStageMultipliers,
             };
         }
 
@@ -188,7 +238,8 @@ namespace Bun3.Gameplay.Effects.Catalog
         {
             RequireAllowedProperties(
                 stack, "maxStack", "onReapply", "addStackCount", "refreshDurationOnReapply",
-                "resetPeriodOnReapply", "onExpiration", "onOverflow", "overflowEffect", "clearStacksOnOverflow");
+                "resetPeriodOnReapply", "onExpiration", "onOverflow", "overflowEffect", "clearStacksOnOverflow",
+                "levelFromStack", "extendCapMultiplier");
 
             var result = new StackPolicy
             {
@@ -225,6 +276,16 @@ namespace Bun3.Gameplay.Effects.Catalog
             if (stack.Property("clearStacksOnOverflow", StringComparison.Ordinal) != null)
             {
                 result.ClearStacksOnOverflow = RequireBool(stack, "clearStacksOnOverflow");
+            }
+
+            if (stack.Property("levelFromStack", StringComparison.Ordinal) != null)
+            {
+                result.LevelFromStack = RequireBool(stack, "levelFromStack");
+            }
+
+            if (stack.Property("extendCapMultiplier", StringComparison.Ordinal) != null)
+            {
+                result.ExtendCapMultiplier = RequireBigNum(stack, "extendCapMultiplier");
             }
 
             return result;

@@ -398,6 +398,59 @@ namespace Bun3.Gameplay.Effects
             return tail == LevelTail.Clamp ? last : last + increment * (clampedLevel - maxLevel);
         }
 
+        // G3: DurationPerLevel(있으면) × DurationScale(있으면, 없으면 배수 1) — 아직 절사·클램프 전의
+        // 연속값이다. CreateInstance(신규 생성)와 MergeReapply의 Refresh/ExtendCapped(신규 지속 재계산)가
+        // 이 헬퍼를 공유한다.
+        private BigNum ComputeScaledDuration(
+            CompiledEffectSpec spec, EffectTarget target, EffectTarget? source, bool hasSource, int level, int stack)
+        {
+            var baseDuration = spec.DurationPerLevel != null
+                ? EvaluateByLevel(spec.DurationPerLevel, LevelTail.Clamp, BigNum.Zero, level)
+                : (BigNum)spec.DurationTicks;
+
+            if (spec.DurationScale == null) return baseDuration;
+
+            var scale = spec.DurationScale;
+            var scaleValue = EvaluateMagnitudeCore(
+                scale.Base, scale.PerLevel, scale.Calc, scale.ByLevel, scale.Tail, scale.Increment,
+                target, source, hasSource, level, stack);
+            return baseDuration * scaleValue;
+        }
+
+        // G3/G5: 병합(Refresh/ExtendCapped)이 쓰는 "신규 지속" — DR(G6)은 신규 생성 경로 전용이라
+        // 여기서는 합성하지 않는다. 절사 후 0 이하면 최소 1틱으로 클램프한다.
+        private int ComputeMergedDurationTicks(CompiledEffectSpec spec, EffectTarget target, EffectInstance instance)
+        {
+            var hasSource = _resolver.TryResolve(instance.Source, out var source) && source is not null;
+            var value = ComputeScaledDuration(spec, target, source, hasSource, instance.Level, instance.Stack);
+            var ticks = ToTicksFloor(value);
+            return ticks <= 0 ? 1 : ticks;
+        }
+
+        // G6: DR 이력을 조회·갱신하고 이번 적용에 쓸 지속시간 배수를 반환한다. 창(DrWindowTicks)이
+        // 지났으면 카운트를 리셋한 뒤 단계를 매긴다 — 첫 적용(카운트 0)은 배수 1, n번째(n≥1)는
+        // DrStageMultipliers[min(n-1, 길이-1)]. 적용 성공·무산 여부와 무관하게 항상 카운트 +1·
+        // lastAppliedTick 갱신까지 마친다(면역도 창을 연장하는 WoW 의미론).
+        private BigNum ApplyDrHistory(EffectTarget target, CompiledEffectSpec spec)
+        {
+            var index = target.FindOrCreateDrHistory(spec.DrCategory.Index);
+            ref var entry = ref target.DrHistoryAt(index);
+
+            if (entry.LastAppliedTick + spec.DrWindowTicks < CurrentTick)
+            {
+                entry.AppliedCount = 0;
+            }
+
+            var stage = entry.AppliedCount;
+            var multiplier = stage == 0
+                ? BigNum.One
+                : spec.DrStageMultipliers[Math.Min(stage - 1, spec.DrStageMultipliers.Length - 1)];
+
+            entry.AppliedCount++;
+            entry.LastAppliedTick = CurrentTick;
+            return multiplier;
+        }
+
         private void ApplyInstant(
             CompiledEffectSpec spec, EffectTarget target, EffectTarget? source, bool hasSource, in PendingApply pending)
         {
@@ -536,16 +589,18 @@ namespace Bun3.Gameplay.Effects
             }
             else if (stackPolicy.OnReapply == StackReapply.ExtendCapped)
             {
-                // G5: 스택은 건드리지 않고 지속시간만 연장한다 — 판데믹 상한 = DurationTicks × ExtendCapMultiplier.
-                var cap = ToTicksFloor((BigNum)spec.DurationTicks * stackPolicy.ExtendCapMultiplier);
-                var extended = instance.RemainingTicks + spec.DurationTicks;
+                // G5: 스택은 건드리지 않고 지속시간만 연장한다 — 판데믹 상한 = 신규 지속 × ExtendCapMultiplier.
+                // G3: "신규 지속"은 DurationPerLevel/DurationScale까지 반영된 값이다(DR은 신규 생성 전용).
+                var newDuration = ComputeMergedDurationTicks(spec, target, instance);
+                var cap = ToTicksFloor((BigNum)newDuration * stackPolicy.ExtendCapMultiplier);
+                var extended = instance.RemainingTicks + newDuration;
                 instance.RemainingTicks = extended < cap ? extended : cap;
             }
 
             if (stackPolicy.OnReapply != StackReapply.ExtendCapped
                 && stackPolicy.RefreshDurationOnReapply && spec.DurationType == EffectDurationType.Duration)
             {
-                instance.RemainingTicks = spec.DurationTicks;
+                instance.RemainingTicks = ComputeMergedDurationTicks(spec, target, instance);
             }
 
             if (stackPolicy.ResetPeriodOnReapply && spec.PeriodTicks > 0)
@@ -624,10 +679,31 @@ namespace Bun3.Gameplay.Effects
 
         // 새 인스턴스: 렌트→Id 오름차순 삽입→(주기 효과가 아니면) 수정자 부착→GrantedTags 부여→Applied→
         // OnApplication 체인 발화. 주기 효과(PeriodTicks > 0)는 매 주기 Instant와 동일한 경로로 Base에
-        // 가감할 뿐 지속 부착 대상이 아니다.
+        // 가감할 뿐 지속 부착 대상이 아니다. G3/G6: Duration 스펙은 이 경로(신규 생성)에서만 DR이
+        // 합성된 지속시간을 계산한다 — 결과가 0틱 이하면 조용히 무산(면역)하되 DR 카운터는 갱신됐으므로
+        // 그대로 반환한다(RemoveOnApply 등 이미 일어난 부수효과는 되돌리지 않는다 — 기존 실패 경로와 같은 결).
         private void CreateInstance(CompiledEffectSpec spec, EffectTarget target, in PendingApply pending)
         {
-            var remainingTicks = spec.DurationType == EffectDurationType.Duration ? spec.DurationTicks : -1;
+            var hasSource = _resolver.TryResolve(pending.Source, out var source) && source is not null;
+
+            var remainingTicks = -1;
+            if (spec.DurationType == EffectDurationType.Duration)
+            {
+                var value = ComputeScaledDuration(spec, target, source, hasSource, pending.Level, stack: 1);
+                if (spec.DrCategory.IsValid)
+                {
+                    value *= ApplyDrHistory(target, spec);
+                    var drTicks = ToTicksFloor(value);
+                    if (drTicks <= 0) return;   // G6: 면역 — 조용한 무산.
+                    remainingTicks = drTicks;
+                }
+                else
+                {
+                    var ticks = ToTicksFloor(value);
+                    remainingTicks = ticks <= 0 ? 1 : ticks;   // G3: 최소 1틱.
+                }
+            }
+
             var periodCountdown = spec.PeriodTicks > 0 ? spec.PeriodTicks : -1;
             var instance = EffectInstance.Rent(
                 _nextInstanceId++, pending.SpecId, pending.Source, pending.Level, stack: 1,
@@ -636,7 +712,6 @@ namespace Bun3.Gameplay.Effects
 
             if (spec.PeriodTicks == 0)
             {
-                var hasSource = _resolver.TryResolve(pending.Source, out var source) && source is not null;
                 var modifiers = spec.Modifiers;
                 for (var i = 0; i < modifiers.Length; i++)
                 {

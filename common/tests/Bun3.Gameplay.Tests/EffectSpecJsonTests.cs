@@ -378,6 +378,105 @@ public sealed class EffectSpecJsonTests
         Assert.That(jsonKit.Defender.Attributes.GetCurrent(EffectTestKit.Attack), Is.EqualTo((BigNum)16)); // 4*4
     }
 
+    // ---- T2·T3 신규 필드 왕복 ----
+
+    [Test]
+    public void T2_T3_new_fields_round_trip()
+    {
+        const string json = """
+        { "schemaVersion": 1, "specs": [ {
+          "name": "kitchen_sink", "maxLevel": 3,
+          "duration": { "type": "Duration", "ticks": 0, "periodTicks": 0 },
+          "stack": { "maxStack": 3, "onReapply": "ExtendCapped", "onOverflow": "Deny",
+                     "levelFromStack": true, "extendCapMultiplier": "1.5" },
+          "modifiers": [], "executions": [], "applicationConditions": [], "ongoingConditions": [],
+          "grantedTags": [], "assetTags": [ "effect.frost" ], "immunityTags": [], "chains": [],
+          "removeOnApplyTags": [ "effect.frost" ],
+          "chanceToApply": { "constant": "0.75" },
+          "durationPerLevel": [ "10", "20", "30" ],
+          "durationScale": { "constant": "2" },
+          "drCategory": "effect.frost", "drWindowTicks": 100,
+          "drStageMultipliers": [ "0.5", "0" ] } ] }
+        """;
+        var spec = Load(json)[0];
+
+        Assert.That(spec.RemoveOnApplyTags, Is.EqualTo(new[] { "effect.frost" }));
+        Assert.That(spec.ChanceToApply, Is.Not.Null);
+        Assert.That(spec.ChanceToApply!.Base, Is.EqualTo(Operand.Constant(BigNum.FromParts(75, -2))));
+        Assert.That(spec.DurationPerLevel, Is.EqualTo(new List<BigNum> { 10, 20, 30 }));
+        Assert.That(spec.DurationScale!.Base, Is.EqualTo(Operand.Constant(BigNum.FromParts(2, 0))));
+        Assert.That(spec.DrCategory, Is.EqualTo("effect.frost"));
+        Assert.That(spec.DrWindowTicks, Is.EqualTo(100));
+        Assert.That(spec.DrStageMultipliers,
+            Is.EqualTo(new List<BigNum> { BigNum.FromParts(5, -1), BigNum.Zero }));
+        Assert.That(spec.Stack.LevelFromStack, Is.True);
+        Assert.That(spec.Stack.ExtendCapMultiplier, Is.EqualTo(BigNum.FromParts(15, -1)));
+    }
+
+    [Test]
+    public void New_fields_absent_keep_model_defaults()
+    {
+        const string json = """
+        { "schemaVersion": 1, "specs": [ {
+          "name": "x", "duration": { "type": "Instant" },
+          "modifiers": [], "executions": [], "applicationConditions": [], "ongoingConditions": [],
+          "grantedTags": [], "assetTags": [], "immunityTags": [], "chains": [] } ] }
+        """;
+        var spec = Load(json)[0];
+
+        Assert.That(spec.RemoveOnApplyTags, Is.Empty);
+        Assert.That(spec.ChanceToApply, Is.Null);
+        Assert.That(spec.DurationPerLevel, Is.Null);
+        Assert.That(spec.DurationScale, Is.Null);
+        Assert.That(spec.DrCategory, Is.Null);
+        Assert.That(spec.DrWindowTicks, Is.EqualTo(0));
+        Assert.That(spec.DrStageMultipliers, Is.Empty);
+        Assert.That(spec.Stack.LevelFromStack, Is.False);
+        Assert.That(spec.Stack.ExtendCapMultiplier, Is.EqualTo(BigNum.FromParts(13, -1)));
+    }
+
+    // ---- 두 경로 동등성: DR 스펙(G6) ----
+
+    private const string DrJson = """
+    { "schemaVersion": 1, "specs": [ {
+      "name": "cc", "duration": { "type": "Duration", "ticks": 10, "periodTicks": 0 },
+      "modifiers": [], "executions": [], "applicationConditions": [], "ongoingConditions": [],
+      "grantedTags": [], "assetTags": [], "immunityTags": [], "chains": [],
+      "drCategory": "effect.frost", "drWindowTicks": 100, "drStageMultipliers": [ "0.5", "0" ] } ] }
+    """;
+
+    [Test]
+    public void Code_built_and_json_loaded_dr_spec_produce_identical_duration_stages()
+    {
+        var codeSpec = EffectTestKit.MinimalDuration("cc", ticks: 10);
+        codeSpec.DrCategory = "effect.frost";
+        codeSpec.DrWindowTicks = 100;
+        codeSpec.DrStageMultipliers = new List<BigNum> { BigNum.FromParts(5, -1), BigNum.Zero };
+
+        var codeKit = EffectTestKit.Create();
+        codeKit.AddSpec(codeSpec);
+        var codeSecondDuration = RunDrTwiceAndGetSecondDuration(codeKit);
+
+        var jsonKit = EffectTestKit.Create();
+        foreach (var spec in Load(DrJson)) jsonKit.AddSpec(spec);
+        var jsonSecondDuration = RunDrTwiceAndGetSecondDuration(jsonKit);
+
+        Assert.That(jsonSecondDuration, Is.EqualTo(codeSecondDuration));
+        Assert.That(jsonSecondDuration, Is.EqualTo(5));
+    }
+
+    private static int RunDrTwiceAndGetSecondDuration(EffectTestKit kit)
+    {
+        var pipeline = kit.BuildPipeline();
+        pipeline.EnqueueApply(kit.SpecId("cc"), kit.Attacker.Id, kit.Defender.Id);
+        pipeline.Tick();
+        for (var i = 0; i < 50 && kit.Defender.ActiveEffectCount > 0; i++) pipeline.Tick();
+
+        pipeline.EnqueueApply(kit.SpecId("cc"), kit.Attacker.Id, kit.Defender.Id);
+        pipeline.Tick();
+        return kit.Defender.ActiveEffects[0].RemainingTicks;
+    }
+
     [Test]
     public void MaxLevel_missing_at_root_defaults_to_zero()
     {

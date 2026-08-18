@@ -227,7 +227,12 @@ namespace Bun3.Gameplay.Effects
             CompiledChain[] chains,
             int overflowEffectId,
             GameplayTag[] removeOnApplyTags,
-            CompiledMagnitude? chanceToApply)
+            CompiledMagnitude? chanceToApply,
+            BigNum[]? durationPerLevel,
+            CompiledMagnitude? durationScale,
+            GameplayTag drCategory,
+            int drWindowTicks,
+            BigNum[] drStageMultipliers)
         {
             Name = name;
             DurationType = durationType;
@@ -245,6 +250,11 @@ namespace Bun3.Gameplay.Effects
             OverflowEffectId = overflowEffectId;
             RemoveOnApplyTags = removeOnApplyTags;
             ChanceToApply = chanceToApply;
+            DurationPerLevel = durationPerLevel;
+            DurationScale = durationScale;
+            DrCategory = drCategory;
+            DrWindowTicks = drWindowTicks;
+            DrStageMultipliers = drStageMultipliers;
         }
 
         /// <summary>효과 이름입니다.</summary>
@@ -295,5 +305,22 @@ namespace Bun3.Gameplay.Effects
 
         /// <summary>적용 확률을 정하는 컴파일된 크기이며 null이면 항상 적용됩니다.</summary>
         internal CompiledMagnitude? ChanceToApply { get; }
+
+        /// <summary>레벨별 지속 틱(표기 ②만)이며 없으면(<see cref="EffectSpec.DurationTicks"/> 단일값
+        /// 사용) null입니다. 스펙 §15 G3.</summary>
+        internal BigNum[]? DurationPerLevel { get; }
+
+        /// <summary>적용 시 1회 평가되는 지속시간 배수이며 없으면 null(배수 1과 동일)입니다. 스펙 §15 G3.</summary>
+        internal CompiledMagnitude? DurationScale { get; }
+
+        /// <summary>DR 계열 분류 태그이며 미사용이면 <see cref="GameplayTag.None"/>입니다. 스펙 §15 G6.</summary>
+        internal GameplayTag DrCategory { get; }
+
+        /// <summary>DR 적용 횟수 리셋 창(틱)입니다. 스펙 §15 G6.</summary>
+        internal int DrWindowTicks { get; }
+
+        /// <summary>DR 단계별 지속시간 배수이며 <see cref="DrCategory"/>가 미사용이면 빈 배열입니다.
+        /// 스펙 §15 G6.</summary>
+        internal BigNum[] DrStageMultipliers { get; }
     }
 }

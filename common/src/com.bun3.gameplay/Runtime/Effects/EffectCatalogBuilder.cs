@@ -54,6 +54,7 @@ namespace Bun3.Gameplay.Effects
             }
 
             var warnings = DetectChainCycles(compiled);
+            DetectLevelFromStackScaleWithStackWarnings(_specs, warnings);
             return new EffectCatalog(nameToId, compiled, warnings);
         }
 
@@ -66,6 +67,8 @@ namespace Bun3.Gameplay.Effects
             ValidateStackOverflowConsistency(spec);
             ValidateInstantOrPeriodicModifierOps(spec);
             ValidateStackVocabConsistency(spec);
+            ValidateDurationScaleFields(spec);
+            ValidateDrFields(spec);
 
             var grantedTags = ResolveTags(spec.GrantedTags, spec.Name, tags, "부여");
             var assetTags = ResolveTags(spec.AssetTags, spec.Name, tags, "자산");
@@ -134,11 +137,34 @@ namespace Bun3.Gameplay.Effects
                     chanceBase, chancePerLevel, chanceCalc, chanceByLevel, chanceTail, chanceIncrement);
             }
 
+            var durationPerLevel = spec.DurationPerLevel?.ToArray();
+
+            CompiledMagnitude? durationScale = null;
+            if (spec.DurationScale != null)
+            {
+                var (scaleBase, scalePerLevel, scaleCalc, scaleByLevel, scaleTail, scaleIncrement) =
+                    ResolveMagnitude(spec.DurationScale, spec, tags, seams, attributes);
+                durationScale = new CompiledMagnitude(
+                    scaleBase, scalePerLevel, scaleCalc, scaleByLevel, scaleTail, scaleIncrement);
+            }
+
+            var drCategory = GameplayTag.None;
+            if (!string.IsNullOrEmpty(spec.DrCategory) && !tags.TryGet(spec.DrCategory!, out drCategory))
+            {
+                throw new InvalidOperationException(
+                    $"효과 '{spec.Name}': DR 계열 태그를 해석할 수 없습니다: {spec.DrCategory}");
+            }
+
+            var drStageMultipliers = spec.DrStageMultipliers.Count > 0
+                ? spec.DrStageMultipliers.ToArray()
+                : Array.Empty<BigNum>();
+
             return new CompiledEffectSpec(
                 spec.Name, spec.DurationType, spec.DurationTicks, spec.PeriodTicks, spec.Stack,
                 modifiers, executions, applicationConditions, ongoingConditions,
                 grantedTags, assetTags, immunityTags, chains, overflowEffectId,
-                removeOnApplyTags, chanceToApply);
+                removeOnApplyTags, chanceToApply, durationPerLevel, durationScale,
+                drCategory, spec.DrWindowTicks, drStageMultipliers);
         }
 
         // 규칙 2·3: DurationType별 필드 제약.
@@ -174,10 +200,12 @@ namespace Bun3.Gameplay.Effects
                     break;
 
                 case EffectDurationType.Duration:
-                    if (spec.DurationTicks <= 0)
+                    // G3: DurationPerLevel이 있으면 DurationTicks는 대신 쓰이지 않는(0인) 상태여야
+                    // 한다 — 상호 배타 규칙은 ValidateDurationScaleFields가 검증한다.
+                    if (spec.DurationPerLevel == null && spec.DurationTicks <= 0)
                     {
                         throw new InvalidOperationException(
-                            $"효과 '{spec.Name}': Duration은 DurationTicks가 0보다 커야 합니다.");
+                            $"효과 '{spec.Name}': Duration은 DurationTicks가 0보다 커야 합니다(또는 DurationPerLevel을 쓰세요).");
                     }
 
                     break;
@@ -257,6 +285,100 @@ namespace Bun3.Gameplay.Effects
                 {
                     throw new InvalidOperationException(
                         $"효과 '{spec.Name}': Stack.ExtendCapMultiplier는 1 이상이어야 합니다.");
+                }
+            }
+        }
+
+        // G3: DurationPerLevel·DurationScale 정합 규칙 — 둘 다 Duration 전용이고, DurationPerLevel은
+        // DurationTicks와 상호 배타(있으면 DurationTicks는 0)이며 MaxLevel·길이가 맞아야 한다.
+        private static void ValidateDurationScaleFields(EffectSpec spec)
+        {
+            if (spec.DurationPerLevel != null)
+            {
+                if (spec.DurationType != EffectDurationType.Duration)
+                {
+                    throw new InvalidOperationException(
+                        $"효과 '{spec.Name}': DurationPerLevel은 DurationType이 Duration이어야 합니다.");
+                }
+
+                if (spec.DurationTicks != 0)
+                {
+                    throw new InvalidOperationException(
+                        $"효과 '{spec.Name}': DurationPerLevel은 DurationTicks와 함께 쓸 수 없습니다(상호 배타).");
+                }
+
+                if (spec.MaxLevel < 1)
+                {
+                    throw new InvalidOperationException(
+                        $"효과 '{spec.Name}': DurationPerLevel은 MaxLevel >= 1 선언이 필요합니다.");
+                }
+
+                if (spec.DurationPerLevel.Count != spec.MaxLevel)
+                {
+                    throw new InvalidOperationException(
+                        $"효과 '{spec.Name}': DurationPerLevel 길이({spec.DurationPerLevel.Count})가 "
+                        + $"MaxLevel({spec.MaxLevel})과 일치해야 합니다.");
+                }
+            }
+
+            if (spec.DurationScale != null && spec.DurationType != EffectDurationType.Duration)
+            {
+                throw new InvalidOperationException(
+                    $"효과 '{spec.Name}': DurationScale은 DurationType이 Duration이어야 합니다.");
+            }
+        }
+
+        // G6: DR 필드 정합 규칙 — DrCategory가 있으면 Duration 전용, 창은 1틱 이상, 단계 배수는
+        // 비어있지 않고 전부 0 이상이어야 한다.
+        private static void ValidateDrFields(EffectSpec spec)
+        {
+            if (string.IsNullOrEmpty(spec.DrCategory)) return;
+
+            if (spec.DurationType != EffectDurationType.Duration)
+            {
+                throw new InvalidOperationException(
+                    $"효과 '{spec.Name}': DrCategory는 DurationType이 Duration이어야 합니다.");
+            }
+
+            if (spec.DrWindowTicks < 1)
+            {
+                throw new InvalidOperationException(
+                    $"효과 '{spec.Name}': DrCategory가 있으면 DrWindowTicks는 1 이상이어야 합니다.");
+            }
+
+            if (spec.DrStageMultipliers.Count == 0)
+            {
+                throw new InvalidOperationException(
+                    $"효과 '{spec.Name}': DrCategory가 있으면 DrStageMultipliers가 비어있을 수 없습니다.");
+            }
+
+            for (var i = 0; i < spec.DrStageMultipliers.Count; i++)
+            {
+                if (spec.DrStageMultipliers[i].Sign < 0)
+                {
+                    throw new InvalidOperationException(
+                        $"효과 '{spec.Name}': DrStageMultipliers는 0 이상이어야 합니다(인덱스 {i}).");
+                }
+            }
+        }
+
+        // 라이더(T2 리뷰): LevelFromStack 스펙에 ScaleWithStack=true인 Modifier가 있으면 레벨 커브 ×
+        // 스택 배수가 복합 적용된다 — 오류는 아니지만(의도된 콘텐츠일 수 있음) 저작자가 인지하도록
+        // Build 경고에 쌓는다.
+        private static void DetectLevelFromStackScaleWithStackWarnings(List<EffectSpec> specs, List<string> warnings)
+        {
+            for (var i = 0; i < specs.Count; i++)
+            {
+                var spec = specs[i];
+                if (!spec.Stack.LevelFromStack) continue;
+
+                for (var m = 0; m < spec.Modifiers.Count; m++)
+                {
+                    if (!spec.Modifiers[m].ScaleWithStack) continue;
+                    warnings.Add(
+                        $"[warn] 효과 '{spec.Name}': LevelFromStack과 ScaleWithStack=true가 함께 켜져 있어 "
+                        + "레벨 커브 × 스택 배수가 복합 적용됩니다.");
+                    break;
                 }
             }
         }

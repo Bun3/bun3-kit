@@ -17,11 +17,13 @@ namespace Bun3.Gameplay.Effects
     /// </summary>
     public sealed class EffectTargetSnapshot
     {
-        internal EffectTargetSnapshot(TargetId targetId, BigNum[] attributeBases, InstanceRow[] instances)
+        internal EffectTargetSnapshot(
+            TargetId targetId, BigNum[] attributeBases, InstanceRow[] instances, DrHistoryRow[] drHistory)
         {
             TargetId = targetId;
             AttributeBases = attributeBases;
             Instances = instances;
+            DrHistory = drHistory;
         }
 
         /// <summary>이 스냅샷이 속한 대상 식별자입니다. 다른 대상으로의 복원을 막는 데 쓰입니다.</summary>
@@ -32,6 +34,10 @@ namespace Bun3.Gameplay.Effects
 
         /// <summary>활성 효과 인스턴스 상태들 — Id 오름차순입니다.</summary>
         internal InstanceRow[] Instances { get; }
+
+        /// <summary>DR(체감 저항, 스펙 §15 G6) 계열별 적용 이력입니다. 이 이력이 지속시간 계산에
+        /// 쓰이므로 결정론 재생을 위해 스냅샷·복원 양쪽에 포함됩니다.</summary>
+        internal DrHistoryRow[] DrHistory { get; }
 
         /// <summary>스냅샷 인스턴스 하나의 필드와, 그 인스턴스가 부착했던 수정자 행들입니다.</summary>
         internal sealed class InstanceRow
@@ -84,6 +90,21 @@ namespace Bun3.Gameplay.Effects
             internal AttributeModifierOp Op { get; }
             internal BigNum Magnitude { get; }
             internal bool ScaleWithStack { get; }
+        }
+
+        /// <summary>DR 계열 태그 하나의 스냅샷 적용 이력 행입니다.</summary>
+        internal readonly struct DrHistoryRow
+        {
+            internal DrHistoryRow(ushort categoryTagIndex, int appliedCount, long lastAppliedTick)
+            {
+                CategoryTagIndex = categoryTagIndex;
+                AppliedCount = appliedCount;
+                LastAppliedTick = lastAppliedTick;
+            }
+
+            internal ushort CategoryTagIndex { get; }
+            internal int AppliedCount { get; }
+            internal long LastAppliedTick { get; }
         }
     }
 }
