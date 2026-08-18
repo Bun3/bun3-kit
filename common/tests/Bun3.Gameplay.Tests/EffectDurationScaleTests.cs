@@ -187,6 +187,67 @@ public sealed class EffectDurationScaleTests
     }
 
     [Test]
+    public void Dr_window_boundary_is_still_within_window_when_exactly_equal()
+    {
+        // 창 경계 고정: lastAppliedTick + DrWindowTicks == 현재 틱일 때 현재 구현은 "<"(strict)라
+        // 아직 리셋되지 않는다 — 리셋됐다면 배수 1(지속 10)이었을 자리에 배수 0.5(지속 5)가 나와야 한다.
+        var kit = EffectTestKit.Create();
+        kit.AddSpec(DrCcSpec("cc"));
+        var pipeline = kit.BuildPipeline();
+
+        var t0 = pipeline.CurrentTick;
+        pipeline.EnqueueApply(kit.SpecId("cc"), kit.Attacker.Id, kit.Defender.Id);
+        pipeline.Tick();
+        Assert.That(kit.Defender.ActiveEffects[0].RemainingTicks, Is.EqualTo(10));
+        RunUntilExpired(pipeline, kit.Defender);
+
+        while (pipeline.CurrentTick < t0 + 100) pipeline.Tick();
+        Assert.That(pipeline.CurrentTick, Is.EqualTo(t0 + 100));
+
+        pipeline.EnqueueApply(kit.SpecId("cc"), kit.Attacker.Id, kit.Defender.Id);
+        pipeline.Tick();
+        Assert.That(kit.Defender.ActiveEffects[0].RemainingTicks, Is.EqualTo(5));
+    }
+
+    [Test]
+    public void Dr_immune_application_does_not_dispel_via_remove_on_apply_tags()
+    {
+        // 회귀: DR 면역 판정이 RemoveOnApplyTags(G1) 부수효과보다 먼저 끝나야 한다 — 면역인 적용이
+        // 대상의 기존(매칭) 효과를 먼저 지워버리면 관측 가능한 왜곡이 생긴다.
+        var kit = EffectTestKit.Create();
+
+        var guard = EffectTestKit.MinimalInfinite("guard");
+        guard.AssetTags.Add("state.frozen");
+        kit.AddSpec(guard);
+
+        var cc = DrCcSpec("cc");
+        cc.RemoveOnApplyTags.Add("state.frozen");
+        kit.AddSpec(cc);
+
+        var pipeline = kit.BuildPipeline();
+
+        // DR 카운트를 2까지 올려 3차 적용이 면역이 되도록 만든다(guard 부여 전에 끝낸다 — 1·2차는
+        // 면역이 아니라서 RemoveOnApplyTags가 정상 발화하므로 guard가 아직 없어야 한다).
+        pipeline.EnqueueApply(kit.SpecId("cc"), kit.Attacker.Id, kit.Defender.Id);
+        pipeline.Tick();
+        RunUntilExpired(pipeline, kit.Defender);
+        pipeline.EnqueueApply(kit.SpecId("cc"), kit.Attacker.Id, kit.Defender.Id);
+        pipeline.Tick();
+        RunUntilExpired(pipeline, kit.Defender);
+
+        pipeline.EnqueueApply(kit.SpecId("guard"), kit.Attacker.Id, kit.Defender.Id);
+        pipeline.Tick();
+        Assert.That(kit.Defender.ActiveEffectCount, Is.EqualTo(1));
+
+        // 3차(면역) 적용 — guard가 디스펠되지 않고 cc 인스턴스도 생기지 않아야 한다.
+        pipeline.EnqueueApply(kit.SpecId("cc"), kit.Attacker.Id, kit.Defender.Id);
+        pipeline.Tick();
+
+        Assert.That(kit.Defender.ActiveEffectCount, Is.EqualTo(1));
+        Assert.That(kit.Defender.ActiveEffects[0].SpecId, Is.EqualTo(kit.SpecId("guard")));
+    }
+
+    [Test]
     public void Dr_history_round_trips_through_snapshot_restore()
     {
         var kit = EffectTestKit.Create();

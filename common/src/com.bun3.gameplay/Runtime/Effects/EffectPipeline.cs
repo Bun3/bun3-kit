@@ -47,6 +47,9 @@ namespace Bun3.Gameplay.Effects
         /// <summary>ChanceToApply 롤 실패로 조용히 무산된 적용 요청 수입니다.</summary>
         internal long ChanceDropCount { get; private set; }
 
+        /// <summary>G6 DR 면역(단계 배수 합성 결과 지속 0틱 이하)으로 조용히 무산된 적용 요청 수입니다.</summary>
+        internal long DrImmuneDropCount { get; private set; }
+
         // G2: [0,1) 결정론 롤 스케일 — _rng.NextUInt32()의 치역(2^32)을 BigNum 정수 비교로 다루기 위한 상수.
         private static readonly BigNum RngRollRange = (BigNum)4_294_967_296L;
 
@@ -228,6 +231,28 @@ namespace Bun3.Gameplay.Effects
                 return;
             }
 
+            // G6: DR 면역 판정은 RemoveOnApply(부수효과, G1)보다 먼저 끝내야 한다 — 그래야 면역인
+            // 적용이 대상의 기존 효과를 먼저 디스펠해버리는 관측 가능한 왜곡이 생기지 않는다(다른 드랍
+            // 경로 — Immune/Chance/Condition — 도 전부 부수효과 이전에 단락한다). DR은 "신규 생성" 경로
+            // 전용이라 이미 같은 스펙의 활성 인스턴스가 있으면(병합 대상) 여기서 판정하지 않고 기존
+            // 병합 동작을 그대로 둔다. ApplyDrHistory는 이력을 변이시키므로 정확히 한 번만 호출한다 —
+            // 여기서 계산한 틱을 CreateInstance로 그대로 전달한다.
+            var precomputedDurationTicks = -1;
+            if (spec.DurationType == EffectDurationType.Duration && spec.DrCategory.IsValid
+                && FindActiveBySpec(target, pending.SpecId) == null)
+            {
+                var value = ComputeScaledDuration(spec, target, source, hasSource, pending.Level, stack: 1);
+                value *= ApplyDrHistory(target, spec);
+                var ticks = ToTicksFloor(value);
+                if (ticks <= 0)
+                {
+                    DrImmuneDropCount++;
+                    return;
+                }
+
+                precomputedDurationTicks = ticks;
+            }
+
             RemoveOnApply(target, spec, pending.SpecId);
 
             if (spec.DurationType == EffectDurationType.Instant)
@@ -236,7 +261,7 @@ namespace Bun3.Gameplay.Effects
             }
             else
             {
-                ApplyDurationOrInfinite(spec, target, in pending);
+                ApplyDurationOrInfinite(spec, target, in pending, precomputedDurationTicks);
             }
         }
 
@@ -540,8 +565,11 @@ namespace Bun3.Gameplay.Effects
         }
 
         // Duration/Infinite: 대상에 동일 SpecId 활성 인스턴스가 있으면 스택 정책으로 병합하고,
-        // 없으면 새 인스턴스를 만들어 수정자 부착·태그 부여까지 끝낸다.
-        private void ApplyDurationOrInfinite(CompiledEffectSpec spec, EffectTarget target, in PendingApply pending)
+        // 없으면 새 인스턴스를 만들어 수정자 부착·태그 부여까지 끝낸다. precomputedDurationTicks는
+        // ProcessPendingApply가 RemoveOnApply 이전에 DR(G6)까지 합성해 미리 계산해둔 지속 틱이며
+        // (DR 미사용/병합 대상이면 -1) CreateInstance가 그대로 쓴다 — ApplyDrHistory 중복 호출 방지.
+        private void ApplyDurationOrInfinite(
+            CompiledEffectSpec spec, EffectTarget target, in PendingApply pending, int precomputedDurationTicks)
         {
             var existing = FindActiveBySpec(target, pending.SpecId);
             if (existing != null)
@@ -550,7 +578,7 @@ namespace Bun3.Gameplay.Effects
                 return;
             }
 
-            CreateInstance(spec, target, in pending);
+            CreateInstance(spec, target, in pending, precomputedDurationTicks);
         }
 
         private static EffectInstance? FindActiveBySpec(EffectTarget target, int specId)
@@ -679,26 +707,27 @@ namespace Bun3.Gameplay.Effects
 
         // 새 인스턴스: 렌트→Id 오름차순 삽입→(주기 효과가 아니면) 수정자 부착→GrantedTags 부여→Applied→
         // OnApplication 체인 발화. 주기 효과(PeriodTicks > 0)는 매 주기 Instant와 동일한 경로로 Base에
-        // 가감할 뿐 지속 부착 대상이 아니다. G3/G6: Duration 스펙은 이 경로(신규 생성)에서만 DR이
-        // 합성된 지속시간을 계산한다 — 결과가 0틱 이하면 조용히 무산(면역)하되 DR 카운터는 갱신됐으므로
-        // 그대로 반환한다(RemoveOnApply 등 이미 일어난 부수효과는 되돌리지 않는다 — 기존 실패 경로와 같은 결).
-        private void CreateInstance(CompiledEffectSpec spec, EffectTarget target, in PendingApply pending)
+        // 가감할 뿐 지속 부착 대상이 아니다. G3/G6: DR이 있는 Duration 스펙은 ProcessPendingApply가
+        // RemoveOnApply보다 먼저 지속시간(및 면역 여부)을 계산해 precomputedDurationTicks로 넘긴다 —
+        // 여기서는 그 값을 그대로 쓸 뿐 ApplyDrHistory를 다시 부르지 않는다(이력 이중 변이 방지).
+        // DR이 없는 Duration은 여기서 계산(최소 1틱 클램프).
+        private void CreateInstance(
+            CompiledEffectSpec spec, EffectTarget target, in PendingApply pending, int precomputedDurationTicks)
         {
             var hasSource = _resolver.TryResolve(pending.Source, out var source) && source is not null;
 
             var remainingTicks = -1;
             if (spec.DurationType == EffectDurationType.Duration)
             {
-                var value = ComputeScaledDuration(spec, target, source, hasSource, pending.Level, stack: 1);
                 if (spec.DrCategory.IsValid)
                 {
-                    value *= ApplyDrHistory(target, spec);
-                    var drTicks = ToTicksFloor(value);
-                    if (drTicks <= 0) return;   // G6: 면역 — 조용한 무산.
-                    remainingTicks = drTicks;
+                    // 면역(0틱 이하)이었다면 ProcessPendingApply가 이미 조용히 무산·return했으므로
+                    // 이 경로에 도달했다는 것 자체가 precomputedDurationTicks > 0을 보장한다.
+                    remainingTicks = precomputedDurationTicks;
                 }
                 else
                 {
+                    var value = ComputeScaledDuration(spec, target, source, hasSource, pending.Level, stack: 1);
                     var ticks = ToTicksFloor(value);
                     remainingTicks = ticks <= 0 ? 1 : ticks;   // G3: 최소 1틱.
                 }
