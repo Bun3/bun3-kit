@@ -14,7 +14,7 @@
 4. **AchievementCatalog\<TDef\>** — 생성자 검증(빈/중복 id ordinal, Target≤0, 상한 65,536,
    null 항목) + `Action<TDef>?` 게임 validator → `TDef[]` + `Dictionary<string,int>` 동결.
    `Count`/`GetDefinition(int)`/`GetIndex(string)`/`TryGetIndex`.
-5. **AchievementTracker\<TDef\>** — 스펙 §4 산식 그대로. 생성자
+5. **AchievementManager\<TDef\>** — 스펙 §4 산식 그대로. 생성자
    `(catalog, Action? onDirty = null, Func<long>? utcNowTicks = null)`.
    `Add`/`Set`/`TryClaim`/`GetClaimableCount`/`GetState(ref readonly)`/`Restore`/`OnCompleted`.
 6. **테스트** — `server/tests/Bun3.Server.Tests/AchievementTests.cs` (NUnit),

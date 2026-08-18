@@ -3,7 +3,7 @@ namespace Bun3.Server.Achievements
     /// <summary>
     /// 업적 수명주기 상태. 저장되는 것은 가용성 셋(Locked/Ready/Active)뿐이며 —
     /// <see cref="AchievementState.Availability"/> — Completed/Claimed는
-    /// <see cref="AchievementTracker{TDef}.GetStatus"/>가 카운터에서 파생한다(저장 안 함).
+    /// <see cref="AchievementManager{TDef}.GetStatus"/>가 카운터에서 파생한다(저장 안 함).
     /// 숫자 값은 저장 포맷의 일부이므로 바꾸지 않는다.
     /// </summary>
     public enum AchievementStatus

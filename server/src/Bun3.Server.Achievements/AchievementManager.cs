@@ -13,7 +13,7 @@ namespace Bun3.Server.Achievements
     /// — 수령 대기 중 UI는 min(Progress, Target)/Target으로 "10/10 [보상받기]"가 된다.
     /// </summary>
     /// <typeparam name="TDef">게임의 업적 정의 타입.</typeparam>
-    public sealed class AchievementTracker<TDef> where TDef : AchievementDefinition
+    public sealed class AchievementManager<TDef> where TDef : AchievementDefinition
     {
         private static readonly Func<long> DefaultClock = () => DateTime.UtcNow.Ticks;
 
@@ -34,7 +34,7 @@ namespace Bun3.Server.Achievements
         /// <paramref name="onDirty"/>에 Player의 MarkDirty를 넘기면 상태가 실제로 변할
         /// 때마다 저장 스윕 대상으로 표시된다. <paramref name="utcNowTicks"/>는 달성
         /// 시각원(기본 UTC 현재) — 테스트용 주입점.</summary>
-        public AchievementTracker(AchievementCatalog<TDef> catalog, Action? onDirty = null, Func<long>? utcNowTicks = null)
+        public AchievementManager(AchievementCatalog<TDef> catalog, Action? onDirty = null, Func<long>? utcNowTicks = null)
         {
             _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
             _states = new AchievementState[catalog.Count];

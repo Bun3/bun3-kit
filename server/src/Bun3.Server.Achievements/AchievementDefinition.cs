@@ -23,12 +23,12 @@ namespace Bun3.Server.Achievements
         public bool Repeatable { get; }
 
         /// <summary>라우팅·그룹 태그. 카탈로그 기동 시 태그 인덱스로 인터닝되어
-        /// <see cref="AchievementTracker{TDef}.IncreaseByTag(int, long)"/>와 그룹 순회에
+        /// <see cref="AchievementManager{TDef}.IncreaseByTag(int, long)"/>와 그룹 순회에
         /// 쓰인다. 게임이 enum으로 관리하고 싶으면 nameof로 채우면 된다(프레임워크는 모름).</summary>
         public IReadOnlyList<string> Tags { get; }
 
         /// <summary>초기 가용성 — Locked/Ready/Active만 유효(카탈로그가 검증). 기본 Active.
-        /// 체인 티어는 Locked로 두고 이전 티어의 완료 훅에서 <see cref="AchievementTracker{TDef}.Activate"/>.</summary>
+        /// 체인 티어는 Locked로 두고 이전 티어의 완료 훅에서 <see cref="AchievementManager{TDef}.Activate"/>.</summary>
         public AchievementStatus InitialAvailability { get; }
 
         /// <summary>정의를 생성한다. 인자 검증은 카탈로그 생성 시점에 일괄 수행된다.</summary>

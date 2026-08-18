@@ -30,7 +30,7 @@ server/src/Bun3.Server.Achievements/   netstandard2.1 · 의존성 0 (순수)
 ├── AchievementDefinition.cs   게임이 상속하는 정의 베이스 (Id, Target, Repeatable, Tags, InitialAvailability)
 ├── AchievementCatalog.cs      AchievementCatalog<TDef> — 기동 시 로드/검증, id·태그 인터닝, 불변
 ├── AchievementState.cs        업적 1개의 플레이어 상태 struct (저장 단위)
-└── AchievementTracker.cs      AchievementTracker<TDef> — 플레이어당 1개, 전 인스턴스 동작 소유
+└── AchievementManager.cs      AchievementManager<TDef> — 플레이어당 1개, 전 인스턴스 동작 소유
 ```
 
 - **의존성 0**: Players를 참조하지 않는다. dirty 연계는 `onDirty` 델리게이트로 게임이
@@ -126,7 +126,7 @@ API (핫패스 전부 인덱스 기반·무할당):
 
 ## 6. 플랫폼 업적(Steam 등)과의 관계 — 원본 → 프로젝션
 
-**트래커가 항상 원본(source of truth), 플랫폼 업적은 단방향 미러다.** Steam 모델은
+**매니저가 항상 원본(source of truth), 플랫폼 업적은 단방향 미러다.** Steam 모델은
 1회성 언락 + 진행도 스탯뿐이라(반복·클레임·리셋 없음) 왕복 변환이 안 되고, Steam
 없는 타깃에서도 프레임워크는 동작해야 한다. 코어는 플랫폼을 모른다 — 접합점은
 기존 seam 둘로 충분하다:
