@@ -79,14 +79,14 @@ public class RegenTests
     public void Regen_target_and_hard_cap_are_separate_knobs()
     {
         // 단일 정의로 growninja의 count/param3 분리를 대체 — 보상 지급은 목표선(5)을 넘어
-        // maxCount(무제한)까지 쌓이고, 리젠은 총량이 목표선 아래일 때만 찬다.
+        // maxCount(기본 무제한)까지 쌓이고, 리젠은 총량이 목표선 아래일 때만 찬다.
         var catalog = new ItemCatalogBuilder<string>()
-            .Register("ticket", "던전 티켓", maxCount: long.MaxValue, regenPeriodTicks: 10, maxRegen: 5)
-            .Register("strict", "엄격 티켓", regenPeriodTicks: 10, maxRegen: 5)   // maxCount 미지정 → 5로 덮임
+            .Register("ticket", "던전 티켓", regenPeriodTicks: 10, maxRegen: 5)
+            .Register("strict", "엄격 티켓", maxCount: 5, regenPeriodTicks: 10, maxRegen: 5)
             .Build();
         var ticket = catalog.GetRequired("ticket");
         var strict = catalog.GetRequired("strict");
-        Assert.That(catalog.GetMaxCount(strict), Is.EqualTo(5), "미지정 maxCount는 maxRegen으로");
+        Assert.That(catalog.GetMaxCount(ticket), Is.EqualTo(long.MaxValue), "기본 maxCount는 무제한");
         Assert.That(catalog.GetMaxRegen(ticket), Is.EqualTo(5));
         long nextId = 0;
         var inventory = new ItemInventory<ItemState>(catalog, () => ++nextId, _ => new ItemState());

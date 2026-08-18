@@ -31,8 +31,8 @@ namespace Bun3.Server.Items
         /// <param name="id">고유 문자열 id(서수 비교) — 정식 키. 중복이면 던진다.</param>
         /// <param name="definition">게임 정의(불투명 보관).</param>
         /// <param name="maxCount">정의당 최대 보유량 하드 상한(스택형=수량, 비스택형=인스턴스 수).
-        /// 0 = 미지정 — 리젠 정의면 <paramref name="maxRegen"/>으로 덮이고(목표선 초과 적립을
-        /// 명시적으로만 허용), 아니면 무제한. 명시적 무제한은 <see cref="long.MaxValue"/>.</param>
+        /// 기본 <see cref="long.MaxValue"/> = 무제한 — 리젠 정의도 기본은 목표선 초과 적립
+        /// 허용이며, 엄격히 막으려면 maxCount를 maxRegen과 같게 명시한다. 0 이하는 거부.</param>
         /// <param name="externalId">선택적 외부 숫자 id(DB 컬럼·Steam itemdefid 등) — 역색인에
         /// 등록된다. 중복이면 던진다. <see cref="long.MinValue"/>는 예약값이라 거부.</param>
         /// <param name="unstackable">true면 비스택형(인스턴스형) — 수량 병합 대신
@@ -47,7 +47,7 @@ namespace Bun3.Server.Items
         public ItemCatalogBuilder<TDefinition> Register(
             string id,
             TDefinition definition,
-            long maxCount = 0,
+            long maxCount = long.MaxValue,
             long? externalId = null,
             bool unstackable = false,
             long regenPeriodTicks = 0,
@@ -59,9 +59,9 @@ namespace Bun3.Server.Items
                 throw new ArgumentException("아이템 id는 비어 있을 수 없습니다.", nameof(id));
             }
 
-            if (maxCount < 0)
+            if (maxCount <= 0)
             {
-                throw new ArgumentOutOfRangeException(nameof(maxCount), maxCount, "maxCount는 0(미지정) 이상이어야 합니다.");
+                throw new ArgumentOutOfRangeException(nameof(maxCount), maxCount, "maxCount는 1 이상이어야 합니다.");
             }
 
             if (maxRegen < 0)
@@ -92,12 +92,6 @@ namespace Bun3.Server.Items
             if (maxRegen > 0 && regenPeriodTicks <= 0)
             {
                 throw new ItemCatalogException($"maxRegen은 리젠 주기 없이는 의미가 없습니다: '{id}'");
-            }
-
-            // 미지정 maxCount 정규화 — 리젠 정의는 목표선으로 덮어(엄격 기본), 아니면 무제한.
-            if (maxCount == 0)
-            {
-                maxCount = maxRegen > 0 ? maxRegen : long.MaxValue;
             }
 
             if (maxRegen > maxCount)

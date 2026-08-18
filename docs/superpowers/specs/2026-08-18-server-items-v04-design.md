@@ -138,3 +138,9 @@ growninja가 티켓을 자동 리젠(count)/보상 획득(param3) 두 필드로 
   maxCount: long.MaxValue 명시.
 - `ExceedsMaxStack` → `ExceedsMaxCount` 개명. 하드캡 검사는 전 정의 일관 복원
   (리젠 예외 제거), SettleRegen 목표선은 GetMaxRegen 사용.
+
+### §10 수정 (사용자 재결정): maxCount 기본값 = long.MaxValue
+
+"0 = 미지정 → maxRegen 덮어쓰기" 매직 규칙 제거 — 기본값을 문자 그대로 무제한으로.
+리젠 정의도 기본은 목표선 초과 적립 허용(growninja 친화)이며, 엄격 상한이 필요한
+정의만 maxCount를 maxRegen과 같게 명시한다. maxRegen ≤ maxCount 불변식은 유지.
