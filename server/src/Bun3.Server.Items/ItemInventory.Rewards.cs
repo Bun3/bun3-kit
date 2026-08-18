@@ -15,8 +15,7 @@ namespace Bun3.Server.Items
             RewardTable table,
             IRandomSource rng,
             out int failedIndex,
-            List<ItemInstance<TState>>? created = null,
-            long reason = 0)
+            List<ItemInstance<TState>>? created = null)
         {
             failedIndex = -1;
             if (table == null)
@@ -33,7 +32,7 @@ namespace Bun3.Server.Items
                 _applyOps.Add(new TxOp(TxOpKind.Add, _rewardScratch[i].Item, 0, _rewardScratch[i].Amount));
             }
 
-            return CommitOps(_applyOps, out failedIndex, created, reason);
+            return CommitOps(_applyOps, out failedIndex, created);
         }
     }
 }

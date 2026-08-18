@@ -110,19 +110,19 @@ public class ItemTransferTests
     }
 
     [Test]
-    public void Transfer_notifies_both_sides_with_reason_and_balances()
+    public void Transfer_notifies_both_sides_with_balances()
     {
-        var log = new List<(string Side, long Reason, BigNum Delta, BigNum Balance)>();
+        var log = new List<(string Side, BigNum Delta, BigNum Balance)>();
         var source = new ItemInventory<ItemState>(_catalog, () => ++_nextId, _ => new ItemState(),
-            onApplied: (reason, applied) => log.Add(("src", reason, applied[0].Delta, applied[0].Balance)));
+            onApplied: applied => log.Add(("src", applied[0].Delta, applied[0].Balance)));
         var target = new ItemInventory<ItemState>(_catalog, () => ++_nextId, _ => new ItemState(),
-            onApplied: (reason, applied) => log.Add(("dst", reason, applied[0].Delta, applied[0].Balance)));
+            onApplied: applied => log.Add(("dst", applied[0].Delta, applied[0].Balance)));
         source.TryAdd(_gold, 100);
         log.Clear();
 
-        Assert.That(source.TryTransfer(target, _gold, 30, reason: 77), Is.EqualTo(InventoryError.None));
+        Assert.That(source.TryTransfer(target, _gold, 30), Is.EqualTo(InventoryError.None));
         Assert.That(log, Has.Count.EqualTo(2));
-        Assert.That(log[0], Is.EqualTo(("src", 77L, -(BigNum)30, (BigNum)70)));
-        Assert.That(log[1], Is.EqualTo(("dst", 77L, (BigNum)30, (BigNum)30)));
+        Assert.That(log[0], Is.EqualTo(("src", -(BigNum)30, (BigNum)70)));
+        Assert.That(log[1], Is.EqualTo(("dst", (BigNum)30, (BigNum)30)));
     }
 }

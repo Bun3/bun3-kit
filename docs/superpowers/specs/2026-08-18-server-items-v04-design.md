@@ -162,3 +162,26 @@ growninja가 티켓을 자동 리젠(count)/보상 획득(param3) 두 필드로 
   필요치 0 이하는 데이터 오류). 레벨 직접 증가·리셋은 대입 한 줄 — 프레임워크 제외.
 - 백로그 기록: 멱등성 id(PlayFab IdempotencyId·Steam requestid 상당)는 영속 dedup이
   필요해 Rpc/핸들러 계층 후보.
+
+### §11 수정 (사용자 피드백): reason 인자 → 로그 스코프 트리
+
+함수마다 사유 인자를 꿰는 방식은 호출 체인 오염 + 문맥 빈약(상품 id·수량 등을 못 담음)
+이라는 지적 수용 — reason 파라미터 전면 제거, 스코프 방식으로 대체(분산 트레이싱 span
+트리와 동형):
+
+```csharp
+using (inventory.BeginLogScope($"BuyItem product={id} x{count}"))   // 핸들러 = 루트
+{
+    inventory.TryRemove(gold, price);          // 변경(델타+잔량) 자동 첨부
+    using (inventory.BeginLogScope("PickReward"))
+    {
+        inventory.Log($"pity={pity}");         // 자유 노트
+        inventory.TryGrant(table, rng, out _);
+    }
+}   // 루트 닫힘 → onLog 싱크로 완성 트리 전달
+```
+
+- 하위 로직은 "뭘로 시작됐는지" 몰라도 됨 — 현재 스코프에 자동 첨부, 중첩 자유.
+- 스코프 밖 변경은 즉시 단건 묶음 전달 — 원장에 구멍 없음. 실패 커밋은 Change 미기록.
+- 싱크(onLog) 미지정 시 전 경로 no-op, `IsLogging`으로 비싼 문자열 구성 가드.
+- 역순 닫기 강제(위반 시 예외). onApplied는 reason 없는 기계 소비(업적)로 존속.

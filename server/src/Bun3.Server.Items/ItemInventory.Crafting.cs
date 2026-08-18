@@ -16,8 +16,7 @@ namespace Bun3.Server.Items
             Recipe recipe,
             out int failedIndex,
             List<ItemInstance<TState>>? created = null,
-            int count = 1,
-            long reason = 0)
+            int count = 1)
         {
             failedIndex = -1;
             if (recipe == null)
@@ -46,7 +45,7 @@ namespace Bun3.Server.Items
                     TxOpKind.Add, results[i].Item, 0, results[i].Amount * multiplier));
             }
 
-            return CommitOps(_applyOps, out failedIndex, created, reason);
+            return CommitOps(_applyOps, out failedIndex, created);
         }
     }
 }

@@ -16,7 +16,7 @@ namespace Bun3.Server.Items
         /// 대상은 같은 카탈로그여야 하며(다르면 구성 오류로 던짐) 대상 maxCount를 검사한다.
         /// 성공 시 양쪽에 onChanged·onApplied(출발 −, 도착 +)가 각 1회.
         /// </summary>
-        public InventoryError TryTransfer(ItemInventory<TState> target, ItemId item, BigNum amount, long reason = 0)
+        public InventoryError TryTransfer(ItemInventory<TState> target, ItemId item, BigNum amount)
         {
             var error = ValidateTransferTarget(target);
             if (error != InventoryError.None)
@@ -104,7 +104,7 @@ namespace Bun3.Server.Items
                 target.ApplyGrant(item, amount, null);
             }
 
-            FinalizeTransfer(target, item, amount, reason);
+            FinalizeTransfer(target, item, amount);
             return InventoryError.None;
         }
 
@@ -113,7 +113,7 @@ namespace Bun3.Server.Items
         /// 스택 싱글턴은 잔량 전부가 정의 단위로 이동한다. 잠금 인스턴스는
         /// <see cref="InventoryError.Locked"/>.
         /// </summary>
-        public InventoryError TryTransferByInstance(ItemInventory<TState> target, long instanceId, long reason = 0)
+        public InventoryError TryTransferByInstance(ItemInventory<TState> target, long instanceId)
         {
             var error = ValidateTransferTarget(target);
             if (error != InventoryError.None)
@@ -160,7 +160,7 @@ namespace Bun3.Server.Items
                 target.ApplyGrant(item, amount, null);
             }
 
-            FinalizeTransfer(target, item, amount, reason);
+            FinalizeTransfer(target, item, amount);
             return InventoryError.None;
         }
 
@@ -217,26 +217,27 @@ namespace Bun3.Server.Items
             target._instances.Add(instance.InstanceId, instance);
         }
 
-        private void FinalizeTransfer(ItemInventory<TState> target, ItemId item, BigNum amount, long reason)
+        private void FinalizeTransfer(ItemInventory<TState> target, ItemId item, BigNum amount)
         {
             _hasChanges = true;
             target._hasChanges = true;
             _onChanged?.Invoke();
             target._onChanged?.Invoke();
+            EmitTransferSide(item, -amount);
+            target.EmitTransferSide(item, amount);
+        }
 
-            if (_onApplied != null)
+        private void EmitTransferSide(ItemId item, BigNum delta)
+        {
+            if (_onApplied == null && _onLog == null)
             {
-                _appliedCount = 0;
-                RecordApplied(item, -amount);
-                _onApplied(reason, new ReadOnlySpan<InventoryChange>(_applied, 0, _appliedCount));
+                return;
             }
 
-            if (target._onApplied != null)
-            {
-                target._appliedCount = 0;
-                target.RecordApplied(item, amount);
-                target._onApplied(reason, new ReadOnlySpan<InventoryChange>(target._applied, 0, target._appliedCount));
-            }
+            _appliedCount = 0;
+            RecordApplied(item, delta);
+            _onApplied?.Invoke(new ReadOnlySpan<InventoryChange>(_applied, 0, _appliedCount));
+            LogCommittedChanges();
         }
     }
 }

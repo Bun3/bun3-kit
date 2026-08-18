@@ -50,7 +50,12 @@ namespace Bun3.Server.Items
         private readonly InventoryAppliedHandler? _onApplied;
         private InventoryChange[] _applied = Array.Empty<InventoryChange>();
         private int _appliedCount;
-        private long _txPendingReason;
+
+        // 로그 스코프(CS 원장) — 싱크 미지정 시 전 경로 no-op.
+        private readonly InventoryLogHandler? _onLog;
+        private InventoryLogEntry[] _logEntries = Array.Empty<InventoryLogEntry>();
+        private int _logCount;
+        private int _logDepth;
 
         /// <summary>인벤토리를 만든다.</summary>
         /// <param name="catalog">아이템 카탈로그.</param>
@@ -64,6 +69,9 @@ namespace Bun3.Server.Items
         /// 후보에서 제외된다(예: 사용 중·유저 잠금). 0이면 잠금 없음.</param>
         /// <param name="onApplied">성공한 커밋당 1회, 적용된 순 델타를 받는 통지 —
         /// 업적/퀘스트/랭킹 카운팅용. 미지정 시 기록 비용 없음.</param>
+        /// <param name="onLog">CS 감사 원장 싱크 — 루트 로그 스코프가 닫힐 때(또는 스코프
+        /// 밖 변경 즉시) 완성된 항목 묶음을 받는다. <see cref="BeginLogScope"/> 참고.
+        /// 미지정 시 로그 경로 전체가 no-op.</param>
         public ItemInventory(
             ItemCatalog catalog,
             Func<long> instanceIdIssuer,
@@ -71,9 +79,11 @@ namespace Bun3.Server.Items
             int capacity = 0,
             Action? onChanged = null,
             uint removeBlockingFlags = 0,
-            InventoryAppliedHandler? onApplied = null)
+            InventoryAppliedHandler? onApplied = null,
+            InventoryLogHandler? onLog = null)
         {
             _onApplied = onApplied;
+            _onLog = onLog;
             _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
             _instanceIdIssuer = instanceIdIssuer ?? throw new ArgumentNullException(nameof(instanceIdIssuer));
             _stateFactory = stateFactory ?? throw new ArgumentNullException(nameof(stateFactory));

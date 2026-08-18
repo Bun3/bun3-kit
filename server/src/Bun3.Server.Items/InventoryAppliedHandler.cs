@@ -25,12 +25,10 @@ namespace Bun3.Server.Items
 
     /// <summary>
     /// 성공한 커밋당 1회 호출되는 적용 통지 — 연산 순서대로의 순 델타와 변경 후 잔량.
-    /// 업적·퀘스트 카운팅과 감사 원장(PlayFab TransactionHistory·Nakama ledger 상당)의
-    /// 원천이다. 게임은 이 핸들러 어댑터 하나로 (플레이어·시각·reason·델타·잔량) 원장
-    /// 행을 영속화하면 라이브 CS 추적이 완성된다. span은 호출 동안만 유효 — 보관은 복사로.
+    /// 업적·퀘스트 카운팅 같은 기계 소비용이다. 문맥(어떤 행동이 왜)을 가진 CS 감사
+    /// 원장은 로그 스코프(<see cref="ItemInventory{TState}.BeginLogScope"/>) 쪽이 원천.
+    /// span은 호출 동안만 유효 — 보관은 복사로.
     /// </summary>
-    /// <param name="reason">커밋에 태워진 게임 정의 사유 코드 — 게임은
-    /// <c>enum ItemReason : long</c>을 정의해 쓰는 것을 권장. 0 = 미지정.</param>
     /// <param name="applied">적용된 변경들.</param>
-    public delegate void InventoryAppliedHandler(long reason, ReadOnlySpan<InventoryChange> applied);
+    public delegate void InventoryAppliedHandler(ReadOnlySpan<InventoryChange> applied);
 }

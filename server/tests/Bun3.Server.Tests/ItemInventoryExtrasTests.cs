@@ -180,36 +180,36 @@ public class ItemInventoryExtrasTests
     // ---- onApplied ----
 
     [Test]
-    public void OnApplied_reports_reason_deltas_and_balances_once_per_commit()
+    public void OnApplied_reports_deltas_and_balances_once_per_commit()
     {
-        var log = new List<(long Reason, ItemId Item, BigNum Delta, BigNum Balance)>();
+        var log = new List<(ItemId Item, BigNum Delta, BigNum Balance)>();
         var commits = 0;
-        var inventory = NewInventory(onApplied: (reason, applied) =>
+        var inventory = NewInventory(onApplied: applied =>
         {
             commits++;
             foreach (var change in applied)
             {
-                log.Add((reason, change.Item, change.Delta, change.Balance));
+                log.Add((change.Item, change.Delta, change.Balance));
             }
         });
         var created = new List<ItemInstance<ItemState>>();
-        inventory.TryAdd(_sword, 2, created, reason: 10);   // 커밋 1 — 사유 10
+        inventory.TryAdd(_sword, 2, created);   // 커밋 1
 
-        var tx = inventory.BeginTransaction(reason: 20);
+        var tx = inventory.BeginTransaction();
         tx.Remove(_gold, 0);
         Assert.That(tx.Commit(out _), Is.EqualTo(InventoryError.InvalidAmount));
         Assert.That(commits, Is.EqualTo(1), "실패 커밋은 통지 없음");
 
-        var tx2 = inventory.BeginTransaction(reason: 30);
+        var tx2 = inventory.BeginTransaction();
         tx2.Add(_gold, 100);
         tx2.RemoveInstance(created[0].InstanceId);
         Assert.That(tx2.Commit(out _), Is.EqualTo(InventoryError.None));
 
         Assert.That(commits, Is.EqualTo(2));
         Assert.That(log, Has.Count.EqualTo(3));
-        // (사유, 델타, 변경 후 잔량) — CS 원장 한 줄의 형태
-        Assert.That(log[0], Is.EqualTo((10L, _sword, (BigNum)2, (BigNum)2)));
-        Assert.That(log[1], Is.EqualTo((30L, _gold, (BigNum)100, (BigNum)100)));
-        Assert.That(log[2], Is.EqualTo((30L, _sword, -BigNum.One, BigNum.One)), "인스턴스 지정 소모도 순 델타·잔량으로");
+        // (델타, 변경 후 잔량) — 잔량이 CS 문의의 답
+        Assert.That(log[0], Is.EqualTo((_sword, (BigNum)2, (BigNum)2)));
+        Assert.That(log[1], Is.EqualTo((_gold, (BigNum)100, (BigNum)100)));
+        Assert.That(log[2], Is.EqualTo((_sword, -BigNum.One, BigNum.One)), "인스턴스 지정 소모도 순 델타·잔량으로");
     }
 }

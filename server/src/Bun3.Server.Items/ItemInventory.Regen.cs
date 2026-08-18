@@ -14,8 +14,7 @@ namespace Bun3.Server.Items
         /// 소모 전에 정산하는 것이 계약이다 — 가득 상태의 기준 재설정이 적립 악용을 막는다.
         /// </summary>
         /// <param name="nowTicksUtc">현재 시각(UTC ticks) — 게임 주입.</param>
-        /// <param name="reason">onApplied로 전달되는 게임 정의 사유 코드(예: REGEN). 0 = 미지정.</param>
-        public int SettleRegen(long nowTicksUtc, long reason = 0)
+        public int SettleRegen(long nowTicksUtc)
         {
             var regenItems = _catalog.RegenItems;
             if (regenItems.Length == 0)
@@ -61,7 +60,7 @@ namespace Bun3.Server.Items
                 return 0;
             }
 
-            if (CommitOps(_applyOps, out _, null, reason) != InventoryError.None)
+            if (CommitOps(_applyOps, out _, null) != InventoryError.None)
             {
                 return 0;   // 도달 불가 방어 — 기준 미전진으로 유실 없음
             }

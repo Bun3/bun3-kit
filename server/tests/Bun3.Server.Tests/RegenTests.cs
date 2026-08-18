@@ -60,7 +60,7 @@ public class RegenTests
         long nextId = 0;
         var applied = 0;
         var inventory = new ItemInventory<ItemState>(
-            catalog, () => ++nextId, _ => new ItemState(), onApplied: (_, _) => applied++);
+            catalog, () => ++nextId, _ => new ItemState(), onApplied: _ => applied++);
 
         Assert.That(inventory.SettleRegen(1000), Is.EqualTo(0), "미초기화 — 기준만 초기화");
         Assert.That(inventory.SettleRegen(1035), Is.EqualTo(1), "티켓 3개(주기 10), 에너지는 주기 미달");
