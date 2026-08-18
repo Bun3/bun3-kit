@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Bun3.Gameplay.Numerics;
+using Bun3.Server.Core;
 
 namespace Bun3.Server.Items
 {

@@ -1,4 +1,5 @@
 using Bun3.Gameplay.Numerics;
+using Bun3.Server.Core;
 using Bun3.Server.Items;
 using NUnit.Framework;
 
@@ -58,14 +59,14 @@ public class ActionLogTests
         Assert.That(entries.Select(e => (e.Kind, e.Depth)), Is.EqualTo(new[]
         {
             (ActionLogEntryKind.ScopeStart, 0),   // BuyItem
-            (ActionLogEntryKind.Change, 1),       // gold -500
-            (ActionLogEntryKind.Change, 1),       // sword +1
+            (ActionLogEntryKind.Data, 1),       // gold -500
+            (ActionLogEntryKind.Data, 1),       // sword +1
             (ActionLogEntryKind.ScopeStart, 1),   // Achievement
             (ActionLogEntryKind.Note, 2),         // cleared
-            (ActionLogEntryKind.Change, 2),       // gold +100 (보상)
+            (ActionLogEntryKind.Data, 2),       // gold +100 (보상)
         }));
-        Assert.That(entries[1].Change.Balance, Is.EqualTo((BigNum)500), "변경 후 잔량 — CS의 답");
-        Assert.That(entries[5].Change.Balance, Is.EqualTo((BigNum)600));
+        Assert.That(((InventoryChange)entries[1].Data!).Balance, Is.EqualTo((BigNum)500), "변경 후 잔량 — CS의 답");
+        Assert.That(((InventoryChange)entries[5].Data!).Balance, Is.EqualTo((BigNum)600));
     }
 
     [Test]
@@ -82,14 +83,14 @@ public class ActionLogTests
         }
 
         var entries = _batches.Single();
-        Assert.That(entries.Select(e => (e.Kind, e.Label)), Is.EqualTo(new[]
+        Assert.That(entries.Select(e => (e.Kind, e.Source)), Is.EqualTo(new[]
         {
             (ActionLogEntryKind.ScopeStart, (string?)null),
-            (ActionLogEntryKind.Change, "bag"),         // -40
-            (ActionLogEntryKind.Change, "warehouse"),   // +40
+            (ActionLogEntryKind.Data, "bag"),         // -40
+            (ActionLogEntryKind.Data, "warehouse"),   // +40
         }));
-        Assert.That(entries[1].Change.Delta, Is.EqualTo(-(BigNum)40));
-        Assert.That(entries[2].Change.Balance, Is.EqualTo((BigNum)40));
+        Assert.That(((InventoryChange)entries[1].Data!).Delta, Is.EqualTo(-(BigNum)40));
+        Assert.That(((InventoryChange)entries[2].Data!).Balance, Is.EqualTo((BigNum)40));
     }
 
     [Test]
@@ -100,7 +101,7 @@ public class ActionLogTests
         _log.Log("standalone note");    // 스코프 밖 노트
 
         Assert.That(_batches, Has.Count.EqualTo(2));
-        Assert.That(_batches[0].Single().Kind, Is.EqualTo(ActionLogEntryKind.Change));
+        Assert.That(_batches[0].Single().Kind, Is.EqualTo(ActionLogEntryKind.Data));
         Assert.That(_batches[1].Single().Kind, Is.EqualTo(ActionLogEntryKind.Note));
     }
 

@@ -26,7 +26,7 @@ namespace Bun3.Server.Items
     /// <summary>
     /// 성공한 커밋당 1회 호출되는 적용 통지 — 연산 순서대로의 순 델타와 변경 후 잔량.
     /// 업적·퀘스트 카운팅 같은 기계 소비용이다. 문맥(어떤 행동이 왜)을 가진 CS 감사
-    /// 원장은 세션 공용 <see cref="ActionLog"/> 쪽이 원천.
+    /// 원장은 세션 공용 <see cref="Bun3.Server.Core.ActionLog"/> 쪽이 원천.
     /// span은 호출 동안만 유효 — 보관은 복사로.
     /// </summary>
     /// <param name="applied">적용된 변경들.</param>

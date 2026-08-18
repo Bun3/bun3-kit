@@ -18,6 +18,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Bun3.Server.Core\Bun3.Server.Core.csproj" />
     <ProjectReference Include="..\..\..\common\src\com.bun3.gameplay\Bun3.Gameplay.csproj" />
   </ItemGroup>
 

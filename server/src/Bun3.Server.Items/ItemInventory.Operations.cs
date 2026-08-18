@@ -316,7 +316,7 @@ namespace Bun3.Server.Items
             if (_appliedCount > 0)
             {
                 _onApplied?.Invoke(new ReadOnlySpan<InventoryChange>(_applied, 0, _appliedCount));
-                _log?.AppendChanges(_logLabel, new ReadOnlySpan<InventoryChange>(_applied, 0, _appliedCount));
+                LogAppliedChanges();
             }
 
             return InventoryError.None;
@@ -476,6 +476,20 @@ namespace Bun3.Server.Items
                     RecordApplied(item, -resolved);
                     return;
                 }
+            }
+        }
+
+        /// <summary>적용 버퍼의 변경들을 행동 로그에 첨부한다 — 저빈도 감사 경로라 박싱 허용.</summary>
+        private void LogAppliedChanges()
+        {
+            if (_log == null)
+            {
+                return;
+            }
+
+            for (var i = 0; i < _appliedCount; i++)
+            {
+                _log.Append(_applied[i], _logLabel);
             }
         }
 

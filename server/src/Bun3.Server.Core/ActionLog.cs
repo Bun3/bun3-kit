@@ -1,6 +1,6 @@
 using System;
 
-namespace Bun3.Server.Items
+namespace Bun3.Server.Core
 {
     /// <summary>로그 항목의 종류.</summary>
     public enum ActionLogEntryKind : byte
@@ -8,24 +8,24 @@ namespace Bun3.Server.Items
         /// <summary>스코프 시작 — <see cref="ActionLogEntry.Text"/>가 행동 이름·문맥.</summary>
         ScopeStart,
 
-        /// <summary>시스템이 남긴 자유 노트(추첨 결과·업적 클리어·천장 카운터 등).</summary>
+        /// <summary>시스템이 남긴 자유 노트(업적 클리어·추첨 결과·천장 카운터 등).</summary>
         Note,
 
-        /// <summary>인벤토리 변경 — <see cref="ActionLogEntry.Change"/>에 델타·잔량,
-        /// <see cref="ActionLogEntry.Label"/>에 인벤토리 라벨(가방/창고 구분).</summary>
-        Change,
+        /// <summary>구조화 항목 — <see cref="ActionLogEntry.Data"/>에 시스템 정의 페이로드
+        /// (예: Items의 InventoryChange), <see cref="ActionLogEntry.Source"/>에 출처 라벨.</summary>
+        Data,
     }
 
     /// <summary>CS 감사 원장의 한 항목 — Depth로 들여쓰면 "행동 트레이스"가 된다.</summary>
     public readonly struct ActionLogEntry
     {
-        internal ActionLogEntry(ActionLogEntryKind kind, int depth, string? text, string? label, InventoryChange change)
+        internal ActionLogEntry(ActionLogEntryKind kind, int depth, string? text, string? source, object? data)
         {
             Kind = kind;
             Depth = depth;
             Text = text;
-            Label = label;
-            Change = change;
+            Source = source;
+            Data = data;
         }
 
         /// <summary>항목 종류.</summary>
@@ -34,14 +34,15 @@ namespace Bun3.Server.Items
         /// <summary>중첩 깊이(루트 스코프 = 0).</summary>
         public int Depth { get; }
 
-        /// <summary>스코프 이름 또는 노트 내용. Change 항목은 null.</summary>
+        /// <summary>스코프 이름 또는 노트 내용. Data 항목은 null.</summary>
         public string? Text { get; }
 
-        /// <summary>변경을 기록한 인벤토리의 라벨(복수 인벤토리 구분용). 미지정이면 null.</summary>
-        public string? Label { get; }
+        /// <summary>구조화 항목의 출처 라벨(복수 인벤토리 구분 등). 미지정이면 null.</summary>
+        public string? Source { get; }
 
-        /// <summary>변경 내용(델타·변경 후 잔량). Change 항목에만 유효.</summary>
-        public InventoryChange Change { get; }
+        /// <summary>시스템 정의 페이로드 — 싱크가 타입 매칭으로 해석한다
+        /// (예: <c>entry.Data is InventoryChange c</c>). Data 항목에만 유효.</summary>
+        public object? Data { get; }
     }
 
     /// <summary>원장 싱크 — 루트 스코프가 닫힐 때(스코프 밖 항목은 즉시) 완성된 묶음을
@@ -66,13 +67,12 @@ namespace Bun3.Server.Items
     }
 
     /// <summary>
-    /// 행동 로그(CS 감사 원장) — 인벤토리 내부 기능이 아니라 세션/플레이어당 1개를 두는
-    /// 범용 문맥이다. 핸들러(HandleBuyItem 등)가 루트 스코프를 열면 그 아래에서 일어나는
-    /// 모든 일 — 인벤토리 변경(참조를 받은 인벤토리들이 자동 첨부), 이벤트로 파생된 업적
-    /// 클리어(<see cref="Log"/> 노트), 그로 인한 보상 지급(다시 자동 첨부) — 이 하나의
-    /// 트리에 순서대로 남는다. 하위 로직은 "뭘로 시작됐는지" 몰라도 되고, 스코프는 자유
-    /// 중첩, 루트가 닫힐 때 완성 묶음이 싱크로 전달된다. 스코프 밖 항목은 즉시 단건
-    /// 전달돼 원장에 구멍이 없다. 단일 세션 액터 안에서만 쓴다(락 없음).
+    /// 행동 로그(CS 감사 원장) — 세션/플레이어당 1개를 두는 범용 문맥. 핸들러가 루트
+    /// 스코프를 열면 그 아래에서 일어나는 모든 일 — 각 모듈의 구조화 항목(인벤토리 변경
+    /// 등 자동 첨부)과 자유 노트(업적 클리어 등) — 이 하나의 트리에 순서대로 남고,
+    /// 하위 로직은 "뭘로 시작됐는지" 몰라도 된다. 스코프는 자유 중첩, 루트가 닫힐 때
+    /// 완성 묶음이 싱크로 전달되며, 스코프 밖 항목은 즉시 전달돼 원장에 구멍이 없다.
+    /// 저빈도 감사 경로라 문자열·박싱 할당을 허용한다. 단일 세션 액터 안에서만 쓴다(락 없음).
     /// </summary>
     public sealed class ActionLog
     {
@@ -82,7 +82,7 @@ namespace Bun3.Server.Items
         private int _depth;
 
         /// <summary>원장 싱크로 로그를 만든다 — 게임은 싱크 어댑터 하나로
-        /// (플레이어·시각·행동 트리·델타·잔량)를 영속화하면 라이브 CS 추적이 완성된다.</summary>
+        /// (플레이어·시각·행동 트리·페이로드)를 영속화하면 라이브 CS 추적이 완성된다.</summary>
         public ActionLog(ActionLogHandler sink)
         {
             _sink = sink ?? throw new ArgumentNullException(nameof(sink));
@@ -91,16 +91,31 @@ namespace Bun3.Server.Items
         /// <summary>스코프를 연다 — 이름에 행동과 문맥을 담는다(예: "BuyItem product=1021 x3").</summary>
         public ActionLogScope BeginScope(string name)
         {
-            Append(ActionLogEntryKind.ScopeStart, _depth, name, null, default);
+            AppendEntry(ActionLogEntryKind.ScopeStart, name, null, null);
             _depth++;
             return new ActionLogScope(this, _depth);
         }
 
-        /// <summary>현재 스코프에 자유 노트를 남긴다 — 어떤 시스템이든(업적 클리어, 추첨
-        /// 결과 등). 스코프 밖이면 즉시 단건 묶음으로 전달된다.</summary>
+        /// <summary>현재 스코프에 자유 노트를 남긴다 — 어떤 시스템이든.
+        /// 스코프 밖이면 즉시 단건 묶음으로 전달된다.</summary>
         public void Log(string note)
         {
-            Append(ActionLogEntryKind.Note, _depth, note, null, default);
+            AppendEntry(ActionLogEntryKind.Note, note, null, null);
+            FlushIfRoot();
+        }
+
+        /// <summary>현재 스코프에 구조화 항목을 남긴다 — 모듈이 자기 타입을 그대로 싣고
+        /// 싱크가 타입 매칭으로 해석한다. 스코프 밖이면 즉시 전달된다.</summary>
+        /// <param name="data">시스템 정의 페이로드.</param>
+        /// <param name="source">출처 라벨(복수 컨테이너 구분 등).</param>
+        public void Append(object data, string? source = null)
+        {
+            if (data == null)
+            {
+                throw new ArgumentNullException(nameof(data));
+            }
+
+            AppendEntry(ActionLogEntryKind.Data, null, source, data);
             FlushIfRoot();
         }
 
@@ -115,24 +130,14 @@ namespace Bun3.Server.Items
             FlushIfRoot();
         }
 
-        internal void AppendChanges(string? label, ReadOnlySpan<InventoryChange> changes)
-        {
-            for (var i = 0; i < changes.Length; i++)
-            {
-                Append(ActionLogEntryKind.Change, _depth, null, label, changes[i]);
-            }
-
-            FlushIfRoot();
-        }
-
-        private void Append(ActionLogEntryKind kind, int depth, string? text, string? label, InventoryChange change)
+        private void AppendEntry(ActionLogEntryKind kind, string? text, string? source, object? data)
         {
             if (_count == _entries.Length)
             {
                 Array.Resize(ref _entries, _entries.Length == 0 ? 16 : _entries.Length * 2);
             }
 
-            _entries[_count++] = new ActionLogEntry(kind, depth, text, label, change);
+            _entries[_count++] = new ActionLogEntry(kind, _depth, text, source, data);
         }
 
         private void FlushIfRoot()

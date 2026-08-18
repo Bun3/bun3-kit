@@ -202,3 +202,12 @@ using (inventory.BeginLogScope($"BuyItem product={id} x{count}"))   // 핸들러
   추적(ActionLog가 해결). 커밋 코어는 이미 검증/적용 2패스라 참가자 계약으로 승격할
   준비가 돼 있고, 두 번째 프레임워크 시스템(업적/퀘스트 모듈)이 실존할 때 승격한다
   (구현 1개짜리 인터페이스 회피).
+
+### §12 수정 (사용자 지시): ActionLog를 Core로 즉시 승격
+
+다음 작업이 바로 위에 올라온다는 지시로 "두 번째 소비자 대기"를 앞당김 —
+`Bun3.Server.Core.ActionLog`(0.5.0)로 이동. Core는 Items 타입을 모르므로 구조화
+페이로드를 일반화: 항목 = {Kind(ScopeStart/Note/Data), Depth, Text, Source, Data(object)}.
+모듈은 `Append(data, source)`로 자기 타입을 그대로 싣고 싱크가 타입 매칭으로 해석
+(`entry.Data is InventoryChange c`). Items는 Core를 참조해 변경을 자동 첨부(저빈도
+감사 경로라 박싱 허용 — 문서 명시). 스코프 밖 항목은 항목별 즉시 전달.

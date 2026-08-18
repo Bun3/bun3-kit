@@ -6,11 +6,11 @@
     <Nullable>enable</Nullable>
     <RootNamespace>Bun3.Server.Core</RootNamespace>
     <PackageId>Bun3.Server.Core</PackageId>
-    <Version>0.4.0</Version>
+    <Version>0.5.0</Version>
     <Authors>Bun3</Authors>
     <RepositoryUrl>https://github.com/Bun3/bun3-kit</RepositoryUrl>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <Description>세션 액터 기반 게임 서버 코어 — Session/ServerBase, 연결당 단일 소비 루프</Description>
+    <Description>세션 액터 기반 게임 서버 코어 — Session/ServerBase, 연결당 단일 소비 루프, ActionLog 행동 원장</Description>
   </PropertyGroup>
 
   <ItemGroup>

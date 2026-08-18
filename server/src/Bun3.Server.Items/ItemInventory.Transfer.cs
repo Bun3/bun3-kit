@@ -237,7 +237,7 @@ namespace Bun3.Server.Items
             _appliedCount = 0;
             RecordApplied(item, delta);
             _onApplied?.Invoke(new ReadOnlySpan<InventoryChange>(_applied, 0, _appliedCount));
-            _log?.AppendChanges(_logLabel, new ReadOnlySpan<InventoryChange>(_applied, 0, _appliedCount));
+            LogAppliedChanges();
         }
     }
 }
