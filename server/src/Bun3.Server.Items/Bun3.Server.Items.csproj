@@ -10,7 +10,7 @@
     <Authors>Bun3</Authors>
     <RepositoryUrl>https://github.com/Bun3/bun3-kit</RepositoryUrl>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <Description>서버 아이템 카탈로그와 스택 인벤토리 — id 인터닝, 원자적 지급/소모 트랜잭션, 저장 dirty 연계</Description>
+    <Description>서버 아이템 프레임워크 — 카탈로그(인터닝·색인·리젠 메타), 스택/인스턴스 통합 인벤토리(BigNum 수량·원자 트랜잭션·변경 추적), 레시피·보상 테이블·리젠·만료·인벤토리 간 이동, ActionLog 원장 연계</Description>
   </PropertyGroup>
 
   <ItemGroup>
