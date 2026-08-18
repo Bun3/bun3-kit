@@ -198,6 +198,19 @@ namespace Bun3.Unity.UI.Popups
             PopupDuplicatePolicy duplicate = PopupDuplicatePolicy.Ignore, TResult defaultResult = default)
             => await WaitForResultCore(await PushWithArgAsync(key, arg, layer, duplicate), defaultResult);
 
+        /// <summary>
+        /// 타입 키 버전 — <typeparamref name="TResult"/>가 키에서 추론돼 호출부 타입 명시가 없고,
+        /// 잘못된 결과 타입은 컴파일 에러가 된다.
+        /// </summary>
+        public UniTask<TResult> PushForResultAsync<TResult>(PopupKey<TResult> key, int layer = 0,
+            PopupDuplicatePolicy duplicate = PopupDuplicatePolicy.Ignore, TResult defaultResult = default)
+            => PushForResultAsync(key.Key, layer, duplicate, defaultResult);
+
+        /// <summary>타입 키 + 초기 데이터 버전 — 두 타입 모두 추론된다.</summary>
+        public UniTask<TResult> PushForResultAsync<TArg, TResult>(PopupKey<TResult> key, TArg arg, int layer = 0,
+            PopupDuplicatePolicy duplicate = PopupDuplicatePolicy.Ignore, TResult defaultResult = default)
+            => PushForResultAsync<TArg, TResult>(key.Key, arg, layer, duplicate, defaultResult);
+
         private static async UniTask<TResult> WaitForResultCore<TResult>(Popup popup, TResult defaultResult)
         {
             if (popup == null)

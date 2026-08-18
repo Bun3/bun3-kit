@@ -89,6 +89,16 @@ namespace Bun3.Unity.UI.Popups
             PopupDuplicatePolicy duplicate = PopupDuplicatePolicy.Ignore, TResult defaultResult = default)
             => Stack.PushForResultAsync(key, arg, layer, duplicate, defaultResult);
 
+        /// <summary>타입 키 <see cref="PopupStack.PushForResultAsync{TResult}(PopupKey{TResult},int,PopupDuplicatePolicy,TResult)"/> 위임.</summary>
+        public UniTask<TResult> PushForResultAsync<TResult>(PopupKey<TResult> key, int layer = 0,
+            PopupDuplicatePolicy duplicate = PopupDuplicatePolicy.Ignore, TResult defaultResult = default)
+            => Stack.PushForResultAsync(key, layer, duplicate, defaultResult);
+
+        /// <summary>타입 키 + 초기 데이터 <see cref="PopupStack.PushForResultAsync{TArg,TResult}(PopupKey{TResult},TArg,int,PopupDuplicatePolicy,TResult)"/> 위임.</summary>
+        public UniTask<TResult> PushForResultAsync<TArg, TResult>(PopupKey<TResult> key, TArg arg, int layer = 0,
+            PopupDuplicatePolicy duplicate = PopupDuplicatePolicy.Ignore, TResult defaultResult = default)
+            => Stack.PushForResultAsync(key, arg, layer, duplicate, defaultResult);
+
         /// <summary><see cref="PopupStack.Enqueue"/> 위임.</summary>
         public void Enqueue(PopupKey key, int layer = 0) => Stack.Enqueue(key, layer);
 

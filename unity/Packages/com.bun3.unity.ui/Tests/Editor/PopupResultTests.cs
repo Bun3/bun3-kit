@@ -87,6 +87,21 @@ namespace Bun3.Unity.UI.Editor.Tests
         }
 
         [Test]
+        public void TypedKey_InfersResultType_AndFlowsThroughAllApis()
+        {
+            var confirmKey = new PopupKey<int>(1);
+
+            // 타입 명시 없이 추론 — 잘못된 결과 타입은 컴파일 에러가 된다.
+            var task = _resultStack.PushForResultAsync(confirmKey, defaultResult: -1);
+
+            Assert.IsTrue(_resultStack.IsOpen(confirmKey), "암시적 변환으로 결과 없는 API에도 그대로 쓰인다.");
+
+            ((ChoicePopup)_resultStack.Top).Choose(9);
+
+            Assert.AreEqual(9, task.GetAwaiter().GetResult());
+        }
+
+        [Test]
         public void PushForResultAsync_WrongPopupType_LogsErrorAndReturnsDefault()
         {
             LogAssert.Expect(LogType.Error, new Regex("Popup<Int32>"));

@@ -183,8 +183,16 @@ public sealed class ConfirmPopup : Popup<bool>, IPopupArg<string>
     void OnYes() { SetResult(true); Close(); }
     void OnNo()  => Close();
 }
-bool ok = await _stack.PushForResultAsync<string, bool>((int)PopupId.Confirm, "Delete this?");
-var picked = await _stack.PushForResultAsync<ItemInstance>((int)PopupId.ItemPick); // null = cancelled
+// Prefer typed keys: declare the key↔result contract once, and every call site is
+// inferred AND compile-checked (a raw int key can only be checked at runtime).
+public static class PopupIds
+{
+    public static readonly PopupKey<bool>         Confirm  = new((int)PopupId.Confirm);
+    public static readonly PopupKey<ItemInstance> ItemPick = new((int)PopupId.ItemPick);
+}
+bool ok     = await _stack.PushForResultAsync(PopupIds.Confirm, "Delete this?");
+var picked  = await _stack.PushForResultAsync(PopupIds.ItemPick);   // null = cancelled
+_stack.Push(PopupIds.Confirm);   // implicit conversion — same key works on every API
 
 // 9. Block closing while the popup is busy (ref-counted; nested locks compose).
 //    A Close/back during the lock is *deferred*, not lost — it runs when the last lock lifts.

@@ -37,4 +37,26 @@ namespace Bun3.Unity.UI.Popups
         /// <summary>원시 값의 십진 문자열. 디버그 표시용 — 핫패스에서 부르지 말 것.</summary>
         public override string ToString() => Value.ToString();
     }
+
+    /// <summary>
+    /// 결과 타입이 붙은 팝업 키. 게임의 키 선언부 한 곳에서
+    /// "이 키의 팝업은 <see cref="Popup{TResult}"/>다"라는 계약을 고정해,
+    /// <c>PushForResultAsync</c> 호출부의 타입 명시를 없애고(추론) 잘못된 결과 타입을
+    /// 컴파일 에러로 만든다. 선언부↔프리팹 불일치는 여전히 런타임 LogError가 잡는다.
+    /// </summary>
+    /// <example><code>
+    /// public static readonly PopupKey&lt;bool&gt; Confirm = new((int)PopupId.Confirm);
+    /// bool ok = await stack.PushForResultAsync(Confirm, "정말?");
+    /// </code></example>
+    public readonly struct PopupKey<TResult>
+    {
+        /// <summary>결과 타입을 뗀 원시 키.</summary>
+        public readonly PopupKey Key;
+
+        /// <summary>원시 값으로 키를 만든다. 게임 enum은 <c>(int)</c> 캐스팅으로 넘긴다.</summary>
+        public PopupKey(int value) => Key = new PopupKey(value);
+
+        /// <summary>결과 없는 API(Push/Enqueue/IsOpen 등)에도 같은 키를 그대로 쓰기 위한 변환.</summary>
+        public static implicit operator PopupKey(PopupKey<TResult> key) => key.Key;
+    }
 }
