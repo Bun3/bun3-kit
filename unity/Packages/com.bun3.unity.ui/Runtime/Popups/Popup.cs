@@ -182,7 +182,12 @@ namespace Bun3.Unity.UI.Popups
             Phase = PopupPhase.Opening;
             CloseRequested = false;
             _closeGuardCount = 0; // 풀 재사용 시 이전 세션 잠금이 새 세션을 오염시키지 않게
+
+            OnAttached();
         }
+
+        /// <summary>새 세션 시작(스택 삽입) 시 어셈블리 내부 파생형이 상태를 리셋하는 지점.</summary>
+        private protected virtual void OnAttached() { }
 
         internal void SetPhase(PopupPhase phase) => Phase = phase;
 

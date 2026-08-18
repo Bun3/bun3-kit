@@ -184,6 +184,21 @@ Standards/Spec 병렬 리뷰에서 확인된 실버그 수정:
 6. Destroy/DestroyImmediate 분기 3중복 → 내부 `EditorSafeDestroy` 헬퍼로 추출.
    public 멤버 XML 문서 누락분 보강. 버전 범프는 기존 결정대로 통합 시 사용자 처리.
 
+## 5차 — 사용성 리뷰 반영 (2026-08-18)
+
+1. **`Popup<TResult>` 결과 채널** — 레거시 `Callback(int result)` 대응. 팝업이 닫기 전
+   `SetResult(value)`, 호출자는 `WaitForResultAsync(defaultResult)` 또는
+   `stack.PushForResultAsync<TResult>(key)`(인자 버전은 `<TArg, TResult>` 명시)로 수신.
+   SetResult 없이 닫히면(back/취소) defaultResult — 취소 처리 코드 불필요.
+   풀 재사용 세션마다 리셋(`private protected OnAttached` 훅 신설).
+2. **`PopupManager` 파사드 위임** — `Instance.Stack.Push` 이중 홉이 불편하다는 피드백.
+   자주 쓰는 동사(Push 계열/PushForResult/Enqueue/Pop/Close/HandleBack/Clear/IsOpen/
+   Top/Count)를 매니저에 위임. 전체 API(이벤트, Popups 뷰)는 여전히 Stack.
+3. 닫기 차단 이원화 유지 확인(질의 응답): `OnBackRequested` = back 입력 정책(영구 성격),
+   `BlockClose` = 일시적 상태 잠금(모든 닫기 경로 예약). 잠금 중엔 정책 훅 미호출(잠금 우선).
+4. 다중 인자는 별도 기능 없이 타입 묶음으로: 인자 struct(권장)/튜플/`string[]` 전부
+   `TArg` 하나로 전달 — 레거시 `InitializeUsingToken(string[])`의 타입 안전 대체.
+
 ## 테스트 전략 (EditMode)
 
 수동 완료 `UniTaskCompletionSource`를 반환하는 테스트 팝업으로 전이를 제어:

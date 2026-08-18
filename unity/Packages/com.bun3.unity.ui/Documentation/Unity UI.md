@@ -168,8 +168,23 @@ _popups.Stack.Push((int)PopupId.Shop);
 
 // 8d. Global access (legacy GameManager.Get().ShowPopup style): assign the built manager
 //     to the optional static slot in your bootstrap. Dispose() clears it automatically.
+//     The manager mirrors the common stack verbs, so no .Stack hop is needed day to day.
 PopupManager.Instance = _popups;
-PopupManager.Instance.Stack.Push((int)PopupId.Shop);   // from anywhere
+PopupManager.Instance.Push((int)PopupId.Shop);                    // from anywhere
+PopupManager.Instance.PushWithArg((int)PopupId.ItemDetail, args);
+PopupManager.Instance.Enqueue((int)PopupId.Reward);
+
+// 8e. Result popups (legacy Callback(int result)): derive from Popup<TResult>, call
+//     SetResult before closing. Closing without SetResult (back key, cancel) yields
+//     defaultResult — cancel needs no extra code.
+public sealed class ConfirmPopup : Popup<bool>, IPopupArg<string>
+{
+    public void OnPopupArg(string message) { /* bind label */ }
+    void OnYes() { SetResult(true); Close(); }
+    void OnNo()  => Close();
+}
+bool ok = await _stack.PushForResultAsync<string, bool>((int)PopupId.Confirm, "Delete this?");
+var picked = await _stack.PushForResultAsync<ItemInstance>((int)PopupId.ItemPick); // null = cancelled
 
 // 9. Block closing while the popup is busy (ref-counted; nested locks compose).
 //    A Close/back during the lock is *deferred*, not lost — it runs when the last lock lifts.
@@ -202,7 +217,7 @@ Behavior rules:
 | Location | Description |
 |---|---|
 | `Runtime/Buttons/` | `ButtonInteractableScope`, `DisabledReason`, `IButtonDisabledHandler`, and `ButtonDisabledClickReceiver` source. |
-| `Runtime/Popups/` | `PopupStack`, `Popup`, `PopupKey`, `PopupDuplicatePolicy`, `IPopupArg<TArg>`, `PopupCloseGuard`, `PopupQueue`, `PopupPool`, `PopupSiblingArranger`, `PopupBackKeyRouter`, `PopupManager`(+builder) source. |
+| `Runtime/Popups/` | `PopupStack`, `Popup`, `Popup<TResult>`, `PopupKey`, `PopupDuplicatePolicy`, `IPopupArg<TArg>`, `PopupCloseGuard`, `PopupQueue`, `PopupPool`, `PopupSiblingArranger`, `PopupBackKeyRouter`, `PopupManager`(+builder) source. |
 | `Samples/ButtonInteractableScope/` | Sample MonoBehaviour and handler demonstrating typical usage. |
 | `Tests/Runtime/` | PlayMode tests (`Bun3.Unity.UI.Tests`). |
 | `Tests/Editor/` | EditMode tests (`Bun3.Unity.UI.Editor.Tests`), covering the popup stack. |

@@ -181,6 +181,39 @@ namespace Bun3.Unity.UI.Popups
         }
 
         /// <summary>
+        /// 결과 팝업(<see cref="Popup{TResult}"/>)을 열고, 닫힐 때까지 기다린 뒤 결과를 돌려준다.
+        /// <c>SetResult</c> 없이 닫히면(back/취소) <paramref name="defaultResult"/>.
+        /// 중복 정책으로 열리지 않았거나 취소됐을 때도 <paramref name="defaultResult"/>.
+        /// </summary>
+        public async UniTask<TResult> PushForResultAsync<TResult>(PopupKey key, int layer = 0,
+            PopupDuplicatePolicy duplicate = PopupDuplicatePolicy.Ignore, TResult defaultResult = default)
+            => await WaitForResultCore(await PushAsync(key, layer, duplicate), defaultResult);
+
+        /// <summary>
+        /// 초기 데이터를 실어 결과 팝업을 열고 결과까지 대기한다.
+        /// 제네릭 부분 추론이 없어 호출 시 두 타입을 명시한다:
+        /// <c>PushForResultAsync&lt;string, bool&gt;(key, "정말?")</c>.
+        /// </summary>
+        public async UniTask<TResult> PushForResultAsync<TArg, TResult>(PopupKey key, TArg arg, int layer = 0,
+            PopupDuplicatePolicy duplicate = PopupDuplicatePolicy.Ignore, TResult defaultResult = default)
+            => await WaitForResultCore(await PushWithArgAsync(key, arg, layer, duplicate), defaultResult);
+
+        private static async UniTask<TResult> WaitForResultCore<TResult>(Popup popup, TResult defaultResult)
+        {
+            if (popup == null)
+                return defaultResult;
+
+            if (popup is Popup<TResult> typed)
+                return await typed.WaitForResultAsync(defaultResult);
+
+            // 게임 코드 결선 오류 — 저빈도 경로라 문자열 할당 허용.
+            Debug.LogError(
+                $"팝업 {popup.GetType().Name}이(가) Popup<{typeof(TResult).Name}>가 아니라 결과를 받을 수 없다.",
+                popup);
+            return defaultResult;
+        }
+
+        /// <summary>
         /// 순차 대기열에 넣는다. 스택이 완전히 비면(로딩 중 포함 없음) 머리부터 하나씩 표시되고,
         /// 닫히면 다음이 표시된다. 보상 연출처럼 겹치지 않고 차례로 보여야 하는 팝업용.
         /// </summary>

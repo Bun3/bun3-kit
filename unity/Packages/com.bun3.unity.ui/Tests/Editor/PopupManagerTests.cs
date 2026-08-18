@@ -62,6 +62,22 @@ namespace Bun3.Unity.UI.Editor.Tests
         }
 
         [Test]
+        public void Facade_DelegatesToStack()
+        {
+            var manager = new PopupManagerBuilder(CreatePopup).Build();
+
+            manager.Push(1);
+
+            Assert.AreEqual(1, manager.Count);
+            Assert.AreSame(manager.Stack.Top, manager.Top);
+            Assert.IsTrue(manager.IsOpen(1));
+            Assert.IsTrue(manager.HandleBack());
+            Assert.AreEqual(0, manager.Count);
+
+            manager.Dispose();
+        }
+
+        [Test]
         public void Instance_ClearedOnDispose_OnlyIfSelf()
         {
             var first = new PopupManagerBuilder(CreatePopup).Build();

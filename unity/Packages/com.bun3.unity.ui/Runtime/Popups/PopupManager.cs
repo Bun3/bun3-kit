@@ -1,4 +1,5 @@
 using System;
+using Cysharp.Threading.Tasks;
 using UnityEngine;
 
 namespace Bun3.Unity.UI.Popups
@@ -45,6 +46,67 @@ namespace Bun3.Unity.UI.Popups
             BackKeyRouter = backKeyRouter;
             Arranger = arranger;
         }
+
+        // ── 자주 쓰는 스택 동작 위임 — PopupManager.Instance.Push(...) 한 단계로 쓰기 위한 파사드.
+        //    전체 API(이벤트, Popups 뷰 등)는 Stack으로.
+
+        /// <summary>최상단 팝업. <see cref="PopupStack.Top"/> 위임.</summary>
+        public Popup Top => Stack.Top;
+
+        /// <summary>열려 있거나 전이 중인 팝업 수. <see cref="PopupStack.Count"/> 위임.</summary>
+        public int Count => Stack.Count;
+
+        /// <summary><see cref="PopupStack.IsOpen"/> 위임.</summary>
+        public bool IsOpen(PopupKey key) => Stack.IsOpen(key);
+
+        /// <summary><see cref="PopupStack.Push"/> 위임.</summary>
+        public void Push(PopupKey key, int layer = 0,
+            PopupDuplicatePolicy duplicate = PopupDuplicatePolicy.Ignore)
+            => Stack.Push(key, layer, duplicate);
+
+        /// <summary><see cref="PopupStack.PushWithArg{TArg}"/> 위임.</summary>
+        public void PushWithArg<TArg>(PopupKey key, TArg arg, int layer = 0,
+            PopupDuplicatePolicy duplicate = PopupDuplicatePolicy.Ignore)
+            => Stack.PushWithArg(key, arg, layer, duplicate);
+
+        /// <summary><see cref="PopupStack.PushAsync"/> 위임.</summary>
+        public UniTask<Popup> PushAsync(PopupKey key, int layer = 0,
+            PopupDuplicatePolicy duplicate = PopupDuplicatePolicy.Ignore)
+            => Stack.PushAsync(key, layer, duplicate);
+
+        /// <summary><see cref="PopupStack.PushWithArgAsync{TArg}"/> 위임.</summary>
+        public UniTask<Popup> PushWithArgAsync<TArg>(PopupKey key, TArg arg, int layer = 0,
+            PopupDuplicatePolicy duplicate = PopupDuplicatePolicy.Ignore)
+            => Stack.PushWithArgAsync(key, arg, layer, duplicate);
+
+        /// <summary><see cref="PopupStack.PushForResultAsync{TResult}"/> 위임.</summary>
+        public UniTask<TResult> PushForResultAsync<TResult>(PopupKey key, int layer = 0,
+            PopupDuplicatePolicy duplicate = PopupDuplicatePolicy.Ignore, TResult defaultResult = default)
+            => Stack.PushForResultAsync(key, layer, duplicate, defaultResult);
+
+        /// <summary><see cref="PopupStack.PushForResultAsync{TArg,TResult}"/> 위임.</summary>
+        public UniTask<TResult> PushForResultAsync<TArg, TResult>(PopupKey key, TArg arg, int layer = 0,
+            PopupDuplicatePolicy duplicate = PopupDuplicatePolicy.Ignore, TResult defaultResult = default)
+            => Stack.PushForResultAsync(key, arg, layer, duplicate, defaultResult);
+
+        /// <summary><see cref="PopupStack.Enqueue"/> 위임.</summary>
+        public void Enqueue(PopupKey key, int layer = 0) => Stack.Enqueue(key, layer);
+
+        /// <summary><see cref="PopupStack.EnqueueWithArg{TArg}"/> 위임.</summary>
+        public void EnqueueWithArg<TArg>(PopupKey key, TArg arg, int layer = 0)
+            => Stack.EnqueueWithArg(key, arg, layer);
+
+        /// <summary><see cref="PopupStack.Pop"/> 위임.</summary>
+        public void Pop() => Stack.Pop();
+
+        /// <summary><see cref="PopupStack.Close"/> 위임.</summary>
+        public void Close(Popup popup) => Stack.Close(popup);
+
+        /// <summary><see cref="PopupStack.HandleBack"/> 위임.</summary>
+        public bool HandleBack() => Stack.HandleBack();
+
+        /// <summary><see cref="PopupStack.Clear"/> 위임.</summary>
+        public void Clear() => Stack.Clear();
 
         /// <summary>
         /// 라우터 제거 → 정렬 해지 → 스택 정리 → 풀 파괴 순으로 전부 해제한다.
