@@ -150,6 +150,82 @@ namespace Bun3.Server.Items
             return CommitOps(_applyOps, out _, null);
         }
 
+        /// <summary>정의의 가용(잠금 제외) 수량 — 소모 가능량 표시·우선순위 소모 계획용.</summary>
+        public BigNum GetRemovableQuantity(ItemId item)
+        {
+            if (_stackSingletons.TryGetValue(item, out var singletonId))
+            {
+                var singleton = _instances[singletonId];
+                return (singleton.Flags & _removeBlockingFlags) != 0 ? BigNum.Zero : singleton.Quantity;
+            }
+
+            long count = 0;
+            foreach (var entry in _instances)
+            {
+                if (entry.Value.Item == item && (entry.Value.Flags & _removeBlockingFlags) == 0)
+                {
+                    count++;
+                }
+            }
+
+            return count;
+        }
+
+        /// <summary>여러 정의의 총 보유 수량 합 — 풀 분리(리젠/보상, 무상/유상) 표시용.</summary>
+        public BigNum GetQuantityAcross(ReadOnlySpan<ItemId> items)
+        {
+            var total = BigNum.Zero;
+            for (var i = 0; i < items.Length; i++)
+            {
+                total += GetQuantity(items[i]);
+            }
+
+            return total;
+        }
+
+        /// <summary>
+        /// 여러 정의에서 우선순위 순서로 나눠 소모한다 — 전부-아니면-전무. 풀 분리 패턴의
+        /// 소모 경로(보상 티켓 먼저·무상 재화 먼저 등 — 순서는 호출측이 정한다).
+        /// 가용(잠금 제외) 합이 부족하면 <see cref="InventoryError.Insufficient"/>에 무변경.
+        /// 비스택형 소스는 정수 amount에서만 정확히 동작한다.
+        /// </summary>
+        /// <param name="sources">소모 우선순위 순서의 정의들(중복 없이).</param>
+        /// <param name="amount">총 소모량(양수).</param>
+        public InventoryError TryRemoveAcross(ReadOnlySpan<ItemId> sources, BigNum amount)
+        {
+            if (amount.Sign <= 0)
+            {
+                return InventoryError.InvalidAmount;
+            }
+
+            _applyOps.Clear();
+            var remaining = amount;
+            for (var i = 0; i < sources.Length && remaining.Sign > 0; i++)
+            {
+                if (!_catalog.Contains(sources[i]))
+                {
+                    return InventoryError.UnknownItem;
+                }
+
+                var available = GetRemovableQuantity(sources[i]);
+                if (available.Sign <= 0)
+                {
+                    continue;
+                }
+
+                var take = available.CompareTo(remaining) < 0 ? available : remaining;
+                _applyOps.Add(new TxOp(TxOpKind.RemoveByItem, sources[i], 0, take));
+                remaining -= take;
+            }
+
+            if (remaining.Sign > 0)
+            {
+                return InventoryError.Insufficient;
+            }
+
+            return CommitOps(_applyOps, out _, null);
+        }
+
         /// <summary>특정 인스턴스에서 수량을 소모한다. 잠금 인스턴스는 <see cref="InventoryError.Locked"/>.
         /// 비스택형은 수량이 1이므로 amount 1로 인스턴스 자체가 제거된다.</summary>
         public InventoryError TryRemoveByInstance(long instanceId, BigNum amount)

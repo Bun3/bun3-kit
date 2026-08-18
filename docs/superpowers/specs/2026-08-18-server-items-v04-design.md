@@ -95,3 +95,15 @@ inventory.SettleRegen(nowTicks);   // 리젠 정의 전체 lazy 정산 — 충�
 - 제약(Register에서 강제): 스택형만·유한 maxStack 필수·수량 정수 강제(변경 경로 검증).
 - 기준 전진은 지급 커밋 성공 후에만 — 실패 시 다음 정산에서 재시도(유실 없음).
 - 소모 전 정산이 계약(가득 재설정의 적립 악용 방지가 이 순서에 의존).
+
+## 8. 풀 분리와 우선순위 소모 (growninja count/param3 대응)
+
+growninja가 티켓을 자동 리젠(count)/보상 획득(param3) 두 필드로 쪼갠 이유는 풀별 상한
+규칙이 달라서다(리젠 풀만 상한·가득 정지, 보상 풀은 무제한). 우리 답: **풀 = 정의** —
+`ticket.regen`(maxStack+regen 메타) + `ticket.bonus`(무제한) 두 정의로 명시하고,
+반복될 소모/표시 경로를 흡수:
+
+- `TryRemoveAcross(sources, amount)` — 우선순위 순서로 나눠 소모, 전부-아니면-전무.
+  보상 티켓 먼저·무상 재화 먼저(자금결제법류 유/무상 분리)·이벤트 재화 우선이 전부 이 패턴.
+- `GetQuantityAcross(items)` — 합산 표시. `GetRemovableQuantity(item)` — 가용(잠금 제외)
+  수량 공개(UI·소모 계획용).

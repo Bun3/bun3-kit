@@ -31,7 +31,8 @@ public class ItemInventoryExtrasTests
     }
 
     private ItemInventory<ItemState> NewInventory(InventoryAppliedHandler? onApplied = null) =>
-        new(_catalog, () => ++_nextId, _ => new ItemState(), onApplied: onApplied);
+        new(_catalog, () => ++_nextId, _ => new ItemState(),
+            removeBlockingFlags: 1u << 0, onApplied: onApplied);
 
     // ---- TryAddUpTo ----
 
@@ -121,6 +122,59 @@ public class ItemInventoryExtrasTests
         Assert.That(inventory.CollectInstances(_gold, buffer), Is.EqualTo(1));
         Assert.That(buffer, Has.Count.EqualTo(4), "이어 담기");
         Assert.That(inventory.CollectInstances(_potion, buffer), Is.EqualTo(0));
+    }
+
+    // ---- 풀 분리(리젠/보상) 우선순위 소모 ----
+
+    [Test]
+    public void Split_pool_tickets_regen_and_bonus_work_together()
+    {
+        var catalog = new ItemCatalogBuilder<string>()
+            .Register("ticket.regen", "리젠 티켓", maxStack: 5, regenPeriodTicks: 10)
+            .Register("ticket.bonus", "보상 티켓")
+            .Build();
+        var regen = catalog.GetRequired("ticket.regen");
+        var bonus = catalog.GetRequired("ticket.bonus");
+        long nextId = 0;
+        var inventory = new ItemInventory<ItemState>(catalog, () => ++nextId, _ => new ItemState());
+        Span<ItemId> pools = stackalloc ItemId[] { bonus, regen };   // growninja 순서: 보너스 먼저
+
+        inventory.SettleRegen(100);                    // 기준 초기화
+        inventory.SettleRegen(160);                    // 리젠 5 (상한 도달)
+        inventory.TryAdd(bonus, 7);                    // 보상은 상한 무관 적립
+        Assert.That(inventory.GetQuantityAcross(pools), Is.EqualTo((BigNum)12));
+
+        // 보너스(7) 먼저 소진 후 리젠에서 2 — 전부-아니면-전무
+        Assert.That(inventory.TryRemoveAcross(pools, 9), Is.EqualTo(InventoryError.None));
+        Assert.That(inventory.GetQuantity(bonus), Is.EqualTo(BigNum.Zero));
+        Assert.That(inventory.GetQuantity(regen), Is.EqualTo((BigNum)3));
+
+        // 가용 합(3) 부족 — 무변경
+        Assert.That(inventory.TryRemoveAcross(pools, 4), Is.EqualTo(InventoryError.Insufficient));
+        Assert.That(inventory.GetQuantity(regen), Is.EqualTo((BigNum)3));
+
+        // 리젠 풀이 상한 아래로 내려갔으니 다시 차오른다
+        Assert.That(inventory.SettleRegen(190), Is.EqualTo(1), "160 기준 30경과 → 2장(상한 5 클램프 전 3+2)");
+        Assert.That(inventory.GetQuantity(regen), Is.EqualTo((BigNum)5));
+    }
+
+    [Test]
+    public void RemoveAcross_excludes_locked_and_validates_input()
+    {
+        var inventory = NewInventory();
+        var created = new List<ItemInstance<ItemState>>();
+        inventory.TryAdd(_gold, 10, created);
+        created[0].Flags = 1u << 0;   // 잠금 — 가용 0
+        inventory.TryAdd(_potion, 5);
+        Span<ItemId> sources = stackalloc ItemId[] { _gold, _potion };
+
+        Assert.That(inventory.GetRemovableQuantity(_gold), Is.EqualTo(BigNum.Zero));
+        Assert.That(inventory.TryRemoveAcross(sources, 6), Is.EqualTo(InventoryError.Insufficient), "잠금 골드 제외");
+        Assert.That(inventory.TryRemoveAcross(sources, 5), Is.EqualTo(InventoryError.None), "물약에서만");
+        Assert.That(inventory.GetQuantity(_gold), Is.EqualTo((BigNum)10));
+        Assert.That(inventory.TryRemoveAcross(sources, 0), Is.EqualTo(InventoryError.InvalidAmount));
+        Span<ItemId> bad = stackalloc ItemId[] { ItemId.None };
+        Assert.That(inventory.TryRemoveAcross(bad, 1), Is.EqualTo(InventoryError.UnknownItem));
     }
 
     // ---- onApplied ----
