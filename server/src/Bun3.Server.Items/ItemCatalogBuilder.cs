@@ -30,6 +30,8 @@ namespace Bun3.Server.Items
         /// <param name="id">고유 문자열 id(서수 비교) — 정식 키. 중복이면 던진다.</param>
         /// <param name="definition">게임 정의(불투명 보관).</param>
         /// <param name="maxStack">정의당 최대 보유량(스택형=스택 상한, 비스택형=최대 인스턴스 수).
+        /// 단, 리젠 정의(regenPeriodTicks &gt; 0)에서는 하드 상한이 아니라 <b>리젠 목표선</b> —
+        /// 명시적 지급은 목표선을 넘어 쌓이고 리젠만 목표선까지 찬다.
         /// 기본 <see cref="long.MaxValue"/> = 무제한. 0 이하는 거부.</param>
         /// <param name="externalId">선택적 외부 숫자 id(DB 컬럼·Steam itemdefid 등) — 역색인에
         /// 등록된다. 중복이면 던진다. <see cref="long.MinValue"/>는 예약값이라 거부.</param>

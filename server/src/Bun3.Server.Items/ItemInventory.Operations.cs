@@ -116,7 +116,7 @@ namespace Bun3.Server.Items
             }
 
             var maxStack = _catalog.GetMaxStack(item);
-            if (maxStack != long.MaxValue)
+            if (maxStack != long.MaxValue && _catalog.GetRegenPeriodTicks(item) == 0)
             {
                 var room = (BigNum)maxStack - GetQuantity(item);
                 if (room.Sign <= 0)
@@ -359,8 +359,12 @@ namespace Bun3.Server.Items
                             return InventoryError.ExceedsMaxStack;
                         }
 
+                        // 리젠 정의의 maxStack은 하드 상한이 아니라 리젠 목표선 —
+                        // 명시적 지급(보상 티켓 등)은 목표선을 넘어 쌓인다.
                         var maxStack = _catalog.GetMaxStack(op.Item);
-                        if (maxStack != long.MaxValue && total.CompareTo(maxStack) > 0)
+                        if (maxStack != long.MaxValue
+                            && _catalog.GetRegenPeriodTicks(op.Item) == 0
+                            && total.CompareTo(maxStack) > 0)
                         {
                             return InventoryError.ExceedsMaxStack;
                         }

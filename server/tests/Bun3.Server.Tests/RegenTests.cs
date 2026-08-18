@@ -76,6 +76,38 @@ public class RegenTests
     }
 
     [Test]
+    public void Regen_max_stack_is_a_target_line_not_a_hard_cap()
+    {
+        // 단일 정의로 growninja의 count/param3 분리를 대체 — 보상 지급은 목표선(5)을 넘고,
+        // 리젠은 총량이 목표선 아래일 때만 찬다.
+        var catalog = new ItemCatalogBuilder<string>()
+            .Register("ticket", "던전 티켓", maxStack: 5, regenPeriodTicks: 10)
+            .Build();
+        var ticket = catalog.GetRequired("ticket");
+        long nextId = 0;
+        var inventory = new ItemInventory<ItemState>(catalog, () => ++nextId, _ => new ItemState());
+
+        inventory.SettleRegen(100);                 // 기준 초기화
+        inventory.SettleRegen(160);                 // 리젠 5 (목표선 도달)
+        Assert.That(inventory.TryAdd(ticket, 7), Is.EqualTo(InventoryError.None), "보상은 목표선 초과 적립");
+        Assert.That(inventory.GetQuantity(ticket), Is.EqualTo((Bun3.Gameplay.Numerics.BigNum)12));
+
+        Assert.That(inventory.SettleRegen(500), Is.EqualTo(0), "목표선 이상 — 리젠 정지·적립 제거");
+
+        inventory.TryRemove(ticket, 9);             // 총량 3 < 목표선 — 리젠 재개
+        Assert.That(inventory.SettleRegen(530), Is.EqualTo(1), "500 기준 30경과 → 2장");
+        Assert.That(inventory.GetQuantity(ticket), Is.EqualTo((Bun3.Gameplay.Numerics.BigNum)5));
+
+        // 클램프 지급도 리젠 정의에선 하드캡 없음 — 전량 지급
+        Assert.That(inventory.TryAddUpTo(ticket, 100, out var granted), Is.EqualTo(InventoryError.None));
+        Assert.That(granted, Is.EqualTo((Bun3.Gameplay.Numerics.BigNum)100));
+
+        // 목표선 초과 보유 로드도 정상
+        var reloaded = new ItemInventory<ItemState>(catalog, () => ++nextId, _ => new ItemState());
+        Assert.That(reloaded.TryLoadInstance(1, ticket, 12, 0, new ItemState()), Is.EqualTo(InventoryError.None));
+    }
+
+    [Test]
     public void SettleRegen_basis_persists_via_load_roundtrip()
     {
         var catalog = new ItemCatalogBuilder<string>()

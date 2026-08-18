@@ -58,12 +58,14 @@ namespace Bun3.Server.Items
                     return InventoryError.DuplicateInstance;
                 }
 
-                if (_catalog.GetRegenPeriodTicks(item) > 0 && quantity.Exponent < 0)
+                var isRegen = _catalog.GetRegenPeriodTicks(item) > 0;
+                if (isRegen && quantity.Exponent < 0)
                 {
                     return InventoryError.InvalidAmount;   // 리젠 정의는 정수 수량만
                 }
 
-                if (maxStack != long.MaxValue && quantity.CompareTo(maxStack) > 0)
+                // 리젠 정의의 maxStack은 리젠 목표선 — 목표선 초과 보유는 정상이라 로드 허용.
+                if (maxStack != long.MaxValue && !isRegen && quantity.CompareTo(maxStack) > 0)
                 {
                     return InventoryError.ExceedsMaxStack;
                 }

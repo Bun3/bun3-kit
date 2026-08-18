@@ -87,7 +87,8 @@ namespace Bun3.Server.Items
             return _ids[item.Index];
         }
 
-        /// <summary>스택 상한. 무제한이면 <see cref="long.MaxValue"/>. 무효 식별자면 던진다.</summary>
+        /// <summary>정의당 최대 보유량. 무제한이면 <see cref="long.MaxValue"/>.
+        /// 리젠 정의에서는 하드 상한이 아니라 리젠 목표선이다. 무효 식별자면 던진다.</summary>
         public long GetMaxStack(ItemId item)
         {
             if (!Contains(item))

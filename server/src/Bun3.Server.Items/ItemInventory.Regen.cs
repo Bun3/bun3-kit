@@ -29,9 +29,19 @@ namespace Bun3.Server.Items
             {
                 var item = regenItems[i];
                 _regenBasis.TryGetValue(item, out var basis);
-                var current = ToInt64Exact(GetQuantity(item));
+                var maxStack = _catalog.GetMaxStack(item);
+                var quantity = GetQuantity(item);
+                if (quantity.CompareTo(maxStack) >= 0)
+                {
+                    // 목표선 이상(초과 보유 포함) — 리젠 정지, 적립 제거. long 변환 없이 판정
+                    // (목표선 초과 수량은 long 범위를 넘을 수 있다).
+                    _regenBasis[item] = nowTicksUtc;
+                    continue;
+                }
+
+                var current = ToInt64Exact(quantity);
                 var granted = Regen.SettlePeriodic(
-                    current, _catalog.GetMaxStack(item), _catalog.GetRegenPeriodTicks(item), nowTicksUtc, ref basis);
+                    current, maxStack, _catalog.GetRegenPeriodTicks(item), nowTicksUtc, ref basis);
                 if (granted > 0)
                 {
                     // 지급 성공 후에만 기준을 전진시킨다 — 실패 시 다음 정산에서 재시도.
