@@ -80,10 +80,10 @@ namespace Bun3.Server.Rpc
         }
 
         public OneofCase? ByFieldNumber(int fieldNumber) =>
-            _byNumber.TryGetValue(fieldNumber, out var found) ? found : null;
+            _byNumber.GetValueOrDefault(fieldNumber);
 
         public OneofCase? ByPayloadType(Type payloadType) =>
-            _byType.TryGetValue(payloadType, out var found) ? found : null;
+            _byType.GetValueOrDefault(payloadType);
 
         /// <summary>envelope에 실제 설정된 케이스. 비어 있으면 null.</summary>
         public OneofCase? GetActiveCase(IMessage envelope)

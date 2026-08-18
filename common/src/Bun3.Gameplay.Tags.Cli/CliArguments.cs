@@ -14,7 +14,7 @@ namespace Bun3.Gameplay.Tags.Cli
         internal IReadOnlyList<string> Sources => _sources;
         internal IReadOnlyList<string> Positionals => _positionals;
         internal bool HasFlag(string name) => _flags.Contains(name);
-        internal string? Get(string name) => _singletons.TryGetValue(name, out var value) ? value : null;
+        internal string? Get(string name) => _singletons.GetValueOrDefault(name);
 
         internal static bool TryParse(
             string[] args,

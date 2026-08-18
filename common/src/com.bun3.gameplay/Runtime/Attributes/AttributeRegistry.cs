@@ -61,6 +61,6 @@ namespace Bun3.Gameplay.Attributes
 
         /// <summary>이 속성을 클램프 경계로 참조하는 속성들(id 오름차순)입니다.</summary>
         public ReadOnlySpan<ushort> GetClampDependents(ushort attributeId) =>
-            _clampDependents.TryGetValue(attributeId, out var dependents) ? dependents : Empty;
+            _clampDependents.GetValueOrDefault(attributeId, Empty);
     }
 }
