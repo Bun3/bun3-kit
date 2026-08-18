@@ -251,6 +251,23 @@ Standards/Spec 병렬 리뷰에서 확인된 실버그 수정:
 3. **`PopupResult.cs` → `Popup{TResult}.cs`** — 파일명이 "결과 값 컨텍스트"로
    오독되던 것을 클래스명 그대로로. 제네릭 변형 파일명 `타입{TParam}.cs` 관례 확정.
 
+## 9차 — 방법론 재정렬: .NET 기조 채택 (2026-08-19, 1차 사료 리서치 후 사용자 선택)
+
+8차의 자작 "역할 묶음" 폴더 규칙을 폐기하고, 리서치
+(`docs/research/2026-08-19-folder-organization-methodologies.md`)로 확인한 확립된
+방법론 중 **.NET 기조**를 채택:
+
+1. **폴더=네임스페이스**(IDE0130 기본 on·Unity 공식 "폴더는 네임스페이스대로") —
+   `Popups/Core|Stack|Services|Manager` 하위 폴더는 단일 네임스페이스와 불일치라
+   **평탄화**(전 파일 `Runtime/Popups/` 직하). 단일 네임스페이스 폴더는 평평하게
+   유지(BCL `System/` 실태).
+2. **동명 제네릭은 같은 파일**(BCL 실측: CoreLib 1,843경로에 백틱/중괄호 파일 0건,
+   `Tuple.cs`·`Action.cs`가 형제 타입 동거) — `Popup{TResult}.cs` 파일 폐기,
+   `Popup<TResult>`는 `Popup.cs`에 합류. 8차의 `타입{TParam}.cs` 규칙 철회
+   (SA1649 문서 기본값이긴 하나 BCL 실태와 다른 niche 관례).
+3. partial `타입.역할.cs`와 타입 폴더 회피(Angular 공식 등 feature 계열 공통 권고)는
+   1차 사료로 뒷받침 확인 — 유지.
+
 ## 테스트 전략 (EditMode)
 
 수동 완료 `UniTaskCompletionSource`를 반환하는 테스트 팝업으로 전이를 제어:

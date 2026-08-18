@@ -27,15 +27,17 @@
   플랜(`docs/superpowers/plans/`) → SDD 실행. 스펙이 결정의 원본이다.
 - 패키지 코드: netstandard2.1 + C#9(블록 네임스페이스), 모든 public 멤버 한국어
   XML 문서, 빌드 경고 0, 라이브러리 await에는 `ConfigureAwait(false)`.
-- 코드 구성 — 폴더도 partial도 **역할 묶음** 한 원리다:
-  - 폴더 = 여러 타입이 이루는 역할 묶음(예: `Popups/Core|Stack|Services|Manager`).
-    타입 종류(enum/interface 모음)로 묶지 않는다 — enum·인터페이스·작은 struct는
-    주 소비자 타입 옆에 둔다(예: `PopupDuplicatePolicy`는 `Stack/`).
-    같은 역할 파일 3개부터 폴더로 승격, 1~2개짜리 폴더는 만들지 않는다.
-  - partial = 타입 하나 안의 역할 축. 역할이 여러 개인 클래스는 `타입.역할.cs`로
-    나누고(예: `PopupStack.Push.cs`, `Util.Component.cs`), 각 파일 머리에 담당 역할
-    주석 한 줄, 본체 XML 문서에 partial 구성을 적는다.
-  - 제네릭 변형 파일명은 `타입{TParam}.cs`(예: `Popup{TResult}.cs`).
+- 코드 구성 — **.NET 기조**(폴더=네임스페이스 + BCL 파일 실태,
+  근거: `docs/research/2026-08-19-folder-organization-methodologies.md`):
+  - **폴더 = 네임스페이스**(IDE0130·Unity 공식 권고). 하위 폴더는 서브네임스페이스를
+    만들 때만 두고, 단일 네임스페이스 폴더는 파일이 많아도 평평하게 유지한다
+    (BCL `System/` 실태). 타입 종류별 폴더(enum/interface 모음)는 만들지 않는다 —
+    응집된 API의 네임스페이스를 폴더 때문에 쪼개지도 않는다.
+  - **동명 제네릭·밀접한 형제 타입은 같은 파일**(BCL: `Tuple.cs`, `Action.cs` —
+    예: `Popup.cs`에 `Popup` + `Popup<TResult>`).
+  - **partial = `타입.역할.cs`**(BCL: `MemoryExtensions.Trim.cs` — 예:
+    `PopupStack.Push.cs`, `Util.Component.cs`). 각 파일 머리에 담당 역할 주석 한 줄,
+    본체 XML 문서에 partial 구성을 적는다.
 - 네이밍: `using`으로 감싸는 수명 타입은 `~Scope` 접미
   (예: `CancellationScope`, `ButtonInteractableScope`, `PopupCloseScope`).
 - 범용 헬퍼는 패키지 로컬 클래스가 아니라 아래 계층의 Util로 내린다 — Unity 범용은

@@ -224,10 +224,7 @@ Behavior rules:
 | Location | Description |
 |---|---|
 | `Runtime/Buttons/` | `ButtonInteractableScope`, `DisabledReason`, `IButtonDisabledHandler`, and `ButtonDisabledClickReceiver` source. |
-| `Runtime/Popups/Core/` | `Popup`(+`.CloseScope` partial), `Popup<TResult>`, `PopupKey`, `PopupPhase`, `IPopupArg<TArg>`, `PopupCloseScope`, delegates. |
-| `Runtime/Popups/Stack/` | `PopupStack` partials: core state/lifetime, `.Push`, `.Close`, `.Result`, `.Queue` — plus `PopupDuplicatePolicy` (the push contract lives beside its consumer). |
-| `Runtime/Popups/Services/` | `PopupQueue`, `PopupPool`, `PopupSiblingArranger`, `PopupBackKeyRouter`. |
-| `Runtime/Popups/Manager/` | `PopupManager`(+`.Facade` partial), `PopupManagerBuilder`. |
+| `Runtime/Popups/` | One flat folder = one namespace (`Bun3.Unity.UI.Popups`). `Popup`(+`Popup<TResult>` in the same file, +`.CloseScope` partial), `PopupStack` partials (`.Push`/`.Close`/`.Result`/`.Queue`), `PopupKey`, `PopupPhase`, `PopupDuplicatePolicy`, `IPopupArg<TArg>`, `PopupCloseScope`, `PopupQueue`, `PopupPool`, `PopupSiblingArranger`, `PopupBackKeyRouter`, `PopupManager`(+`.Facade`), `PopupManagerBuilder`, delegates. |
 | `Samples/ButtonInteractableScope/` | Sample MonoBehaviour and handler demonstrating typical usage. |
 | `Tests/Runtime/` | PlayMode tests (`Bun3.Unity.UI.Tests`). |
 | `Tests/Editor/` | EditMode tests (`Bun3.Unity.UI.Editor.Tests`), covering the popup stack. |
