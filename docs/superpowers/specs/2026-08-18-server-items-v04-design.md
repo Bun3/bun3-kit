@@ -65,3 +65,16 @@ inventory.TryGrant(table, rng, out failedIndex);    // 샘플 → 원자 지급 
 - TryAddUpTo: 부분 지급·0 지급 성공·비스택형 정수/상한.
 - 만료: 필드 추적(Updated)·로드·CollectExpired 경계(0 제외, ==now 포함 여부 명시).
 - CollectInstances / onApplied: 순서·부호·커밋당 1회·실패 시 미호출·무할당.
+
+## 6. 리젠 정산 (v0.4 추가 — 재분류)
+
+§2에서 "아이템 전용 아님"으로 제외했으나 사용자 정정: idlez는 **티켓 아이템을 리젠으로
+구현**한다(`CalculateRegenValueFromPeriod`) — 아이템 도메인 실수요가 맞고, 옛 구현이
+주석으로 남아 있을 만큼 틀리기 쉬운 공식이라 프레임워크 몫의 전형.
+
+`Regen.SettlePeriodic(current, max, periodTicks, nowTicks, ref lastRefreshTicks)`:
+- 소비한 주기만큼만 기준 시각 전진 — 나머지 경과 보존(연속 호출 드리프트 없음).
+- 가득이면(도달 포함) 기준을 현재로 재설정 — 가득 상태 경과 적립(악용) 방지.
+- 미초기화(0)·시계 역행은 기준을 현재로 놓고 0 지급 — "최초 정산 가득 지급" 버그 방지.
+- 시간은 항상 게임 주입(프레임워크는 시계를 모름). 수량 반영·기준 저장(TState)은 게임 몫.
+- 초당 r개 연속 리젠은 period = 1초/r 환산으로 동일 공식 사용.
