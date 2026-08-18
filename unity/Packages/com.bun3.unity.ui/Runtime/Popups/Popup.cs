@@ -67,17 +67,17 @@ namespace Bun3.Unity.UI.Popups
 
         /// <summary>
         /// 열림 연출 대기 지점. 스택은 이 태스크가 끝나야 <see cref="PopupPhase.Open"/>으로 전이한다.
-        /// 기본은 즉시 완료(연출 없음).
+        /// 기본 구현은 내장 연출 플래그(스케일 팝/페이드)를 실행하고, 플래그가 꺼져 있으면 즉시 완료.
         /// </summary>
         protected internal virtual UniTask PlayOpenAsync(CancellationToken cancellationToken)
-            => UniTask.CompletedTask;
+            => PlayBuiltInAnimationAsync(opening: true, cancellationToken);
 
         /// <summary>
         /// 닫힘 연출 대기 지점. 스택은 이 태스크가 끝나야 인스턴스를 해제한다.
-        /// 기본은 즉시 완료(연출 없음).
+        /// 기본 구현은 내장 연출 플래그를 역방향으로 실행하고, 플래그가 꺼져 있으면 즉시 완료.
         /// </summary>
         protected internal virtual UniTask PlayCloseAsync(CancellationToken cancellationToken)
-            => UniTask.CompletedTask;
+            => PlayBuiltInAnimationAsync(opening: false, cancellationToken);
 
         /// <summary>
         /// back 키(ESC/Android back)가 이 팝업에 라우팅됐을 때. <c>true</c>(기본)면 닫기가
@@ -103,6 +103,7 @@ namespace Bun3.Unity.UI.Popups
             CloseRequested = false;
             _closeScopeCount = 0; // 풀 재사용 시 이전 세션 잠금이 새 세션을 오염시키지 않게
 
+            SetUpInteractionForSession();
             OnAttached();
         }
 

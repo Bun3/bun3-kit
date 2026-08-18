@@ -184,13 +184,17 @@ namespace Bun3.Unity.UI.Popups
                 _loading.Remove(key);
                 // 팩토리가 던져도 대기열이 영구 정지하지 않게 드레인을 이어 준다.
                 if (!loaded)
+                {
                     TryDrainQueue();
+                    NotifyIfEmpty();
+                }
             }
 
             // 팩토리는 로드 실패를 null로 알릴 수 있다.
             if (popup == null)
             {
                 TryDrainQueue();
+                NotifyIfEmpty();
                 return null;
             }
 
@@ -198,6 +202,7 @@ namespace Bun3.Unity.UI.Popups
             {
                 // Clear/Dispose 이후 도착한 인스턴스 — 스택에 넣지 않고 바로 돌려보낸다.
                 _releaser(popup);
+                NotifyIfEmpty();
                 return null;
             }
 
@@ -221,6 +226,7 @@ namespace Bun3.Unity.UI.Popups
 
             InsertSorted(popup, layer);
             popup.Attach(this, key, layer);
+            popup.OnTransitionStarted();
             Opened?.Invoke(popup);
             NotifyStackOrderChanged();
 
@@ -237,6 +243,7 @@ namespace Bun3.Unity.UI.Popups
                 return null; // 열림 연출 중 Clear됨 — 이미 해제된 인스턴스를 내보내지 않는다.
 
             popup.SetPhase(PopupPhase.Open);
+            popup.OnOpenCompleted(token);
 
             if (popup.CloseRequested && !popup.IsCloseBlocked)
                 await CloseAsync(popup);

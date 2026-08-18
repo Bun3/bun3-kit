@@ -56,6 +56,13 @@ namespace Bun3.Unity.UI.Editor.Tests
                 LastIsTopmost = isTopmost;
             }
 
+            public int TopmostGained;
+            public int TopmostLost;
+
+            protected override void OnBecameTopmost() => TopmostGained++;
+
+            protected override void OnCovered() => TopmostLost++;
+
             protected override void OnCloseBlockedChanged(bool blocked)
             {
                 BlockedChanges++;
@@ -75,6 +82,9 @@ namespace Bun3.Unity.UI.Editor.Tests
 
         /// <summary>true면 팩토리가 만드는 팝업에 딤 자식 오브젝트를 달아 준다.</summary>
         protected bool WithDim;
+
+        /// <summary>true면 딤 클릭 닫기(<see cref="Popup.CloseOnDimClick"/>)도 켠다.</summary>
+        protected bool WithDimClick;
 
         [SetUp]
         public void SetUp()
@@ -112,6 +122,7 @@ namespace Bun3.Unity.UI.Editor.Tests
                 var dim = new GameObject("dim");
                 dim.transform.SetParent(popup.transform, false);
                 popup.BackgroundDim = dim;
+                popup.CloseOnDimClick = WithDimClick;
             }
 
             Created.Add(popup);

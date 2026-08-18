@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using Bun3.Unity.Core.Utils;
+using Cysharp.Threading.Tasks;
 using UnityEngine;
 
 namespace Bun3.Unity.UI.Popups
@@ -40,6 +41,38 @@ namespace Bun3.Unity.UI.Popups
 
         /// <summary><see cref="PopupDuplicatePolicy.Focus"/>로 기존 인스턴스가 최상단에 재사용될 때 발화.</summary>
         public event Action<Popup> Focused;
+
+        /// <summary>
+        /// 스택·로딩·순차 대기열이 전부 빈 순간 발화. 오토랜딩/튜토리얼처럼
+        /// "팝업이 하나도 없을 때만 시작"하는 흐름의 신호(레거시 UISequence 예약 대응).
+        /// </summary>
+        public event Action Emptied;
+
+        private UniTaskCompletionSource _emptySource;
+
+        /// <summary>열린 팝업·진행 중 로딩·순차 대기열이 전부 비었는지.</summary>
+        public bool IsEmpty => _stack.Count == 0 && _loading.Count == 0 && _queue.Count == 0;
+
+        /// <summary>전부 빌 때까지 대기한다. 이미 비어 있으면 즉시 완료.</summary>
+        public UniTask WaitUntilEmptyAsync()
+        {
+            if (IsEmpty)
+                return UniTask.CompletedTask;
+
+            _emptySource ??= new UniTaskCompletionSource();
+            return _emptySource.Task;
+        }
+
+        private void NotifyIfEmpty()
+        {
+            if (!IsEmpty)
+                return;
+
+            var source = _emptySource;
+            _emptySource = null;
+            source?.TrySetResult();
+            Emptied?.Invoke();
+        }
 
         /// <summary>열려 있거나 전이 중인 팝업 수.</summary>
         public int Count => _stack.Count;
@@ -93,7 +126,10 @@ namespace Bun3.Unity.UI.Popups
             // 토큰이 취소됐으므로 도착한 인스턴스는 스택에 들어오지 못하고 바로 해제된다.
 
             if (_stack.Count == 0)
+            {
+                NotifyIfEmpty();
                 return;
+            }
 
             // 해제 콜백이 재-Push할 수 있어 스냅샷을 뜬다. (저빈도 경로 — 할당 허용)
             var popups = _stack.ToArray();
@@ -106,6 +142,8 @@ namespace Bun3.Unity.UI.Popups
                 Closed?.Invoke(popup);
                 _releaser(popup);
             }
+
+            NotifyIfEmpty();
         }
 
         /// <summary><see cref="Clear"/> 후 스택을 더 쓸 수 없게 만든다.</summary>
@@ -144,6 +182,7 @@ namespace Bun3.Unity.UI.Popups
                 if (popup.BackgroundDim)
                     popup.BackgroundDim.SetActive(ReferenceEquals(popup, dimOwner));
 
+                popup.UpdateTopmost(ReferenceEquals(popup, top));
                 popup.OnStackOrderChanged(i, ReferenceEquals(popup, top));
             }
         }

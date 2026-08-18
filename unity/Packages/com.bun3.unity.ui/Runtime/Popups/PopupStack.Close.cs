@@ -65,6 +65,7 @@ namespace Bun3.Unity.UI.Popups
             }
 
             popup.SetPhase(PopupPhase.Closing);
+            popup.OnTransitionStarted();
 
             try
             {
@@ -85,6 +86,36 @@ namespace Bun3.Unity.UI.Popups
             _releaser(popup);
 
             TryDrainQueue();
+            NotifyIfEmpty();
+        }
+
+        /// <summary>
+        /// 열린 팝업을 전부(또는 <paramref name="except"/>만 남기고) 정상 경로로 닫는다 —
+        /// 닫힘 연출·훅·이벤트를 전부 태운다(연출 생략 강제 정리는 <see cref="Clear"/>).
+        /// 레거시 HideAllPopups(without) 대응.
+        /// </summary>
+        public void CloseAll(Popup except = null)
+        {
+            for (int i = _stack.Count - 1; i >= 0; i--)
+            {
+                var popup = _stack[i];
+                if (popup.Phase != PopupPhase.Closing && !ReferenceEquals(popup, except))
+                    Close(popup);
+            }
+        }
+
+        /// <summary>조건에 맞는 팝업만 정상 경로로 닫는다. (저빈도 경로 — 델리게이트 허용)</summary>
+        public void CloseAll(Predicate<Popup> match)
+        {
+            if (match == null)
+                throw new ArgumentNullException(nameof(match));
+
+            for (int i = _stack.Count - 1; i >= 0; i--)
+            {
+                var popup = _stack[i];
+                if (popup.Phase != PopupPhase.Closing && match(popup))
+                    Close(popup);
+            }
         }
 
         private void CloseAllOf(PopupKey key)

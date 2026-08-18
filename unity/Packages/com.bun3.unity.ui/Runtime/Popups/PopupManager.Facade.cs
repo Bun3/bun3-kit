@@ -97,6 +97,12 @@ namespace Bun3.Unity.UI.Popups
             where TPopup : Popup
             => Stack.EnqueueWithArg(PopupKey.Of<TPopup>(popupName), arg, layer);
 
+        /// <summary><see cref="PopupStack.CloseAll(Popup)"/> 위임.</summary>
+        public void CloseAll(Popup except = null) => Stack.CloseAll(except);
+
+        /// <summary><see cref="PopupStack.WaitUntilEmptyAsync"/> 위임.</summary>
+        public UniTask WaitUntilEmptyAsync() => Stack.WaitUntilEmptyAsync();
+
         /// <summary><see cref="PopupStack.Pop"/> 위임.</summary>
         public void Pop() => Stack.Pop();
 
