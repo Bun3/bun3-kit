@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <LangVersion>9.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Bun3.Server.Items</RootNamespace>
+    <PackageId>Bun3.Server.Items</PackageId>
+    <Version>0.1.0</Version>
+    <Authors>Bun3</Authors>
+    <RepositoryUrl>https://github.com/Bun3/bun3-kit</RepositoryUrl>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <Description>서버 아이템 프레임워크 — 카탈로그(인터닝·색인·리젠 메타), 스택/인스턴스 통합 인벤토리(BigNum 수량·원자 트랜잭션·변경 추적), 레시피·보상 테이블·리젠·만료·인벤토리 간 이동, ActionLog 원장 연계</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Bun3.Server.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Bun3.Server.Core\Bun3.Server.Core.csproj" />
+    <ProjectReference Include="..\..\..\common\src\com.bun3.gameplay\Bun3.Gameplay.csproj" />
+  </ItemGroup>
+
+</Project>

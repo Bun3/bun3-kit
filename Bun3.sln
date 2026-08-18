@@ -66,7 +66,10 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Bun3.Server.GameplayTags", "server\src\Bun3.Server.GameplayTags\Bun3.Server.GameplayTags.csproj", "{7828FBF7-3EE4-469A-A4C1-4DFD1F254621}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Bun3.Server.Achievements", "server\src\Bun3.Server.Achievements\Bun3.Server.Achievements.csproj", "{AD24CBE8-3D1B-447B-8B97-B2C0BF81C35F}"
+EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Bun3.Server.Transport.InProcess", "server\src\Bun3.Server.Transport.InProcess\Bun3.Server.Transport.InProcess.csproj", "{20D888B4-B1DF-4828-BC6F-43EB52F13087}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Bun3.Server.Items", "server\src\Bun3.Server.Items\Bun3.Server.Items.csproj", "{1942B15B-1346-4BBD-8AE6-AC47882E1F40}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -366,6 +369,18 @@ Global
 		{20D888B4-B1DF-4828-BC6F-43EB52F13087}.Release|x64.Build.0 = Release|Any CPU
 		{20D888B4-B1DF-4828-BC6F-43EB52F13087}.Release|x86.ActiveCfg = Release|Any CPU
 		{20D888B4-B1DF-4828-BC6F-43EB52F13087}.Release|x86.Build.0 = Release|Any CPU
+		{1942B15B-1346-4BBD-8AE6-AC47882E1F40}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1942B15B-1346-4BBD-8AE6-AC47882E1F40}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1942B15B-1346-4BBD-8AE6-AC47882E1F40}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{1942B15B-1346-4BBD-8AE6-AC47882E1F40}.Debug|x64.Build.0 = Debug|Any CPU
+		{1942B15B-1346-4BBD-8AE6-AC47882E1F40}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{1942B15B-1346-4BBD-8AE6-AC47882E1F40}.Debug|x86.Build.0 = Debug|Any CPU
+		{1942B15B-1346-4BBD-8AE6-AC47882E1F40}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1942B15B-1346-4BBD-8AE6-AC47882E1F40}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1942B15B-1346-4BBD-8AE6-AC47882E1F40}.Release|x64.ActiveCfg = Release|Any CPU
+		{1942B15B-1346-4BBD-8AE6-AC47882E1F40}.Release|x64.Build.0 = Release|Any CPU
+		{1942B15B-1346-4BBD-8AE6-AC47882E1F40}.Release|x86.ActiveCfg = Release|Any CPU
+		{1942B15B-1346-4BBD-8AE6-AC47882E1F40}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -402,5 +417,6 @@ Global
 		{7828FBF7-3EE4-469A-A4C1-4DFD1F254621} = {2132E9AA-A8A6-6DB3-1CCB-FE240A8CB002}
 		{AD24CBE8-3D1B-447B-8B97-B2C0BF81C35F} = {2132E9AA-A8A6-6DB3-1CCB-FE240A8CB002}
 		{20D888B4-B1DF-4828-BC6F-43EB52F13087} = {2132E9AA-A8A6-6DB3-1CCB-FE240A8CB002}
+		{1942B15B-1346-4BBD-8AE6-AC47882E1F40} = {2132E9AA-A8A6-6DB3-1CCB-FE240A8CB002}
 	EndGlobalSection
 EndGlobal
