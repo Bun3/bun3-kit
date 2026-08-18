@@ -23,7 +23,7 @@ namespace Bun3.Server.Items
         /// 재설정한다(가득 상태에서 경과 시간 적립 방지).</param>
         /// <param name="periodTicks">1개 충전에 걸리는 시간(ticks, 양수).</param>
         /// <param name="nowTicksUtc">현재 시각(UTC ticks) — 게임 주입.</param>
-        /// <param name="lastRefreshTicksUtc">기준 시각. 0(미초기화)이면 현재로 초기화하고
+        /// <param name="lastRegenTicksUtc">기준 시각. 0(미초기화)이면 현재로 초기화하고
         /// 0을 준다 — "최초 정산에서 가득 차는" 고전 버그 방지. 미래 값(시계 역행)도
         /// 현재로 재설정하고 0을 준다.</param>
         /// <returns>이번 정산에서 충전된 수량(0 이상).</returns>
@@ -32,26 +32,26 @@ namespace Bun3.Server.Items
             long maxCount,
             long periodTicks,
             long nowTicksUtc,
-            ref long lastRefreshTicksUtc)
+            ref long lastRegenTicksUtc)
         {
             if (periodTicks <= 0)
             {
                 throw new ArgumentOutOfRangeException(nameof(periodTicks), periodTicks, "주기는 양수여야 합니다.");
             }
 
-            if (lastRefreshTicksUtc == 0 || lastRefreshTicksUtc > nowTicksUtc)
+            if (lastRegenTicksUtc == 0 || lastRegenTicksUtc > nowTicksUtc)
             {
-                lastRefreshTicksUtc = nowTicksUtc;
+                lastRegenTicksUtc = nowTicksUtc;
                 return 0;
             }
 
             if (currentCount >= maxCount)
             {
-                lastRefreshTicksUtc = nowTicksUtc;
+                lastRegenTicksUtc = nowTicksUtc;
                 return 0;
             }
 
-            var elapsedPeriods = (nowTicksUtc - lastRefreshTicksUtc) / periodTicks;
+            var elapsedPeriods = (nowTicksUtc - lastRegenTicksUtc) / periodTicks;
             var granted = Math.Min(maxCount - currentCount, elapsedPeriods);
             if (granted <= 0)
             {
@@ -60,11 +60,11 @@ namespace Bun3.Server.Items
 
             if (currentCount + granted >= maxCount)
             {
-                lastRefreshTicksUtc = nowTicksUtc;   // 가득 도달 — 남은 적립 제거
+                lastRegenTicksUtc = nowTicksUtc;   // 가득 도달 — 남은 적립 제거
             }
             else
             {
-                lastRefreshTicksUtc += periodTicks * granted;
+                lastRegenTicksUtc += periodTicks * granted;
             }
 
             return granted;

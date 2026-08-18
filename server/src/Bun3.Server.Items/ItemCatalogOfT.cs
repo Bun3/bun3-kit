@@ -18,10 +18,12 @@ namespace Bun3.Server.Items
             long[] maxStacks,
             long[] externalIds,
             bool[] unstackables,
+            long[] regenPeriods,
+            ItemId[] regenItems,
             Dictionary<string, int> lookup,
             Dictionary<long, int> externalLookup,
             TDefinition[] definitions)
-            : base(ids, maxStacks, externalIds, unstackables, lookup, externalLookup)
+            : base(ids, maxStacks, externalIds, unstackables, regenPeriods, regenItems, lookup, externalLookup)
         {
             _definitions = definitions;
         }

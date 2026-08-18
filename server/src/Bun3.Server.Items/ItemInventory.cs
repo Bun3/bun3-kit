@@ -41,6 +41,9 @@ namespace Bun3.Server.Items
         private readonly List<BigNum> _txNetTotal = new List<BigNum>();
         private readonly List<BigNum> _txNetPool = new List<BigNum>();
         private readonly List<ItemDelta> _rewardScratch = new List<ItemDelta>();
+        private readonly Dictionary<ItemId, long> _regenBasis = new Dictionary<ItemId, long>();
+        private readonly List<ItemId> _regenScratchItems = new List<ItemId>();
+        private readonly List<long> _regenScratchBasis = new List<long>();
         private int _txToken;
 
         // onApplied 통지용 재사용 버퍼 — 핸들러 미지정 시 기록 자체를 생략한다.

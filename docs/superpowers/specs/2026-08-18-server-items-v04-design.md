@@ -78,3 +78,20 @@ inventory.TryGrant(table, rng, out failedIndex);    // 샘플 → 원자 지급 
 - 미초기화(0)·시계 역행은 기준을 현재로 놓고 0 지급 — "최초 정산 가득 지급" 버그 방지.
 - 시간은 항상 게임 주입(프레임워크는 시계를 모름). 수량 반영·기준 저장(TState)은 게임 몫.
 - 초당 r개 연속 리젠은 period = 1초/r 환산으로 동일 공식 사용.
+
+## 7. 리젠 자동 정산 (사용자 요청 확장)
+
+공식만으로는 idlez의 "리젠 아이템들을 돌리는 루프"(RefreshTickets)가 게임마다 남는다 —
+카탈로그 메타로 승격해 프레임워크가 스윕을 소유한다:
+
+```csharp
+builder.Register("ticket", def, maxStack: 5, regenPeriodTicks: TimeSpan.FromMinutes(30).Ticks);
+inventory.SettleRegen(nowTicks);   // 리젠 정의 전체 lazy 정산 — 충전분 원자 지급 1배치
+```
+
+- 기준 시각(lastRegenTicksUtc — 파라미터명도 이걸로 개명)은 **정의별 맵**에 둔다:
+  전량 소모로 인스턴스가 사라져도(수량 0 행 제거 모델) 리젠이 계속되는 티켓 의미론.
+  영속화는 `GetRegenBasis`/`LoadRegenBasis` + `catalog.RegenItems` 순회.
+- 제약(Register에서 강제): 스택형만·유한 maxStack 필수·수량 정수 강제(변경 경로 검증).
+- 기준 전진은 지급 커밋 성공 후에만 — 실패 시 다음 정산에서 재시도(유실 없음).
+- 소모 전 정산이 계약(가득 재설정의 적립 악용 방지가 이 순서에 의존).

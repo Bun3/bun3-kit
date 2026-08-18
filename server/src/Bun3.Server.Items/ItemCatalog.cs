@@ -21,6 +21,8 @@ namespace Bun3.Server.Items
         private readonly long[] _maxStacks;
         private readonly long[] _externalIds;
         private readonly bool[] _unstackables;
+        private readonly long[] _regenPeriods;
+        private readonly ItemId[] _regenItems;
         private readonly Dictionary<string, int> _lookup;
         private readonly Dictionary<long, int> _externalLookup;
 
@@ -29,6 +31,8 @@ namespace Bun3.Server.Items
             long[] maxStacks,
             long[] externalIds,
             bool[] unstackables,
+            long[] regenPeriods,
+            ItemId[] regenItems,
             Dictionary<string, int> lookup,
             Dictionary<long, int> externalLookup)
         {
@@ -36,6 +40,8 @@ namespace Bun3.Server.Items
             _maxStacks = maxStacks;
             _externalIds = externalIds;
             _unstackables = unstackables;
+            _regenPeriods = regenPeriods;
+            _regenItems = regenItems;
             _lookup = lookup;
             _externalLookup = externalLookup;
         }
@@ -103,6 +109,21 @@ namespace Bun3.Server.Items
 
             return _unstackables[item.Index];
         }
+
+        /// <summary>리젠 주기(ticks). 0 = 리젠 없음. 무효 식별자면 던진다.</summary>
+        public long GetRegenPeriodTicks(ItemId item)
+        {
+            if (!Contains(item))
+            {
+                throw new ArgumentOutOfRangeException(nameof(item), "이 카탈로그의 식별자가 아닙니다.");
+            }
+
+            return _regenPeriods[item.Index];
+        }
+
+        /// <summary>리젠 메타가 등록된 정의 목록 — <see cref="ItemInventory{TState}.SettleRegen"/>의
+        /// 순회 대상이자 게임의 리젠 기준 시각 저장 대상.</summary>
+        public ReadOnlySpan<ItemId> RegenItems => _regenItems;
 
         /// <summary>외부 숫자 id(DB 컬럼·Steam itemdefid 등)를 반환한다.
         /// 미등록이면 false. 무효 식별자면 던진다.</summary>

@@ -263,9 +263,16 @@ namespace Bun3.Server.Items
                         return InventoryError.InvalidAmount;
                     }
 
-                    if (_catalog.IsUnstackable(op.Item) && !TryToInstanceCount(op.Amount, out _))
+                    if (_catalog.IsUnstackable(op.Item))
                     {
-                        return InventoryError.InvalidAmount;
+                        if (!TryToInstanceCount(op.Amount, out _))
+                        {
+                            return InventoryError.InvalidAmount;
+                        }
+                    }
+                    else if (_catalog.GetRegenPeriodTicks(op.Item) > 0 && op.Amount.Exponent < 0)
+                    {
+                        return InventoryError.InvalidAmount;   // 리젠 정의는 정수 수량만 — 정산 산술의 전제
                     }
 
                     var net = NetIndexOf(op.Item);

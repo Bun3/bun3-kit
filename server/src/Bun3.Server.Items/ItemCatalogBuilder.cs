@@ -16,6 +16,7 @@ namespace Bun3.Server.Items
         private readonly List<long> _maxStacks = new List<long>();
         private readonly List<long> _externalIds = new List<long>();
         private readonly List<bool> _unstackables = new List<bool>();
+        private readonly List<long> _regenPeriods = new List<long>();
         private readonly Dictionary<string, int> _lookup = new Dictionary<string, int>(StringComparer.Ordinal);
         private readonly Dictionary<long, int> _externalLookup = new Dictionary<long, int>();
         private readonly List<Action<ItemCatalog<TDefinition>>> _validators = new List<Action<ItemCatalog<TDefinition>>>();
@@ -34,13 +35,17 @@ namespace Bun3.Server.Items
         /// 등록된다. 중복이면 던진다. <see cref="long.MinValue"/>는 예약값이라 거부.</param>
         /// <param name="unstackable">true면 비스택형(인스턴스형) — 수량 병합 대신
         /// 수량 1 인스턴스 N개로 보유하며 maxStack이 최대 인스턴스 수가 된다.</param>
+        /// <param name="regenPeriodTicks">리젠 주기(ticks). 0 = 리젠 없음. 지정 시
+        /// <see cref="ItemInventory{TState}.SettleRegen"/>이 이 정의를 자동 정산한다 —
+        /// 스택형 + 유한 maxStack(상한) 필수이며, 수량은 정수만 허용된다.</param>
         /// <returns>체이닝용 빌더 자신.</returns>
         public ItemCatalogBuilder<TDefinition> Register(
             string id,
             TDefinition definition,
             long maxStack = long.MaxValue,
             long? externalId = null,
-            bool unstackable = false)
+            bool unstackable = false,
+            long regenPeriodTicks = 0)
         {
             ThrowIfBuilt();
             if (string.IsNullOrWhiteSpace(id))
@@ -56,6 +61,21 @@ namespace Bun3.Server.Items
             if (externalId == ItemCatalog.NoExternalId)
             {
                 throw new ArgumentOutOfRangeException(nameof(externalId), externalId, "long.MinValue는 예약값입니다.");
+            }
+
+            if (regenPeriodTicks < 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(regenPeriodTicks), regenPeriodTicks, "리젠 주기는 0(없음) 또는 양수여야 합니다.");
+            }
+
+            if (regenPeriodTicks > 0 && unstackable)
+            {
+                throw new ItemCatalogException($"비스택형 정의는 리젠을 지원하지 않습니다: '{id}'");
+            }
+
+            if (regenPeriodTicks > 0 && maxStack == long.MaxValue)
+            {
+                throw new ItemCatalogException($"리젠 정의는 유한한 maxStack(상한)이 필요합니다: '{id}'");
             }
 
             if (_lookup.ContainsKey(id))
@@ -79,6 +99,7 @@ namespace Bun3.Server.Items
             _maxStacks.Add(maxStack);
             _externalIds.Add(externalId ?? ItemCatalog.NoExternalId);
             _unstackables.Add(unstackable);
+            _regenPeriods.Add(regenPeriodTicks);
             return this;
         }
 
@@ -175,11 +196,22 @@ namespace Bun3.Server.Items
             ThrowIfBuilt();
             _built = true;
 
+            var regenItems = new List<ItemId>();
+            for (var i = 0; i < _regenPeriods.Count; i++)
+            {
+                if (_regenPeriods[i] > 0)
+                {
+                    regenItems.Add(new ItemId(i));
+                }
+            }
+
             var catalog = new ItemCatalog<TDefinition>(
                 _ids.ToArray(),
                 _maxStacks.ToArray(),
                 _externalIds.ToArray(),
                 _unstackables.ToArray(),
+                _regenPeriods.ToArray(),
+                regenItems.ToArray(),
                 _lookup,
                 _externalLookup,
                 _definitions.ToArray());
