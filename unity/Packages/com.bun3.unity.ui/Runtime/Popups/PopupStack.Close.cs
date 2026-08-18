@@ -69,7 +69,7 @@ namespace Bun3.Unity.UI.Popups
 
             try
             {
-                await popup.PlayCloseAsync(_lifetime.Token);
+                await popup.PlayHideAsync(_lifetime.Token);
             }
             catch (OperationCanceledException)
             {

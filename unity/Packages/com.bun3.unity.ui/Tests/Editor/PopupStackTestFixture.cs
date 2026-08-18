@@ -27,10 +27,10 @@ namespace Bun3.Unity.UI.Editor.Tests
             public int BlockedChanges;
             public bool LastBlocked;
 
-            protected override UniTask PlayOpenAsync(CancellationToken cancellationToken)
+            protected override UniTask PlayShowAsync(CancellationToken cancellationToken)
                 => OpenSource?.Task ?? UniTask.CompletedTask;
 
-            protected override UniTask PlayCloseAsync(CancellationToken cancellationToken)
+            protected override UniTask PlayHideAsync(CancellationToken cancellationToken)
                 => CloseSource?.Task ?? UniTask.CompletedTask;
 
             protected override bool OnBackRequested()

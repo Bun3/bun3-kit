@@ -27,13 +27,14 @@
 `int` 래퍼, `IEquatable<PopupKey>`, `int`에서 암시적 변환. 게임은 enum을 캐스팅해 쓴다.
 문자열 키 금지(무할당 규율 + 오타 방지).
 
-### Popup (abstract MonoBehaviour)
+### Popup (abstract, UIView 상속 — 12차)
 
 게임 팝업 프리팹의 베이스. 스택이 소유 관계를 주입한다.
 
 - `PopupKey Key`, `int Layer`, `PopupPhase Phase` — 스택이 설정, 게임은 읽기만.
-- `protected virtual UniTask PlayOpenAsync(CancellationToken)` — 열림 연출 대기 지점. 기본 즉시 완료.
-- `protected virtual UniTask PlayCloseAsync(CancellationToken)` — 닫힘 연출 대기 지점. 기본 즉시 완료.
+- `protected virtual UniTask PlayShowAsync(CancellationToken)` — 열림 연출 대기 지점(UIView 훅,
+  12차에 PlayOpenAsync에서 개명). 기본은 내장 연출 플래그 실행, 꺼져 있으면 즉시 완료.
+- `protected virtual UniTask PlayHideAsync(CancellationToken)` — 닫힘 연출 대기 지점(동상).
 - `protected virtual bool OnBackRequested()` — back 키가 이 팝업에 라우팅됐을 때.
   `true`(기본) = 닫기 진행, `false` = 닫기 거부(키는 소비됨).
 - `public void Close()` — 자신을 소유 스택에서 닫는 편의 메서드.
@@ -58,7 +59,7 @@ public delegate void PopupReleaser(Popup popup);
 
 - `PopupStack(PopupFactory factory, PopupReleaser releaser = null)`
 - `void Push(PopupKey key, int layer = 0, PopupDuplicatePolicy duplicate = Ignore)`
-  / `UniTask PushAsync(...)` — 팩토리 로딩 → 스택 삽입 → `PlayOpenAsync` 대기.
+  / `UniTask PushAsync(...)` — 팩토리 로딩 → 스택 삽입 → `PlayShowAsync` 대기.
 - `void Enqueue(PopupKey key, int layer = 0)` — 순차 표시 대기열(보상 연출 등).
   **스택이 비면** 머리부터 하나씩 표시, 닫히면 다음. (기본값 결정 — 아래 참고)
 - `bool HandleBack()` — 최상단 팝업에 라우팅. 소비 여부 반환(스택 비면 false → 게임이 종료 다이얼로그 등 처리).
@@ -310,6 +311,20 @@ Timeline 전환 에셋(훅으로 충분), UI Toolkit 백엔드(uGUI 기조).
 - 위젯 기본값 리셋은 게임 팝업의 `OnAttached()`(레거시 Initialize() 대응, 풀 재사용 안전).
 - `MessageBoxPopup`/`MessageBoxRequest`/확장 삭제 — configure + `Popup<TResult>` 조합이
   상위 호환(레거시 `WaitResultAsync()` 수동 TCS 패턴의 표준화).
+
+## 12차 — UIView 공용 베이스 (2026-08-19, 사용자 리뷰)
+
+Popup/ToastView/LoadingView가 같은 전이 훅을 제각각 들고 있던 것(Popup만
+`PlayOpen/CloseAsync` 딴 이름, 내장 연출도 Popup 전용)을 정리:
+
+- **`UIView : MonoBehaviour`** (`Runtime/UIView.cs`, 루트 네임스페이스 `Bun3.Unity.UI`) —
+  `PlayShowAsync`/`PlayHideAsync` 가상 훅 + 내장 스케일/페이드 연출(직렬화 플래그,
+  기본 구현)을 보유. Popup·ToastView·LoadingView가 상속 → 토스트/로딩도 내장 연출을
+  공짜로 얻는다(프레임워크-우선). `Popup.Animation.cs` 삭제(내용 하강).
+- Popup의 `PlayOpenAsync`/`PlayCloseAsync`는 `PlayShowAsync`/`PlayHideAsync`로 **개명
+  통일** — 세 서브시스템이 같은 어휘를 쓴다. 직렬화 필드명 유지라 프리팹 데이터 무손실.
+- 인터페이스(`IUIView` 등)는 도입하지 않음 — 셋을 다형으로 소비하는 코드가 없다
+  (각 소유자가 구체 타입을 직접 받음). 필요해지면 그때.
 
 ## 테스트 전략 (EditMode)
 

@@ -1,4 +1,3 @@
-using System.Threading;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
 
@@ -12,10 +11,12 @@ namespace Bun3.Unity.UI.Popups
     /// <see cref="Key"/>/<see cref="Layer"/>/<see cref="Phase"/>는 스택이 설정한다 — 게임은 읽기만.
     /// 인스턴스 생성(<see cref="PopupFactory"/>)과 해제(<see cref="PopupReleaser"/>)는 게임 몫이므로,
     /// 이 클래스는 트랜스폼/캔버스 배치를 일절 건드리지 않는다.
+    /// 열림/닫힘 연출은 <see cref="UIView.PlayShowAsync"/>/<see cref="UIView.PlayHideAsync"/> 오버라이드 —
+    /// 스택이 <see cref="PopupPhase.Opening"/>/<see cref="PopupPhase.Closing"/> 단계에서 완료를 대기한다.
     /// <br/>
-    /// partial 구성: 이 파일(생명주기·훅) / CloseScope(닫기 잠금).
+    /// partial 구성: 이 파일(생명주기·훅) / CloseScope(닫기 잠금) / Interaction(입력 보호·딤 클릭).
     /// </remarks>
-    public abstract partial class Popup : MonoBehaviour
+    public abstract partial class Popup : UIView
     {
         [SerializeField]
         [Tooltip("최상단 팝업일 때만 켤 딤 배경. 딤이 없는 팝업은 비워 둔다.")]
@@ -64,20 +65,6 @@ namespace Bun3.Unity.UI.Popups
             _closedSource ??= new UniTaskCompletionSource();
             return _closedSource.Task;
         }
-
-        /// <summary>
-        /// 열림 연출 대기 지점. 스택은 이 태스크가 끝나야 <see cref="PopupPhase.Open"/>으로 전이한다.
-        /// 기본 구현은 내장 연출 플래그(스케일 팝/페이드)를 실행하고, 플래그가 꺼져 있으면 즉시 완료.
-        /// </summary>
-        protected internal virtual UniTask PlayOpenAsync(CancellationToken cancellationToken)
-            => PlayBuiltInAnimationAsync(opening: true, cancellationToken);
-
-        /// <summary>
-        /// 닫힘 연출 대기 지점. 스택은 이 태스크가 끝나야 인스턴스를 해제한다.
-        /// 기본 구현은 내장 연출 플래그를 역방향으로 실행하고, 플래그가 꺼져 있으면 즉시 완료.
-        /// </summary>
-        protected internal virtual UniTask PlayCloseAsync(CancellationToken cancellationToken)
-            => PlayBuiltInAnimationAsync(opening: false, cancellationToken);
 
         /// <summary>
         /// back 키(ESC/Android back)가 이 팝업에 라우팅됐을 때. <c>true</c>(기본)면 닫기가

@@ -97,9 +97,11 @@ Arguments are evaluated before `Require` is entered, so the scope cannot prevent
 using Bun3.Unity.UI.Popups;
 
 // 1. Derive popups from Popup (override animation/back hooks as needed).
+//    Popup, ToastView, LoadingView all share the UIView base: PlayShowAsync/PlayHideAsync
+//    transition hooks + built-in scale/fade animation flags (inspector) as the default.
 public sealed class ShopPopup : Popup
 {
-    protected override UniTask PlayOpenAsync(CancellationToken ct) => _tween.PlayAsync(ct);
+    protected override UniTask PlayShowAsync(CancellationToken ct) => _tween.PlayAsync(ct);
     protected override bool OnBackRequested() => !_isPurchasing; // refuse close mid-purchase
 }
 

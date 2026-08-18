@@ -309,7 +309,7 @@ namespace Bun3.Unity.UI.Popups
 
             try
             {
-                await popup.PlayOpenAsync(token);
+                await popup.PlayShowAsync(token);
             }
             catch (OperationCanceledException)
             {
