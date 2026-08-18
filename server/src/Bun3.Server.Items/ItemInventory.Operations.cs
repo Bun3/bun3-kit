@@ -316,7 +316,7 @@ namespace Bun3.Server.Items
             if (_appliedCount > 0)
             {
                 _onApplied?.Invoke(new ReadOnlySpan<InventoryChange>(_applied, 0, _appliedCount));
-                LogCommittedChanges();
+                _log?.AppendChanges(_logLabel, new ReadOnlySpan<InventoryChange>(_applied, 0, _appliedCount));
             }
 
             return InventoryError.None;
@@ -481,7 +481,7 @@ namespace Bun3.Server.Items
 
         private void RecordApplied(ItemId item, BigNum delta)
         {
-            if (_onApplied == null && _onLog == null)
+            if (_onApplied == null && _log == null)
             {
                 return;
             }
