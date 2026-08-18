@@ -65,20 +65,59 @@ namespace Bun3.Gameplay.Effects
         Fixed = 1,
     }
 
+    /// <summary>레벨 테이블에서 MaxLevel을 넘는 레벨을 다루는 방식입니다.</summary>
+    public enum LevelTail : byte
+    {
+        /// <summary>MaxLevel의 마지막 값을 그대로 유지합니다.</summary>
+        Clamp = 0,
+        /// <summary>마지막 값에서 레벨당 증분을 더해 선형 외삽합니다.</summary>
+        Extrapolate = 1,
+    }
+
+    /// <summary>희소 레벨 커브의 키 하나입니다(레벨, 값).</summary>
+    public sealed class LevelKey
+    {
+        /// <summary>레벨입니다.</summary>
+        public int Level { get; set; }
+
+        /// <summary>해당 레벨의 값입니다.</summary>
+        public BigNum Value { get; set; }
+    }
+
     /// <summary>
-    /// 크기 정의입니다. 상수/속성 기반 <see cref="Base"/>·<see cref="PerLevel"/> 쌍이거나
-    /// SeamRegistry에 등록된 계산 태그(<see cref="CalcTag"/>) 중 하나만 가질 수 있습니다.
+    /// 크기 정의입니다. 레벨 스케일링 표기는 상호 배타 계열 5종 중 정확히 하나입니다 —
+    /// ① <see cref="Base"/>(+<see cref="PerLevel"/>) 선형, ② <see cref="PerLevelValues"/> 명시 배열,
+    /// ③ <see cref="Formula"/> 결정론 수식, ④ <see cref="CurveKeys"/> 희소 키+선형 보간,
+    /// 또는 SeamRegistry에 등록된 <see cref="CalcTag"/>. 스펙 §15.1 참고.
     /// </summary>
     public sealed class MagnitudeDef
     {
-        /// <summary>레벨 무관 기본 크기입니다. <see cref="CalcTag"/>와는 배타적입니다.</summary>
+        /// <summary>레벨 무관 기본 크기입니다(표기 ①). 다른 표기들과는 배타적입니다.</summary>
         public Operand? Base { get; set; }
 
-        /// <summary>레벨 1당 추가되는 크기입니다. <see cref="Base"/>가 있을 때만 사용할 수 있습니다.</summary>
+        /// <summary>레벨 1당 추가되는 크기입니다(표기 ①). <see cref="Base"/>가 있을 때만 사용할 수 있습니다.</summary>
         public Operand? PerLevel { get; set; }
 
-        /// <summary>SeamRegistry에 등록된 크기 계산 태그입니다. <see cref="Base"/>와는 배타적입니다.</summary>
+        /// <summary>레벨별 명시 값 배열입니다(표기 ②). 길이가 곧 <see cref="EffectSpec.MaxLevel"/>이어야 합니다.</summary>
+        public List<BigNum>? PerLevelValues { get; set; }
+
+        /// <summary>결정론 수식입니다(표기 ③). <see cref="Numerics.BigNumFormula"/> 문법을 따르며
+        /// 변수 x에 레벨을 대입해 평가합니다.</summary>
+        public string? Formula { get; set; }
+
+        /// <summary>희소 레벨 키 목록입니다(표기 ④). 레벨 오름차순, 중복 금지, 첫 키는 레벨 1이어야 합니다.
+        /// 키 사이는 선형 보간, 마지막 키 뒤는 <see cref="Tail"/> 정책을 따릅니다.</summary>
+        public List<LevelKey>? CurveKeys { get; set; }
+
+        /// <summary>SeamRegistry에 등록된 크기 계산 태그입니다. 다른 표기들과는 배타적입니다.</summary>
         public string? CalcTag { get; set; }
+
+        /// <summary>레벨 테이블(②③④)이 MaxLevel을 넘는 레벨을 다루는 방식입니다.</summary>
+        public LevelTail Tail { get; set; }
+
+        /// <summary><see cref="Tail"/>이 Extrapolate일 때 레벨당 증분입니다. 0이면 배열의 마지막
+        /// 두 값의 차로 자동 계산됩니다.</summary>
+        public BigNum ExtrapolateIncrement { get; set; }
     }
 
     /// <summary>속성 수정자 정의입니다.</summary>
@@ -184,6 +223,9 @@ namespace Bun3.Gameplay.Effects
     {
         /// <summary>카탈로그 내에서 고유해야 하는 효과 이름입니다.</summary>
         public string Name { get; set; } = string.Empty;
+
+        /// <summary>레벨 테이블 표기(②③④) 사용 시 필요한 최대 레벨입니다. 0이면 미선언입니다.</summary>
+        public int MaxLevel { get; set; }
 
         /// <summary>지속 방식입니다.</summary>
         public EffectDurationType DurationType { get; set; }

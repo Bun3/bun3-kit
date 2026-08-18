@@ -263,4 +263,130 @@ public sealed class EffectSpecJsonTests
             Is.EqualTo(codeKit.Defender.Attributes.GetCurrent(EffectTestKit.Attack)));
         Assert.That(jsonKit.Defender.ActiveEffectCount, Is.EqualTo(codeKit.Defender.ActiveEffectCount));
     }
+
+    // ---- 레벨 테이블 저작 표기(②③④) 왕복·오류 ----
+
+    [Test]
+    public void PerLevelValues_form_round_trips()
+    {
+        const string json = """
+        { "schemaVersion": 1, "specs": [ {
+          "name": "x", "maxLevel": 3, "duration": { "type": "Instant" },
+          "modifiers": [ { "attribute": "Attack", "op": "Add",
+                           "magnitude": { "perLevelValues": ["10", "25", "70"] } } ],
+          "executions": [], "applicationConditions": [], "ongoingConditions": [], "grantedTags": [],
+          "assetTags": [], "immunityTags": [], "chains": [] } ] }
+        """;
+        var spec = Load(json)[0];
+        Assert.That(spec.MaxLevel, Is.EqualTo(3));
+        var magnitude = spec.Modifiers[0].Magnitude;
+        Assert.That(magnitude.PerLevelValues, Is.EqualTo(new List<BigNum> { 10, 25, 70 }));
+        Assert.That(magnitude.Tail, Is.EqualTo(LevelTail.Clamp));
+        Assert.That(magnitude.ExtrapolateIncrement, Is.EqualTo(BigNum.Zero));
+    }
+
+    [Test]
+    public void Formula_form_round_trips_with_tail_and_increment()
+    {
+        const string json = """
+        { "schemaVersion": 1, "specs": [ {
+          "name": "x", "maxLevel": 5, "duration": { "type": "Instant" },
+          "modifiers": [ { "attribute": "Attack", "op": "Add",
+                           "magnitude": { "formula": "x*x", "tail": "Extrapolate", "extrapolateIncrement": "9" } } ],
+          "executions": [], "applicationConditions": [], "ongoingConditions": [], "grantedTags": [],
+          "assetTags": [], "immunityTags": [], "chains": [] } ] }
+        """;
+        var spec = Load(json)[0];
+        var magnitude = spec.Modifiers[0].Magnitude;
+        Assert.That(magnitude.Formula, Is.EqualTo("x*x"));
+        Assert.That(magnitude.Tail, Is.EqualTo(LevelTail.Extrapolate));
+        Assert.That(magnitude.ExtrapolateIncrement, Is.EqualTo((BigNum)9));
+    }
+
+    [Test]
+    public void CurveKeys_form_round_trips()
+    {
+        const string json = """
+        { "schemaVersion": 1, "specs": [ {
+          "name": "x", "maxLevel": 50, "duration": { "type": "Instant" },
+          "modifiers": [ { "attribute": "Attack", "op": "Add",
+                           "magnitude": { "curveKeys": [
+                             { "level": 1, "value": "10" }, { "level": 50, "value": "400" } ] } } ],
+          "executions": [], "applicationConditions": [], "ongoingConditions": [], "grantedTags": [],
+          "assetTags": [], "immunityTags": [], "chains": [] } ] }
+        """;
+        var spec = Load(json)[0];
+        var keys = spec.Modifiers[0].Magnitude.CurveKeys;
+        Assert.That(keys, Has.Count.EqualTo(2));
+        Assert.That(keys![0].Level, Is.EqualTo(1));
+        Assert.That(keys[0].Value, Is.EqualTo((BigNum)10));
+        Assert.That(keys[1].Level, Is.EqualTo(50));
+        Assert.That(keys[1].Value, Is.EqualTo((BigNum)400));
+    }
+
+    [Test]
+    public void Magnitude_with_both_base_and_formula_throws()
+    {
+        const string json = """
+        { "schemaVersion": 1, "specs": [ {
+          "name": "x", "maxLevel": 3, "duration": { "type": "Instant" },
+          "modifiers": [ { "attribute": "Attack", "op": "Add",
+                           "magnitude": { "base": { "constant": "1" }, "formula": "x" } } ],
+          "executions": [], "applicationConditions": [], "ongoingConditions": [], "grantedTags": [],
+          "assetTags": [], "immunityTags": [], "chains": [] } ] }
+        """;
+        Assert.Throws<TagCatalogException>(() => Load(json));
+    }
+
+    // 코드로 구축한 formula 스펙과 JSON에서 로드한 동일 스펙이 같은 결과를 낸다(§15.1 표기 ③ 동등성).
+    [Test]
+    public void Code_built_and_json_loaded_formula_spec_produce_identical_outcome()
+    {
+        const string json = """
+        { "schemaVersion": 1, "specs": [ {
+          "name": "surge", "maxLevel": 5,
+          "duration": { "type": "Duration", "ticks": 100, "periodTicks": 0 },
+          "modifiers": [ { "attribute": "Attack", "op": "Add", "magnitude": { "formula": "x*x" } } ],
+          "executions": [], "applicationConditions": [], "ongoingConditions": [], "grantedTags": [],
+          "assetTags": [], "immunityTags": [], "chains": [] } ] }
+        """;
+
+        var codeSpec = EffectTestKit.MinimalDuration("surge", ticks: 100);
+        codeSpec.MaxLevel = 5;
+        codeSpec.Modifiers.Add(new ModifierDef
+        {
+            AttributeId = EffectTestKit.Attack, Op = AttributeModifierOp.Add,
+            Magnitude = new MagnitudeDef { Formula = "x*x" },
+        });
+
+        var codeKit = EffectTestKit.Create();
+        codeKit.AddSpec(codeSpec);
+        var codePipeline = codeKit.BuildPipeline();
+        codeKit.Defender.Attributes.SetBase(EffectTestKit.Attack, 0);
+        codePipeline.EnqueueApply(codeKit.SpecId("surge"), codeKit.Attacker.Id, codeKit.Defender.Id, level: 4);
+        codePipeline.Tick();
+
+        var jsonKit = EffectTestKit.Create();
+        foreach (var spec in Load(json)) jsonKit.AddSpec(spec);
+        var jsonPipeline = jsonKit.BuildPipeline();
+        jsonKit.Defender.Attributes.SetBase(EffectTestKit.Attack, 0);
+        jsonPipeline.EnqueueApply(jsonKit.SpecId("surge"), jsonKit.Attacker.Id, jsonKit.Defender.Id, level: 4);
+        jsonPipeline.Tick();
+
+        Assert.That(jsonKit.Defender.Attributes.GetCurrent(EffectTestKit.Attack),
+            Is.EqualTo(codeKit.Defender.Attributes.GetCurrent(EffectTestKit.Attack)));
+        Assert.That(jsonKit.Defender.Attributes.GetCurrent(EffectTestKit.Attack), Is.EqualTo((BigNum)16)); // 4*4
+    }
+
+    [Test]
+    public void MaxLevel_missing_at_root_defaults_to_zero()
+    {
+        const string json = """
+        { "schemaVersion": 1, "specs": [ {
+          "name": "x", "duration": { "type": "Instant" },
+          "modifiers": [], "executions": [], "applicationConditions": [], "ongoingConditions": [],
+          "grantedTags": [], "assetTags": [], "immunityTags": [], "chains": [] } ] }
+        """;
+        Assert.That(Load(json)[0].MaxLevel, Is.EqualTo(0));
+    }
 }

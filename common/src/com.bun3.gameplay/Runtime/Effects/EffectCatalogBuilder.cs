@@ -50,7 +50,7 @@ namespace Bun3.Gameplay.Effects
             var compiled = new CompiledEffectSpec[_specs.Count];
             for (var i = 0; i < _specs.Count; i++)
             {
-                compiled[i] = CompileSpec(_specs[i], nameToId, tags, seams, attributes);
+                compiled[i] = CompileSpec(_specs[i], _specs, nameToId, tags, seams, attributes);
             }
 
             var warnings = DetectChainCycles(compiled);
@@ -58,7 +58,7 @@ namespace Bun3.Gameplay.Effects
         }
 
         private static CompiledEffectSpec CompileSpec(
-            EffectSpec spec, Dictionary<string, int> nameToId,
+            EffectSpec spec, List<EffectSpec> allSpecs, Dictionary<string, int> nameToId,
             TagCatalog tags, SeamRegistry seams, AttributeRegistry attributes)
         {
             ValidateDurationTypeFields(spec);
@@ -80,8 +80,10 @@ namespace Bun3.Gameplay.Effects
                         $"효과 '{spec.Name}': 미등록 속성 {m.AttributeId}을(를) 참조합니다.");
                 }
 
-                var (magBase, perLevel, calc) = ResolveMagnitude(m.Magnitude, spec.Name, tags, seams, attributes);
-                modifiers[i] = new CompiledModifier(m.AttributeId, m.Op, magBase, perLevel, calc, m.ScaleWithStack);
+                var (magBase, perLevel, calc, byLevel, tail, increment) =
+                    ResolveMagnitude(m.Magnitude, spec, tags, seams, attributes);
+                modifiers[i] = new CompiledModifier(
+                    m.AttributeId, m.Op, magBase, perLevel, calc, byLevel, tail, increment, m.ScaleWithStack);
             }
 
             var executions = new CompiledExecution[spec.Executions.Count];
@@ -107,7 +109,7 @@ namespace Bun3.Gameplay.Effects
             var chains = new CompiledChain[spec.Chains.Count];
             for (var i = 0; i < spec.Chains.Count; i++)
             {
-                chains[i] = ResolveChain(spec.Chains[i], spec.Name, nameToId, tags, seams, attributes);
+                chains[i] = ResolveChain(spec.Chains[i], spec, allSpecs, nameToId, tags, seams, attributes);
             }
 
             var overflowEffectId = -1;
@@ -238,38 +240,142 @@ namespace Bun3.Gameplay.Effects
             return result;
         }
 
-        // 규칙 6·9: MagnitudeDef의 CalcTag XOR Base, PerLevel은 Base 있을 때만.
-        // 규칙 7: Base/PerLevel의 속성 참조 검증.
-        private static (Operand? Base, Operand? PerLevel, IMagnitudeCalc? Calc) ResolveMagnitude(
-            MagnitudeDef def, string specName, TagCatalog tags, SeamRegistry seams, AttributeRegistry attributes)
+        // 규칙 6·9: MagnitudeDef 표기(Base(+PerLevel) | PerLevelValues | Formula | CurveKeys | CalcTag) 중
+        // 정확히 하나. 레벨 테이블 표기(②③④)는 spec.MaxLevel >= 1 필수 — 스펙 §15.1.
+        private static (
+            Operand? Base, Operand? PerLevel, IMagnitudeCalc? Calc,
+            BigNum[]? ByLevel, LevelTail Tail, BigNum Increment) ResolveMagnitude(
+            MagnitudeDef def, EffectSpec spec, TagCatalog tags, SeamRegistry seams, AttributeRegistry attributes)
         {
             var hasCalc = !string.IsNullOrEmpty(def.CalcTag);
             var hasBase = def.Base.HasValue;
-            if (hasCalc == hasBase)
+            var hasPerLevelValues = def.PerLevelValues != null;
+            var hasFormula = !string.IsNullOrEmpty(def.Formula);
+            var hasCurveKeys = def.CurveKeys != null;
+            var formCount = (hasCalc ? 1 : 0) + (hasBase ? 1 : 0) + (hasPerLevelValues ? 1 : 0)
+                             + (hasFormula ? 1 : 0) + (hasCurveKeys ? 1 : 0);
+            if (formCount != 1)
             {
                 throw new InvalidOperationException(
-                    $"효과 '{specName}': MagnitudeDef는 CalcTag 또는 Base 중 하나만 가져야 합니다.");
+                    $"효과 '{spec.Name}': MagnitudeDef는 Base(+PerLevel)·PerLevelValues·Formula·CurveKeys·"
+                    + "CalcTag 중 정확히 하나만 가져야 합니다.");
             }
 
             if (!hasBase && def.PerLevel.HasValue)
             {
                 throw new InvalidOperationException(
-                    $"효과 '{specName}': PerLevel은 Base가 있을 때만 사용할 수 있습니다.");
+                    $"효과 '{spec.Name}': PerLevel은 Base가 있을 때만 사용할 수 있습니다.");
             }
 
             if (hasCalc)
             {
-                var calc = ResolveMagnitudeCalc(def.CalcTag!, specName, tags, seams);
-                return (null, null, calc);
+                var calc = ResolveMagnitudeCalc(def.CalcTag!, spec.Name, tags, seams);
+                return (null, null, calc, null, LevelTail.Clamp, BigNum.Zero);
             }
 
-            ValidateOperandAttribute(def.Base!.Value, specName, attributes);
-            if (def.PerLevel.HasValue)
+            if (hasBase)
             {
-                ValidateOperandAttribute(def.PerLevel.Value, specName, attributes);
+                ValidateOperandAttribute(def.Base!.Value, spec.Name, attributes);
+                if (def.PerLevel.HasValue)
+                {
+                    ValidateOperandAttribute(def.PerLevel.Value, spec.Name, attributes);
+                }
+
+                return (def.Base, def.PerLevel, null, null, LevelTail.Clamp, BigNum.Zero);
             }
 
-            return (def.Base, def.PerLevel, null);
+            if (spec.MaxLevel < 1)
+            {
+                throw new InvalidOperationException(
+                    $"효과 '{spec.Name}': PerLevelValues/Formula/CurveKeys는 MaxLevel >= 1 선언이 필요합니다.");
+            }
+
+            var byLevel = hasPerLevelValues
+                ? CompilePerLevelValues(def.PerLevelValues!, spec)
+                : hasFormula
+                    ? CompileFormula(def.Formula!, spec)
+                    : CompileCurveKeys(def.CurveKeys!, spec);
+
+            var tail = def.Tail;
+            var increment = def.ExtrapolateIncrement;
+            if (tail == LevelTail.Extrapolate && increment.IsZero && byLevel.Length > 1)
+            {
+                increment = byLevel[byLevel.Length - 1] - byLevel[byLevel.Length - 2];
+            }
+
+            return (null, null, null, byLevel, tail, increment);
+        }
+
+        // 표기 ②: 명시 배열 — 길이가 곧 MaxLevel과 일치해야 한다.
+        private static BigNum[] CompilePerLevelValues(List<BigNum> values, EffectSpec spec)
+        {
+            if (values.Count != spec.MaxLevel)
+            {
+                throw new InvalidOperationException(
+                    $"효과 '{spec.Name}': PerLevelValues 길이({values.Count})가 MaxLevel({spec.MaxLevel})과 일치해야 합니다.");
+            }
+
+            return values.ToArray();
+        }
+
+        // 표기 ③: 결정론 수식 — 레벨 1..MaxLevel을 각각 x에 대입해 저작/Build 시점에 사전 평가한다.
+        private static BigNum[] CompileFormula(string formula, EffectSpec spec)
+        {
+            if (!BigNumFormula.TryValidate(formula, out var validationError))
+            {
+                throw new InvalidOperationException($"효과 '{spec.Name}': Formula가 유효하지 않습니다 — {validationError}");
+            }
+
+            var byLevel = new BigNum[spec.MaxLevel];
+            for (var level = 1; level <= spec.MaxLevel; level++)
+            {
+                if (!BigNumFormula.TryEvaluate(formula, level, out byLevel[level - 1]))
+                {
+                    throw new InvalidOperationException(
+                        $"효과 '{spec.Name}': Formula 평가에 실패했습니다(레벨 {level}): {formula}");
+                }
+            }
+
+            return byLevel;
+        }
+
+        // 표기 ④: 희소 키 + 선형 보간 — 레벨 오름차순·중복 금지·첫 키 레벨 1. 키 사이는 선형 보간,
+        // 마지막 키 뒤는 마지막 값(그 이후 Tail 정책은 런타임 평가 헬퍼가 담당).
+        private static BigNum[] CompileCurveKeys(List<LevelKey> keys, EffectSpec spec)
+        {
+            if (keys.Count == 0 || keys[0].Level != 1)
+            {
+                throw new InvalidOperationException($"효과 '{spec.Name}': CurveKeys의 첫 키는 레벨 1이어야 합니다.");
+            }
+
+            for (var i = 1; i < keys.Count; i++)
+            {
+                if (keys[i].Level <= keys[i - 1].Level)
+                {
+                    throw new InvalidOperationException(
+                        $"효과 '{spec.Name}': CurveKeys는 레벨 오름차순이어야 하며 중복을 허용하지 않습니다.");
+                }
+            }
+
+            var byLevel = new BigNum[spec.MaxLevel];
+            var keyIndex = 0;
+            for (var level = 1; level <= spec.MaxLevel; level++)
+            {
+                while (keyIndex + 1 < keys.Count && keys[keyIndex + 1].Level <= level) keyIndex++;
+
+                var k0 = keys[keyIndex];
+                if (keyIndex + 1 >= keys.Count)
+                {
+                    byLevel[level - 1] = k0.Value;   // 마지막 키 뒤(또는 정확히 마지막 키)
+                    continue;
+                }
+
+                var k1 = keys[keyIndex + 1];
+                byLevel[level - 1] = k0.Value
+                                      + (k1.Value - k0.Value) * (level - k0.Level) / (k1.Level - k0.Level);
+            }
+
+            return byLevel;
         }
 
         private static IMagnitudeCalc ResolveMagnitudeCalc(
@@ -343,24 +449,36 @@ namespace Bun3.Gameplay.Effects
             return result;
         }
 
-        // 규칙 6·8: SelectorTag(있으면)와 EffectName 해석.
+        // 규칙 6·8: SelectorTag(있으면)와 EffectName 해석. LevelRule.Fixed는 대상 스펙에 MaxLevel이
+        // 선언된 경우 FixedLevel이 그 MaxLevel을 넘지 않는지도 검증한다.
         private static CompiledChain ResolveChain(
-            ChainEdgeDef edge, string specName, Dictionary<string, int> nameToId,
+            ChainEdgeDef edge, EffectSpec ownerSpec, List<EffectSpec> allSpecs, Dictionary<string, int> nameToId,
             TagCatalog tags, SeamRegistry seams, AttributeRegistry attributes)
         {
             if (string.IsNullOrEmpty(edge.EffectName) || !nameToId.TryGetValue(edge.EffectName, out var effectId))
             {
                 throw new InvalidOperationException(
-                    $"효과 '{specName}': 체인 대상 효과를 해석할 수 없습니다: {edge.EffectName}");
+                    $"효과 '{ownerSpec.Name}': 체인 대상 효과를 해석할 수 없습니다: {edge.EffectName}");
+            }
+
+            if (edge.LevelRule == ChainLevelRule.Fixed)
+            {
+                var targetMaxLevel = allSpecs[effectId].MaxLevel;
+                if (targetMaxLevel > 0 && edge.FixedLevel > targetMaxLevel)
+                {
+                    throw new InvalidOperationException(
+                        $"효과 '{ownerSpec.Name}': 체인 대상 '{edge.EffectName}'의 FixedLevel({edge.FixedLevel})이 "
+                        + $"MaxLevel({targetMaxLevel})을 초과합니다.");
+                }
             }
 
             ITargetSelector? selector = null;
             if (!string.IsNullOrEmpty(edge.SelectorTag))
             {
-                selector = ResolveTargetSelector(edge.SelectorTag!, specName, tags, seams);
+                selector = ResolveTargetSelector(edge.SelectorTag!, ownerSpec.Name, tags, seams);
             }
 
-            var conditions = ResolveConditions(edge.Conditions, specName, attributes, allowSourceAttribute: true);
+            var conditions = ResolveConditions(edge.Conditions, ownerSpec.Name, attributes, allowSourceAttribute: true);
             return new CompiledChain(
                 edge.Trigger, effectId, selector, edge.SelectorParams.ToArray(),
                 conditions, edge.LevelRule, edge.FixedLevel);

@@ -57,13 +57,17 @@ namespace Bun3.Gameplay.Effects
     {
         internal CompiledModifier(
             ushort attributeId, AttributeModifierOp op,
-            Operand? @base, Operand? perLevel, IMagnitudeCalc? calc, bool scaleWithStack)
+            Operand? @base, Operand? perLevel, IMagnitudeCalc? calc,
+            BigNum[]? byLevel, LevelTail tail, BigNum increment, bool scaleWithStack)
         {
             AttributeId = attributeId;
             Op = op;
             Base = @base;
             PerLevel = perLevel;
             Calc = calc;
+            ByLevel = byLevel;
+            Tail = tail;
+            Increment = increment;
             ScaleWithStack = scaleWithStack;
         }
 
@@ -73,14 +77,23 @@ namespace Bun3.Gameplay.Effects
         /// <summary>수정자 연산 종류입니다.</summary>
         internal AttributeModifierOp Op { get; }
 
-        /// <summary>레벨 무관 기본 크기이며 <see cref="Calc"/>가 있으면 null입니다.</summary>
+        /// <summary>레벨 무관 기본 크기이며 <see cref="Calc"/>·<see cref="ByLevel"/>이 있으면 null입니다.</summary>
         internal Operand? Base { get; }
 
         /// <summary>레벨당 추가 크기입니다.</summary>
         internal Operand? PerLevel { get; }
 
-        /// <summary>해석된 크기 계산 계약이며 상수/속성 기반 크기면 null입니다.</summary>
+        /// <summary>해석된 크기 계산 계약이며 상수/속성/레벨 테이블 기반 크기면 null입니다.</summary>
         internal IMagnitudeCalc? Calc { get; }
+
+        /// <summary>레벨 테이블(표기 ②③④가 컴파일된 밀집 배열)이며, 없으면(표기 ①·Calc) null입니다.</summary>
+        internal BigNum[]? ByLevel { get; }
+
+        /// <summary><see cref="ByLevel"/>의 길이(MaxLevel)를 넘는 레벨을 다루는 방식입니다.</summary>
+        internal LevelTail Tail { get; }
+
+        /// <summary>Tail이 Extrapolate일 때 레벨당 증분입니다.</summary>
+        internal BigNum Increment { get; }
 
         /// <summary>스택 수에 비례해 크기를 배율할지 여부입니다.</summary>
         internal bool ScaleWithStack { get; }

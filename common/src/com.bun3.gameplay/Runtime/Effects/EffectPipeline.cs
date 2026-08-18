@@ -304,6 +304,11 @@ namespace Bun3.Gameplay.Effects
                 return modifier.Calc.Calculate(in ctx);
             }
 
+            if (modifier.ByLevel != null)
+            {
+                return EvaluateByLevel(modifier.ByLevel, modifier.Tail, modifier.Increment, level);
+            }
+
             var value = EvaluateOperand(modifier.Base!.Value, target, source, hasSource);
             if (modifier.PerLevel.HasValue)
             {
@@ -311,6 +316,21 @@ namespace Bun3.Gameplay.Effects
             }
 
             return value;
+        }
+
+        // 레벨 테이블(표기 ②③④가 컴파일된 밀집 배열) 조회 — 0 이하 레벨은 1로, MaxLevel 이내는 그대로,
+        // 초과분은 Tail 정책(Clamp=마지막 값 유지, Extrapolate=마지막 값 + 증분 × 초과 레벨 수)을 따른다.
+        private static BigNum EvaluateByLevel(BigNum[] byLevel, LevelTail tail, BigNum increment, int level)
+        {
+            var clampedLevel = level <= 0 ? 1 : level;
+            var maxLevel = byLevel.Length;
+            if (clampedLevel <= maxLevel)
+            {
+                return byLevel[clampedLevel - 1];
+            }
+
+            var last = byLevel[maxLevel - 1];
+            return tail == LevelTail.Clamp ? last : last + increment * (clampedLevel - maxLevel);
         }
 
         private void ApplyInstant(

@@ -109,11 +109,12 @@ namespace Bun3.Gameplay.Effects.Catalog
         private static EffectSpec ReadSpec(JObject spec, IReadOnlyDictionary<string, ushort> attributeNames)
         {
             RequireAllowedProperties(
-                spec, "name", "duration", "stack", "modifiers", "executions",
+                spec, "name", "maxLevel", "duration", "stack", "modifiers", "executions",
                 "applicationConditions", "ongoingConditions", "grantedTags", "assetTags",
                 "immunityTags", "chains");
 
             var name = RequireString(spec, "name");
+            var maxLevel = ReadOptionalInt(spec, "maxLevel", 0);
             var (durationType, durationTicks, periodTicks) = ReadDuration(RequireObject(spec, "duration"));
             var stack = spec.Property("stack", StringComparison.Ordinal) is { } stackProperty
                 ? ReadStack(AsObject(stackProperty.Value, "stack은 객체여야 합니다."))
@@ -158,6 +159,7 @@ namespace Bun3.Gameplay.Effects.Catalog
             return new EffectSpec
             {
                 Name = name,
+                MaxLevel = maxLevel,
                 DurationType = durationType,
                 DurationTicks = durationTicks,
                 PeriodTicks = periodTicks,
@@ -263,7 +265,56 @@ namespace Bun3.Gameplay.Effects.Catalog
                 return new MagnitudeDef { Base = baseOperand, PerLevel = perLevel };
             }
 
+            if (magnitude.Property("perLevelValues", StringComparison.Ordinal) != null)
+            {
+                RequireAllowedProperties(magnitude, "perLevelValues", "tail", "extrapolateIncrement");
+                var values = new List<BigNum>();
+                foreach (var item in RequireArray(magnitude, "perLevelValues"))
+                {
+                    values.Add(RequireBigNumToken(item));
+                }
+
+                var (tail, increment) = ReadLevelTailOptions(magnitude);
+                return new MagnitudeDef { PerLevelValues = values, Tail = tail, ExtrapolateIncrement = increment };
+            }
+
+            if (magnitude.Property("formula", StringComparison.Ordinal) != null)
+            {
+                RequireAllowedProperties(magnitude, "formula", "tail", "extrapolateIncrement");
+                var formula = RequireString(magnitude, "formula");
+                var (tail, increment) = ReadLevelTailOptions(magnitude);
+                return new MagnitudeDef { Formula = formula, Tail = tail, ExtrapolateIncrement = increment };
+            }
+
+            if (magnitude.Property("curveKeys", StringComparison.Ordinal) != null)
+            {
+                RequireAllowedProperties(magnitude, "curveKeys", "tail", "extrapolateIncrement");
+                var keys = new List<LevelKey>();
+                foreach (var item in RequireArray(magnitude, "curveKeys"))
+                {
+                    var keyObject = AsObject(item, "curveKeys의 항목은 객체여야 합니다.");
+                    RequireAllowedProperties(keyObject, "level", "value");
+                    keys.Add(new LevelKey
+                    {
+                        Level = RequireInt(keyObject, "level"), Value = RequireBigNum(keyObject, "value"),
+                    });
+                }
+
+                var (curveTail, curveIncrement) = ReadLevelTailOptions(magnitude);
+                return new MagnitudeDef { CurveKeys = keys, Tail = curveTail, ExtrapolateIncrement = curveIncrement };
+            }
+
             return new MagnitudeDef { Base = ReadOperand(magnitude, attributeNames) };
+        }
+
+        // "tail"·"extrapolateIncrement"는 레벨 테이블 표기(②③④) 공통 선택 필드다.
+        private static (LevelTail Tail, BigNum Increment) ReadLevelTailOptions(JObject magnitude)
+        {
+            var tail = magnitude.Property("tail", StringComparison.Ordinal) != null
+                ? RequireEnum<LevelTail>(magnitude, "tail")
+                : LevelTail.Clamp;
+            var increment = ReadOptionalBigNum(magnitude, "extrapolateIncrement", BigNum.Zero);
+            return (tail, increment);
         }
 
         private static ExecutionDef ReadExecution(JObject execution, IReadOnlyDictionary<string, ushort> attributeNames)
