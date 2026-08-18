@@ -29,6 +29,7 @@ internal sealed class EffectTestKit
       "schemaVersion": 1,
       "tags": [
         { "name": "calc.magnitude.x" },
+        { "name": "calc.magnitude.y" },
         { "name": "calc.execution.dmg" },
         { "name": "selector.team" },
         { "name": "selector.everyone" },
@@ -145,6 +146,10 @@ internal sealed class EffectTestKit
     /// <summary>효과 실행 계산을 태그에 등록합니다. BuildPipeline 전에 호출해야 합니다.</summary>
     public void RegisterExecutionCalc(string calcTag, IExecutionCalc calc) =>
         _seamRegistryBuilder.RegisterExecutionCalc(_tagCatalog.GetRequired(calcTag), calc);
+
+    /// <summary>크기 계산을 태그에 등록합니다. BuildPipeline 전에 호출해야 합니다.</summary>
+    public void RegisterMagnitudeCalc(string calcTag, IMagnitudeCalc calc) =>
+        _seamRegistryBuilder.RegisterMagnitudeCalc(_tagCatalog.GetRequired(calcTag), calc);
 
     /// <summary>대상 선택 계약을 태그에 등록합니다. <see cref="AllTargetsSelector"/>는 등록 시점의
     /// 대상 목록에 바인딩됩니다. BuildPipeline 전에 호출해야 합니다.</summary>

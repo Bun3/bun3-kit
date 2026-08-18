@@ -3,6 +3,7 @@ using Bun3.Gameplay.Attributes;
 using Bun3.Gameplay.Effects;
 using Bun3.Gameplay.Numerics;
 using Bun3.Gameplay.Seams;
+using Bun3.Gameplay.Tags;
 using NUnit.Framework;
 
 namespace Bun3.Gameplay.Tests;
@@ -123,5 +124,89 @@ public sealed class EffectInstantTests
 
         // 공격력 100 × -1.2 = -120 → Hp 150 - 120 = 30.
         Assert.That(kit.Defender.Attributes.GetBase(EffectTestKit.Hp), Is.EqualTo((BigNum)30));
+    }
+
+    [Test]
+    public void Magnitude_calc_reads_target_and_source_tags_via_seam_context()
+    {
+        var kit = EffectTestKit.Create();
+        var frozenTag = kit.Tag("state.frozen");
+        var hastedTag = kit.Tag("state.hasted");
+        kit.RegisterMagnitudeCalc("calc.magnitude.x", new TagGatedMagnitudeCalc(frozenTag, -10, checkSource: false));
+        kit.RegisterMagnitudeCalc("calc.magnitude.y", new TagGatedMagnitudeCalc(hastedTag, -10, checkSource: true));
+
+        var frost = EffectTestKit.MinimalInfinite("frost");
+        frost.GrantedTags.Add("state.frozen");
+        kit.AddSpec(frost);
+
+        var haste = EffectTestKit.MinimalInfinite("haste");
+        haste.GrantedTags.Add("state.hasted");
+        kit.AddSpec(haste);
+
+        var hitTarget = EffectTestKit.MinimalInstant("hitTarget");
+        hitTarget.Modifiers.Add(new ModifierDef
+        {
+            AttributeId = EffectTestKit.Hp, Op = AttributeModifierOp.Add,
+            Magnitude = new MagnitudeDef { CalcTag = "calc.magnitude.x" },
+        });
+        kit.AddSpec(hitTarget);
+
+        var hitSource = EffectTestKit.MinimalInstant("hitSource");
+        hitSource.Modifiers.Add(new ModifierDef
+        {
+            AttributeId = EffectTestKit.Hp, Op = AttributeModifierOp.Add,
+            Magnitude = new MagnitudeDef { CalcTag = "calc.magnitude.y" },
+        });
+        kit.AddSpec(hitSource);
+
+        var pipeline = kit.BuildPipeline();
+        kit.Defender.Attributes.SetBase(EffectTestKit.MaxHp, 200);
+        kit.Defender.Attributes.SetBase(EffectTestKit.Hp, 200);
+
+        // TargetHasTag: 대상에 frozen 없음 → 배율 없이 -10.
+        pipeline.EnqueueApply(kit.SpecId("hitTarget"), kit.Attacker.Id, kit.Defender.Id);
+        pipeline.Tick();
+        Assert.That(kit.Defender.Attributes.GetBase(EffectTestKit.Hp), Is.EqualTo((BigNum)190));
+
+        // 대상에 frozen 부여 후 → 2배 -20.
+        pipeline.EnqueueApply(kit.SpecId("frost"), kit.Attacker.Id, kit.Defender.Id);
+        pipeline.Tick();
+        pipeline.EnqueueApply(kit.SpecId("hitTarget"), kit.Attacker.Id, kit.Defender.Id);
+        pipeline.Tick();
+        Assert.That(kit.Defender.Attributes.GetBase(EffectTestKit.Hp), Is.EqualTo((BigNum)170));
+
+        // SourceHasTag: 시전자(Attacker)에 hasted 없음 → 배율 없이 -10.
+        pipeline.EnqueueApply(kit.SpecId("hitSource"), kit.Attacker.Id, kit.Defender.Id);
+        pipeline.Tick();
+        Assert.That(kit.Defender.Attributes.GetBase(EffectTestKit.Hp), Is.EqualTo((BigNum)160));
+
+        // 시전자에 hasted 부여 후 → 2배 -20.
+        pipeline.EnqueueApply(kit.SpecId("haste"), kit.Attacker.Id, kit.Attacker.Id);
+        pipeline.Tick();
+        pipeline.EnqueueApply(kit.SpecId("hitSource"), kit.Attacker.Id, kit.Defender.Id);
+        pipeline.Tick();
+        Assert.That(kit.Defender.Attributes.GetBase(EffectTestKit.Hp), Is.EqualTo((BigNum)140));
+    }
+
+    /// <summary>MagnitudeContext.TargetHasTag/SourceHasTag 회귀 테스트 전용 계산 — 지정한 쪽(대상 또는
+    /// 시전자)이 태그를 보유하면 크기를 2배로 반환합니다.</summary>
+    private sealed class TagGatedMagnitudeCalc : IMagnitudeCalc
+    {
+        private readonly GameplayTag _tag;
+        private readonly BigNum _amount;
+        private readonly bool _checkSource;
+
+        public TagGatedMagnitudeCalc(GameplayTag tag, BigNum amount, bool checkSource)
+        {
+            _tag = tag;
+            _amount = amount;
+            _checkSource = checkSource;
+        }
+
+        public BigNum Calculate(in MagnitudeContext ctx)
+        {
+            var hasTag = _checkSource ? ctx.SourceHasTag(_tag) : ctx.TargetHasTag(_tag);
+            return hasTag ? _amount * 2 : _amount;
+        }
     }
 }
