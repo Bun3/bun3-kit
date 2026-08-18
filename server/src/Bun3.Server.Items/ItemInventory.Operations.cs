@@ -77,6 +77,70 @@ namespace Bun3.Server.Items
             return CommitOps(_applyOps, out _, created);
         }
 
+        /// <summary>
+        /// 가능한 만큼만 지급한다(클램프) — 상한 도달은 실패가 아니라 부분 지급이라는
+        /// 레거시 의미론(idlez 초과분 버림·growninja 우편 폴백). <paramref name="granted"/>가
+        /// 실제 지급량(0 포함 — 0이면 변경·통지 없음)이며, 잔여분 처리(우편 등)는 게임 몫.
+        /// 오류는 UnknownItem·InvalidAmount(0 이하·비스택형 비정수)뿐이다.
+        /// 스택형 BigNum 손실 의미론상 보고 지급량과 잔량 변화가 다를 수 있다(거대 스택에 미소량 흡수).
+        /// </summary>
+        public InventoryError TryAddUpTo(
+            ItemId item,
+            BigNum amount,
+            out BigNum granted,
+            List<ItemInstance<TState>>? created = null)
+        {
+            granted = BigNum.Zero;
+            if (!_catalog.Contains(item))
+            {
+                return InventoryError.UnknownItem;
+            }
+
+            if (amount.Sign <= 0)
+            {
+                return InventoryError.InvalidAmount;
+            }
+
+            var clamp = amount;
+            if (_catalog.IsUnstackable(item))
+            {
+                if (amount.Exponent < 0)
+                {
+                    return InventoryError.InvalidAmount;
+                }
+
+                if (clamp.CompareTo(MaxInstancesPerOperationQuantity) > 0)
+                {
+                    clamp = MaxInstancesPerOperationQuantity;
+                }
+            }
+
+            var maxStack = _catalog.GetMaxStack(item);
+            if (maxStack != long.MaxValue)
+            {
+                var room = (BigNum)maxStack - GetQuantity(item);
+                if (room.Sign <= 0)
+                {
+                    return InventoryError.None;   // 가득 — 0 지급 성공
+                }
+
+                if (clamp.CompareTo(room) > 0)
+                {
+                    clamp = room;
+                }
+            }
+
+            _applyOps.Clear();
+            _applyOps.Add(new TxOp(TxOpKind.Add, item, 0, clamp));
+            var error = CommitOps(_applyOps, out _, created);
+            if (error == InventoryError.None)
+            {
+                granted = clamp;
+            }
+
+            return error;
+        }
+
         /// <summary>수량을 소모한다. amount는 양수여야 한다. 비스택형은 잠금 아닌 인스턴스
         /// amount개가 제거된다(순서 미보장 — 특정 인스턴스는 <see cref="TryRemoveByInstance"/>).</summary>
         public InventoryError TryRemove(ItemId item, BigNum amount)
@@ -165,6 +229,7 @@ namespace Bun3.Server.Items
             }
 
             // 적용 패스 — 실패 불가능 상태에서 순서대로 반영.
+            _appliedCount = 0;
             for (var i = 0; i < ops.Count; i++)
             {
                 ApplyOp(ops[i], _txResolved[i], created);
@@ -172,6 +237,11 @@ namespace Bun3.Server.Items
 
             _hasChanges = true;
             _onChanged?.Invoke();
+            if (_onApplied != null && _appliedCount > 0)
+            {
+                _onApplied(new ReadOnlySpan<ItemDelta>(_applied, 0, _appliedCount));
+            }
+
             return InventoryError.None;
         }
 
@@ -297,15 +367,18 @@ namespace Bun3.Server.Items
             {
                 case TxOpKind.Add:
                     ApplyGrant(op.Item, op.Amount, created);
+                    RecordApplied(op.Item, op.Amount);
                     return;
 
                 case TxOpKind.RemoveByItem:
                     ApplyConsume(op.Item, op.Amount);
+                    RecordApplied(op.Item, -op.Amount);
                     return;
 
                 default:
                 {
                     var target = _instances[op.InstanceId];
+                    var item = target.Item;
                     if (target.Quantity.CompareTo(resolved) == 0)
                     {
                         RemoveInstance(target);
@@ -316,9 +389,25 @@ namespace Bun3.Server.Items
                         MarkChangedNoNotify(target);
                     }
 
+                    RecordApplied(item, -resolved);
                     return;
                 }
             }
+        }
+
+        private void RecordApplied(ItemId item, BigNum delta)
+        {
+            if (_onApplied == null)
+            {
+                return;
+            }
+
+            if (_appliedCount == _applied.Length)
+            {
+                System.Array.Resize(ref _applied, _applied.Length == 0 ? 8 : _applied.Length * 2);
+            }
+
+            _applied[_appliedCount++] = new ItemDelta(item, delta);
         }
 
         private void ApplyGrant(ItemId item, BigNum amount, List<ItemInstance<TState>>? created)
@@ -449,7 +538,7 @@ namespace Bun3.Server.Items
         private ItemInstance<TState> CreateInstance(ItemId item, BigNum quantity)
         {
             var instance = new ItemInstance<TState>(
-                this, _instanceIdIssuer(), item, quantity, 0, _stateFactory(item))
+                this, _instanceIdIssuer(), item, quantity, 0, 0, _stateFactory(item))
             {
                 IsNew = true,
             };

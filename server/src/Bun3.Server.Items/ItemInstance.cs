@@ -14,14 +14,23 @@ namespace Bun3.Server.Items
     public sealed class ItemInstance<TState>
     {
         private uint _flags;
+        private long _expiresAtTicksUtc;
 
-        internal ItemInstance(ItemInventory<TState> owner, long instanceId, ItemId item, BigNum quantity, uint flags, TState state)
+        internal ItemInstance(
+            ItemInventory<TState> owner,
+            long instanceId,
+            ItemId item,
+            BigNum quantity,
+            uint flags,
+            long expiresAtTicksUtc,
+            TState state)
         {
             _owner = owner;
             InstanceId = instanceId;
             Item = item;
             Quantity = quantity;
             _flags = flags;
+            _expiresAtTicksUtc = expiresAtTicksUtc;
             State = state;
         }
 
@@ -49,6 +58,23 @@ namespace Bun3.Server.Items
                 if (_flags != value)
                 {
                     _flags = value;
+                    MarkChanged();
+                }
+            }
+        }
+
+        /// <summary>만료 시각(UTC ticks). 0 = 무기한. 연장 규칙(누적/갱신/최대)은 게임이
+        /// 이 값을 갱신하는 방식으로 정한다. 프레임워크는 시계를 모르므로 만료 판정·처리는
+        /// <see cref="ItemInventory{TState}.CollectExpired"/>에 게임이 현재 시각을 주입해
+        /// 수행한다(만료 ≠ 자동 삭제 — idlez 의미론). setter가 변경 추적에 자동 반영한다.</summary>
+        public long ExpiresAtTicksUtc
+        {
+            get => _expiresAtTicksUtc;
+            set
+            {
+                if (_expiresAtTicksUtc != value)
+                {
+                    _expiresAtTicksUtc = value;
                     MarkChanged();
                 }
             }

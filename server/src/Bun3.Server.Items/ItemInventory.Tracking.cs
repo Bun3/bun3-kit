@@ -15,7 +15,13 @@ namespace Bun3.Server.Items
         /// 않는다. 중복 id·스택형 정의의 두 번째 인스턴스는 <see cref="InventoryError.DuplicateInstance"/>,
         /// 비스택형에 수량 1 외는 <see cref="InventoryError.InvalidAmount"/>, maxStack 검사 수행.
         /// </summary>
-        public InventoryError TryLoadInstance(long instanceId, ItemId item, BigNum quantity, uint flags, TState state)
+        public InventoryError TryLoadInstance(
+            long instanceId,
+            ItemId item,
+            BigNum quantity,
+            uint flags,
+            TState state,
+            long expiresAtTicksUtc = 0)
         {
             if (!_catalog.Contains(item))
             {
@@ -60,7 +66,7 @@ namespace Bun3.Server.Items
                 _stackSingletons.Add(item, instanceId);
             }
 
-            _instances.Add(instanceId, new ItemInstance<TState>(this, instanceId, item, quantity, flags, state));
+            _instances.Add(instanceId, new ItemInstance<TState>(this, instanceId, item, quantity, flags, expiresAtTicksUtc, state));
             return InventoryError.None;
         }
 

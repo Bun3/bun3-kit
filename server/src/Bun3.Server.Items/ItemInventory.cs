@@ -40,7 +40,13 @@ namespace Bun3.Server.Items
         private readonly List<ItemId> _txNetIds = new List<ItemId>();
         private readonly List<BigNum> _txNetTotal = new List<BigNum>();
         private readonly List<BigNum> _txNetPool = new List<BigNum>();
+        private readonly List<ItemDelta> _rewardScratch = new List<ItemDelta>();
         private int _txToken;
+
+        // onApplied 통지용 재사용 버퍼 — 핸들러 미지정 시 기록 자체를 생략한다.
+        private readonly InventoryAppliedHandler? _onApplied;
+        private ItemDelta[] _applied = Array.Empty<ItemDelta>();
+        private int _appliedCount;
 
         /// <summary>인벤토리를 만든다.</summary>
         /// <param name="catalog">아이템 카탈로그.</param>
@@ -52,14 +58,18 @@ namespace Bun3.Server.Items
         /// 1회 호출 — 게임은 Player.MarkDirty를 넘겨 저장 주기와 맞물린다.</param>
         /// <param name="removeBlockingFlags">이 마스크에 걸리는 플래그의 인스턴스는 소모
         /// 후보에서 제외된다(예: 사용 중·유저 잠금). 0이면 잠금 없음.</param>
+        /// <param name="onApplied">성공한 커밋당 1회, 적용된 순 델타를 받는 통지 —
+        /// 업적/퀘스트/랭킹 카운팅용. 미지정 시 기록 비용 없음.</param>
         public ItemInventory(
             ItemCatalog catalog,
             Func<long> instanceIdIssuer,
             Func<ItemId, TState> stateFactory,
             int capacity = 0,
             Action? onChanged = null,
-            uint removeBlockingFlags = 0)
+            uint removeBlockingFlags = 0,
+            InventoryAppliedHandler? onApplied = null)
         {
+            _onApplied = onApplied;
             _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
             _instanceIdIssuer = instanceIdIssuer ?? throw new ArgumentNullException(nameof(instanceIdIssuer));
             _stateFactory = stateFactory ?? throw new ArgumentNullException(nameof(stateFactory));
@@ -107,6 +117,52 @@ namespace Bun3.Server.Items
 
             instance = null!;
             return false;
+        }
+
+        /// <summary>정의의 보유 인스턴스를 버퍼에 이어 담고 담은 수를 반환한다.</summary>
+        public int CollectInstances(ItemId item, List<ItemInstance<TState>> buffer)
+        {
+            if (buffer == null)
+            {
+                throw new ArgumentNullException(nameof(buffer));
+            }
+
+            var count = 0;
+            foreach (var entry in _instances)
+            {
+                if (entry.Value.Item == item)
+                {
+                    buffer.Add(entry.Value);
+                    count++;
+                }
+            }
+
+            return count;
+        }
+
+        /// <summary>만료된 인스턴스(<see cref="ItemInstance{TState}.ExpiresAtTicksUtc"/>가
+        /// 0이 아니고 <paramref name="nowTicksUtc"/> 이하)를 버퍼에 이어 담고 담은 수를
+        /// 반환한다. 수집만 한다 — 만료 처리(소모·후속 보상·멱등 마커)는 게임 몫이며,
+        /// 시간은 항상 게임이 주입한다(결정론·테스트 용이).</summary>
+        public int CollectExpired(long nowTicksUtc, List<ItemInstance<TState>> buffer)
+        {
+            if (buffer == null)
+            {
+                throw new ArgumentNullException(nameof(buffer));
+            }
+
+            var count = 0;
+            foreach (var entry in _instances)
+            {
+                var expiresAt = entry.Value.ExpiresAtTicksUtc;
+                if (expiresAt != 0 && expiresAt <= nowTicksUtc)
+                {
+                    buffer.Add(entry.Value);
+                    count++;
+                }
+            }
+
+            return count;
         }
 
         /// <summary>보유 인스턴스 열거 — foreach 무할당(struct 열거자).</summary>
