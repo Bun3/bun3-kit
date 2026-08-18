@@ -69,6 +69,23 @@ namespace Bun3.Unity.UI.Popups
             int layer = 0, PopupDuplicatePolicy duplicate = PopupDuplicatePolicy.Ignore) where TPopup : Popup
             => Stack.PushWithArgAsync<TPopup, TArg>(arg, popupName, layer, duplicate);
 
+        /// <summary>구성 체인 <c>Push&lt;TPopup&gt;(configure)</c> 위임.</summary>
+        public void Push<TPopup>(System.Action<TPopup> configure, string popupName = null, int layer = 0,
+            PopupDuplicatePolicy duplicate = PopupDuplicatePolicy.Ignore) where TPopup : Popup
+            => Stack.Push(configure, popupName, layer, duplicate);
+
+        /// <summary>구성 체인 <c>PushAsync&lt;TPopup&gt;(configure)</c> 위임.</summary>
+        public UniTask<TPopup> PushAsync<TPopup>(System.Action<TPopup> configure, string popupName = null,
+            int layer = 0, PopupDuplicatePolicy duplicate = PopupDuplicatePolicy.Ignore) where TPopup : Popup
+            => Stack.PushAsync(configure, popupName, layer, duplicate);
+
+        /// <summary>구성 체인 <c>PushForResultAsync&lt;TPopup, TResult&gt;(configure)</c> 위임.</summary>
+        public UniTask<TResult> PushForResultAsync<TPopup, TResult>(System.Action<TPopup> configure,
+            string popupName = null, int layer = 0,
+            PopupDuplicatePolicy duplicate = PopupDuplicatePolicy.Ignore,
+            TResult defaultResult = default) where TPopup : Popup<TResult>
+            => Stack.PushForResultAsync(configure, popupName, layer, duplicate, defaultResult);
+
         /// <summary>타입 키 <c>PushForResultAsync&lt;TPopup, TResult&gt;</c> 위임 — 팝업↔결과 타입 컴파일 검증.</summary>
         public UniTask<TResult> PushForResultAsync<TPopup, TResult>(string popupName = null, int layer = 0,
             PopupDuplicatePolicy duplicate = PopupDuplicatePolicy.Ignore, TResult defaultResult = default)

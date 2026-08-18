@@ -207,9 +207,22 @@ _stack.CloseAll(p => p.Layer == 0);
 await _stack.WaitUntilEmptyAsync();            // auto-landing/tutorial gate (legacy UISequence)
 _stack.Emptied += TryStartAutoLanding;
 
-// 9c. Message box (legacy Callback(int)): derive one MessageBoxPopup prefab, then:
-int picked = await _stack.ShowMessageBoxAsync<MyMessageBox>("Title", "Body", "Yes", "No", "Later");
-bool ok    = await _stack.ConfirmAsync<MyMessageBox>("Title", "Body", "OK", "Cancel"); // first button only
+// 9c. Universal alert (legacy Popup_Alert): keep fluent setters ON YOUR popup class —
+//     open-ended, any content can extend it with more setters — and pass the chain as a
+//     `configure` callback. It runs after the async load, before the open animation, so
+//     the legacy builder DX survives without synchronous instantiation.
+public sealed class AlertPopup : Popup<bool>
+{
+    public AlertPopup SetTitle(string t) { ...; return this; }
+    public AlertPopup SetDesc(string d)  { ...; return this; }
+    public AlertPopup SetItems(IEnumerable<AddItem> items) { ...; return this; } // game extension
+    void OnOk() { SetResult(true); Close(); }
+    // reset widgets to defaults in OnAttached() — legacy Initialize(), pool-reuse safe
+}
+bool ok = await _stack.PushForResultAsync<AlertPopup, bool>(
+    p => p.SetTitle("Title").SetDesc("Body").SetItems(rewards));
+// Focus re-applies the chain to the live instance (legacy GetOrShow().Set...);
+// Queue keeps the chain until the popup is actually shown.
 
 // 9d. Toasts (Bun3.Unity.UI.Toasts) — independent of the popup stack, one at a time:
 _toasts = new ToastQueue<string>(CreateToastViewAsync, defaultDuration: 2f, capacity: 10,

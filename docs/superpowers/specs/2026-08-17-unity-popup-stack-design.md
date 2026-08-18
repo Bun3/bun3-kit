@@ -296,6 +296,21 @@ Standards/Spec 병렬 리뷰에서 확인된 실버그 수정:
 불채택(조사 근거): DI 통합(델리게이트로 이미 개방), Sheet/씬 히스토리(팝업 밖),
 Timeline 전환 에셋(훅으로 충분), UI Toolkit 백엔드(uGUI 기조).
 
+## 11차 — MessageBoxPopup 철회, configure 채널로 교체 (2026-08-19, 사용자 리뷰)
+
+10차 4항의 `MessageBoxPopup`(제목+본문+버튼N 고정 스키마)은 레거시 `Popup_Alert`의
+범용성 — 어떤 콘텐츠든 세터 추가로 확장하는 열린 빌더 — 에 못 미친다는 지적 수용.
+**닫힌 스키마 대신 열린 빌더**로 교체:
+
+- **configure 델리게이트 채널** — `Push/PushAsync/PushForResultAsync<TPopup[, TResult]>
+  (Action<TPopup> configure)`. 게임 팝업의 fluent 세터 체인(레거시 그대로)을
+  **비동기 로딩 완료 후·열림 연출 전**에 실행 — 레거시 빌더 DX를 동기 생성 강제 없이 유지.
+  `Focus`면 기존 인스턴스에 재적용(레거시 GetOrShow().Set체인), `Queue`면 표시 시점까지
+  캐리어로 보관. 저빈도 다이얼로그 경로라 클로저/캐리어 할당 허용.
+- 위젯 기본값 리셋은 게임 팝업의 `OnAttached()`(레거시 Initialize() 대응, 풀 재사용 안전).
+- `MessageBoxPopup`/`MessageBoxRequest`/확장 삭제 — configure + `Popup<TResult>` 조합이
+  상위 호환(레거시 `WaitResultAsync()` 수동 TCS 패턴의 표준화).
+
 ## 테스트 전략 (EditMode)
 
 수동 완료 `UniTaskCompletionSource`를 반환하는 테스트 팝업으로 전이를 제어:

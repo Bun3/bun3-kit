@@ -122,6 +122,83 @@ namespace Bun3.Unity.UI.Popups
             int layer = 0, PopupDuplicatePolicy duplicate = PopupDuplicatePolicy.Ignore) where TPopup : Popup
             => CastOrNull<TPopup>(await PushWithArgAsync(PopupKey.Of<TPopup>(popupName), arg, layer, duplicate));
 
+        // ── configure 채널 (레거시 Popup_Alert fluent 빌더 대응) ──
+        // 게임 팝업의 fluent 세터 체인을 "비동기 로딩 완료 후, 열림 연출 전"에 실행한다 —
+        // 레거시처럼 인스턴스를 동기 생성하지 않고도 Show().SetTitle().SetDesc() DX를 유지한다.
+        // (저빈도 다이얼로그 경로 — 클로저/캐리어 할당 허용)
+
+        /// <summary>구성 체인을 실어 연다. fire-and-forget.</summary>
+        public void Push<TPopup>(Action<TPopup> configure, string popupName = null, int layer = 0,
+            PopupDuplicatePolicy duplicate = PopupDuplicatePolicy.Ignore) where TPopup : Popup
+        {
+            ThrowIfDisposed();
+            PushAsync(configure, popupName, layer, duplicate).Forget();
+        }
+
+        /// <summary>
+        /// 구성 체인을 실어 열고 타입된 인스턴스를 돌려준다. <paramref name="configure"/>는
+        /// 로딩 완료 직후·열림 연출 전에 호출된다. <see cref="PopupDuplicatePolicy.Focus"/>면
+        /// 기존 인스턴스에 재적용(레거시 GetOrShow().Set체인 대응),
+        /// <see cref="PopupDuplicatePolicy.Queue"/>면 표시 시점까지 보관된다.
+        /// </summary>
+        public async UniTask<TPopup> PushAsync<TPopup>(Action<TPopup> configure, string popupName = null,
+            int layer = 0, PopupDuplicatePolicy duplicate = PopupDuplicatePolicy.Ignore) where TPopup : Popup
+        {
+            ThrowIfDisposed();
+
+            if (configure == null)
+                throw new ArgumentNullException(nameof(configure));
+
+            var key = PopupKey.Of<TPopup>(popupName);
+            var carrier = new PopupConfigureArg<TPopup>(configure);
+
+            switch (ResolveDuplicate(key, duplicate))
+            {
+                case DuplicateDecision.Drop:
+                    return null;
+                case DuplicateDecision.Enqueue:
+                    EnqueueCore(key, layer, carrier);
+                    return null;
+                case DuplicateDecision.Focus:
+                    return CastOrNull<TPopup>(FocusExisting(key, carrier));
+            }
+
+            return CastOrNull<TPopup>(await OpenAsync(key, layer, (IQueuedPopupArg)carrier, ArgMode.Queued));
+        }
+
+        /// <summary>
+        /// 결과 팝업을 구성 체인과 함께 열고 결과까지 대기한다 — 레거시
+        /// <c>Popup_Alert.Show().SetDesc(...).WaitResultAsync()</c>의 프레임워크 표준형:
+        /// <c>await PushForResultAsync&lt;AlertPopup, bool&gt;(p =&gt; p.SetTitle("...").SetDesc("..."))</c>.
+        /// </summary>
+        public async UniTask<TResult> PushForResultAsync<TPopup, TResult>(Action<TPopup> configure,
+            string popupName = null, int layer = 0,
+            PopupDuplicatePolicy duplicate = PopupDuplicatePolicy.Ignore,
+            TResult defaultResult = default) where TPopup : Popup<TResult>
+        {
+            var popup = await PushAsync(configure, popupName, layer, duplicate);
+            return popup == null
+                ? defaultResult
+                : await popup.WaitForResultAsync(defaultResult);
+        }
+
+        private Popup FocusExisting(PopupKey key, IQueuedPopupArg carrier)
+        {
+            var popup = FindTopmostOpen(key);
+            if (popup == null)
+            {
+                Debug.LogWarning($"Focus 대상 팝업({key.Name})이 아직 로딩 중이라 구성 체인이 버려졌다.");
+                return null;
+            }
+
+            carrier.Deliver(popup);
+            _stack.Remove(popup);
+            InsertSorted(popup, popup.Layer);
+            Focused?.Invoke(popup);
+            NotifyStackOrderChanged();
+            return popup;
+        }
+
         private DuplicateDecision ResolveDuplicate(PopupKey key, PopupDuplicatePolicy duplicate)
         {
             if (!IsOpen(key) && !IsLoading(key))
@@ -249,6 +326,24 @@ namespace Bun3.Unity.UI.Popups
                 await CloseAsync(popup);
 
             return popup;
+        }
+
+        /// <summary>구성 체인을 표시 시점까지 실어 나르는 캐리어. (저빈도 — 할당 허용)</summary>
+        private sealed class PopupConfigureArg<TPopup> : IQueuedPopupArg where TPopup : Popup
+        {
+            private readonly Action<TPopup> _configure;
+
+            public PopupConfigureArg(Action<TPopup> configure) => _configure = configure;
+
+            public void Deliver(Popup popup)
+            {
+                if (popup is TPopup typed)
+                    _configure(typed);
+                else
+                    Debug.LogError(
+                        $"키 {popup.Key.Name}의 인스턴스가 {popup.GetType().Name}이라 {typeof(TPopup).Name} 구성 체인을 적용할 수 없다.",
+                        popup);
+            }
         }
 
         private static TPopup CastOrNull<TPopup>(Popup popup) where TPopup : Popup
