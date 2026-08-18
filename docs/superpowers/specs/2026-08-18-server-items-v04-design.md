@@ -144,3 +144,21 @@ growninja가 티켓을 자동 리젠(count)/보상 획득(param3) 두 필드로 
 "0 = 미지정 → maxRegen 덮어쓰기" 매직 규칙 제거 — 기본값을 문자 그대로 무제한으로.
 리젠 정의도 기본은 목표선 초과 적립 허용(growninja 친화)이며, 엄격 상한이 필요한
 정의만 maxCount를 maxRegen과 같게 명시한다. maxRegen ≤ maxCount 불변식은 유지.
+
+## 11. v0.5 — reason 원장·인벤토리 간 이동·Growth (2026-08-19, 외부 대조 채택분)
+
+- **reason 사유 코드 + 원장 강화**: 모든 변경 API·BeginTransaction에 선택적
+  `long reason`(게임은 `enum ItemReason : long` 권장 — 프레임워크가 enum을 정의하면
+  도메인 침범, 제네릭은 서명 오염이라 long 통로). `onApplied(reason, changes)`의
+  변경 항목은 `InventoryChange { Item, Delta, Balance }` — **변경 후 잔량** 포함으로
+  PlayFab TransactionHistory·Nakama ledger 상당의 CS 원장을 어댑터 하나로 구성 가능.
+  "Stack Trace" 요구의 업계 답 = 콜스택이 아니라 (사유, 델타, 잔량) 구조적 원장.
+- **인벤토리 간 이동**: `TryTransfer`(정의 단위 — 스택 병합, 비스택형 n개 통째 이동)·
+  `TryTransferByInstance`(id·상태·플래그·만료 보존). **같은 플레이어·같은 세션 액터
+  한정** — 유저간 거래는 다른 액터라 인메모리 원자화 불가, 에스크로/우편 워크플로
+  몫(미래 Trade/Mail 모듈). 출발 Removed·도착 Created 추적(DB 소유 컬럼 UPDATE 매핑).
+  잠금은 이동도 차단, 대상 maxCount 검사, 발급자 교차 id 충돌 방어.
+- **Growth.SettleExp**: exp 테이블 소진 다단계 레벨업(잔여 보존·만렙 정지·잔여 유지,
+  필요치 0 이하는 데이터 오류). 레벨 직접 증가·리셋은 대입 한 줄 — 프레임워크 제외.
+- 백로그 기록: 멱등성 id(PlayFab IdempotencyId·Steam requestid 상당)는 영속 dedup이
+  필요해 Rpc/핸들러 계층 후보.

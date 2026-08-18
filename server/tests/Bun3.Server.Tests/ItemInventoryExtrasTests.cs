@@ -180,36 +180,36 @@ public class ItemInventoryExtrasTests
     // ---- onApplied ----
 
     [Test]
-    public void OnApplied_reports_net_deltas_once_per_commit()
+    public void OnApplied_reports_reason_deltas_and_balances_once_per_commit()
     {
-        var log = new List<(ItemId Item, BigNum Amount)>();
+        var log = new List<(long Reason, ItemId Item, BigNum Delta, BigNum Balance)>();
         var commits = 0;
-        var inventory = NewInventory(onApplied: applied =>
+        var inventory = NewInventory(onApplied: (reason, applied) =>
         {
             commits++;
-            foreach (var delta in applied)
+            foreach (var change in applied)
             {
-                log.Add((delta.Item, delta.Amount));
+                log.Add((reason, change.Item, change.Delta, change.Balance));
             }
         });
         var created = new List<ItemInstance<ItemState>>();
-        inventory.TryAdd(_sword, 2, created);   // 커밋 1
+        inventory.TryAdd(_sword, 2, created, reason: 10);   // 커밋 1 — 사유 10
 
-        var tx = inventory.BeginTransaction();   // 커밋 2 — 혼합 배치
-        tx.Remove(_gold, 0);                     // 실패 예정이 아님 — 아래에서 gold 지급부터
-        // 다시 구성: 실패 배치는 통지 없음을 먼저 확인
+        var tx = inventory.BeginTransaction(reason: 20);
+        tx.Remove(_gold, 0);
         Assert.That(tx.Commit(out _), Is.EqualTo(InventoryError.InvalidAmount));
         Assert.That(commits, Is.EqualTo(1), "실패 커밋은 통지 없음");
 
-        var tx2 = inventory.BeginTransaction();
+        var tx2 = inventory.BeginTransaction(reason: 30);
         tx2.Add(_gold, 100);
         tx2.RemoveInstance(created[0].InstanceId);
         Assert.That(tx2.Commit(out _), Is.EqualTo(InventoryError.None));
 
         Assert.That(commits, Is.EqualTo(2));
         Assert.That(log, Has.Count.EqualTo(3));
-        Assert.That(log[0], Is.EqualTo((_sword, (BigNum)2)));
-        Assert.That(log[1], Is.EqualTo((_gold, (BigNum)100)));
-        Assert.That(log[2], Is.EqualTo((_sword, -BigNum.One)), "인스턴스 지정 소모도 순 델타로");
+        // (사유, 델타, 변경 후 잔량) — CS 원장 한 줄의 형태
+        Assert.That(log[0], Is.EqualTo((10L, _sword, (BigNum)2, (BigNum)2)));
+        Assert.That(log[1], Is.EqualTo((30L, _gold, (BigNum)100, (BigNum)100)));
+        Assert.That(log[2], Is.EqualTo((30L, _sword, -BigNum.One, BigNum.One)), "인스턴스 지정 소모도 순 델타·잔량으로");
     }
 }

@@ -48,8 +48,9 @@ namespace Bun3.Server.Items
 
         // onApplied 통지용 재사용 버퍼 — 핸들러 미지정 시 기록 자체를 생략한다.
         private readonly InventoryAppliedHandler? _onApplied;
-        private ItemDelta[] _applied = Array.Empty<ItemDelta>();
+        private InventoryChange[] _applied = Array.Empty<InventoryChange>();
         private int _appliedCount;
+        private long _txPendingReason;
 
         /// <summary>인벤토리를 만든다.</summary>
         /// <param name="catalog">아이템 카탈로그.</param>

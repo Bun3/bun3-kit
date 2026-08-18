@@ -37,10 +37,11 @@ namespace Bun3.Server.Items
         /// 트랜잭션 빌더를 시작한다 — 정의 단위와 인스턴스 지정 연산을 섞은 원자 배치.
         /// 동시 배치는 1개: 새 Begin은 이전 미커밋 배치를 버리고, 낡은 빌더 사용은 던진다.
         /// </summary>
-        public InventoryTransaction<TState> BeginTransaction()
+        public InventoryTransaction<TState> BeginTransaction(long reason = 0)
         {
             _txOps.Clear();
             _txToken++;
+            _txPendingReason = reason;
             return new InventoryTransaction<TState>(this, _txToken);
         }
 
@@ -62,7 +63,7 @@ namespace Bun3.Server.Items
             }
 
             _txToken++;   // 커밋 후 빌더 재사용 차단
-            var error = CommitOps(_txOps, out failedIndex, created);
+            var error = CommitOps(_txOps, out failedIndex, created, _txPendingReason);
             _txOps.Clear();
             return error;
         }
@@ -70,11 +71,11 @@ namespace Bun3.Server.Items
         /// <summary>수량을 지급한다. amount는 양수여야 한다. 비스택형은 amount개(정수·상한
         /// <see cref="MaxInstancesPerOperation"/>) 인스턴스가 생성되며 <paramref name="created"/>에
         /// 담긴다(스택 싱글턴 신규 생성 포함).</summary>
-        public InventoryError TryAdd(ItemId item, BigNum amount, List<ItemInstance<TState>>? created = null)
+        public InventoryError TryAdd(ItemId item, BigNum amount, List<ItemInstance<TState>>? created = null, long reason = 0)
         {
             _applyOps.Clear();
             _applyOps.Add(new TxOp(TxOpKind.Add, item, 0, amount));
-            return CommitOps(_applyOps, out _, created);
+            return CommitOps(_applyOps, out _, created, reason);
         }
 
         /// <summary>
@@ -88,7 +89,8 @@ namespace Bun3.Server.Items
             ItemId item,
             BigNum amount,
             out BigNum granted,
-            List<ItemInstance<TState>>? created = null)
+            List<ItemInstance<TState>>? created = null,
+            long reason = 0)
         {
             granted = BigNum.Zero;
             if (!_catalog.Contains(item))
@@ -132,7 +134,7 @@ namespace Bun3.Server.Items
 
             _applyOps.Clear();
             _applyOps.Add(new TxOp(TxOpKind.Add, item, 0, clamp));
-            var error = CommitOps(_applyOps, out _, created);
+            var error = CommitOps(_applyOps, out _, created, reason);
             if (error == InventoryError.None)
             {
                 granted = clamp;
@@ -143,11 +145,11 @@ namespace Bun3.Server.Items
 
         /// <summary>수량을 소모한다. amount는 양수여야 한다. 비스택형은 잠금 아닌 인스턴스
         /// amount개가 제거된다(순서 미보장 — 특정 인스턴스는 <see cref="TryRemoveByInstance"/>).</summary>
-        public InventoryError TryRemove(ItemId item, BigNum amount)
+        public InventoryError TryRemove(ItemId item, BigNum amount, long reason = 0)
         {
             _applyOps.Clear();
             _applyOps.Add(new TxOp(TxOpKind.RemoveByItem, item, 0, amount));
-            return CommitOps(_applyOps, out _, null);
+            return CommitOps(_applyOps, out _, null, reason);
         }
 
         /// <summary>정의의 가용(잠금 제외) 수량 — 소모 가능량 표시·우선순위 소모 계획용.</summary>
@@ -191,7 +193,8 @@ namespace Bun3.Server.Items
         /// </summary>
         /// <param name="sources">소모 우선순위 순서의 정의들(중복 없이).</param>
         /// <param name="amount">총 소모량(양수).</param>
-        public InventoryError TryRemoveAcross(ReadOnlySpan<ItemId> sources, BigNum amount)
+        /// <param name="reason">onApplied로 전달되는 게임 정의 사유 코드. 0 = 미지정.</param>
+        public InventoryError TryRemoveAcross(ReadOnlySpan<ItemId> sources, BigNum amount, long reason = 0)
         {
             if (amount.Sign <= 0)
             {
@@ -223,16 +226,16 @@ namespace Bun3.Server.Items
                 return InventoryError.Insufficient;
             }
 
-            return CommitOps(_applyOps, out _, null);
+            return CommitOps(_applyOps, out _, null, reason);
         }
 
         /// <summary>특정 인스턴스에서 수량을 소모한다. 잠금 인스턴스는 <see cref="InventoryError.Locked"/>.
         /// 비스택형은 수량이 1이므로 amount 1로 인스턴스 자체가 제거된다.</summary>
-        public InventoryError TryRemoveByInstance(long instanceId, BigNum amount)
+        public InventoryError TryRemoveByInstance(long instanceId, BigNum amount, long reason = 0)
         {
             _applyOps.Clear();
             _applyOps.Add(new TxOp(TxOpKind.RemoveInstanceAmount, ItemId.None, instanceId, amount));
-            return CommitOps(_applyOps, out _, null);
+            return CommitOps(_applyOps, out _, null, reason);
         }
 
         /// <summary>
@@ -243,7 +246,8 @@ namespace Bun3.Server.Items
         public InventoryError TryApply(
             ReadOnlySpan<ItemDelta> deltas,
             out int failedIndex,
-            List<ItemInstance<TState>>? created = null)
+            List<ItemInstance<TState>>? created = null,
+            long reason = 0)
         {
             _applyOps.Clear();
             for (var i = 0; i < deltas.Length; i++)
@@ -254,7 +258,7 @@ namespace Bun3.Server.Items
                     : new TxOp(TxOpKind.RemoveByItem, delta.Item, 0, -delta.Amount));
             }
 
-            return CommitOps(_applyOps, out failedIndex, created);
+            return CommitOps(_applyOps, out failedIndex, created, reason);
         }
 
         /// <summary>
@@ -263,7 +267,7 @@ namespace Bun3.Server.Items
         /// 소모의 후보 풀에서 배치 전체에 걸쳐 제외된다(순서 무관). id 발급자·상태 팩토리는
         /// 검증 통과 후에만 호출되고, 성공 시 onChanged는 배치당 1회다.
         /// </summary>
-        private InventoryError CommitOps(List<TxOp> ops, out int failedIndex, List<ItemInstance<TState>>? created)
+        private InventoryError CommitOps(List<TxOp> ops, out int failedIndex, List<ItemInstance<TState>>? created, long reason)
         {
             failedIndex = -1;
             if (ops.Count == 0)
@@ -315,7 +319,7 @@ namespace Bun3.Server.Items
             _onChanged?.Invoke();
             if (_onApplied != null && _appliedCount > 0)
             {
-                _onApplied(new ReadOnlySpan<ItemDelta>(_applied, 0, _appliedCount));
+                _onApplied(reason, new ReadOnlySpan<InventoryChange>(_applied, 0, _appliedCount));
             }
 
             return InventoryError.None;
@@ -490,7 +494,8 @@ namespace Bun3.Server.Items
                 System.Array.Resize(ref _applied, _applied.Length == 0 ? 8 : _applied.Length * 2);
             }
 
-            _applied[_appliedCount++] = new ItemDelta(item, delta);
+            // 잔량은 적용 직후 조회 — 원장(ledger)의 "변경 후 잔량" 컬럼이 된다.
+            _applied[_appliedCount++] = new InventoryChange(item, delta, GetQuantity(item));
         }
 
         private void ApplyGrant(ItemId item, BigNum amount, List<ItemInstance<TState>>? created)
