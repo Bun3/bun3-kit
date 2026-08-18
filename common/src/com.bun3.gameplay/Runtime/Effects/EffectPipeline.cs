@@ -101,9 +101,10 @@ namespace Bun3.Gameplay.Effects
 
         /// <summary>
         /// 대상의 활성 인스턴스 중 query의 태그 하나라도 인스턴스 스펙의 자산 태그를 자신-또는-조상으로 갖는
-        /// 것을 전부 즉시 제거합니다(Id 오름차순). 제거는 만료와 같은 정리 경로를 타되
-        /// <see cref="EffectLifecycleKind.RemovedPrematurely"/> 이벤트와 <see cref="ChainTrigger.OnCompletePrematurely"/>
-        /// 체인을 발화합니다(OnCompleteNormal은 발화하지 않습니다).
+        /// 것을 전부 제거합니다(Id 오름차순). 수정자 분리·GrantedTags 회수·활성 목록에서의 제거는 이 호출
+        /// 안에서 즉시 일어나지만, 그로 인한 속성 Current 재반영은 다음 틱의 재계산 페이즈까지 미뤄집니다.
+        /// 제거는 만료와 같은 정리 경로를 타되 <see cref="EffectLifecycleKind.RemovedPrematurely"/> 이벤트와
+        /// <see cref="ChainTrigger.OnCompletePrematurely"/> 체인을 발화합니다(OnCompleteNormal은 발화하지 않습니다).
         /// </summary>
         /// <param name="target">대상 식별자입니다.</param>
         /// <param name="query">디스펠 질의 태그 컨테이너입니다.</param>
@@ -137,7 +138,8 @@ namespace Bun3.Gameplay.Effects
             return removed;
         }
 
-        /// <summary>대상의 활성 인스턴스 하나를 id로 즉시 제거합니다. 제거 경로·이벤트·체인은
+        /// <summary>대상의 활성 인스턴스 하나를 id로 제거합니다. 수정자 해제는 이 호출 안에서 즉시
+        /// 일어나지만 속성 Current 반영은 다음 틱 재계산 페이즈입니다. 제거 경로·이벤트·체인은
         /// <see cref="RemoveByTags"/>와 같습니다(<see cref="ChainTrigger.OnCompletePrematurely"/>).</summary>
         /// <param name="target">대상 식별자입니다.</param>
         /// <param name="instanceId">제거할 인스턴스 id입니다.</param>

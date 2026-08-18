@@ -59,6 +59,16 @@ public sealed class SeamRegistryTests
     }
 
     [Test]
+    public void Build_then_register_throws()
+    {
+        var catalog = LoadCatalog();
+        var builder = new SeamRegistryBuilder();
+        builder.Build(catalog);
+        Assert.Throws<InvalidOperationException>(
+            () => builder.RegisterMagnitudeCalc(catalog.GetRequired("calc.magnitude.x"), new FixedMagnitude()));
+    }
+
+    [Test]
     public void XorShift_is_deterministic_and_rejects_zero_seed()
     {
         var a = new XorShiftRng(42);

@@ -70,6 +70,15 @@ namespace Bun3.Gameplay.Seams
         /// <summary>대상 속성의 Current 값을 가져옵니다.</summary>
         /// <param name="attributeId">조회할 속성 id입니다.</param>
         public BigNum TargetAttr(ushort attributeId) => _target.Attributes.GetCurrent(attributeId);
+
+        /// <summary>대상이 주어진 태그를 보유하고 있는지(자신 또는 자손 계층 포함) 확인합니다.</summary>
+        /// <param name="tag">조회할 태그입니다.</param>
+        public bool TargetHasTag(GameplayTag tag) => _target.Tags.Has(tag);
+
+        /// <summary>시전자가 주어진 태그를 보유하고 있는지(자신 또는 자손 계층 포함) 확인합니다.
+        /// 시전자가 미해석이면 항상 false입니다.</summary>
+        /// <param name="tag">조회할 태그입니다.</param>
+        public bool SourceHasTag(GameplayTag tag) => HasSource && _source!.Tags.Has(tag);
     }
 
     /// <summary>효과 실행에 필요한 컨텍스트입니다. 소스가 미해석이면 <see cref="SourceAttr"/>는 항상 0입니다.</summary>
@@ -127,6 +136,15 @@ namespace Bun3.Gameplay.Seams
         /// <summary>미리 평가된 입력 피연산자 값을 가져옵니다.</summary>
         /// <param name="index">입력 목록 안의 인덱스입니다.</param>
         public BigNum Input(int index) => _inputs[index];
+
+        /// <summary>대상이 주어진 태그를 보유하고 있는지(자신 또는 자손 계층 포함) 확인합니다.</summary>
+        /// <param name="tag">조회할 태그입니다.</param>
+        public bool TargetHasTag(GameplayTag tag) => _target.Tags.Has(tag);
+
+        /// <summary>시전자가 주어진 태그를 보유하고 있는지(자신 또는 자손 계층 포함) 확인합니다.
+        /// 시전자가 미해석이면 항상 false입니다.</summary>
+        /// <param name="tag">조회할 태그입니다.</param>
+        public bool SourceHasTag(GameplayTag tag) => HasSource && _source!.Tags.Has(tag);
 
         /// <summary>대상 속성의 Base를 직접 씁니다. 항상 클램프·전파·이벤트 규칙을 통과합니다.</summary>
         /// <param name="attributeId">쓸 속성 id입니다.</param>

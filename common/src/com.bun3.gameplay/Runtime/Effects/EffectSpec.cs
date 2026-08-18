@@ -206,7 +206,8 @@ namespace Bun3.Gameplay.Effects
         /// <summary>적용 조건들이며 전부 만족해야 적용됩니다.</summary>
         public List<ConditionDef> ApplicationConditions { get; set; } = new List<ConditionDef>();
 
-        /// <summary>지속 조건들이며 하나라도 깨지면 효과가 종료됩니다.</summary>
+        /// <summary>지속 조건들이며 하나라도 깨지면 효과가 제거되지 않고 비활성(enabled=false)으로
+        /// 토글되어 수정자·부여 태그가 꺼집니다. 조건이 다시 충족되면 활성으로 되돌아옵니다.</summary>
         public List<ConditionDef> OngoingConditions { get; set; } = new List<ConditionDef>();
 
         /// <summary>효과가 적용되어 있는 동안 대상에게 부여되는 태그들입니다.</summary>
@@ -215,7 +216,8 @@ namespace Bun3.Gameplay.Effects
         /// <summary>효과 자체를 분류하는 자산 태그들입니다.</summary>
         public List<string> AssetTags { get; set; } = new List<string>();
 
-        /// <summary>대상이 가지고 있으면 이 효과의 적용을 막는 면역 태그들입니다.</summary>
+        /// <summary>이 효과가 활성인 동안, AssetTags가 이 태그들의 자손-또는-자신인 다른 효과의
+        /// 적용을 차단합니다.</summary>
         public List<string> ImmunityTags { get; set; } = new List<string>();
 
         /// <summary>다른 효과로 이어지는 체인 엣지들입니다.</summary>

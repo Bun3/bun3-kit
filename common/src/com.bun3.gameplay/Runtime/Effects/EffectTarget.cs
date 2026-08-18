@@ -105,10 +105,11 @@ namespace Bun3.Gameplay.Effects
 
         /// <summary>
         /// 스냅샷으로 이 대상을 복원합니다. 현재 활성 인스턴스는 전부 이벤트 없이 분리·회수되고
-        /// (복원은 관측 불가), 스냅샷의 인스턴스가 수정자 재부착까지 포함해 재구성됩니다. Base는
-        /// 클램프 없이 raw로 쓰고, 마지막에 한 번 <see cref="AttributeSet.RebuildDirty"/>를 호출해
-        /// Current를 재계산합니다 — 이 재계산 결정론이 비트 동일성을 보장합니다. 대기 적용 큐·파이프라인
-        /// 틱 카운터·다음 발급 Id는 호출자가 별도로 복원해야 합니다.
+        /// (복원은 관측 불가), 스냅샷의 인스턴스가 선언 순서 그대로 수정자 재부착까지 포함해 원시
+        /// 복원됩니다. Base도 클램프 없이 raw로 씁니다. 이 원시 복원 전체가 끝난 뒤 마지막에 딱 한 번
+        /// <see cref="AttributeSet.RebuildDirty"/>를 호출하며, 이 한 번의 재계산이 레지스트리의 위상
+        /// (EvaluationOrder) 순서로 Current를 재구성합니다 — 그 결정론이 비트 동일성을 보장합니다.
+        /// 대기 적용 큐·파이프라인 틱 카운터·다음 발급 Id는 호출자가 별도로 복원해야 합니다.
         /// </summary>
         /// <param name="snapshot">복원할 스냅샷입니다.</param>
         /// <param name="catalog">GrantedTags 회수·재부여에 쓸 효과 카탈로그입니다(스냅샷 시점과 같은 카탈로그여야 합니다).</param>
@@ -123,8 +124,12 @@ namespace Bun3.Gameplay.Effects
             {
                 var instance = _activeEffects[i];
                 Attributes.DetachModifiers(instance);
-                var grantedTags = catalog.GetSpec(instance.SpecId).GrantedTags;
-                for (var g = 0; g < grantedTags.Length; g++) Tags.Remove(grantedTags[g]);
+                if (instance.Enabled)   // 비활성 인스턴스는 태그를 보유하지 않는다 — 회수하면 이중 감산.
+                {
+                    var grantedTags = catalog.GetSpec(instance.SpecId).GrantedTags;
+                    for (var g = 0; g < grantedTags.Length; g++) Tags.Remove(grantedTags[g]);
+                }
+
                 EffectInstance.Return(instance);
             }
 
@@ -152,8 +157,11 @@ namespace Bun3.Gameplay.Effects
                         modifier.Magnitude, modifier.ScaleWithStack);
                 }
 
-                var grantedTags = catalog.GetSpec(row.SpecId).GrantedTags;
-                for (var g = 0; g < grantedTags.Length; g++) Tags.Add(grantedTags[g]);
+                if (row.Enabled)   // 비활성 인스턴스는 태그를 부여하지 않는다 — 부여하면 영구 누수.
+                {
+                    var grantedTags = catalog.GetSpec(row.SpecId).GrantedTags;
+                    for (var g = 0; g < grantedTags.Length; g++) Tags.Add(grantedTags[g]);
+                }
             }
 
             Attributes.RebuildDirty();

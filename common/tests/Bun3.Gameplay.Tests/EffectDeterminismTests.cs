@@ -30,7 +30,9 @@ public sealed class EffectDeterminismTests
         while (world.Pipeline.PendingApplyCount > 0) world.Pipeline.Tick();
         Assert.That(world.Pipeline.PendingApplyCount, Is.Zero);
 
-        var driverRngAtSnapshot = world.DriverRng;
+        // XorShiftRng는 클래스라 대입은 참조 공유 — Clone()으로 이 시점 상태를 독립적으로 떼어내야
+        // 아래 world.DriverRng = driverRngAtSnapshot 복원이 실제로 되감기 역할을 한다.
+        var driverRngAtSnapshot = world.DriverRng.Clone();
         var nextInstanceId = world.Pipeline.NextInstanceId;
         var currentTick = world.Pipeline.CurrentTick;
         var snapshots = new EffectTargetSnapshot[world.Targets.Length];
@@ -115,6 +117,61 @@ public sealed class EffectDeterminismTests
         Assert.That(kit.Attacker.Attributes.GetCurrent(EffectTestKit.Attack), Is.EqualTo(referenceAttackerAttack));
         Assert.That(kit.Defender.Attributes.GetCurrent(EffectTestKit.Hp), Is.EqualTo(referenceDefenderHp));
         Assert.That(kit.Defender.Attributes.GetCurrent(EffectTestKit.Attack), Is.EqualTo(referenceDefenderAttack));
+    }
+
+    [Test]
+    public void Restore_snapshot_respects_enabled_when_handling_granted_tags()
+    {
+        var kit = EffectTestKit.Create();
+        var hastedTag = kit.Tag("state.hasted");
+
+        // 조건 미충족(Mp<50 거짓)이면 곧바로 토글 오프되는 Ongoing 스펙 — 태그를 부여하되 비활성화된다.
+        var ongoingHaste = EffectTestKit.MinimalInfinite("ongoingHaste");
+        ongoingHaste.OngoingConditions.Add(new ConditionDef
+        {
+            Left = Operand.Attribute(EffectTestKit.Mp),
+            Op = ComparisonOp.Less,
+            Right = Operand.Constant(50),
+        });
+        ongoingHaste.GrantedTags.Add("state.hasted");
+        kit.AddSpec(ongoingHaste);
+
+        // 조건 없이 같은 태그를 부여하는 별도 활성 효과 — Defender에서 "다른 활성 인스턴스"로 쓴다.
+        var permaHaste = EffectTestKit.MinimalInfinite("permaHaste");
+        permaHaste.GrantedTags.Add("state.hasted");
+        kit.AddSpec(permaHaste);
+
+        var pipeline = kit.BuildPipeline();
+        kit.Attacker.Attributes.SetBase(EffectTestKit.Mp, 100);
+        kit.Defender.Attributes.SetBase(EffectTestKit.Mp, 100);
+
+        // Attacker: ongoingHaste 단독 — 토글 오프되어 태그가 하나도 없어야 하는 경우.
+        pipeline.EnqueueApply(kit.SpecId("ongoingHaste"), kit.Attacker.Id, kit.Attacker.Id);
+        pipeline.Tick();
+        Assert.That(kit.Attacker.ActiveEffects[0].Enabled, Is.False);   // 사전 확인: 토글 오프됨
+        Assert.That(kit.Attacker.Tags.Has(hastedTag), Is.False);
+
+        // Defender: ongoingHaste(비활성) + permaHaste(활성) 둘 다 같은 태그를 부여.
+        pipeline.EnqueueApply(kit.SpecId("ongoingHaste"), kit.Attacker.Id, kit.Defender.Id);
+        pipeline.Tick();
+        pipeline.EnqueueApply(kit.SpecId("permaHaste"), kit.Attacker.Id, kit.Defender.Id);
+        pipeline.Tick();
+        Assert.That(kit.Defender.Tags.Count(hastedTag), Is.EqualTo(1));   // 사전 확인: permaHaste만 기여
+
+        var attackerSnapshot = kit.Attacker.CreateSnapshot();
+        var defenderSnapshot = kit.Defender.CreateSnapshot();
+
+        kit.Attacker.RestoreSnapshot(attackerSnapshot, kit.Catalog);
+        kit.Defender.RestoreSnapshot(defenderSnapshot, kit.Catalog);
+
+        // 복원 직후: 비활성 인스턴스는 태그를 부여하지 않고(1), 활성 인스턴스의 카운트는 보존된다(2).
+        Assert.That(kit.Attacker.Tags.Has(hastedTag), Is.False);
+        Assert.That(kit.Defender.Tags.Count(hastedTag), Is.EqualTo(1));
+
+        pipeline.Tick();   // 1틱 후에도 유지되는지 확인
+
+        Assert.That(kit.Attacker.Tags.Has(hastedTag), Is.False);
+        Assert.That(kit.Defender.Tags.Count(hastedTag), Is.EqualTo(1));
     }
 
     private static void RemoveAllActive(EffectPipeline pipeline, EffectTarget target)

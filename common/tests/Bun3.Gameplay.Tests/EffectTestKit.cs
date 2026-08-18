@@ -163,6 +163,9 @@ internal sealed class EffectTestKit
     /// <summary>등록된 효과 이름의 카탈로그 id를 가져옵니다. BuildPipeline 이후에 호출해야 합니다.</summary>
     public int SpecId(string name) => BuiltCatalog.GetRequiredId(name);
 
+    /// <summary>빌드된 효과 카탈로그입니다(RestoreSnapshot 등 카탈로그가 필요한 호출용). BuildPipeline 이후에 호출해야 합니다.</summary>
+    public EffectCatalog Catalog => BuiltCatalog;
+
     private EffectCatalog BuiltCatalog =>
         _catalog ??= _effectCatalogBuilder.Build(_tagCatalog, _seamRegistryBuilder.Build(_tagCatalog), _attributeRegistry);
 

@@ -11,7 +11,9 @@ namespace Bun3.Gameplay.Effects
     /// 수정자 재부착 후 전체 재계산으로 재구성하며, 그 결정론이 비트 동일성을 보장합니다). 보유 태그도
     /// 저장하지 않습니다 — 슬라이스 2 범위에서 태그는 전부 활성 인스턴스의 GrantedTags를 경유해서만
     /// 붙으므로 인스턴스 복원이 재부여로 충분합니다. 대기 적용 큐·파이프라인 틱 카운터·다음 발급
-    /// Id는 이 스냅샷의 책임 밖입니다(호출자가 별도로 관리).
+    /// Id는 이 스냅샷의 책임 밖입니다(호출자가 별도로 관리). 불투명 토큰입니다 — 멤버가 전부
+    /// internal이며 <see cref="EffectTarget.CreateSnapshot"/>/<see cref="EffectTarget.RestoreSnapshot"/>
+    /// 전용이고, 호출자는 인스턴스를 보관·전달만 할 뿐 내부를 들여다보지 않습니다.
     /// </summary>
     public sealed class EffectTargetSnapshot
     {

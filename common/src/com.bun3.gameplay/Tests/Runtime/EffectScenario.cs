@@ -307,7 +307,8 @@ namespace Bun3.Gameplay.Tests
         }
 
         /// <summary>조립된 미니 우주 — 스냅샷/복원 테스트가 중간 지점에 개입할 수 있도록 값들을 노출합니다.
-        /// <see cref="DriverRng"/>는 가변 구조체라 필드로 노출합니다(프로퍼티면 값 복사라 상태가 유실됩니다).
+        /// <see cref="DriverRng"/>는 XorShiftRng(클래스, 참조 공유)를 필드로 노출합니다 — 특정 시점의
+        /// 스트림 상태를 독립적으로 보존하려면 호출자가 <see cref="XorShiftRng.Clone"/>을 명시적으로 써야 합니다.
         /// <see cref="Pipeline"/>은 스냅샷 복원 재생 테스트가 큐 잔여물 없는 새 파이프라인으로
         /// 교체할 수 있도록 세터를 엽니다(대기 큐는 스냅샷 범위 밖이라 새 인스턴스로 비운다).</summary>
         internal sealed class World

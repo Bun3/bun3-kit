@@ -11,14 +11,16 @@ namespace Bun3.Gameplay.Seams
         private readonly Dictionary<ushort, IMagnitudeCalc> _magnitudeCalcs = new();
         private readonly Dictionary<ushort, IExecutionCalc> _executionCalcs = new();
         private readonly Dictionary<ushort, ITargetSelector> _targetSelectors = new();
+        private bool _built;
 
         /// <summary>크기 계산 계약을 등록합니다.</summary>
         /// <param name="tag">등록할 태그입니다.</param>
         /// <param name="calc">계산 구현입니다.</param>
         /// <exception cref="ArgumentNullException">계산이 null일 때 발생합니다.</exception>
-        /// <exception cref="InvalidOperationException">같은 태그가 이미 등록되었을 때 발생합니다.</exception>
+        /// <exception cref="InvalidOperationException">Build 후 호출했거나, 같은 태그가 이미 등록되었을 때 발생합니다.</exception>
         public void RegisterMagnitudeCalc(GameplayTag tag, IMagnitudeCalc calc)
         {
+            if (_built) throw new InvalidOperationException("Build 후에는 등록할 수 없습니다.");
             if (calc == null)
                 throw new ArgumentNullException(nameof(calc));
             if (_magnitudeCalcs.ContainsKey(tag.Index))
@@ -30,9 +32,10 @@ namespace Bun3.Gameplay.Seams
         /// <param name="tag">등록할 태그입니다.</param>
         /// <param name="exec">실행 구현입니다.</param>
         /// <exception cref="ArgumentNullException">실행이 null일 때 발생합니다.</exception>
-        /// <exception cref="InvalidOperationException">같은 태그가 이미 등록되었을 때 발생합니다.</exception>
+        /// <exception cref="InvalidOperationException">Build 후 호출했거나, 같은 태그가 이미 등록되었을 때 발생합니다.</exception>
         public void RegisterExecutionCalc(GameplayTag tag, IExecutionCalc exec)
         {
+            if (_built) throw new InvalidOperationException("Build 후에는 등록할 수 없습니다.");
             if (exec == null)
                 throw new ArgumentNullException(nameof(exec));
             if (_executionCalcs.ContainsKey(tag.Index))
@@ -44,9 +47,10 @@ namespace Bun3.Gameplay.Seams
         /// <param name="tag">등록할 태그입니다.</param>
         /// <param name="selector">선택 구현입니다.</param>
         /// <exception cref="ArgumentNullException">선택이 null일 때 발생합니다.</exception>
-        /// <exception cref="InvalidOperationException">같은 태그가 이미 등록되었을 때 발생합니다.</exception>
+        /// <exception cref="InvalidOperationException">Build 후 호출했거나, 같은 태그가 이미 등록되었을 때 발생합니다.</exception>
         public void RegisterTargetSelector(GameplayTag tag, ITargetSelector selector)
         {
+            if (_built) throw new InvalidOperationException("Build 후에는 등록할 수 없습니다.");
             if (selector == null)
                 throw new ArgumentNullException(nameof(selector));
             if (_targetSelectors.ContainsKey(tag.Index))
@@ -60,6 +64,7 @@ namespace Bun3.Gameplay.Seams
         /// <exception cref="InvalidOperationException">태그가 예약된 루트 하위가 아니거나, 루트 태그 자체이거나, 루트 태그가 카탈로그에 없을 때 발생합니다.</exception>
         public SeamRegistry Build(TagCatalog catalog)
         {
+            _built = true;
             const string magnitudeRoot = "calc.magnitude";
             const string executionRoot = "calc.execution";
             const string selectorRoot = "selector";
@@ -117,7 +122,10 @@ namespace Bun3.Gameplay.Seams
                     throw new InvalidOperationException($"태그 {tag.Index}는 {selectorRoot} 루트 하위가 아닙니다.");
             }
 
-            return new SeamRegistry(_magnitudeCalcs, _executionCalcs, _targetSelectors);
+            return new SeamRegistry(
+                new Dictionary<ushort, IMagnitudeCalc>(_magnitudeCalcs),
+                new Dictionary<ushort, IExecutionCalc>(_executionCalcs),
+                new Dictionary<ushort, ITargetSelector>(_targetSelectors));
         }
     }
 }

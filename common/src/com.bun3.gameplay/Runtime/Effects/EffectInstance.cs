@@ -10,6 +10,9 @@ namespace Bun3.Gameplay.Effects
     /// </summary>
     public sealed class EffectInstance : IAttributeModifierSource
     {
+        // ponytail: 프로세스 전역 static 풀 — 스레드당 월드 1개 전제(동시에 여러 월드가 한 스레드를
+        // 공유하거나 여러 스레드가 풀을 동시에 건드리면 안전하지 않다). 필요해지면 풀을 월드/파이프라인
+        // 소유 인스턴스로 옮긴다.
         private static readonly Stack<EffectInstance> Pool = new Stack<EffectInstance>();
 
         private EffectInstance()
