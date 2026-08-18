@@ -21,3 +21,14 @@
    스펙 §7 표 전 행. 테스트 csproj에 ProjectReference 추가.
 7. **검증** — `dotnet build`(경고 0) + `dotnet test --filter Achievement`.
 8. **커밋** — ✨ gitmoji + Co-Authored-By 트레일러. 퍼블리시/버전 태깅 없음.
+
+## v2 (2026-08-18 — 사용자 문답으로 확정된 방향 반영)
+
+1. `AchievementStatus` enum + `Availability` 저장 필드(부분집합) + `GetStatus` 파생.
+2. `Add`→`Increase`, `Set`→`SetProgress` 개명. 진행은 Active에서만.
+3. 반복 업적을 "누적 + 수령 시 차감"(idlez/growninja 동일 모델)으로 — 10/10 UI 성립.
+4. 태그 인터닝(`Tags`/`GetTagIndex`/`GetIndicesByTag`) + `IncreaseByTag`(+필터 오버로드),
+   호출 시점 스냅샷 의미론(체인 티어 배치 미이월).
+5. 가용성 전이 `Unlock`/`Activate`/`Lock`, Def `InitialAvailability`.
+6. Reset은 카운터만(가용성 유지). 진행도 타입 long 확정(스펙 §8 근거).
+7. 테스트 37건, 버전 0.2.0.
