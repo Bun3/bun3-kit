@@ -402,6 +402,15 @@ public sealed class EffectEventChainTests
         var thorns = EffectTestKit.MinimalInfinite("thorns");
         thorns.Chains.Add(EventEdge("event.damage.taken", "first", ChainListen.AsTarget));
         kit.AddSpec(thorns);
+
+        // Reachability requires a direct OnEvent target — "second" is only reached transitively
+        // (thorns -> first -> second) in the path this test actually exercises. This spec exists solely
+        // to make "second" a legal direct OnEvent target for Build; it is registered but never applied to
+        // any target, so the only path exercised below remains the two-hop one.
+        var unusedWatcher = EffectTestKit.MinimalInfinite("unusedWatcher");
+        unusedWatcher.Chains.Add(EventEdge("event.damage.taken", "second", ChainListen.AsTarget));
+        kit.AddSpec(unusedWatcher);
+
         var pipeline = kit.BuildPipeline();
 
         foreach (var target in kit.AllTargets)
@@ -432,6 +441,36 @@ public sealed class EffectEventChainTests
             Magnitude = new MagnitudeDef { Base = Operand.EventMagnitude((BigNum)1) },
         });
         kit.AddSpec(orphan);
+
+        Assert.That(
+            () => kit.BuildPipeline(),
+            Throws.InvalidOperationException.With.Message.Contains("EventMagnitude"));
+    }
+
+    [Test]
+    public void Event_magnitude_reachable_only_transitively_is_a_build_error()
+    {
+        // "second" is reachable only via first's OnApplication chain, never as the direct target of any
+        // OnEvent edge — it would always see zero, so Build must reject it even though it is chain-reachable.
+        var kit = EffectTestKit.Create();
+        kit.AddSpec(Damage("bolt", 100, "event.damage.taken"));
+
+        var second = EffectTestKit.MinimalInstant("second");
+        second.Modifiers.Add(new ModifierDef
+        {
+            AttributeId = EffectTestKit.Hp,
+            Op = AttributeModifierOp.Add,
+            Magnitude = new MagnitudeDef { Base = Operand.EventMagnitude((BigNum)1) },
+        });
+        kit.AddSpec(second);
+
+        var first = EffectTestKit.MinimalInstant("first");
+        first.Chains.Add(EffectTestKit.Edge(ChainTrigger.OnApplication, "second"));
+        kit.AddSpec(first);
+
+        var thorns = EffectTestKit.MinimalInfinite("thorns");
+        thorns.Chains.Add(EventEdge("event.damage.taken", "first", ChainListen.AsTarget));
+        kit.AddSpec(thorns);
 
         Assert.That(
             () => kit.BuildPipeline(),

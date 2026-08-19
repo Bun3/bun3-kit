@@ -404,46 +404,22 @@ namespace Bun3.Gameplay.Effects
             }
         }
 
-        // EventMagnitude is only meaningful for an effect an OnEvent chain applies directly (one hop).
-        // A spec chained (any trigger, any depth) under an OnEvent target may still legally reference
-        // EventMagnitude — the value itself only survives the one direct OnEvent hop and is zero from
-        // there on (EffectPipeline.FireChain always enqueues BigNum.Zero), but the reference is not dead
-        // code: the same spec could be the direct OnEvent target of a different chain elsewhere. Only a
-        // spec with no path at all from an OnEvent edge can never receive anything but zero and is rejected.
+        // EventMagnitude is only meaningful for an effect an OnEvent chain applies directly (one hop) —
+        // a spec reached only transitively (via further OnApplication/etc. chains) always sees zero, so
+        // using EventMagnitude there is never anything but a silent authoring bug. Reachability is
+        // therefore strict: a spec that uses EventMagnitude anywhere must be the direct target of at
+        // least one OnEvent edge somewhere in the catalog (it may also be reached transitively elsewhere
+        // — that adds nothing, since the direct edge alone already makes it legal).
         private static void ValidateEventMagnitudeReachability(List<EffectSpec> specs, Dictionary<string, int> nameToId)
         {
-            var adjacency = new List<int>[specs.Count];
             var reachable = new bool[specs.Count];
-            var worklist = new Queue<int>();
-
             for (var i = 0; i < specs.Count; i++)
             {
-                var targets = new List<int>();
                 var chains = specs[i].Chains;
                 for (var c = 0; c < chains.Count; c++)
                 {
-                    if (!nameToId.TryGetValue(chains[c].EffectName, out var id)) continue;
-                    targets.Add(id);
-                    if (chains[c].Trigger == ChainTrigger.OnEvent && !reachable[id])
-                    {
-                        reachable[id] = true;
-                        worklist.Enqueue(id);
-                    }
-                }
-
-                adjacency[i] = targets;
-            }
-
-            while (worklist.Count > 0)
-            {
-                var current = worklist.Dequeue();
-                var targets = adjacency[current];
-                for (var t = 0; t < targets.Count; t++)
-                {
-                    var next = targets[t];
-                    if (reachable[next]) continue;
-                    reachable[next] = true;
-                    worklist.Enqueue(next);
+                    if (chains[c].Trigger != ChainTrigger.OnEvent) continue;
+                    if (nameToId.TryGetValue(chains[c].EffectName, out var id)) reachable[id] = true;
                 }
             }
 
@@ -451,7 +427,7 @@ namespace Bun3.Gameplay.Effects
             {
                 if (reachable[i] || !UsesEventMagnitude(specs[i])) continue;
                 throw new InvalidOperationException(
-                    $"Effect '{specs[i].Name}': uses EventMagnitude but is never chained under an OnEvent chain.");
+                    $"Effect '{specs[i].Name}': uses EventMagnitude but no OnEvent chain applies it directly.");
             }
         }
 
