@@ -32,4 +32,26 @@ namespace Bun3.Gameplay
         /// <summary>Owner identity, 0 when unowned.</summary>
         internal ulong OwnerId { get; }
     }
+
+    /// <summary>
+    /// Immutable deep copy of an entire world's deterministic state — every unit plus the counters
+    /// that live outside a unit (pipeline tick, next issued instance id). The pending apply queue is
+    /// deliberately excluded: a restore starts from a drained queue, which is why
+    /// <see cref="World.CreateSnapshot"/> requires one.
+    /// </summary>
+    public sealed class WorldSnapshot
+    {
+        internal WorldSnapshot(UnitSnapshot[] units, long currentTick, ulong nextInstanceId)
+        {
+            Units = units;
+            CurrentTick = currentTick;
+            NextInstanceId = nextInstanceId;
+        }
+
+        internal UnitSnapshot[] Units { get; }
+
+        internal long CurrentTick { get; }
+
+        internal ulong NextInstanceId { get; }
+    }
 }

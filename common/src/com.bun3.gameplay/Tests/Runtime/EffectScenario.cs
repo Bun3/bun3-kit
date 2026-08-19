@@ -36,7 +36,7 @@ namespace Bun3.Gameplay.Tests
         }
 
         /// <summary>Assembles the world without advancing it — exposed so snapshot/restore round-trip tests can intervene midway.</summary>
-        internal static World BuildWorld(int seed)
+        internal static ScenarioWorld BuildWorld(int seed)
         {
             var tagCatalog = TagCatalog.Create(new List<string>(), new List<TagCatalog.RedirectDefinition>());
 
@@ -69,12 +69,12 @@ namespace Bun3.Gameplay.Tests
             var pipeline = new EffectPipeline(catalog, resolver, new XorShiftRng(pipelineRngSeed));
             var driverRng = new XorShiftRng(NonZero(unchecked((ulong)seed)));
 
-            return new World(catalog, resolver, targets, pipeline, driverRng);
+            return new ScenarioWorld(catalog, resolver, targets, pipeline, driverRng);
         }
 
         /// <summary>Advances the world by the given ticks. Each tick mixes in one random apply/dispel action,
         /// calls Tick(), then drains the event/change buffers.</summary>
-        internal static void RunTicks(World world, int ticks)
+        internal static void RunTicks(ScenarioWorld world, int ticks)
         {
             for (var t = 0; t < ticks; t++)
             {
@@ -116,7 +116,7 @@ namespace Bun3.Gameplay.Tests
             return hash;
         }
 
-        private static void DriveOneTick(World world)
+        private static void DriveOneTick(ScenarioWorld world)
         {
             var roll = world.DriverRng.NextUInt32() % 4;
             if (roll == 0)
@@ -313,9 +313,9 @@ namespace Bun3.Gameplay.Tests
         /// must explicitly use <see cref="XorShiftRng.Clone"/> to preserve a stream state independently.
         /// <see cref="Pipeline"/> has an open setter so snapshot-restore replay tests can swap in a
         /// fresh pipeline with no queue residue (the pending queue is outside snapshot scope).</summary>
-        internal sealed class World
+        internal sealed class ScenarioWorld
         {
-            internal World(
+            internal ScenarioWorld(
                 EffectCatalog catalog, IEffectTargetResolver resolver, EffectTarget[] targets,
                 EffectPipeline pipeline, XorShiftRng driverRng)
             {
