@@ -34,7 +34,8 @@
     (BCL `System/` 실태). 타입 종류별 폴더(enum/interface 모음)는 만들지 않는다 —
     응집된 API의 네임스페이스를 폴더 때문에 쪼개지도 않는다.
   - **동명 제네릭·밀접한 형제 타입은 같은 파일**(BCL: `Tuple.cs`, `Action.cs` —
-    예: `Popup.cs`에 `Popup` + `Popup<TResult>`).
+    예: `Popup.cs`에 `Popup` + `Popup<TResult>`). 제네릭이 단독 파일을 가질 수밖에
+    없을 때만 파일명은 `타입{T}.cs`(SA1649 stylecop 컨벤션 — 백틱 `` 타입`1.cs `` 금지).
   - **partial = `타입.역할.cs`**(BCL: `MemoryExtensions.Trim.cs` — 예:
     `PopupStack.Push.cs`, `Util.Component.cs`). 각 파일 머리에 담당 역할 주석 한 줄,
     본체 XML 문서에 partial 구성을 적는다.
