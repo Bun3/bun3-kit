@@ -55,29 +55,43 @@ public sealed class BigNumFormulaTests
         Assert.That(error, Is.Not.Null.And.Not.Empty);
     }
 
-    [Test]
-    public void Compiled_path_matches_interpreted_path_bit_for_bit()
+    // Golden values captured from the pre-compilation interpreter (commit 464404a) by running it
+    // in a throwaway scratch project, one row per (formula, x). Exercises left-associative
+    // subtraction/division chains, mixed precedence, doubled unary minus, nested parens, integer
+    // power edge exponents, and decimal/scientific literals — exactly the shapes a swapped
+    // operand or a repeated-squaring power bug would break.
+    private static readonly (string Formula, int X, long Mantissa, int Exponent)[] GoldenValues =
     {
-        string[] formulas =
-        {
-            "1", "x", "-x", "x+1", "1-x", "x*x", "x/2", "2/x", "x^3", "-x^2",
-            "(x+1)*(x-1)", "x*x*x - 3*x + 2", "1.5*x + 0.25", "1e3*x", "x^0", "((x))",
-        };
+        ("x-1-1", 1, -1, 0), ("x-1-1", 2, 0, 0), ("x-1-1", 3, 1, 0), ("x-1-1", 7, 5, 0),
+        ("10-x-2", 1, 7, 0), ("10-x-2", 2, 6, 0), ("10-x-2", 3, 5, 0), ("10-x-2", 7, 1, 0),
+        ("x/2/2", 1, 25, -2), ("x/2/2", 2, 5, -1), ("x/2/2", 3, 75, -2), ("x/2/2", 7, 175, -2),
+        ("100/x/2", 1, 5, 1), ("100/x/2", 2, 25, 0),
+        ("100/x/2", 3, 1666666666666666665, -17), ("100/x/2", 7, 714285714285714285, -17),
+        ("x*x*x - 3*x + 2", 1, 0, 0), ("x*x*x - 3*x + 2", 2, 4, 0),
+        ("x*x*x - 3*x + 2", 3, 2, 1), ("x*x*x - 3*x + 2", 7, 324, 0),
+        ("-x", 1, -1, 0), ("-x", 2, -2, 0), ("-x", 3, -3, 0), ("-x", 7, -7, 0),
+        ("- -x", 1, 1, 0), ("- -x", 2, 2, 0), ("- -x", 3, 3, 0), ("- -x", 7, 7, 0),
+        ("-x^2", 1, -1, 0), ("-x^2", 2, -4, 0), ("-x^2", 3, -9, 0), ("-x^2", 7, -49, 0),
+        ("(x+1)*(x-1)", 1, 0, 0), ("(x+1)*(x-1)", 2, 3, 0),
+        ("(x+1)*(x-1)", 3, 8, 0), ("(x+1)*(x-1)", 7, 48, 0),
+        ("((x))", 1, 1, 0), ("((x))", 2, 2, 0), ("((x))", 3, 3, 0), ("((x))", 7, 7, 0),
+        ("x^0", 1, 1, 0), ("x^0", 2, 1, 0), ("x^0", 3, 1, 0), ("x^0", 7, 1, 0),
+        ("x^1", 1, 1, 0), ("x^1", 2, 2, 0), ("x^1", 3, 3, 0), ("x^1", 7, 7, 0),
+        ("x^3", 1, 1, 0), ("x^3", 2, 8, 0), ("x^3", 3, 27, 0), ("x^3", 7, 343, 0),
+        ("1.5*x + 0.25", 1, 175, -2), ("1.5*x + 0.25", 2, 325, -2),
+        ("1.5*x + 0.25", 3, 475, -2), ("1.5*x + 0.25", 7, 1075, -2),
+        ("1e3*x", 1, 1, 3), ("1e3*x", 2, 2, 3), ("1e3*x", 3, 3, 3), ("1e3*x", 7, 7, 3),
+    };
 
-        foreach (var formula in formulas)
+    [Test]
+    public void Compiled_path_matches_golden_values_from_pre_compilation_interpreter()
+    {
+        foreach (var (formula, x, expectedMantissa, expectedExponent) in GoldenValues)
         {
             Assert.That(BigNumFormula.TryCompile(formula, out var compiled, out var error), Is.True, $"compile failed: {formula} ({error})");
-            for (var level = 1; level <= 20; level++)
-            {
-                var interpretedOk = BigNumFormula.TryEvaluate(formula, level, out var interpreted);
-                var compiledOk = compiled!.TryEvaluate(level, out var fromCompiled);
-                Assert.That(compiledOk, Is.EqualTo(interpretedOk), $"{formula} @ {level}");
-                if (interpretedOk)
-                {
-                    Assert.That(fromCompiled.Mantissa, Is.EqualTo(interpreted.Mantissa), $"{formula} @ {level}");
-                    Assert.That(fromCompiled.Exponent, Is.EqualTo(interpreted.Exponent), $"{formula} @ {level}");
-                }
-            }
+            Assert.That(compiled!.TryEvaluate(x, out var result), Is.True, $"{formula} @ x={x}");
+            Assert.That(result.Mantissa, Is.EqualTo(expectedMantissa), $"{formula} @ x={x}: mantissa");
+            Assert.That(result.Exponent, Is.EqualTo(expectedExponent), $"{formula} @ x={x}: exponent");
         }
     }
 

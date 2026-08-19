@@ -56,6 +56,8 @@ namespace Bun3.Gameplay.Numerics
         }
 
         /// <summary>Evaluates the compiled formula with the given variable value.</summary>
+        /// <remarks>Allocates a working stack per call — intended for catalog-build paths (called once
+        /// per level at startup), not tick hot paths.</remarks>
         /// <param name="x">Value substituted for the variable x.</param>
         /// <param name="result">Evaluation result on success; <see cref="BigNum.Zero"/> on failure.</param>
         /// <returns><see langword="true"/> when evaluation succeeds. Division by zero returns false.</returns>
