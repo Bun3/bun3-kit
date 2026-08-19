@@ -70,10 +70,10 @@ namespace Bun3.Gameplay.Effects
             ValidateDurationScaleFields(spec);
             ValidateDrFields(spec);
 
-            var grantedTags = ResolveTags(spec.GrantedTags, spec.Name, tags, "granted");
-            var assetTags = ResolveTags(spec.AssetTags, spec.Name, tags, "asset");
-            var immunityTags = ResolveTags(spec.ImmunityTags, spec.Name, tags, "immunity");
-            var removeOnApplyTags = ResolveTags(spec.RemoveOnApplyTags, spec.Name, tags, "RemoveOnApply");
+            var grantedTags = MagnitudeCompiler.ResolveTags(spec.GrantedTags, spec.Name, tags, "granted");
+            var assetTags = MagnitudeCompiler.ResolveTags(spec.AssetTags, spec.Name, tags, "asset");
+            var immunityTags = MagnitudeCompiler.ResolveTags(spec.ImmunityTags, spec.Name, tags, "immunity");
+            var removeOnApplyTags = MagnitudeCompiler.ResolveTags(spec.RemoveOnApplyTags, spec.Name, tags, "RemoveOnApply");
 
             var modifiers = new CompiledModifier[spec.Modifiers.Count];
             for (var i = 0; i < spec.Modifiers.Count; i++)
@@ -86,7 +86,7 @@ namespace Bun3.Gameplay.Effects
                 }
 
                 var (magBase, perLevel, calc, byLevel, tail, increment) =
-                    ResolveMagnitude(m.Magnitude, spec, tags, seams, attributes);
+                    MagnitudeCompiler.Resolve(m.Magnitude, spec.Name, spec.MaxLevel, tags, seams, attributes);
                 modifiers[i] = new CompiledModifier(
                     m.AttributeId, m.Op, magBase, perLevel, calc, byLevel, tail, increment, m.ScaleWithStack);
             }
@@ -95,11 +95,11 @@ namespace Bun3.Gameplay.Effects
             for (var i = 0; i < spec.Executions.Count; i++)
             {
                 var e = spec.Executions[i];
-                var calc = ResolveExecutionCalc(e.CalcTag, spec.Name, tags, seams);
+                var calc = MagnitudeCompiler.ResolveExecutionCalc(e.CalcTag, spec.Name, tags, seams);
                 var inputs = new Operand[e.Inputs.Count];
                 for (var j = 0; j < e.Inputs.Count; j++)
                 {
-                    ValidateOperandAttribute(e.Inputs[j], spec.Name, attributes);
+                    MagnitudeCompiler.ValidateOperandAttribute(e.Inputs[j], spec.Name, attributes);
                     inputs[j] = e.Inputs[j];
                 }
 
@@ -132,7 +132,7 @@ namespace Bun3.Gameplay.Effects
             if (spec.ChanceToApply != null)
             {
                 var (chanceBase, chancePerLevel, chanceCalc, chanceByLevel, chanceTail, chanceIncrement) =
-                    ResolveMagnitude(spec.ChanceToApply, spec, tags, seams, attributes);
+                    MagnitudeCompiler.Resolve(spec.ChanceToApply, spec.Name, spec.MaxLevel, tags, seams, attributes);
                 chanceToApply = new CompiledMagnitude(
                     chanceBase, chancePerLevel, chanceCalc, chanceByLevel, chanceTail, chanceIncrement);
             }
@@ -143,7 +143,7 @@ namespace Bun3.Gameplay.Effects
             if (spec.DurationScale != null)
             {
                 var (scaleBase, scalePerLevel, scaleCalc, scaleByLevel, scaleTail, scaleIncrement) =
-                    ResolveMagnitude(spec.DurationScale, spec, tags, seams, attributes);
+                    MagnitudeCompiler.Resolve(spec.DurationScale, spec.Name, spec.MaxLevel, tags, seams, attributes);
                 durationScale = new CompiledMagnitude(
                     scaleBase, scalePerLevel, scaleCalc, scaleByLevel, scaleTail, scaleIncrement);
             }
@@ -379,214 +379,6 @@ namespace Bun3.Gameplay.Effects
             }
         }
 
-        private static GameplayTag[] ResolveTags(List<string> paths, string specName, TagCatalog tags, string what)
-        {
-            var result = new GameplayTag[paths.Count];
-            for (var i = 0; i < paths.Count; i++)
-            {
-                if (!tags.TryGet(paths[i], out result[i]))
-                {
-                    throw new InvalidOperationException(
-                        $"Effect '{specName}': cannot resolve {what} tag: {paths[i]}");
-                }
-            }
-
-            return result;
-        }
-
-        // Exactly one MagnitudeDef notation: Base(+PerLevel) | PerLevelValues | Formula | CurveKeys | CalcTag.
-        // Level-table notations require spec.MaxLevel >= 1.
-        private static (
-            Operand? Base, Operand? PerLevel, IMagnitudeCalc? Calc,
-            BigNum[]? ByLevel, LevelTail Tail, BigNum Increment) ResolveMagnitude(
-            MagnitudeDef def, EffectSpec spec, TagCatalog tags, SeamRegistry seams, AttributeRegistry attributes)
-        {
-            var hasCalc = !string.IsNullOrEmpty(def.CalcTag);
-            var hasBase = def.Base.HasValue;
-            var hasPerLevelValues = def.PerLevelValues != null;
-            var hasFormula = !string.IsNullOrEmpty(def.Formula);
-            var hasCurveKeys = def.CurveKeys != null;
-            var formCount = (hasCalc ? 1 : 0) + (hasBase ? 1 : 0) + (hasPerLevelValues ? 1 : 0)
-                             + (hasFormula ? 1 : 0) + (hasCurveKeys ? 1 : 0);
-            if (formCount != 1)
-            {
-                throw new InvalidOperationException(
-                    $"Effect '{spec.Name}': MagnitudeDef must have exactly one of Base(+PerLevel), "
-                    + "PerLevelValues, Formula, CurveKeys, or CalcTag.");
-            }
-
-            if (!hasBase && def.PerLevel.HasValue)
-            {
-                throw new InvalidOperationException(
-                    $"Effect '{spec.Name}': PerLevel can only be used together with Base.");
-            }
-
-            if (hasCalc)
-            {
-                var calc = ResolveMagnitudeCalc(def.CalcTag!, spec.Name, tags, seams);
-                return (null, null, calc, null, LevelTail.Clamp, BigNum.Zero);
-            }
-
-            if (hasBase)
-            {
-                ValidateOperandAttribute(def.Base!.Value, spec.Name, attributes);
-                if (def.PerLevel.HasValue)
-                {
-                    ValidateOperandAttribute(def.PerLevel.Value, spec.Name, attributes);
-                }
-
-                return (def.Base, def.PerLevel, null, null, LevelTail.Clamp, BigNum.Zero);
-            }
-
-            if (spec.MaxLevel < 1)
-            {
-                throw new InvalidOperationException(
-                    $"Effect '{spec.Name}': PerLevelValues/Formula/CurveKeys require MaxLevel >= 1 to be declared.");
-            }
-
-            var byLevel = hasPerLevelValues
-                ? CompilePerLevelValues(def.PerLevelValues!, spec)
-                : hasFormula
-                    ? CompileFormula(def.Formula!, spec)
-                    : CompileCurveKeys(def.CurveKeys!, spec);
-
-            var tail = def.Tail;
-            var increment = def.ExtrapolateIncrement;
-            if (tail == LevelTail.Extrapolate && increment.IsZero && byLevel.Length > 1)
-            {
-                increment = byLevel[byLevel.Length - 1] - byLevel[byLevel.Length - 2];
-            }
-
-            return (null, null, null, byLevel, tail, increment);
-        }
-
-        private static BigNum[] CompilePerLevelValues(List<BigNum> values, EffectSpec spec)
-        {
-            if (values.Count != spec.MaxLevel)
-            {
-                throw new InvalidOperationException(
-                    $"Effect '{spec.Name}': PerLevelValues length ({values.Count}) must match MaxLevel ({spec.MaxLevel}).");
-            }
-
-            return values.ToArray();
-        }
-
-        // Deterministic formula — pre-evaluated at Build time by substituting levels 1..MaxLevel for x.
-        private static BigNum[] CompileFormula(string formula, EffectSpec spec)
-        {
-            if (!BigNumFormula.TryCompile(formula, out var compiled, out var validationError))
-            {
-                throw new InvalidOperationException($"Effect '{spec.Name}': Formula is invalid — {validationError}");
-            }
-
-            var byLevel = new BigNum[spec.MaxLevel];
-            for (var level = 1; level <= spec.MaxLevel; level++)
-            {
-                if (!compiled!.TryEvaluate(level, out byLevel[level - 1]))
-                {
-                    throw new InvalidOperationException(
-                        $"Effect '{spec.Name}': Formula evaluation failed (level {level}): {formula}");
-                }
-            }
-
-            return byLevel;
-        }
-
-        // Sparse keys + linear interpolation — keys in ascending level order, no duplicates, first key at
-        // level 1. Values between keys interpolate linearly; beyond the last key the last value holds
-        // (the Tail policy past MaxLevel is handled by the runtime evaluation helper).
-        private static BigNum[] CompileCurveKeys(List<LevelKey> keys, EffectSpec spec)
-        {
-            if (keys.Count == 0 || keys[0].Level != 1)
-            {
-                throw new InvalidOperationException($"Effect '{spec.Name}': the first CurveKeys key must be level 1.");
-            }
-
-            for (var i = 1; i < keys.Count; i++)
-            {
-                if (keys[i].Level <= keys[i - 1].Level)
-                {
-                    throw new InvalidOperationException(
-                        $"Effect '{spec.Name}': CurveKeys must be in ascending level order without duplicates.");
-                }
-            }
-
-            if (keys[keys.Count - 1].Level > spec.MaxLevel)
-            {
-                throw new InvalidOperationException(
-                    $"Effect '{spec.Name}': the last CurveKeys key level ({keys[keys.Count - 1].Level}) "
-                    + $"exceeds MaxLevel ({spec.MaxLevel}).");
-            }
-
-            var byLevel = new BigNum[spec.MaxLevel];
-            var keyIndex = 0;
-            for (var level = 1; level <= spec.MaxLevel; level++)
-            {
-                while (keyIndex + 1 < keys.Count && keys[keyIndex + 1].Level <= level) keyIndex++;
-
-                var k0 = keys[keyIndex];
-                if (keyIndex + 1 >= keys.Count)
-                {
-                    byLevel[level - 1] = k0.Value;   // at or beyond the last key
-                    continue;
-                }
-
-                var k1 = keys[keyIndex + 1];
-                byLevel[level - 1] = k0.Value
-                                      + (k1.Value - k0.Value) * (level - k0.Level) / (k1.Level - k0.Level);
-            }
-
-            return byLevel;
-        }
-
-        private static IMagnitudeCalc ResolveMagnitudeCalc(
-            string calcTag, string specName, TagCatalog tags, SeamRegistry seams)
-        {
-            if (!tags.TryGet(calcTag, out var tag) || !seams.TryGetMagnitudeCalc(tag, out var calc) || calc is null)
-            {
-                throw new InvalidOperationException(
-                    $"Effect '{specName}': cannot resolve magnitude calc tag: {calcTag}");
-            }
-
-            return calc;
-        }
-
-        private static IExecutionCalc ResolveExecutionCalc(
-            string calcTag, string specName, TagCatalog tags, SeamRegistry seams)
-        {
-            if (!tags.TryGet(calcTag, out var tag) || !seams.TryGetExecutionCalc(tag, out var calc) || calc is null)
-            {
-                throw new InvalidOperationException(
-                    $"Effect '{specName}': cannot resolve execution calc tag: {calcTag}");
-            }
-
-            return calc;
-        }
-
-        private static ITargetSelector ResolveTargetSelector(
-            string selectorTag, string specName, TagCatalog tags, SeamRegistry seams)
-        {
-            if (!tags.TryGet(selectorTag, out var tag)
-                || !seams.TryGetTargetSelector(tag, out var selector)
-                || selector is null)
-            {
-                throw new InvalidOperationException(
-                    $"Effect '{specName}': cannot resolve target selector tag: {selectorTag}");
-            }
-
-            return selector;
-        }
-
-        // Operand attribute reference validation; Constant is exempt.
-        private static void ValidateOperandAttribute(Operand operand, string specName, AttributeRegistry attributes)
-        {
-            if (operand.Kind != OperandKind.Constant && !attributes.Contains(operand.AttributeId))
-            {
-                throw new InvalidOperationException(
-                    $"Effect '{specName}': references unregistered attribute {operand.AttributeId}.");
-            }
-        }
-
         // OngoingConditions cannot have SourceAttribute operands.
         private static CompiledCondition[] ResolveConditions(
             List<ConditionDef> defs, string specName, AttributeRegistry attributes, bool allowSourceAttribute)
@@ -602,8 +394,8 @@ namespace Bun3.Gameplay.Effects
                         $"Effect '{specName}': OngoingConditions cannot have SourceAttribute operands.");
                 }
 
-                ValidateOperandAttribute(c.Left, specName, attributes);
-                ValidateOperandAttribute(c.Right, specName, attributes);
+                MagnitudeCompiler.ValidateOperandAttribute(c.Left, specName, attributes);
+                MagnitudeCompiler.ValidateOperandAttribute(c.Right, specName, attributes);
                 result[i] = new CompiledCondition(c.Left, c.Op, c.Right);
             }
 
@@ -636,7 +428,7 @@ namespace Bun3.Gameplay.Effects
             ITargetSelector? selector = null;
             if (!string.IsNullOrEmpty(edge.SelectorTag))
             {
-                selector = ResolveTargetSelector(edge.SelectorTag!, ownerSpec.Name, tags, seams);
+                selector = MagnitudeCompiler.ResolveTargetSelector(edge.SelectorTag!, ownerSpec.Name, tags, seams);
             }
 
             var conditions = ResolveConditions(edge.Conditions, ownerSpec.Name, attributes, allowSourceAttribute: true);
