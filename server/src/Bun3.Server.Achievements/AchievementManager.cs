@@ -23,6 +23,8 @@ namespace Bun3.Server.Achievements
         private readonly AchievementState[] _states;
         private readonly Action? _onDirty;
         private readonly Func<long> _utcNowTicks;
+        private readonly ActionLog? _log;
+        private readonly string? _logLabel;
         private readonly Transaction? _transaction;
 
         /// <summary>Hook fired right after completion — (identifier, definition, new completion
@@ -41,6 +43,11 @@ namespace Bun3.Server.Achievements
         /// actually changes.</param>
         /// <param name="utcNowTicks">Completion time source (default UTC now) — an injection point
         /// for tests.</param>
+        /// <param name="log">Session-wide action log (<see cref="Bun3.Server.Core.ActionLog"/>) —
+        /// when set, completion, claim, and availability changes are attached as structured
+        /// entries. Nothing is attached when unset.</param>
+        /// <param name="logLabel">Source label attached to entries this manager appends
+        /// (e.g. to distinguish multiple achievement managers in the same log).</param>
         /// <param name="transaction">Session-wide transaction (<see cref="Transaction"/>) — when
         /// set, changes made while it is open are reversible and dirty/completion notifications are
         /// buffered until commit. Nothing is snapshotted when no transaction is open.</param>
@@ -48,12 +55,16 @@ namespace Bun3.Server.Achievements
             AchievementCatalog<TDef> catalog,
             Action? onDirty = null,
             Func<long>? utcNowTicks = null,
+            ActionLog? log = null,
+            string? logLabel = null,
             Transaction? transaction = null)
         {
             _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
             _states = new AchievementState[catalog.Count];
             _onDirty = onDirty;
             _utcNowTicks = utcNowTicks ?? DefaultClock;
+            _log = log;
+            _logLabel = logLabel;
             _transaction = transaction;
             _txCaptured = new bool[catalog.Count];
             for (var i = 0; i < _states.Length; i++)
@@ -231,6 +242,7 @@ namespace Bun3.Server.Achievements
                 state.CompletedCount += newCompletions;
                 state.LastCompletedAtUtcTicks = _utcNowTicks();
                 changed = true;
+                NotifyChange(id, AchievementChangeKind.Completed);
             }
 
             if (changed)
@@ -271,6 +283,7 @@ namespace Bun3.Server.Achievements
                 state.Progress = remaining > 0 ? remaining : 0;   // Floor at 0 to tolerate a lenient Restore.
             }
 
+            NotifyChange(id, AchievementChangeKind.Claimed);
             NotifyDirty();
             return true;
         }
@@ -324,6 +337,7 @@ namespace Bun3.Server.Achievements
 
             Capture(id);
             state.Availability = AchievementStatus.Ready;
+            NotifyChange(id, AchievementChangeKind.AvailabilityChanged);
             NotifyDirty();
             return true;
         }
@@ -340,6 +354,7 @@ namespace Bun3.Server.Achievements
 
             Capture(id);
             state.Availability = AchievementStatus.Active;
+            NotifyChange(id, AchievementChangeKind.AvailabilityChanged);
             NotifyDirty();
             return true;
         }
@@ -358,6 +373,7 @@ namespace Bun3.Server.Achievements
 
             Capture(id);
             state.Availability = AchievementStatus.Locked;
+            NotifyChange(id, AchievementChangeKind.AvailabilityChanged);
             NotifyDirty();
             return true;
         }

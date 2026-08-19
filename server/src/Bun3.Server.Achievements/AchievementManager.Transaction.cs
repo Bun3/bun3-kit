@@ -14,6 +14,7 @@ namespace Bun3.Server.Achievements
         private readonly List<AchievementState> _txStates = new List<AchievementState>();
         private readonly List<AchievementId> _txCompletedIds = new List<AchievementId>();
         private readonly List<int> _txCompletedCounts = new List<int>();
+        private readonly List<AchievementChange> _txChanges = new List<AchievementChange>();
         private bool _txEnlisted;
         private bool _txDirtyPending;
 
@@ -68,11 +69,39 @@ namespace Bun3.Server.Achievements
             OnCompleted?.Invoke(id, _catalog.GetDefinition(id), newCompletions);
         }
 
+        /// <summary>Attaches a change to the action log, or buffers it until commit.
+        /// Low-frequency audit path, so boxing is acceptable.</summary>
+        private void NotifyChange(AchievementId id, AchievementChangeKind kind)
+        {
+            if (_log == null)
+            {
+                return;
+            }
+
+            ref readonly var state = ref _states[id.Index];
+            var change = new AchievementChange(
+                id, kind, state.CompletedCount, state.ClaimedCount, state.Availability);
+            if (_txEnlisted)
+            {
+                _txChanges.Add(change);
+                return;
+            }
+
+            _log.Append(change, _logLabel);
+        }
+
         /// <inheritdoc />
         void ITransactionParticipant.OnCommit()
         {
             _txEnlisted = false;
             ClearSnapshots();
+
+            for (var i = 0; i < _txChanges.Count; i++)
+            {
+                _log!.Append(_txChanges[i], _logLabel);
+            }
+
+            _txChanges.Clear();
 
             if (_txDirtyPending)
             {
@@ -97,6 +126,7 @@ namespace Bun3.Server.Achievements
             _txDirtyPending = false;
             _txCompletedIds.Clear();
             _txCompletedCounts.Clear();
+            _txChanges.Clear();
 
             for (var i = _txIds.Count - 1; i >= 0; i--)
             {
