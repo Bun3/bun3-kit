@@ -1,0 +1,591 @@
+# 게임플레이 슬라이스 3 — Ability · Unit · World 설계
+
+- 상태: 승인됨
+- 작성일: 2026-08-20
+- 적용 패키지: `Bun3.Gameplay` (0.13.0 → 0.14.0 예정)
+- 기반 명세: [`2026-08-10-gameplay-framework-design.md`](2026-08-10-gameplay-framework-design.md) §8.3·§8.5, §13 슬라이스 3
+- 직전 슬라이스: [`2026-08-17-gameplay-slice2-attributes-effects-design.md`](2026-08-17-gameplay-slice2-attributes-effects-design.md) — 본 스펙은 그 §12 이연 목록에서 출발한다
+- 참고 분석: Unreal GAS(Lyra 5.3 실코드), idlez(GameSkill·GameBuff·ResourceTrigger + 출하 데이터), growninja(ReactBuff + 출하 데이터), growdaemon(ResourceBuff·ResourceUnit.Trigger)
+
+## 1. 목적과 범위
+
+슬라이스 2가 남긴 세 구멍을 메우고 능동 발동 계층을 세운다.
+
+1. **이벤트 → 반응형 콘텐츠**(반사·흡혈·처치 반응) — 슬라이스 2 §12 이연
+2. **TargetSelector 호출 배선** — 인터페이스는 출하됐으나 후보를 열거할 수단이 없었다
+3. **EffectTarget을 품는 Unit**과 그 레지스트리인 World
+4. **Ability** — 게이트(태그·조건·코스트·쿨다운)와 부여 소스 4종
+
+합격선: "피격 시 공격자에게 받은 피해의 30%를 되돌린다"가 코드 0줄, "쿨다운 20% 감소 반지"가
+코드 0줄.
+
+함께 처리하는 백로그 3종: 수식 파싱 1회화, 출하 컴파일 아티팩트, 셀렉터 절단 카운터.
+
+**비목표(명시적 이연)**: §13 참조. 특히 시전 인스턴스(타임라인 액터)는 위치·공간 수치에
+의존하므로 이동 스펙 이후다.
+
+## 2. 결정 요약
+
+| 주제 | 결정 |
+|---|---|
+| Unit ↔ EffectTarget | **합성** — Unit이 EffectTarget을 보유. EffectTarget은 sealed 유지·무수정 |
+| 반응형 수신자 | **Effect**(체인의 `OnEvent` 트리거). Ability가 아니다 |
+| 이벤트 큐 | **없음** — 발행 즉시 체인 매칭 → 기존 적용 큐로. 새 기계 0개 |
+| 이벤트 페이로드 | `(Tag, Source, Target, Magnitude, NominalMagnitude)` — 체인 값 전달 규칙을 `OnEvent`에 한해 개정 |
+| magnitude | **실적용**(클램프 후) 기본. Operand kind 1종. 명목값은 이벤트에 동승하되 Operand 없음 |
+| magnitude 소스 | **속성 명시** — `RaiseEvents`가 태그와 속성 id를 짝으로 선언 |
+| Ability의 로직 | **없음**(순수 데이터). `IAbilityBehavior` 시섬 불채택 — 시섬은 기존 3종 유지 |
+| 쿨다운 | Effect로 표현(GrantedTags ↔ BlockedTags). 감소는 `DurationScale`이 속성 참조 |
+| 코스트 | **즉시 차감**(Effect 우회 안 함) — 게이트 검사와 차감의 원자성 |
+| 발동 API | 동기 반환(사유 enum). 범용 Command 타입 계층 없음 |
+| 스폰/디스폰 | 큐 적재 후 페이즈 경계 반영 — 순회 중 컬렉션 변경 금지 |
+| 셀렉터 후보 | `resolver.TargetIds` 전체 스팬(오름차순) + 태그·속성 접근자 |
+| 시전 인스턴스 | 불채택 — 즉발 발동만 |
+
+## 3. 조사 근거 (결정의 배경)
+
+세 레거시와 GAS를 실코드·출하 데이터까지 확인한 결과가 §2의 두 핵심 결정을 정했다.
+
+### 3.1 반응 주체는 언제나 Buff였다
+
+| | 반응 주체 | 표현 방식 | 페이로드 | 성숙도 |
+|---|---|---|---|---|
+| growdaemon | `UnitBuff` | 하드코딩 필드 ~20종 + 행동 태그 | C# 시그니처로만 | 원시 |
+| growninja | Buff | `ReactBuff` = 버프 조합/교체만, 이벤트 반응 없음 | 없음 | 미도달 |
+| idlez | `GameBuff` | 일반 트리거(표현식 트리) | `Damage`/`ValidDamage`/`IsCritical`/`Return` | 성숙 |
+
+셋 다 반응이 Buff(= 우리 Effect)에 붙는다. 별도 Ability 개념을 거치지 않는다.
+
+진화 방향도 명확하다 — **하드코딩 필드 → 일반 트리거 기계**. growdaemon이
+`killAddBuffs`·`mainAttackHitAddBuffs`·`guardianHPPercent`·`infectionAddBuffs`·`auraBuffID`·
+`disposableImmortalReplaceBuffID`·`unattackedLevelUpDuration` 같은 필드를 하나씩 늘려 겪은
+비용을 idlez가 일반 트리거로 해결했다. 본 슬라이스는 한 걸음 더 간다 — 표현식 트리 없이
+데이터 어휘(체인 + 조건 + 셀렉터)로.
+
+growdaemon은 여기에 더해 `UnitBuff.HandleAttacked`가 `Tag.DESTROY_ON_ATTACKED`·
+`Tag.RESET_LEVEL_ON_ATTACKED`·`Tag.RESTART_TIMER_ON_ATTACKED_BY_BOSS`로 분기한다.
+프레임워크 설계 §8.2가 명시적으로 기각한 동작-태그 혼합이며, 본 스펙도 채택하지 않는다.
+
+### 3.2 반응형은 희소하고, 값 비례 반사는 더 희소하다
+
+idlez 출하 데이터(`Triggers.json`, 트리거 134개) 타입 분포:
+
+| 트리거 | 개수 | 본 레포 대응 |
+|---|---|---|
+| `OnUpdate` | 86 (64%) | 이미 있음 — `PeriodTicks` 주기 실행 |
+| `OnDestroy` | 31 (23%) | 이미 있음 — 만료/조기제거 체인 |
+| `OnAttacked` | 4 | 본 슬라이스 |
+| `OnAttackedPost` | 3 | 본 슬라이스 |
+| `OnKill`·`OnDead`·`OnBuffApply`·`OnAttack`·`OnOwnerKill` | 각 1~2 | 본 슬라이스 |
+
+반응형 훅은 16건(12%)이고 87%는 이미 보유한 기계다. 그 16건의 실체:
+
+```
+Buff_HealOnHpLossLuckScaling_Attacked            피격 시 Luck 확률로 회복 버프 부여
+Buff_IncreaseBuffLevelOnMonsterHit_Attacked      피격 시 버프 레벨 증가
+Buff_IncreaseBuffStackOnMonsterHit_Attacked      피격 시 버프 스택 증가
+Buff_UseSkillToAttackerWhenDamaged_AttackedPost  피격 시 공격자에게 스킬     ← 유일한 반사
+Buff_UseSkillWhenDamaged_AttackedPost            피격 시 스킬
+```
+
+출하 콘텐츠의 반사는 1건이고 값 비례가 아니다. 그럼에도 `EventMagnitude`를 본 슬라이스에
+넣는 것은 사용자 결정이다 — "받은 피해의 30%"가 장르 표준 어휘이고, 나중에 넣으면
+`OnEvent` 스키마를 다시 여는 비용이 든다.
+
+growninja 쪽 대조군: `Buffs.xml`의 `ReactBuff` 60건 전부가 `RemoveBuffID`(37)·`AddBuff`(17)·
+`MinStack`(22)이고 Type은 `REPLACE` 20 / `FUSION` 3이다. 파서에 선언된
+`addDamages`·`selfAddBuffs`·`addShield`는 출하 데이터에서 사용 0건 — 능력을 미리 뚫어두면
+안 쓰인다는 증거로 §13의 이연 판단에 반영했다.
+
+### 3.3 피해 수정 훅은 불필요하다
+
+idlez의 `Return` 기계(훅이 damage를 고쳐 돌려주는 경로)는 만들어졌으나 출하 데이터가 거의
+쓰지 않는다 — 확인한 `OnAttacked` 트리거는 `Return = Damage`로 통과시킨다. 실제 피해 감소는
+전부 스탯이다: `ApplyDefense`(Defense/MagicResist), `ApplyDamageTakenEfficiency`,
+`ApplyArmor`(방어 계수 테이블). growninja `addShield`는 출하 사용 0건이고 idlez는 SP로 대신한다.
+전부 Attribute + Multiply 수정자로 커버되므로 **피해 수정 훅을 도입하지 않는다.**
+
+대가를 명시한다: 본 레포는 피해가 "Instant Effect의 Hp Add"라 idlez 같은 고정 피해
+파이프라인(치명타 → 방어구 → 방어력 → 피해효율 순서)이 없다. 그 순서는 게임이
+`MagnitudeCalc` 또는 Operand 조합으로 스스로 정한다.
+
+### 3.4 GAS는 발행 주체가 게임 코드다
+
+Lyra 5.3 `ULyraHealthComponent::HandleOutOfHealth`가 `FGameplayEventData`를 채워
+`ASC->HandleGameplayEvent(...)`를 호출한다. 페이로드는 `EventTag`·`Instigator`·`Target`·
+`OptionalObject`·`InstigatorTags`·`TargetTags`·`EventMagnitude`. 수신은
+`FAbilityTriggerData { TriggerTag, TriggerSource }`이고 `EGameplayAbilityTriggerSource`는
+`GameplayEvent`/`OwnedTagAdded`/`OwnedTagPresent` 3종이다.
+
+GAS의 GameplayEffect에는 "이 GE가 이런 이벤트를 발행한다"는 필드가 없다 — 속성 델리게이트를
+게임이 구독해 이벤트로 변환한다. 이 지점에서 갈라진다: 그대로 두면 모든 게임이 같은 변환
+계층을 다시 짜게 되고, 이는 레포 제1 원칙 위반이다. 본 스펙은 발행을 **데이터 선언**으로
+내린다(`EffectSpec.RaiseEvents`).
+
+### 3.5 쿨다운이 아니라 확률이 실전 관례다
+
+idlez의 반응 훅은 Buff에 달려 쿨다운 개념이 없고, 발동 제어를 확률로 한다
+(`Buff_HealOnHpLossLuckScaling_Attacked`가 `Luck` 유닛 변수로 확률을 스케일). 본 레포는 이미
+`ChanceToApply`(슬라이스 2.1 G2)를 갖고 있고 `MagnitudeDef`를 받으므로 속성 참조 확률까지
+표현된다. 따라서 "반응형에 게이트가 필요하니 Ability여야 한다"는 논거는 성립하지 않는다.
+
+### 3.6 idlez GameSkill은 Ability가 아니다
+
+`GameSkill`은 proto 필드가 `position`·`direction`·`velocity`·`acceleration`·`timelineSpeed`·
+`tick`·`hitCountByUnitIds`인 **시전 중인 개체**(투사체/장판/타임라인 액터)다.
+`GameBoard.skills_`에 유닛과 별개의 id 공간(`nextSkillId_`)으로 등록되고, 타임라인이
+`Hit`·`UnitKnockback`·`UnitCharge`·`PlayFx`·`AddSkill`·`SelfAddBuff`·`Destroy`를 시간축에서
+실행한다.
+
+셋으로 갈린다: `ResourceSkill`(정의) / `GameUnit.cooldowns_`(유닛이 소유한 쿨다운) /
+`GameSkill`(시전 개체). 본 슬라이스의 `AbilityDef` + `AbilitySet`은 앞의 둘에 대응하고,
+`GameSkill`에 해당하는 것은 만들지 않는다(§13).
+
+`GameSkill`에는 AttributeSet도 버프 목록도 없다 — **시전 개체는 이펙트 타깃이 아니다.**
+이 사실이 §4의 합성 결정을 뒷받침한다.
+
+### 3.7 틱 모델의 선례
+
+```
+GameBoard.Update():   board.RunLogic → unit.RunLogic → skill.RunLogic → buff.RunLogic
+                    → unit.Update → FlushPosition → 공간 인덱스 재구축
+                    → dropItem.Update → skill.Update → buff.Update
+GameBoard.PostUpdate(): postActions → Add큐 반영 → Destroy 정리 → buff Add/Remove/Finalize
+```
+
+`RunLogic`(트리거·타임라인)과 `Update`(상태 전진)를 분리하고 **추가·제거를 전부 큐로 미룬다.**
+본 레포 `EffectPipeline`의 6페이즈와 같은 철학이며, §5의 스폰/디스폰 큐가 이 선례를 따른다.
+
+## 4. Unit — EffectTarget 합성
+
+```
+Unit
+├─ TargetId Id
+├─ EffectTarget Effects        AttributeSet + TagCountContainer + ActiveEffects + DR 이력
+├─ AbilitySet Abilities
+└─ ulong OwnerId               0 = 무소유(NPC·몬스터)
+
+전달 프로퍼티(상태 중복 없음): Attributes => Effects.Attributes, Tags => Effects.Tags
+```
+
+소유자를 `ulong`로 두는 이유: 심은 세션·플레이어 개념을 모른다(프레임워크 설계 §4).
+`Bun3.Server.Players`의 식별자 타입을 끌어오면 `Bun3.Gameplay`가 서버 패키지에 의존하게 된다.
+`TargetId`가 id 중립인 것과 같은 규율이며, 게임·서버 글루가 자기 식별자를 이 자리에 매핑한다.
+
+**상속을 채택하지 않은 이유** (직렬화가 결정적):
+
+1. **proto에는 상속이 없다.** 와이어는 어차피 합성(`UnitSnapshot ⊇ EffectTargetSnapshot`)이므로
+   클래스 계층이 직렬화에서 벌어주는 것이 없다. 합성은 객체 그래프와 메시지 트리가 1:1이다.
+2. **판별자 세금.** TargetId 하나로 여러 종류를 가리키면 복원 시 종류 기록 + 팩토리 분기가
+   필요하다(`oneof` + kind). 합성이면 `UnitSnapshot`/`ItemSnapshot`이 스키마 레벨에서 이미
+   다르고 각자 `effect_target`을 optional로 품는다.
+3. **반쪽 스냅샷 불가능.** `EffectTarget.CreateSnapshot()`은 이미 출하됐고
+   `EffectTargetSnapshot`은 전 멤버 internal인 opaque 토큰이다. sealed를 풀면
+   "어빌리티가 빠진 스냅샷을 조용히 반환하는 호출 경로"가 생긴다. 합성은 그것을 표현할 수
+   없다 — 슬라이스 2가 수명·스택을 enum으로 고정한 "잘못된 상태 표현 불가"와 같은 논리다.
+4. **dirty 추적(슬라이스 4)이 경계를 그대로 쓴다.** `Effects`·`Abilities`·`Inventory`가 각자
+   dirty를 들고 복제 수집기가 하위 집합체를 순회한다.
+5. **아이템 확장의 선택성.** 슬라이스 2 §12가 "아이템·스킬의 EffectTarget 보유 여부"를
+   슬라이스 4 안건으로 열어뒀다. 합성이면 `ItemInstance.Effects`가 대부분 null이고 필요한
+   아이템에만 붙는다. 상속이면 스택형 잡템까지 속성 슬롯과 태그 카운터를 진다.
+6. **미러 클라의 부분 상태.** 시야 필터에 걸린 유닛은 `Effects = null`인 껍데기가 자연스럽다.
+
+상속의 이점 둘은 작다 — 객체 헤더 하나(~24B, 스폰 경로이지 틱 핫패스가 아님)와 역조회인데,
+역조회 경로는 실제로 없다(`ExecutionContext`·`SelectorContext`가 이미 `TargetId`를 들고 있고
+이벤트 라우팅도 TargetId로 World에 묻는다). 필요해지면 `object? Owner` 역포인터 한 줄이다.
+
+### 4.1 UnitSnapshot
+
+```
+UnitSnapshot { EffectTargetSnapshot Effects; AbilitySetSnapshot Abilities; ulong OwnerId; }
+```
+
+`EffectTarget.CreateSnapshot`/`RestoreSnapshot`은 수정하지 않는다. World 수준 스냅샷은
+유닛 스냅샷 배열 + 파이프라인 틱 카운터 + 다음 발급 인스턴스 id + Rng 상태를 함께 싣는다
+(슬라이스 2가 "캘러가 별도 복원"으로 남긴 항목들).
+
+## 5. World
+
+```
+World : IEffectTargetResolver
+├─ Unit 레지스트리 (TargetId 오름차순 — resolver 계약)
+├─ EffectPipeline·IRng 소유 (조립 루트 주입, static Instance 금지)
+├─ TryResolve(id, out EffectTarget?) → unit.Effects
+├─ TargetIds → 오름차순 스팬
+├─ Spawn(unit) / Despawn(id)       큐 적재 → 페이즈 경계 반영
+├─ TryActivateAbility(unitId, abilityId) → AbilityActivationResult   (동기)
+├─ CurrentTick => pipeline.CurrentTick      틱 카운터는 파이프라인이 단독 소유
+└─ Tick():  ⓪ 스폰/디스폰 큐 반영 → EffectPipeline.Tick()
+```
+
+World는 별도 틱 카운터를 두지 않는다. 두 카운터가 생기면 스냅샷·복원에서 어긋날 수 있고,
+`EffectPipeline.CurrentTick`은 이미 슬라이스 2에서 복원 replay를 위해 internal setter까지
+갖췄다.
+
+- **범용 Command 타입 계층을 만들지 않는다.** 소비자가 발동·스폰·디스폰 셋이고 발동은 사유를
+  동기 반환해야 한다. `PostAsync` 액터 래퍼는 `Bun3.Server.Gameplay`(슬라이스 5) 몫이며 심은
+  동기 API만 낸다 — 프레임워크 설계 §5의 액터 모델은 서버 글루 계층에서 성립한다.
+- 스폰/디스폰만 지연하는 이유는 §3.7 — 틱 순회 중 레지스트리 변경 금지. 발동이 거는 Effect는
+  기존 적용 큐로 들어가므로 별도 지연이 필요 없다.
+- 디스폰된 유닛을 대상으로 남은 적용 요청은 기존 `UnresolvedTargetDropCount` 경로로 조용히
+  드랍된다(슬라이스 2 계약 유지).
+
+## 6. 이벤트와 OnEvent 체인
+
+### 6.1 새 큐를 만들지 않는다
+
+이벤트는 `ApplyInstant`·`FirePeriodic` 안에서 발생하며, 그 자리에서 `OnEvent` 체인을 매칭해
+`EnqueueApply`만 한다. 재진입이 없고 순환은 **기존 적용 큐의 틱당 예산**이 그대로 유계화한다.
+슬라이스 2 §9.2의 "큐+예산이 순환 체인을 틱당 1회 도는 느린 루프로 강등시킨다"가 이벤트에도
+그대로 적용된다.
+
+### 6.2 발행 — EffectSpec.RaiseEvents
+
+```
+RaiseEvents: [{ Tag: GameplayTag, AttributeId: ushort }]
+```
+
+Instant 적용과 주기 실행에서, 지정 속성의 Base 변화를 magnitude로 삼아 발행한다.
+속성을 명시하는 이유: 한 Effect에 modifier가 여럿이면 합계가 무의미하다(Hp −100, Mp +50).
+
+```
+GameplayEvent = (Tag, Source: TargetId, Target: TargetId,
+                 Magnitude: BigNum, NominalMagnitude: BigNum)
+```
+
+- `Magnitude` = **클램프 후 실제 Base 변화량**. `AttributeSet.AddBase → SetBase → ClampToBounds`
+  경로 때문에 명목과 다르다(HP 300인데 500 피해 → 300). before/after 차분으로 얻는다.
+- `NominalMagnitude` = 클램프 전 명목값. 이벤트에 동승하지만 **읽는 Operand는 두지 않는다** —
+  세 레거시 출하 데이터에서 명목값 수요 사례를 찾지 못했다. 수요 발생 시 Operand kind 추가는
+  비파괴다.
+- `Source`는 그 적용의 시전자, `Target`은 적용 대상이다.
+
+### 6.3 수신 — ChainTrigger.OnEvent
+
+```
+ChainTrigger.OnEvent                    (5번째 멤버)
+ChainEdgeDef.EventTag: GameplayTag      OnEvent일 때만 유효
+ChainEdgeDef.Listen: AsTarget | AsSource
+```
+
+이벤트가 발생하면 두 방향을 검사한다:
+
+- `Target` 유닛의 활성 Effect 중 `Listen = AsTarget`인 `OnEvent` 체인 → 반사·피격 반응
+- `Source` 유닛의 활성 Effect 중 `Listen = AsSource`인 `OnEvent` 체인 → 흡혈·가해 반응
+
+매칭은 이벤트 태그가 체인 선언 태그의 후손-또는-자기(`IsAncestorOrSelf(선언, 이벤트)`)일 때
+성립한다 — 디스펠·면역 매칭과 같은 방향이다.
+
+`Enabled = false`인 인스턴스는 수신하지 않는다(수정자·GrantedTags가 꺼진 것과 일관).
+
+순회 순서는 canonical — 활성 인스턴스 id 오름차순, 인스턴스 안에서는 체인 선언 순.
+BigNum 비결합성 때문에 발화 순서가 결과에 남으므로 슬라이스 2의 집계 순서 규율을 그대로 쓴다.
+
+### 6.4 내장 셀렉터
+
+`EventSource` / `EventTarget` 두 종을 프레임워크가 제공한다. 셀렉터 태그를 생략하면
+슬라이스 2 계약대로 원 대상을 그대로 쓴다.
+
+### 6.5 Operand.EventMagnitude
+
+```
+Operand.EventMagnitude(coefficient)     실적용 magnitude × 계수
+```
+
+`OnEvent` 체인이 건 Effect의 modifier 크기·조건 양변·Execution 입력에서만 유효하다.
+클램프 경계에서는 금지(경계는 상시 평가되므로 이벤트 문맥이 없다).
+
+**슬라이스 2 §7.2 개정**: "체인은 값을 나르지 않는다"는 `OnApplication`·`OnCompleteNormal`·
+`OnCompletePrematurely`·`OnStackOverflow` 4종에만 적용된다. 그 근거("크기는 적용 시점의
+속성참조가 당시 상태를 읽는다")가 이벤트 magnitude에는 성립하지 않는다 — 방금 일어난 일에
+대한 일시적 사실이지 상태가 아니다. `OnEvent`는 명시적 예외다.
+
+큐에 실리는 값 튜플이 (대상 id, 스펙 id, source, level)에서 (…, eventMagnitude)로 확장된다.
+
+### 6.6 핫패스 비용
+
+컴파일 시 스펙에 "`OnEvent` 체인 보유" 플래그를 세우고, `EffectTarget`이 활성 인스턴스 중
+리스너 수를 카운트한다. 카운터가 0이면 이벤트 발행이 즉시 반환한다. 매칭 경로에 할당이 없다
+(스팬·인덱스만 사용).
+
+### 6.7 Build 검증
+
+- `RaiseEvents.AttributeId`가 그 스펙의 modifier 대상에 없음 = 오류
+- `RaiseEvents.AttributeId`가 미등록 속성 = 오류
+- `EventMagnitude` Operand가 `OnEvent` 체인으로 도달 불가능한 스펙에 있음 = 오류
+- `EventTag`가 `OnEvent`가 아닌 트리거에 선언됨 = 오류
+- `OnEvent`인데 `EventTag`가 비어 있음 = 오류
+- 클램프 경계에 `EventMagnitude` = 오류
+- `OnEvent` 체인이 자기 스펙의 `RaiseEvents`로 닫히는 순환 = **경고**(기존 체인 순환 검출 확장)
+
+### 6.8 알려진 한계
+
+반응이 **자기 자신의 상태를 바꾸는 것**은 표현할 수 없다. growdaemon의
+`DESTROY_ON_ATTACKED`·`RESET_LEVEL_ON_ATTACKED`·`RESTART_TIMER_ON_ATTACKED_BY_BOSS`가 그
+부류다. 체인은 "다른 Effect를 적용"만 하기 때문이다.
+
+우회: 반응이 거는 Effect가 `RemoveOnApplyTags`(G1)로 원 Effect의 AssetTag를 지정하면 자기
+제거까지는 된다. 레벨 리셋·타이머 재시작은 "제거 후 재적용"(Level 1로 새 인스턴스) 근사다.
+`ChainEdgeDef.SelfAction: None | RemoveSelf | Refresh`는 실수요 시 비파괴 추가로 남긴다.
+
+### 6.9 반사 예시 (코드 0줄 확인)
+
+```
+피해 스펙 "FireBolt" (Instant)
+  Modifiers:   [{ Hp, Add, SourceAttribute(Attack) × -1.2 }]
+  RaiseEvents: [{ Tag: event.damage.taken, AttributeId: Hp }]
+
+반사 버프 "Thorns" (Infinite)
+  Chains: [{ Trigger: OnEvent, EventTag: event.damage.taken, Listen: AsTarget,
+             EffectName: "ThornsRetaliate", Selector: EventSource, LevelRule: Inherit }]
+
+"ThornsRetaliate" (Instant)
+  Modifiers: [{ Hp, Add, EventMagnitude × 0.3 }]
+```
+
+**magnitude는 부호가 있는 Base 변화량이다.** 위 예에서 피해 이벤트의 magnitude는 −100(Hp가
+줄었으므로)이고, 반사는 `× 0.3 = −30`을 공격자 Hp에 Add하므로 30 피해가 된다. 회복 이벤트라면
+magnitude가 양수이므로 같은 계수가 회복을 전파한다 — 부호가 의미를 나르기 때문에 절댓값을
+쓰지 않는다.
+
+흡혈은 같은 이벤트에 `Listen: AsSource` + 셀렉터 생략(= 시전자 자신) +
+`Hp, Add, EventMagnitude × -0.1` → `−100 × −0.1 = +10`, 10 회복이 된다.
+확률 반사는 `ThornsRetaliate`에 `ChanceToApply`(G2)를 달면 된다.
+
+## 7. Ability
+
+### 7.1 AbilityDef — 순수 데이터
+
+```
+AbilityDef
+├─ Name, MaxLevel
+├─ AssetTags[]                              어빌리티 분류 (쿨다운 Effect가 겨냥하는 대상)
+├─ RequiredTags[] / BlockedTags[]           소유자 태그 게이트
+├─ ActivationConditions: ConditionDef[]     Operand 비교 (슬라이스 2 조건 어휘 재사용)
+├─ Costs: [{ AttributeId, MagnitudeDef }]
+├─ CooldownEffect: string?                  발동 성공 시 자신에게 적용할 Effect 이름
+└─ Effects: [{ EffectName, SelectorTag?, SelectorParams[], LevelRule }]
+```
+
+`IAbilityBehavior` 시섬을 두지 않는다. 소비자가 0개이고, 임의 로직 자리는 이미
+`IExecutionCalc`가 있다(어빌리티가 Effect를 적용하고 그 Effect가 Execution을 갖는 경로).
+시섬은 기존 3종(`IMagnitudeCalc`·`IExecutionCalc`·`ITargetSelector`)을 유지한다.
+필요해지면 추가는 비파괴다.
+
+### 7.2 발동 순서와 결과
+
+```
+TryActivateAbility(unitId, abilityId) → AbilityActivationResult
+```
+
+레벨은 인자가 아니라 **부여 시 기록된 값**이다(§7.4) — 같은 어빌리티를 여러 소스가 주면 최대
+레벨을 쓴다. 호출자가 임의 레벨을 넘길 수 있으면 게이트를 통과한 뒤 크기만 부풀리는 경로가
+생긴다.
+
+1. 유닛 해석 → 실패 시 `UnknownUnit`
+2. 카탈로그 해석 → 실패 시 `UnknownAbility`
+3. 부여 여부 → 미부여면 `NotGranted`
+4. `RequiredTags` 미충족 → `MissingTag`
+5. `BlockedTags` 보유 → `BlockedByTag` (쿨다운은 이 경로로 잡힌다)
+6. `ActivationConditions` 미충족 → `ConditionFailed`
+7. `Costs` 전부 `Current >= 비용` 검사 → 미달이면 `CostInsufficient`
+8. **코스트 즉시 차감** → `CooldownEffect` 적용 → `Effects` 각 항목을 셀렉터로 대상 선택 후
+   `EnqueueApply` → `Success`
+
+게이트 실패는 예외가 아니라 사유 반환이다(프레임워크 설계 §10). 7~8이 한 호출 안에서 끝나야
+같은 틱 다중 발동에서 이중 소모 검사가 깨지지 않는다 — 이것이 **코스트를 Effect로 우회하지
+않는 이유**다. 코스트 감소는 `MagnitudeDef`가 속성을 참조하면 되므로 데이터로 커버된다.
+
+```
+AbilityActivationResult:
+  Success | UnknownUnit | UnknownAbility | NotGranted | MissingTag
+| BlockedByTag | ConditionFailed | CostInsufficient
+```
+
+### 7.3 쿨다운 = Effect
+
+프레임워크 설계 §8.3의 "쿨다운·코스트는 내부적으로 Effect로 표현(쿨다운 감소 아이템이 공짜)"를
+다음으로 구현한다.
+
+```
+"Cooldown.Fireball" (Duration, DurationTicks: 200)
+  GrantedTags:   [cooldown.fireball]
+  AssetTags:     [cooldown]
+  DurationScale: MagnitudeDef → Operand.Attribute(CooldownReduction)
+
+AbilityDef "Fireball"
+  BlockedTags:    [cooldown.fireball]
+  CooldownEffect: "Cooldown.Fireball"
+```
+
+쿨다운 20% 감소 반지 = `CooldownReduction` 속성에 `Multiply −0.2`를 거는 Effect 하나.
+`DurationScale`(G3)이 이미 `MagnitudeDef`이고 적용 시 1회 평가하며 Operand가 대상(= 시전자)
+속성을 읽으므로 **추가 기계가 0개**다.
+
+쿨다운 초기화·단축은 기존 `RemoveByTags(cooldown.*)`로 커버된다.
+
+### 7.4 AbilitySet과 부여 소스
+
+```
+AbilitySet (Unit 소유)
+├─ Grant(abilityId, GrantSource, level)
+├─ Revoke(GrantSource)              해당 소스가 준 것만 회수
+├─ IsGranted(abilityId)
+├─ GetLevel(abilityId)              부여 소스들의 레벨 중 최대값
+└─ 소스별 참조 카운트 — 여러 소스가 같은 어빌리티를 주면 마지막 소스가 사라질 때 회수
+
+GrantSource = Archetype | Effect(instanceId) | Item(itemId) | Code
+```
+
+부여 목록은 (abilityId, GrantSource) 오름차순으로 유지한다 — 최대 레벨 계산과 스냅샷
+직렬화가 순서 의존이므로 결정론 근거가 필요하다.
+
+프레임워크 설계 §8.3의 부여 소스 4종에 대응한다.
+
+- **Archetype**: 유닛 생성 시 아키타입 선언에서 부여. 유닛 고유 반응(idlez
+  `UNIT_ONATTACKED_MYPLAYER` 부류)도 "스폰 시 부여되는 Infinite Effect"로 표현되므로
+  별도 어휘가 필요 없다.
+- **Effect**: `EffectSpec.GrantedAbilities[]`를 `GrantedTags`와 평행하게 추가한다. 인스턴스
+  제거 시 회수하고, `Enabled` 토글에도 함께 붙였다 뗀다(GrantedTags와 동일 규율).
+- **Item**: 슬라이스 4에서 연결한다. 본 슬라이스는 `GrantSource.Item(itemId)` 케이스와
+  `Revoke` 경로만 뚫어둔다.
+- **Code**: 게임이 직접.
+
+부여 시점에 `RequiredTags` 게이트를 걸지 않는다 — 게이트는 발동 시점 검사다(§7.2).
+프레임워크 설계 §8.3의 "부여 조건은 grant 시 RequiredTags 게이트"는 발동 게이트와 중복이므로
+채택하지 않는다.
+
+### 7.5 AbilityCatalog
+
+`EffectCatalog`와 같은 Build 체인에 붙는다:
+`TagCatalog → SeamRegistry → AttributeRegistry → EffectCatalog → AbilityCatalog`.
+어빌리티가 참조하는 Effect 이름은 Build에서 밀집 id로 해석되고, 미해석 참조는 예외다.
+JSON 저작 스키마와 로더를 함께 출하한다(슬라이스 2 §10.1과 같은 strict 규율).
+
+## 8. TargetSelector 배선
+
+```
+SelectorContext (기존 Source / Params / Rng 에 추가)
+├─ ReadOnlySpan<TargetId> Candidates          = resolver.TargetIds (오름차순 — 결정론 근거)
+├─ bool TryGetTags(TargetId, out TagCountContainer)
+├─ bool TryGetAttribute(TargetId, ushort, out BigNum)
+├─ TargetId EventSource / EventTarget         OnEvent 경로에서만 유효(그 외 기본값)
+└─ TargetId Origin                            선택의 원 대상
+```
+
+"적 전체", "체력 최저 아군", "태그 보유자 N명" 등이 셀렉터 구현에서 표현된다. 공간 질의(거리
+기반 오라·전염)는 이동·공간 스펙과 함께 온다 — 그때 `SelectorContext`에 공간 인덱스 접근자가
+비파괴로 추가된다(idlez는 `GameBoard._unitRTree`가 그 자리다).
+
+셀렉터에 World 참조를 통째로 주지 않는다. 심이 월드 전체를 만질 수 있게 되면 결정론·테스트
+경계가 무너진다.
+
+**절단 카운터**(백로그 ③): `FireChain`의 `stackalloc TargetId[32]`를 유지하되,
+`Select`가 32를 초과해 반환하면 `SelectorTruncationCount`를 올린다. 기존
+`UnresolvedTargetDropCount`·`ImmuneDropCount`·`ConditionDropCount`·`ChanceDropCount`·
+`DrImmuneDropCount`와 나란히 노출한다. 어빌리티의 `Effects` 셀렉터 호출도 같은 경로를 쓴다.
+
+## 9. 백로그 ① — 수식 파싱 1회화
+
+현재 `EffectCatalogBuilder.CompileFormula`가 `BigNumFormula.TryEvaluate(formula, level, …)`를
+`MaxLevel`회 호출해 매번 문자열을 재파싱한다.
+
+```
+BigNumFormula.TryCompile(string formula, out CompiledFormula compiled, out string? error)
+CompiledFormula.Evaluate(BigNum x) → BigNum
+```
+
+`CompiledFormula`는 토큰/RPN 배열을 담는 불변 구조다. `CompileFormula`가 1회 컴파일 후 레벨
+루프를 돈다. 결과값은 기존 경로와 **비트 동일**해야 한다(회귀 테스트로 고정).
+`TryValidate`는 `TryCompile`의 얇은 래퍼가 된다.
+
+현실 카탈로그 규모(2000 effect × 3 magnitude × 100 level ≈ 60만 회 ≈ 580ms) 기준으로 서버·클라
+기동 모두에서 유의미하다.
+
+## 10. 백로그 ② — 출하 컴파일 아티팩트
+
+`TagCatalogBinary` 패턴을 그대로 복제한다.
+
+```
+EffectCatalogBinary / AbilityCatalogBinary
+├─ Writer: 빌드 시 컴파일된 카탈로그를 바이너리로 기록 (AtomicFileWriter 재사용)
+├─ Reader: 기동 시 로드 — JSON 파싱·수식 평가·검증을 건너뛴다
+└─ fingerprint: TagCatalog fingerprint + AttributeRegistry 서명 + 스키마 버전
+```
+
+- **JSON 저작이 정본이라는 것은 불변이다.** 바이너리는 파생 산출물이며 빌드 파이프라인이 굽는다.
+- fingerprint 불일치는 기동 시 예외(`TagCatalogCompatibilityException` 계열과 동형).
+- 손상 파일 검출은 `TagCatalogBinaryCorruptionTests`의 패턴을 따른다.
+- 이 아티팩트가 ①의 수식 평가 비용까지 흡수하므로 클라 기동에서는 양쪽 비용이 모두 0이 된다.
+  ①은 바이너리를 굽는 빌드 측과 JSON 직접 로드를 쓰는 개발 워크플로에 남는다.
+
+## 11. 틱 파이프라인 (개정판)
+
+```
+World.Tick():
+  ⓪ 스폰/디스폰 큐 반영 (레지스트리 변경은 여기서만)
+  EffectPipeline.Tick():
+    ① 적용   큐 드레인(FIFO, 틱당 예산 N)
+             — Instant 실행 시 RaiseEvents → OnEvent 체인 매칭 → 같은 큐 적재
+    ② 시간   ttl 감소, Period 발화(→ RaiseEvents 동일), 만료 제거, 만료 체인 큐 적재
+    ③ 재계산 1차
+    ④ 조건   Ongoing 일괄 평가 → enabled 토글 (GrantedAbilities도 함께 토글)
+    ⑤ 재계산 2차
+    ⑥ 방출   이벤트 버퍼 확정
+    CurrentTick++            (파이프라인 내부 — World는 별도 카운터를 두지 않는다)
+```
+
+`OnEvent`가 새 페이즈를 만들지 않는다는 점이 핵심이다 — 페이즈 ①·② 안에서 기존 큐에
+합류하므로 예산·이월·순환 유계화가 전부 재사용된다.
+
+## 12. 테스트 전략
+
+**결정론 오라클**(슬라이스 2의 3종에 시나리오 추가):
+반사 왕복(A반사 ↔ B반사 상호 반사가 예산 안에서 수렴), 부여/회수 왕복, 쿨다운 사이클 후
+상태 비트 동일.
+
+**기계별**:
+- 게이트 실패 사유 7종 각각 하나씩 + `Success` 경로
+- 부여 소스 4종 × (부여 → 소스 소멸 → 회수), 중복 부여 참조 카운트, 최대 레벨 선택
+- `Enabled` 토글 시 GrantedAbilities 동반 토글
+- `OnEvent`: AsTarget/AsSource 방향, 태그 계층 매칭, `Enabled=false` 미수신,
+  `EventMagnitude` 실적용값(클램프 걸린 케이스 포함), 순회 순서 canonical, 순환의 예산 유계
+- 코스트 원자성: 같은 틱 다중 발동에서 이중 소모 없음
+- 쿨다운 감소: `CooldownReduction` 속성이 `DurationScale`에 반영
+- 셀렉터: 후보 스팬 오름차순, 절단 카운터 증가
+- 스폰/디스폰이 페이즈 경계에서만 반영, 디스폰 대상 적용은 드랍 카운터
+- Build 검증 오류 전 경로(§6.7) — 오류 하나당 테스트 하나
+
+**직렬화 라운드트립**: 같은 스펙 집합을 ① 코드 빌더 ② JSON 로드 ③ 컴파일 아티팩트 세 경로로
+Build했을 때 시나리오 해시가 일치.
+
+**수식 컴파일 회귀**: 기존 `TryEvaluate` 경로와 새 `TryCompile → Evaluate`가 비트 동일.
+
+**무할당 스모크**: 정착 상태 틱 반복 + 이벤트 발행 경로에서
+`GC.GetAllocatedBytesForCurrentThread` == 0. 발동·스폰 순간은 풀 왕복만 허용.
+
+## 13. 이연 목록
+
+| 항목 | 어디로 |
+|---|---|
+| 시전 인스턴스(타임라인 액터 — idlez `GameSkill` 상당) | 이동·공간 스펙 이후. World 틱에 페이즈 한 쌍 추가하는 비파괴 확장 |
+| 채널링·지속 어빌리티 1급 지원 | 위와 동일 |
+| `ChainEdgeDef.SelfAction`(반응이 자기 상태를 변경) | 실수요 시 — §6.8 |
+| `Operand.EventNominalMagnitude` | 실수요 시 — 값은 이벤트에 이미 동승 |
+| 아이템의 EffectTarget 보유 | 슬라이스 4 — 합성이라 optional로 붙는다 |
+| Item 부여 소스 실배선 | 슬라이스 4 (케이스·Revoke 경로는 본 슬라이스에서 뚫림) |
+| 공간 질의 셀렉터(거리 기반 오라·전염) | 이동·공간 스펙 |
+| proto 직렬화·dirty 추적 | 슬라이스 4 |
+| 복제(gameplay.proto)·미러 월드·시야 필터 | 슬라이스 5 |
+| `World.PostAsync` 액터 래퍼 | `Bun3.Server.Gameplay`, 슬라이스 5 |
+| 피해 파이프라인 1급화(치명타·방어구 순서 고정) | 채택 안 함 — §3.3. 게임이 MagnitudeCalc로 정한다 |
+| `IAbilityBehavior` 시섬 | 실수요 시 — §7.1 |
+
+## 14. 버전
+
+기능 추가(파괴 없음): `Bun3.Gameplay` 0.13.0 → **0.14.0**, UPM 동반.
+슬라이스 2 §7.2의 체인 값 전달 규칙 개정은 문서 개정이며 기존 4종 트리거의 동작은 불변이다.
+`calc.*`·`selector.*`에 이어 `event.*` 예약 루트가 추가된다(일반 태그이므로 카탈로그 스키마
+영향 없음).
+
+퍼블리시와 main 머지는 본 슬라이스 범위 밖이다 — 브랜치에서 완결하고 사용자 확인을 기다린다.
