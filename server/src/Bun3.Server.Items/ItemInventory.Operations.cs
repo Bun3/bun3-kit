@@ -158,16 +158,21 @@ namespace Bun3.Server.Items
         /// priority-consumption planning.</summary>
         public BigNum GetRemovableQuantity(ItemId item)
         {
-            if (_stackSingletons.TryGetValue(item, out var singletonId))
+            if (TryGetSingleton(item, out var singleton))
             {
-                var singleton = _instances[singletonId];
                 return (singleton.Flags & _removeBlockingFlags) != 0 ? BigNum.Zero : singleton.Quantity;
             }
 
-            long count = 0;
-            foreach (var entry in _instances)
+            var held = GetHeld(item);
+            if (held == null)
             {
-                if (entry.Value.Item == item && (entry.Value.Flags & _removeBlockingFlags) == 0)
+                return BigNum.Zero;
+            }
+
+            long count = 0;
+            for (var i = 0; i < held.Count; i++)
+            {
+                if ((held[i].Flags & _removeBlockingFlags) == 0)
                 {
                     count++;
                 }
@@ -535,25 +540,22 @@ namespace Bun3.Server.Items
                 return;
             }
 
-            if (_stackSingletons.TryGetValue(item, out var singletonId))
+            if (TryGetSingleton(item, out var singleton))
             {
-                var singleton = _instances[singletonId];
                 singleton.Quantity += amount;
                 MarkChangedNoNotify(singleton);
             }
             else
             {
                 var instance = CreateInstance(item, amount);
-                _stackSingletons.Add(item, instance.InstanceId);
                 created?.Add(instance);
             }
         }
 
         private void ApplyConsume(ItemId item, BigNum amount)
         {
-            if (_stackSingletons.TryGetValue(item, out var singletonId))
+            if (TryGetSingleton(item, out var singleton))
             {
-                var singleton = _instances[singletonId];
                 if (singleton.Quantity.CompareTo(amount) == 0)
                 {
                     RemoveInstance(singleton);
@@ -570,18 +572,15 @@ namespace Bun3.Server.Items
             // Unstackable — collect count instances that are neither locked nor batch-targeted, then remove.
             TryToInstanceCount(amount, out var count);   // Passed validation — cannot fail.
             _removeScratch.Clear();
-            foreach (var entry in _instances)
+            var held = GetHeld(item);
+            if (held != null)
             {
-                if (_removeScratch.Count >= count)
+                for (var i = 0; i < held.Count && _removeScratch.Count < count; i++)
                 {
-                    break;
-                }
-
-                if (entry.Value.Item == item
-                    && (entry.Value.Flags & _removeBlockingFlags) == 0
-                    && !IsUnstackableTarget(entry.Key))
-                {
-                    _removeScratch.Add(entry.Value);
+                    if ((held[i].Flags & _removeBlockingFlags) == 0 && !IsUnstackableTarget(held[i].InstanceId))
+                    {
+                        _removeScratch.Add(held[i]);
+                    }
                 }
             }
 
@@ -613,18 +612,21 @@ namespace Bun3.Server.Items
 
         private BigNum GetRemovablePoolBase(ItemId item)
         {
-            if (_stackSingletons.TryGetValue(item, out var singletonId))
+            if (TryGetSingleton(item, out var singleton))
             {
-                var singleton = _instances[singletonId];
                 return (singleton.Flags & _removeBlockingFlags) != 0 ? BigNum.Zero : singleton.Quantity;
             }
 
-            long count = 0;
-            foreach (var entry in _instances)
+            var held = GetHeld(item);
+            if (held == null)
             {
-                if (entry.Value.Item == item
-                    && (entry.Value.Flags & _removeBlockingFlags) == 0
-                    && !IsUnstackableTarget(entry.Key))
+                return BigNum.Zero;
+            }
+
+            long count = 0;
+            for (var i = 0; i < held.Count; i++)
+            {
+                if ((held[i].Flags & _removeBlockingFlags) == 0 && !IsUnstackableTarget(held[i].InstanceId))
                 {
                     count++;
                 }
@@ -654,16 +656,33 @@ namespace Bun3.Server.Items
                 IsNew = true,
             };
             _instances.Add(instance.InstanceId, instance);
+            Index(instance);
             return instance;
+        }
+
+        private void Index(ItemInstance<TState> instance)
+        {
+            if (!_instancesByItem.TryGetValue(instance.Item, out var held))
+            {
+                held = new List<ItemInstance<TState>>();
+                _instancesByItem.Add(instance.Item, held);
+            }
+
+            held.Add(instance);
+        }
+
+        private void Unindex(ItemInstance<TState> instance)
+        {
+            if (_instancesByItem.TryGetValue(instance.Item, out var held))
+            {
+                held.Remove(instance);
+            }
         }
 
         private void RemoveInstance(ItemInstance<TState> instance)
         {
             _instances.Remove(instance.InstanceId);
-            if (_stackSingletons.TryGetValue(instance.Item, out var singletonId) && singletonId == instance.InstanceId)
-            {
-                _stackSingletons.Remove(instance.Item);
-            }
+            Unindex(instance);
 
             if (!instance.IsNew)
             {

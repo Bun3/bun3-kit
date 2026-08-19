@@ -45,16 +45,15 @@ namespace Bun3.Server.Items
                 }
 
                 _removeScratch.Clear();
-                foreach (var entry in _instances)
+                var held = GetHeld(item);
+                if (held != null)
                 {
-                    if (_removeScratch.Count >= count)
+                    for (var i = 0; i < held.Count && _removeScratch.Count < count; i++)
                     {
-                        break;
-                    }
-
-                    if (entry.Value.Item == item && (entry.Value.Flags & _removeBlockingFlags) == 0)
-                    {
-                        _removeScratch.Add(entry.Value);
+                        if ((held[i].Flags & _removeBlockingFlags) == 0)
+                        {
+                            _removeScratch.Add(held[i]);
+                        }
                     }
                 }
 
@@ -210,6 +209,7 @@ namespace Bun3.Server.Items
         private void MoveInstance(ItemInventory<TState> target, ItemInstance<TState> instance)
         {
             _instances.Remove(instance.InstanceId);
+            Unindex(instance);
             if (!instance.IsNew)
             {
                 _removed.Add(instance.InstanceId);
@@ -219,6 +219,7 @@ namespace Bun3.Server.Items
             instance.IsNew = true;
             instance.Changed = false;
             target._instances.Add(instance.InstanceId, instance);
+            target.Index(instance);
         }
 
         private void FinalizeTransfer(ItemInventory<TState> target, ItemId item, BigNum amount)

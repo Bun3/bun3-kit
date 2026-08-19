@@ -55,7 +55,7 @@ namespace Bun3.Server.Items
             }
             else
             {
-                if (_stackSingletons.ContainsKey(item))
+                if (GetHeld(item) != null)
                 {
                     return InventoryError.DuplicateInstance;
                 }
@@ -69,11 +69,11 @@ namespace Bun3.Server.Items
                 {
                     return InventoryError.ExceedsMaxCount;
                 }
-
-                _stackSingletons.Add(item, instanceId);
             }
 
-            _instances.Add(instanceId, new ItemInstance<TState>(this, instanceId, item, quantity, flags, expiresAtTicksUtc, state));
+            var instance = new ItemInstance<TState>(this, instanceId, item, quantity, flags, expiresAtTicksUtc, state);
+            _instances.Add(instanceId, instance);
+            Index(instance);
             return InventoryError.None;
         }
 

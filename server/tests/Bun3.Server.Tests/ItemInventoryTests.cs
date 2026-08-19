@@ -359,4 +359,59 @@ public class ItemInventoryTests
         var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
         if (allocated != 0) Assert.Fail($"allocated {allocated} bytes across 1000 iterations");
     }
+
+    // ---- Per-definition instance index ----
+
+    [Test]
+    public void Index_stays_consistent_across_create_and_remove()
+    {
+        Assert.That(_inventory.TryAdd(_sword, 3), Is.EqualTo(InventoryError.None));
+        Assert.That(_inventory.GetQuantity(_sword).ToString(), Is.EqualTo(((BigNum)3).ToString()));
+
+        Assert.That(_inventory.TryRemove(_sword, 2), Is.EqualTo(InventoryError.None));
+        Assert.That(_inventory.GetQuantity(_sword).ToString(), Is.EqualTo(BigNum.One.ToString()));
+
+        Assert.That(_inventory.TryRemove(_sword, 1), Is.EqualTo(InventoryError.None));
+        Assert.That(_inventory.GetQuantity(_sword).Sign, Is.Zero);
+        Assert.That(_inventory.InstanceCount, Is.Zero);
+
+        // Refilling after the index entry drained must still work.
+        Assert.That(_inventory.TryAdd(_sword, 1), Is.EqualTo(InventoryError.None));
+        Assert.That(_inventory.GetQuantity(_sword).ToString(), Is.EqualTo(BigNum.One.ToString()));
+    }
+
+    [Test]
+    public void Index_isolates_definitions_with_many_instances()
+    {
+        Assert.That(_inventory.TryAdd(_relic, 50), Is.EqualTo(InventoryError.None));
+        Assert.That(_inventory.TryAdd(_sword, 3), Is.EqualTo(InventoryError.None));
+
+        var buffer = new List<ItemInstance<ItemState>>();
+        Assert.That(_inventory.CollectInstances(_sword, buffer), Is.EqualTo(3));
+        Assert.That(buffer, Has.All.Matches<ItemInstance<ItemState>>(i => i.Item == _sword));
+        Assert.That(_inventory.GetQuantity(_relic).ToString(), Is.EqualTo(((BigNum)50).ToString()));
+    }
+
+    [Test]
+    public void Stack_singleton_is_the_sole_index_entry()
+    {
+        Assert.That(_inventory.TryAdd(_gold, 100), Is.EqualTo(InventoryError.None));
+        Assert.That(_inventory.TryAdd(_gold, 50), Is.EqualTo(InventoryError.None));
+
+        Assert.That(_inventory.InstanceCount, Is.EqualTo(1));
+        var buffer = new List<ItemInstance<ItemState>>();
+        Assert.That(_inventory.CollectInstances(_gold, buffer), Is.EqualTo(1));
+        Assert.That(buffer[0].Quantity.ToString(), Is.EqualTo(((BigNum)150).ToString()));
+    }
+
+    [Test]
+    public void Loading_a_second_stackable_instance_is_rejected_via_the_index()
+    {
+        Assert.That(
+            _inventory.TryLoadInstance(10, _gold, 100, 0, new ItemState()),
+            Is.EqualTo(InventoryError.None));
+        Assert.That(
+            _inventory.TryLoadInstance(11, _gold, 50, 0, new ItemState()),
+            Is.EqualTo(InventoryError.DuplicateInstance));
+    }
 }

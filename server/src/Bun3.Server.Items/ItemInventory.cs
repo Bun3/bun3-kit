@@ -32,7 +32,7 @@ namespace Bun3.Server.Items
         private readonly Action? _onDirty;
         private readonly uint _removeBlockingFlags;
         private readonly Dictionary<long, ItemInstance<TState>> _instances;
-        private readonly Dictionary<ItemId, long> _stackSingletons;
+        private readonly Dictionary<ItemId, List<ItemInstance<TState>>> _instancesByItem;
         private readonly List<long> _removed = new List<long>();
         private readonly List<ItemInstance<TState>> _removeScratch = new List<ItemInstance<TState>>();
         private bool _hasChanges;
@@ -99,7 +99,7 @@ namespace Bun3.Server.Items
             _onDirty = onDirty;
             _removeBlockingFlags = removeBlockingFlags;
             _instances = new Dictionary<long, ItemInstance<TState>>(capacity);
-            _stackSingletons = new Dictionary<ItemId, long>();
+            _instancesByItem = new Dictionary<ItemId, List<ItemInstance<TState>>>();
         }
 
         /// <summary>The catalog this inventory is bound to.</summary>
@@ -112,23 +112,36 @@ namespace Bun3.Server.Items
         /// instance count for unstackables. 0 if not held.</summary>
         public BigNum GetQuantity(ItemId item)
         {
-            if (_stackSingletons.TryGetValue(item, out var singletonId))
+            if (TryGetSingleton(item, out var singleton))
             {
-                return _instances[singletonId].Quantity;
+                return singleton.Quantity;
             }
 
-            long count = 0;
-            // ponytail: full scan without a per-definition index (O(instance count)) — assumes
-            // player inventories in the hundreds.
-            foreach (var entry in _instances)
+            var held = GetHeld(item);
+            return held == null ? BigNum.Zero : (BigNum)(long)held.Count;
+        }
+
+        /// <summary>Held instances of the definition, or null when none are held. The list is
+        /// reused across refills, so an empty list is treated as "not held".</summary>
+        private List<ItemInstance<TState>>? GetHeld(ItemId item) =>
+            _instancesByItem.TryGetValue(item, out var held) && held.Count > 0 ? held : null;
+
+        /// <summary>The stack singleton of a stackable definition. False for unstackables and for
+        /// definitions with nothing held.</summary>
+        private bool TryGetSingleton(ItemId item, out ItemInstance<TState> singleton)
+        {
+            if (!_catalog.IsUnstackable(item))
             {
-                if (entry.Value.Item == item)
+                var held = GetHeld(item);
+                if (held != null)
                 {
-                    count++;
+                    singleton = held[0];
+                    return true;
                 }
             }
 
-            return count;
+            singleton = null!;
+            return false;
         }
 
         /// <summary>Looks up an instance by id.</summary>
@@ -152,17 +165,18 @@ namespace Bun3.Server.Items
                 throw new ArgumentNullException(nameof(buffer));
             }
 
-            var count = 0;
-            foreach (var entry in _instances)
+            var held = GetHeld(item);
+            if (held == null)
             {
-                if (entry.Value.Item == item)
-                {
-                    buffer.Add(entry.Value);
-                    count++;
-                }
+                return 0;
             }
 
-            return count;
+            for (var i = 0; i < held.Count; i++)
+            {
+                buffer.Add(held[i]);
+            }
+
+            return held.Count;
         }
 
         /// <summary>Appends expired instances (<see cref="ItemInstance{TState}.ExpiresAtTicksUtc"/>
