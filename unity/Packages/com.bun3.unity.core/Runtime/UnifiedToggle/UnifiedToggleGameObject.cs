@@ -37,7 +37,7 @@ namespace Bun3.Unity.Core.UnifiedToggle
     }
 
     [Serializable]
-    public partial class UnifiedToggleGameObject : BaseUnifiedToggle<UnifiedToggleGameObject>
+    public class UnifiedToggleGameObject : BaseUnifiedToggle<UnifiedToggleGameObject>
     {
         public override UnifiedToggleGameObject Component => this;
     }

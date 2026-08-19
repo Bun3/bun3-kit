@@ -76,7 +76,7 @@ namespace Bun3.Unity.Core.UnifiedToggle
 
 
     [ExecuteAlways]
-    public abstract partial class BaseUnifiedToggle : MonoBehaviour, IUnifiedToggle
+    public abstract class BaseUnifiedToggle : MonoBehaviour, IUnifiedToggle
     {
         [SerializeField] protected UnifiedToggleGroup _authorGroup;
 
@@ -84,13 +84,8 @@ namespace Bun3.Unity.Core.UnifiedToggle
 
         public abstract void SetValue(string value);
 
-        partial void OnDestroyEditor();
-
         protected virtual void OnDestroy()
         {
-#if UNITY_EDITOR
-            OnDestroyEditor();
-#endif
             if (_authorGroup)
                 _authorGroup.EnsureValidToggles();
         }
@@ -131,7 +126,7 @@ namespace Bun3.Unity.Core.UnifiedToggle
     }
 
     [DisallowMultipleComponent]
-    public abstract partial class BaseUnifiedToggle<TComponent> : BaseUnifiedToggle where TComponent : Component
+    public abstract class BaseUnifiedToggle<TComponent> : BaseUnifiedToggle where TComponent : Component
     {
         public abstract TComponent Component { get; }
 

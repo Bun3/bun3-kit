@@ -15,7 +15,7 @@ namespace Bun3.Unity.Core.UnifiedToggle
     }
 
     [RequireComponent(typeof(UnifiedToggleGroup))]
-    public partial class UnifiedToggleToggleGroup : BaseUnifiedToggle<UnifiedToggleGroup>
+    public class UnifiedToggleToggleGroup : BaseUnifiedToggle<UnifiedToggleGroup>
     {
         [SerializeField, ReadOnly]
         protected UnifiedToggleGroup _group;

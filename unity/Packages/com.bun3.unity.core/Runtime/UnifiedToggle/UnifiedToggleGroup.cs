@@ -6,7 +6,7 @@ using UnityEngine;
 namespace Bun3.Unity.Core.UnifiedToggle
 {
     [DisallowMultipleComponent]
-    public sealed partial class UnifiedToggleGroup : MonoBehaviour, IUnifiedToggle
+    public sealed class UnifiedToggleGroup : MonoBehaviour, IUnifiedToggle
     {
         [SerializeField] private string[] _presets = { "Off", "On" };
         [SerializeField] private BaseUnifiedToggle[] _toggles = { };
