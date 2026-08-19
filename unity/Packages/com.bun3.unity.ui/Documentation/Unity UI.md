@@ -89,6 +89,172 @@ Arguments are evaluated before `Require` is entered, so the scope cannot prevent
 - Pass a cached `Action` field, not a method group or lambda — `Require(cond, OpenPopup)` and `Require(cond, () => OpenPopup())` allocate a delegate every frame. Assign `_openPopup = OpenPopup;` once in `Awake()`.
 - Prefer constant strings — `Require(gold >= price, $"Need {price - gold} more gold")` allocates a string every frame. Build interpolated messages only when the value changes, and cache them.
 
+## Popup stack
+
+`Bun3.Unity.UI.Popups` provides a domain-agnostic popup/modal stack: push/pop with layer ordering, duplicate policies, a sequential display queue, back-key routing, and animation await points. Everything game-specific — prefab loading, parenting, dim/sound presentation — is injected through delegates and virtual methods.
+
+```csharp
+using Bun3.Unity.UI.Popups;
+
+// 1. Derive popups from Popup (override animation/back hooks as needed).
+//    Popup, ToastView, LoadingView all share the UIView base: PlayShowAsync/PlayHideAsync
+//    transition hooks + built-in scale/fade animation flags (inspector) as the default.
+public sealed class ShopPopup : Popup
+{
+    protected override UniTask PlayShowAsync(CancellationToken ct) => _tween.PlayAsync(ct);
+    protected override bool OnBackRequested() => !_isPurchasing; // refuse close mid-purchase
+}
+
+// 2. Create one stack, supplying how popups are created and released.
+_stack = new PopupStack(
+    factory: (key, ct) => LoadAndInstantiateAsync(key, ct), // Resources/Addressables/pool — your call
+    releaser: popup => Destroy(popup.gameObject));           // omit for default Destroy
+
+// 3. Drive it. The popup TYPE is the key (legacy ShowPopup<T> style) — the class name
+//    becomes the load address your factory receives. A string name is only for
+//    (a) prefab variants of the same class and (b) data-driven opens.
+_stack.Push<ShopPopup>();                              // fire-and-forget
+var shop = await _stack.PushAsync<ShopPopup>();        // await open animation, get the TYPED instance
+_stack.Push<ShopPopup>("ShopPopup_Halloween");         // same class, different prefab = distinct popup
+_stack.Push("ShopPopup");                              // data-driven (server/table string) — same key
+_stack.Push<SystemAlertPopup>(layer: 100);             // higher layer stays on top
+_stack.Push<ShopPopup>(duplicate: PopupDuplicatePolicy.Replace);
+_stack.Enqueue<LevelUpPopup>();                        // shows when the stack is empty, one at a time
+_stack.HandleBack();                                   // route ESC/Android back to the top popup
+
+// 4. Pass initial data without synchronous instantiation: implement IPopupArg<TArg>
+//    and it arrives right after the async load, before the open animation.
+_stack.PushWithArg<ItemDetailPopup, ItemDetailArgs>(new ItemDetailArgs(itemId));
+_stack.EnqueueWithArg("RewardPopup", rewardArgs);      // string-key form for data-driven paths
+
+// A popup may implement IPopupArg<TArg> for several TArg types to expose multiple
+// initialization routes — e.g. a typed code path plus a designer-data string path.
+// The static type at the call site picks which OnPopupArg runs.
+public sealed class ItemDetailPopup : Popup, IPopupArg<int>, IPopupArg<string>
+{
+    public void OnPopupArg(int defId)     { /* from code */ }
+    public void OnPopupArg(string token)  => OnPopupArg(int.Parse(token)); // from table/server data
+}
+// To make the string route mandatory for every popup (like an abstract token method),
+// enforce it in your game's base class: abstract class GamePopup : Popup, IPopupArg<string>.
+
+// 5. Reuse an already-open instance instead of stacking a duplicate (legacy GetOrShowPopup):
+//    moves it to the top of its layer and re-delivers the arg via IPopupArg.
+var shop = await _stack.PushWithArgAsync<ShopPopup, ShopArgs>(shopArgs,
+    duplicate: PopupDuplicatePolicy.Focus);
+
+// 6. Channel queue: show one at a time *within this queue* — on top of other popups.
+//    (PopupStack.Enqueue waits for an empty stack; PopupQueue only waits for its own popup.)
+//    Higher priority shows first; FIFO within the same priority.
+_rewardQueue = new PopupQueue(_stack);
+_rewardQueue.EnqueueWithArg<PromotionPopup, RankArgs>(rankArgs, priority: 2);
+_rewardQueue.EnqueueWithArg<GotItemsPopup, ItemArgs>(itemArgs);       // priority 0
+
+// 7. Pooling + preload: plug the pool straight into the stack.
+_pool = new PopupPool(LoadPopupAsync);
+_stack = new PopupStack(_pool.RentAsync, _pool.Return);
+await _pool.PreloadAsync<ShopPopup>();         // marks the key pooled + stocks an instance
+
+// 8. Sibling ordering: optional arranger keeps sibling indices matching stack order
+//    (assumes a popup-only parent). Order notifications and dim handling live in the
+//    stack itself, so this is purely about transform order.
+_arranger = new PopupSiblingArranger(_stack);
+
+// 8b. Dim: assign the popup prefab's dim object to the serialized BackgroundDim field
+//     (leave null for dimless popups). The stack keeps exactly one dim visible — the
+//     topmost popup that HAS a dim — so a dimless popup on top keeps the dim below it.
+
+// 8c. Or wire everything at once and let Dispose() tear it down in order:
+_popups = new PopupManagerBuilder(LoadPopupAsync)
+    .UsePool()                                  // wraps the loader in a PopupPool
+    .UseBackKey(gameObject, ShowQuitDialog)     // attaches PopupBackKeyRouter, injects the stack
+    .UseSiblingArranger()
+    .Build();
+_popups.Stack.Push<ShopPopup>();
+
+// 8d. Global access (legacy GameManager.Get().ShowPopup style): assign the built manager
+//     to the optional static slot in your bootstrap. Dispose() clears it automatically.
+//     The manager mirrors the common stack verbs, so no .Stack hop is needed day to day.
+PopupManager.Instance = _popups;
+PopupManager.Instance.Push<ShopPopup>();                          // from anywhere
+PopupManager.Instance.PushWithArg<ItemDetailPopup, ItemDetailArgs>(args);
+PopupManager.Instance.Enqueue("RewardPopup");
+
+// 8e. Result popups (legacy Callback(int result)): derive from Popup<TResult>, call
+//     SetResult before closing. Closing without SetResult (back key, cancel) yields
+//     defaultResult — cancel needs no extra code.
+public sealed class ConfirmPopup : Popup<bool>, IPopupArg<string>
+{
+    public void OnPopupArg(string message) { /* bind label */ }
+    void OnYes() { SetResult(true); Close(); }
+    void OnNo()  => Close();
+}
+// The where TPopup : Popup<TResult> constraint checks the popup↔result pairing at
+// COMPILE time — no key declarations needed at all:
+bool ok    = await _stack.PushForResultAsync<ConfirmPopup, string, bool>("Delete this?");
+var picked = await _stack.PushForResultAsync<ItemPickPopup, ItemInstance>(); // null = cancelled
+// (string-key overloads remain for data-driven opens; those are checked at runtime.)
+
+// 9. Input protection (all serialized flags on Popup, on by default where safe):
+//    - raycasts are blocked during open/close transitions (+optional post-open delay)
+//    - EventSystem selection is cleared on open
+//    - closeOnDimClick: clicking the dim closes the popup (respects close scopes)
+//    Built-in scale-pop/fade animations (legacy animated/faded/animDuration) run from the
+//    default PlayOpen/CloseAsync — overriding those hooks replaces them.
+//    OnBecameTopmost()/OnCovered() fire as popups stack over each other.
+
+// 9b. Whole-stack signals and bulk close:
+_stack.CloseAll(except: settingsPopup);        // normal close path (animations run) — Clear() skips them
+_stack.CloseAll(p => p.Layer == 0);
+await _stack.WaitUntilEmptyAsync();            // auto-landing/tutorial gate (legacy UISequence)
+_stack.Emptied += TryStartAutoLanding;
+
+// 9c. Universal alert (legacy Popup_Alert): keep fluent setters ON YOUR popup class —
+//     open-ended, any content can extend it with more setters — and pass the chain as a
+//     `configure` callback. It runs after the async load, before the open animation, so
+//     the legacy builder DX survives without synchronous instantiation.
+public sealed class AlertPopup : Popup<bool>
+{
+    public AlertPopup SetTitle(string t) { ...; return this; }
+    public AlertPopup SetDesc(string d)  { ...; return this; }
+    public AlertPopup SetItems(IEnumerable<AddItem> items) { ...; return this; } // game extension
+    void OnOk() { SetResult(true); Close(); }
+    // reset widgets to defaults in OnAttached() — legacy Initialize(), pool-reuse safe
+}
+bool ok = await _stack.PushForResultAsync<AlertPopup, bool>(
+    p => p.SetTitle("Title").SetDesc("Body").SetItems(rewards));
+// Focus re-applies the chain to the live instance (legacy GetOrShow().Set...);
+// Queue keeps the chain until the popup is actually shown.
+
+// 9d. Toasts (Bun3.Unity.UI.Toasts) — independent of the popup stack, one at a time:
+_toasts = new ToastQueue<string>(CreateToastViewAsync, defaultDuration: 2f, capacity: 10,
+    duplicateComparer: StringComparer.Ordinal);
+_toasts.Show("Item acquired");
+_toasts.Show("Server error", force: true);     // jumps the queue, skips the current toast
+
+// 9e. Loading overlay (Bun3.Unity.UI.Loading) — ref-counted, flash-free (delayed show):
+_loading = new LoadingOverlay(CreateLoadingViewAsync, showDelay: 0.2f);
+using (_loading.Begin()) await SendPacketAsync(req, ct);
+var data = await _loading.During(FetchAsync(ct));
+_loading.SetProgress(0.7f);
+
+// 10. Block closing while the popup is busy (ref-counted; nested locks compose).
+//    A Close/back during the lock is *deferred*, not lost — it runs when the last lock lifts.
+using (BlockClose())                                   // sequence direction, cutscenes
+    await PlaySequenceAsync(ct);
+var res = await BlockCloseWhile(SendPacketAsync(req, ct)); // server round-trip
+```
+
+Behavior rules:
+
+- The stack is ordered by (layer ascending, push order); `Top` is the end. Back-key routing, `Pop()`, and `HandleBack()` always target the top.
+- `PopupDuplicatePolicy` decides what happens when the same `PopupKey` is already open or loading: `Ignore` (default), `Queue` (append to the sequential queue), or `Replace` (close the existing instance, open a new one).
+- `Enqueue` items display one at a time, each waiting until the stack is completely empty — the pattern for reward chains. `popup.WaitUntilClosedAsync()` awaits an individual popup's dismissal.
+- `HandleBack()` consumes the key whenever any popup is present. A top popup in transition swallows the input; `OnBackRequested()` returning `false` refuses the close. Only an empty stack returns `false`, letting the game show its own quit dialog. Attach the optional `PopupBackKeyRouter` component (assign its `Stack`) to poll ESC/Android back automatically under both input backends.
+- `Clear()` skips animations, cancels in-flight loads, ignores close locks, and releases everything — for scene transitions.
+- While `IsCloseBlocked` (any `BlockClose`/`BlockCloseWhile` lock held), back keys are consumed without routing and `Close` requests are deferred until the last lock releases. Hook `OnCloseBlockedChanged(bool)` to drive raycast blocking or spinners.
+- The push/pop/back paths allocate no closures, LINQ, or strings. (`*WithArg` uses generics — no boxing on the direct path; only queued args allocate a small holder, and that queue is a cold path.)
+
 # Technical details
 
 ## Requirements
@@ -96,18 +262,24 @@ Arguments are evaluated before `Require` is entered, so the scope cannot prevent
 - Unity 6000.3
 - `UnityEngine.UI` and `UnityEngine.EventSystems` (built-in)
 - `com.bun3.unity.core` 0.3.0
+- `com.cysharp.unitask` (popup lifecycle awaits)
 
 ## Package contents
 
 | Location | Description |
 |---|---|
 | `Runtime/Buttons/` | `ButtonInteractableScope`, `DisabledReason`, `IButtonDisabledHandler`, and `ButtonDisabledClickReceiver` source. |
+| `Runtime/Popups/` | One flat folder = one namespace (`Bun3.Unity.UI.Popups`). `Popup`(+`Popup<TResult>` in the same file, +`.CloseScope` partial), `PopupStack` partials (`.Push`/`.Close`/`.Result`/`.Queue`), `PopupKey`, `PopupPhase`, `PopupDuplicatePolicy`, `IPopupArg<TArg>`, `PopupCloseScope`, `PopupQueue`, `PopupPool`, `PopupSiblingArranger`, `PopupBackKeyRouter`, `PopupManager`(+`.Facade`), `PopupManagerBuilder`, delegates. |
+| `Runtime/Toasts/` | `ToastQueue<TData>`, `ToastView<TData>` — sequential toast display independent of the popup stack. |
+| `Runtime/Loading/` | `LoadingOverlay`(+`LoadingScope`), `LoadingView` — ref-counted, flash-free loading indicator. |
 | `Samples/ButtonInteractableScope/` | Sample MonoBehaviour and handler demonstrating typical usage. |
 | `Tests/Runtime/` | PlayMode tests (`Bun3.Unity.UI.Tests`). |
+| `Tests/Editor/` | EditMode tests (`Bun3.Unity.UI.Editor.Tests`), covering the popup stack. |
 
 ## Document revision history
 
 | Date | Reason |
 |---|---|
+| 2026-08-17 | Added the popup/modal stack (`Bun3.Unity.UI.Popups`). |
 | 2026-07-26 | Reworked for click-time reason replay. Matches package version 0.2.0. |
 | 2026-05-08 | Document created. Matches package version 0.1.0. |
