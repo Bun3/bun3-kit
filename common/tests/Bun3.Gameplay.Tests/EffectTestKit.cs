@@ -44,7 +44,9 @@ internal sealed class EffectTestKit
         { "name": "effect.magic.curse" },
         { "name": "event.damage.taken" },
         { "name": "event.damage" },
-        { "name": "event.heal.taken" }
+        { "name": "event.heal.taken" },
+        { "name": "selector.event.source" },
+        { "name": "selector.event.target" }
       ]
     }
     """;

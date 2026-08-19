@@ -614,4 +614,61 @@ public sealed class EffectEventChainTests
 
         Assert.That(() => kit.BuildPipeline(), Throws.Nothing);
     }
+
+    [Test]
+    public void Built_in_event_source_selector_targets_the_attacker()
+    {
+        var kit = EffectTestKit.Create();
+        kit.AddSpec(Damage("bolt", 40, "event.damage.taken"));
+        kit.AddSpec(Damage("retaliate", 7, eventTag: null));
+
+        var thorns = EffectTestKit.MinimalInfinite("thorns");
+        var edge = EventEdge("event.damage.taken", "retaliate", ChainListen.AsTarget);
+        edge.SelectorTag = "selector.event.source";
+        thorns.Chains.Add(edge);
+        kit.AddSpec(thorns);
+        var pipeline = kit.BuildPipeline();
+
+        foreach (var target in kit.AllTargets)
+        {
+            target.Attributes.SetBase(EffectTestKit.MaxHp, 100);
+            target.Attributes.SetBase(EffectTestKit.Hp, 100);
+        }
+
+        pipeline.EnqueueApply(kit.SpecId("thorns"), kit.Defender.Id, kit.Defender.Id);
+        pipeline.Tick();
+        pipeline.EnqueueApply(kit.SpecId("bolt"), kit.Attacker.Id, kit.Defender.Id);
+        pipeline.Tick();
+
+        Assert.That(kit.Attacker.Attributes.GetBase(EffectTestKit.Hp), Is.EqualTo((BigNum)93));
+    }
+
+    [Test]
+    public void Built_in_event_target_selector_targets_the_victim()
+    {
+        var kit = EffectTestKit.Create();
+        kit.AddSpec(Damage("bolt", 40, "event.damage.taken"));
+        kit.AddSpec(Damage("followup", 5, eventTag: null));
+
+        var vampiric = EffectTestKit.MinimalInfinite("vampiric");
+        var edge = EventEdge("event.damage.taken", "followup", ChainListen.AsSource);
+        edge.SelectorTag = "selector.event.target";
+        vampiric.Chains.Add(edge);
+        kit.AddSpec(vampiric);
+        var pipeline = kit.BuildPipeline();
+
+        foreach (var target in kit.AllTargets)
+        {
+            target.Attributes.SetBase(EffectTestKit.MaxHp, 100);
+            target.Attributes.SetBase(EffectTestKit.Hp, 100);
+        }
+
+        pipeline.EnqueueApply(kit.SpecId("vampiric"), kit.Attacker.Id, kit.Attacker.Id);
+        pipeline.Tick();
+        pipeline.EnqueueApply(kit.SpecId("bolt"), kit.Attacker.Id, kit.Defender.Id);
+        pipeline.Tick();
+
+        Assert.That(kit.Defender.Attributes.GetBase(EffectTestKit.Hp), Is.EqualTo((BigNum)55));
+        Assert.That(kit.Attacker.Attributes.GetBase(EffectTestKit.Hp), Is.EqualTo((BigNum)100));
+    }
 }
