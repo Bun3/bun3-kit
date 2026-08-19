@@ -45,7 +45,7 @@ public class ItemInventoryTests
             _catalog,
             instanceIdIssuer: () => ++_nextId,
             stateFactory: _ => new ItemState(),
-            onChanged: () => _changed++,
+            onDirty: () => _changed++,
             removeBlockingFlags: FlagInUse | FlagUserLocked);
     }
 

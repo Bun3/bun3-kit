@@ -10,7 +10,7 @@ namespace Bun3.Server.Items
     {
         /// <summary>
         /// Lazily settles all regen definitions to the current time — refills are granted
-        /// atomically as one batch (onChanged and onApplied once each) and the number of refilled
+        /// atomically as one batch (onDirty and onApplied once each) and the number of refilled
         /// definitions is returned. Games call this at access points (login, tick, right before
         /// consuming) — no timer needed.
         /// Settling before consuming is the contract — resetting the basis while full prevents

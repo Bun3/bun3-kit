@@ -17,7 +17,7 @@ namespace Bun3.Server.Items
         /// instances move whole, preserving id, state, flags, and expiry. On failure both sides are
         /// unchanged. The target must share the catalog (a mismatch is a configuration error and
         /// throws) and the target's maxCount is checked.
-        /// On success, onChanged and onApplied (source −, target +) fire once on each side.
+        /// On success, onDirty and onApplied (source −, target +) fire once on each side.
         /// </summary>
         public InventoryError TryTransfer(ItemInventory<TState> target, ItemId item, BigNum amount)
         {
@@ -225,8 +225,8 @@ namespace Bun3.Server.Items
         {
             _hasChanges = true;
             target._hasChanges = true;
-            _onChanged?.Invoke();
-            target._onChanged?.Invoke();
+            _onDirty?.Invoke();
+            target._onDirty?.Invoke();
             EmitTransferSide(item, -amount);
             target.EmitTransferSide(item, amount);
         }

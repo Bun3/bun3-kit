@@ -29,7 +29,7 @@ namespace Bun3.Server.Items
         private readonly ItemCatalog _catalog;
         private readonly Func<long> _instanceIdIssuer;
         private readonly Func<ItemId, TState> _stateFactory;
-        private readonly Action? _onChanged;
+        private readonly Action? _onDirty;
         private readonly uint _removeBlockingFlags;
         private readonly Dictionary<long, ItemInstance<TState>> _instances;
         private readonly Dictionary<ItemId, long> _stackSingletons;
@@ -67,7 +67,7 @@ namespace Bun3.Server.Items
         /// (snowflake, hi-lo, DB sequence, etc. is the game's choice). Called only after validation passes.</param>
         /// <param name="stateFactory">Initial state factory for created instances.</param>
         /// <param name="capacity">Initial capacity (0 = default).</param>
-        /// <param name="onChanged">Called once per successful mutating operation plus once per
+        /// <param name="onDirty">Called once per successful mutating operation plus once per
         /// <see cref="ItemInstance{TState}.MarkChanged"/> — games pass Player.MarkDirty to tie
         /// into the save cadence.</param>
         /// <param name="removeBlockingFlags">Instances with flags matching this mask are excluded
@@ -84,7 +84,7 @@ namespace Bun3.Server.Items
             Func<long> instanceIdIssuer,
             Func<ItemId, TState> stateFactory,
             int capacity = 0,
-            Action? onChanged = null,
+            Action? onDirty = null,
             uint removeBlockingFlags = 0,
             InventoryAppliedHandler? onApplied = null,
             ActionLog? log = null,
@@ -96,7 +96,7 @@ namespace Bun3.Server.Items
             _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
             _instanceIdIssuer = instanceIdIssuer ?? throw new ArgumentNullException(nameof(instanceIdIssuer));
             _stateFactory = stateFactory ?? throw new ArgumentNullException(nameof(stateFactory));
-            _onChanged = onChanged;
+            _onDirty = onDirty;
             _removeBlockingFlags = removeBlockingFlags;
             _instances = new Dictionary<long, ItemInstance<TState>>(capacity);
             _stackSingletons = new Dictionary<ItemId, long>();

@@ -86,7 +86,7 @@ namespace Bun3.Server.Items
         public TState State { get; }
 
         /// <summary>Call after mutating <see cref="State"/> — feeds change tracking (Updated) and
-        /// the inventory's onChanged (save cadence). Ignored after removal from the inventory.</summary>
+        /// the inventory's onDirty (save cadence). Ignored after removal from the inventory.</summary>
         public void MarkChanged()
         {
             Changed = true;

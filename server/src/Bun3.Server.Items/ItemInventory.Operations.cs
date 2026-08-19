@@ -271,7 +271,7 @@ namespace Bun3.Server.Items
         /// the apply pass runs. Unstackable instances targeted by instance-level consumes are
         /// excluded from the definition-level candidate pool for the whole batch (order-independent).
         /// The id issuer and state factory are called only after validation passes; on success
-        /// onChanged fires once per batch.
+        /// onDirty fires once per batch.
         /// </summary>
         private InventoryError CommitOps(List<TxOp> ops, out int failedIndex, List<ItemInstance<TState>>? created)
         {
@@ -324,7 +324,7 @@ namespace Bun3.Server.Items
             }
 
             _hasChanges = true;
-            _onChanged?.Invoke();
+            _onDirty?.Invoke();
             if (_appliedCount > 0)
             {
                 _onApplied?.Invoke(new ReadOnlySpan<InventoryChange>(_applied, 0, _appliedCount));
