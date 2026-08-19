@@ -8,6 +8,7 @@ using Bun3.Gameplay.Attributes;
 using Bun3.Gameplay.Catalog;
 using Bun3.Gameplay.Effects;
 using Bun3.Gameplay.Numerics;
+using Bun3.Gameplay.Seams;
 using Bun3.Gameplay.Tags;
 using NUnit.Framework;
 
@@ -144,6 +145,24 @@ public sealed class GameplayCatalogBinaryTests
     }
 
     [Test]
+    public void Unregistered_seam_tag_is_rejected()
+    {
+        var (kit, abilities) = BuildRichSource();
+        using var stream = new MemoryStream();
+        GameplayCatalogBinary.Write(stream, kit.Catalog, abilities, kit.TagCatalog, kit.Attributes);
+        stream.Position = 0;
+
+        var emptySeams = new SeamRegistryBuilder().Build(kit.TagCatalog);
+        var missing = kit.Tag("calc.magnitude.x");
+
+        Assert.That(
+            () => GameplayCatalogBinary.Load(stream, kit.TagCatalog, emptySeams, kit.Attributes),
+            Throws.InstanceOf<TagCatalogCompatibilityException>()
+                .With.Message.Contains("magnitude calc")
+                .And.Message.Contains(missing.Index.ToString()));
+    }
+
+    [Test]
     [Ignore("Enabled in Task 16 once EffectScenario.RunHash exists.")]
     public void Binary_and_json_paths_produce_the_same_scenario_hash()
     {
@@ -224,10 +243,12 @@ public sealed class GameplayCatalogBinaryTests
         burn.Stack.OnOverflow = StackOverflow.ApplyEffect;
         burn.Stack.OverflowEffectName = "bolt";
         burn.Stack.ClearStacksOnOverflow = true;
+        burn.Stack.LevelFromStack = true;
         burn.Modifiers.Add(new ModifierDef
         {
             AttributeId = EffectTestKit.Attack,
             Op = AttributeModifierOp.Add,
+            ScaleWithStack = true,
             Magnitude = new MagnitudeDef
             {
                 PerLevelValues = new List<BigNum> { 1, 2, 3 },
@@ -352,6 +373,8 @@ public sealed class GameplayCatalogBinaryTests
         typeof(string), typeof(BigNum), typeof(Operand), typeof(GameplayTag),
     };
 
+    // Boundary of the guard: it walks properties only. Compiled types expose every member as a
+    // get-only auto-property; a public field or an indexer added later would be skipped or throw here.
     private static void AssertDeepEqual(Type declaredType, object? expected, object? actual, string path)
     {
         if (expected is null || actual is null)
@@ -400,8 +423,8 @@ public sealed class GameplayCatalogBinaryTests
         }
     }
 
-    private sealed class ConstantMagnitude : Bun3.Gameplay.Seams.IMagnitudeCalc
+    private sealed class ConstantMagnitude : IMagnitudeCalc
     {
-        public BigNum Calculate(in Bun3.Gameplay.Seams.MagnitudeContext ctx) => 7;
+        public BigNum Calculate(in MagnitudeContext ctx) => 7;
     }
 }

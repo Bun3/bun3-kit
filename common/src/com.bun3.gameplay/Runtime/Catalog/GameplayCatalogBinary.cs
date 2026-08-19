@@ -138,8 +138,8 @@ namespace Bun3.Gameplay.Catalog
         /// <exception cref="ArgumentNullException">Any argument is null.</exception>
         /// <exception cref="ArgumentException">The input stream is not readable.</exception>
         /// <exception cref="TagCatalogFormatException">The magic, schema, length, checksum, or payload structure is invalid.</exception>
-        /// <exception cref="TagCatalogCompatibilityException">The tag fingerprint or attribute signature differs.</exception>
-        /// <exception cref="KeyNotFoundException">A stored seam tag is not registered in <paramref name="seams"/>.</exception>
+        /// <exception cref="TagCatalogCompatibilityException">The tag fingerprint or attribute signature
+        /// differs, or a stored seam tag is not registered in <paramref name="seams"/>.</exception>
         public static (EffectCatalog Effects, AbilityCatalog Abilities) Load(
             Stream input, TagCatalog tags, SeamRegistry seams, AttributeRegistry attributes)
         {
@@ -328,8 +328,7 @@ namespace Bun3.Gameplay.Catalog
                 var increment = reader.ReadBigNum("modifier increment");
                 var scaleWithStack = reader.ReadBool("modifier scale with stack");
                 modifiers[i] = new CompiledModifier(
-                    attributeId, op, magnitudeBase, perLevel,
-                    calcTag.IsValid ? seams.GetMagnitudeCalc(calcTag) : null, calcTag,
+                    attributeId, op, magnitudeBase, perLevel, MagnitudeCalc(seams, calcTag), calcTag,
                     byLevel, tail, increment, scaleWithStack);
             }
 
@@ -339,7 +338,7 @@ namespace Bun3.Gameplay.Catalog
                 var calcTag = reader.ReadTag("execution calc tag");
                 var inputs = new Operand[reader.ReadLength("execution input count")];
                 for (var j = 0; j < inputs.Length; j++) inputs[j] = reader.ReadOperand("execution input");
-                executions[i] = new CompiledExecution(seams.GetExecutionCalc(calcTag), calcTag, inputs);
+                executions[i] = new CompiledExecution(ExecutionCalc(seams, calcTag), calcTag, inputs);
             }
 
             var applicationConditions = ReadConditions(reader, "application condition");
@@ -369,8 +368,8 @@ namespace Bun3.Gameplay.Catalog
                 var eventTag = reader.ReadTag("chain event tag");
                 var listen = (ChainListen)reader.ReadByte("chain listen");
                 chains[i] = new CompiledChain(
-                    trigger, effectId, selectorTag.IsValid ? seams.GetTargetSelector(selectorTag) : null,
-                    selectorTag, selectorParams, conditions, levelRule, fixedLevel, eventTag, listen);
+                    trigger, effectId, TargetSelector(seams, selectorTag), selectorTag, selectorParams,
+                    conditions, levelRule, fixedLevel, eventTag, listen);
             }
 
             var overflowEffectId = reader.ReadInt32("overflow effect id");
@@ -455,8 +454,8 @@ namespace Bun3.Gameplay.Catalog
                 var levelRule = (ChainLevelRule)reader.ReadByte("ability effect level rule");
                 var fixedLevel = reader.ReadInt32("ability effect fixed level");
                 effects[i] = new CompiledAbilityEffect(
-                    effectId, selectorTag.IsValid ? seams.GetTargetSelector(selectorTag) : null,
-                    selectorTag, selectorParams, levelRule, fixedLevel);
+                    effectId, TargetSelector(seams, selectorTag), selectorTag, selectorParams, levelRule,
+                    fixedLevel);
             }
 
             return new CompiledAbility(
@@ -486,9 +485,35 @@ namespace Bun3.Gameplay.Catalog
             var tail = (LevelTail)reader.ReadByte(field + " tail");
             var increment = reader.ReadBigNum(field + " increment");
             return new CompiledMagnitude(
-                magnitudeBase, perLevel, calcTag.IsValid ? seams.GetMagnitudeCalc(calcTag) : null, calcTag,
-                byLevel, tail, increment);
+                magnitudeBase, perLevel, MagnitudeCalc(seams, calcTag), calcTag, byLevel, tail, increment);
         }
+
+        // An artifact naming a seam the running registry does not have is the same class of failure as a
+        // fingerprint mismatch: the artifact was built against a different shape.
+        private static IMagnitudeCalc? MagnitudeCalc(SeamRegistry seams, GameplayTag tag)
+        {
+            if (!tag.IsValid) return null;
+            if (seams.TryGetMagnitudeCalc(tag, out var calc) && calc != null) return calc;
+            throw Unregistered("magnitude calc", tag);
+        }
+
+        private static IExecutionCalc ExecutionCalc(SeamRegistry seams, GameplayTag tag)
+        {
+            if (seams.TryGetExecutionCalc(tag, out var calc) && calc != null) return calc;
+            throw Unregistered("execution calc", tag);
+        }
+
+        private static ITargetSelector? TargetSelector(SeamRegistry seams, GameplayTag tag)
+        {
+            if (!tag.IsValid) return null;
+            if (seams.TryGetTargetSelector(tag, out var selector) && selector != null) return selector;
+            throw Unregistered("target selector", tag);
+        }
+
+        private static TagCatalogCompatibilityException Unregistered(string kind, GameplayTag tag) =>
+            new TagCatalogCompatibilityException(
+                $"Compiled gameplay catalog needs a {kind} registered for tag index {tag.Index}, "
+                + "but the seam registry has none.");
 
         private static void WriteConditions(BufferWriter writer, CompiledCondition[] conditions)
         {
