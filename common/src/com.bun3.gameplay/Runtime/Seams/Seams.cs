@@ -158,20 +158,37 @@ namespace Bun3.Gameplay.Seams
         public void ApplyToTarget(int specId) => _pipeline.EnqueueApply(specId, _sourceId, _targetId, Level);
     }
 
-    /// <summary>Context for target selection.</summary>
+    /// <summary>Context for target selection. Candidates are the resolver's target ids in ascending
+    /// order — that order is the determinism basis, so selectors must not reorder their scan.</summary>
     public readonly ref struct SelectorContext
     {
         private readonly ReadOnlySpan<BigNum> _params;
+        private readonly IEffectTargetResolver _resolver;
 
-        internal SelectorContext(TargetId source, ReadOnlySpan<BigNum> parameters, IRng rng)
+        internal SelectorContext(
+            TargetId source, TargetId origin, ReadOnlySpan<BigNum> parameters, IRng rng,
+            IEffectTargetResolver resolver, TargetId eventSource, TargetId eventTarget)
         {
             Source = source;
+            Origin = origin;
             _params = parameters;
             Rng = rng;
+            _resolver = resolver;
+            EventSource = eventSource;
+            EventTarget = eventTarget;
         }
 
         /// <summary>Source that triggered the selection.</summary>
         public TargetId Source { get; }
+
+        /// <summary>Target the selection originates from — the target the firing effect is applied to.</summary>
+        public TargetId Origin { get; }
+
+        /// <summary>Source of the gameplay event that triggered this selection. Default outside an event path.</summary>
+        public TargetId EventSource { get; }
+
+        /// <summary>Target of the gameplay event that triggered this selection. Default outside an event path.</summary>
+        public TargetId EventTarget { get; }
 
         /// <summary>Random number generator usable in this selection.</summary>
         public IRng Rng { get; }
@@ -182,5 +199,46 @@ namespace Bun3.Gameplay.Seams
         /// <summary>Gets a parameter value passed to the selection.</summary>
         /// <param name="index">Index into the parameter list.</param>
         public BigNum Param(int index) => _params[index];
+
+        /// <summary>Number of candidate targets.</summary>
+        public int CandidateCount => _resolver.TargetIds.Count;
+
+        /// <summary>Gets a candidate target id. Candidates are in ascending id order.</summary>
+        /// <param name="index">Index into the candidate list.</param>
+        public TargetId CandidateAt(int index) => _resolver.TargetIds[index];
+
+        /// <summary>Reads a candidate's owned tags.</summary>
+        /// <param name="id">Candidate target id.</param>
+        /// <param name="tags">Owned-tag container of that candidate.</param>
+        /// <returns>True when the candidate resolves.</returns>
+        public bool TryGetTags(TargetId id, out TagCountContainer? tags)
+        {
+            if (_resolver.TryResolve(id, out var target) && target is not null)
+            {
+                tags = target.Tags;
+                return true;
+            }
+
+            tags = null;
+            return false;
+        }
+
+        /// <summary>Reads a candidate attribute's Current value.</summary>
+        /// <param name="id">Candidate target id.</param>
+        /// <param name="attributeId">Attribute id to read.</param>
+        /// <param name="value">Current value; <see cref="BigNum.Zero"/> when unavailable.</param>
+        /// <returns>True when the candidate resolves and declares that attribute.</returns>
+        public bool TryGetAttribute(TargetId id, ushort attributeId, out BigNum value)
+        {
+            if (_resolver.TryResolve(id, out var target) && target is not null
+                && target.Attributes.Has(attributeId))
+            {
+                value = target.Attributes.GetCurrent(attributeId);
+                return true;
+            }
+
+            value = BigNum.Zero;
+            return false;
+        }
     }
 }

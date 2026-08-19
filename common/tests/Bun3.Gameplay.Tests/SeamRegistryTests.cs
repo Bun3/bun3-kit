@@ -132,6 +132,17 @@ public sealed class SeamRegistryTests
         Assert.That(pipeline.SelectorTruncationCount, Is.Zero);
     }
 
+    private sealed class EmptyResolver : IEffectTargetResolver
+    {
+        public bool TryResolve(TargetId id, out EffectTarget? target)
+        {
+            target = null;
+            return false;
+        }
+
+        public System.Collections.Generic.IReadOnlyList<TargetId> TargetIds => System.Array.Empty<TargetId>();
+    }
+
     [Test]
     public void AllTargetsSelector_with_many_targets_returns_total_count_not_written_count()
     {
@@ -142,7 +153,9 @@ public sealed class SeamRegistryTests
         var selector = new EffectTestKit.AllTargetsSelector();
         selector.Bind(manyTargets);
 
-        var selectorCtx = new SelectorContext(new TargetId(1), System.Array.Empty<BigNum>(), new XorShiftRng(1));
+        var selectorCtx = new SelectorContext(
+            new TargetId(1), new TargetId(1), System.Array.Empty<BigNum>(), new XorShiftRng(1), new EmptyResolver(),
+            eventSource: default, eventTarget: default);
         var returned = selector.Select(in selectorCtx, buffer);
 
         Assert.That(returned, Is.EqualTo(40), "AllTargetsSelector should return total count (40), not written count (32)");
