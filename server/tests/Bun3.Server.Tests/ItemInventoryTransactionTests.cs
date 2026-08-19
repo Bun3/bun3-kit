@@ -267,4 +267,40 @@ public class ItemInventoryTransactionTests
         Assert.That(Q(_inventory.GetQuantity(_gold)), Is.EqualTo(Q(60)));
         Assert.That(Q(other.GetQuantity(_gold)), Is.EqualTo(Q(40)));
     }
+
+    [Test]
+    public void Rollback_after_create_then_remove_leaves_nothing()
+    {
+        using (_transaction.Begin())
+        {
+            _inventory.TryAdd(_gold, 100);
+            _inventory.TryRemove(_gold, 100);
+        }
+
+        Assert.That(_inventory.GetQuantity(_gold).Sign, Is.Zero);
+        Assert.That(_inventory.InstanceCount, Is.Zero);
+    }
+
+    [Test]
+    public void Rollback_after_create_then_partial_remove_leaves_nothing()
+    {
+        using (_transaction.Begin())
+        {
+            _inventory.TryAdd(_sword, 2);
+            _inventory.TryRemove(_sword, 1);
+        }
+
+        Assert.That(_inventory.GetQuantity(_sword).Sign, Is.Zero);
+        Assert.That(_inventory.InstanceCount, Is.Zero);
+    }
+
+    [Test]
+    public void DrainChanges_inside_a_transaction_throws()
+    {
+        using (_transaction.Begin())
+        {
+            var buffer = new List<ItemChange<ItemState>>();
+            Assert.That(() => _inventory.DrainChanges(buffer), Throws.TypeOf<InvalidOperationException>());
+        }
+    }
 }

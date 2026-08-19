@@ -83,13 +83,21 @@ namespace Bun3.Server.Items
         /// an in-memory snapshot and destructive — <b>the buffer takes ownership of the change set</b>,
         /// so the game keeps the buffer until persistence succeeds and retries with the same buffer
         /// on failure (Created/Updated hold instance references, so retries carry the latest state).
-        /// DB I/O belongs to the game's async save hook.
+        /// DB I/O belongs to the game's async save hook. Not available inside a transaction — its
+        /// bookkeeping (clearing the removed list, resetting Created/Updated flags) is not
+        /// rollback-safe, so drain after the transaction commits.
         /// </summary>
         public void DrainChanges(List<ItemChange<TState>> buffer)
         {
             if (buffer == null)
             {
                 throw new ArgumentNullException(nameof(buffer));
+            }
+
+            if (InTransaction)
+            {
+                throw new InvalidOperationException(
+                    "DrainChanges is not available inside a transaction — drain after the transaction commits.");
             }
 
             for (var i = 0; i < _removed.Count; i++)

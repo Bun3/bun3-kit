@@ -39,6 +39,12 @@ namespace Bun3.Server.Items
         private readonly List<ItemId> _txRegenItems = new List<ItemId>();
         private readonly List<long> _txRegenBasis = new List<long>();
         private readonly List<bool> _txRegenExisted = new List<bool>();
+        /// <summary><see cref="ItemInstance{TState}.TxSnapshotIndex"/> value marking an instance
+        /// created within the current transaction — <see cref="CaptureRemoved"/> skips such an
+        /// instance, since <see cref="_txCreated"/> already drops it wholesale on rollback and
+        /// re-adding it via <see cref="_txRemoved"/> would resurrect it.</summary>
+        private const int CreatedThisTransactionMarker = -2;
+
         private int _txSnapshotToken;
         private int _txRemovedMark;
         private bool _txHasChangesMark;
@@ -99,17 +105,26 @@ namespace Bun3.Server.Items
             }
 
             instance.TxToken = _txSnapshotToken;   // Created instances are dropped wholesale, never restored.
+            instance.TxSnapshotIndex = CreatedThisTransactionMarker;
             _txCreated.Add(instance);
         }
 
-        /// <summary>Records a removed instance so a rollback can re-index it.</summary>
+        /// <summary>Records a removed instance so a rollback can re-index it. An instance created
+        /// earlier in the same transaction is skipped — <see cref="_txCreated"/> already drops it.</summary>
         private void CaptureRemoved(ItemInstance<TState> instance)
         {
             EnsureEnlisted();
-            if (_txEnlisted)
+            if (!_txEnlisted)
             {
-                _txRemoved.Add(instance);
+                return;
             }
+
+            if (instance.TxToken == _txSnapshotToken && instance.TxSnapshotIndex == CreatedThisTransactionMarker)
+            {
+                return;
+            }
+
+            _txRemoved.Add(instance);
         }
 
         /// <summary>Snapshots a regen basis entry before it changes.</summary>
@@ -173,6 +188,7 @@ namespace Bun3.Server.Items
                 _instances.Remove(created.InstanceId);
                 Unindex(created);
                 created._owner = null;
+                created.TxSnapshotIndex = -1;
             }
 
             for (var i = _txSnapshots.Count - 1; i >= 0; i--)
