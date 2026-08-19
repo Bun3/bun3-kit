@@ -15,6 +15,18 @@ public class ItemStateRollbackTests
         public MutableState Clone() => new MutableState { Level = Level, Options = new List<int>(Options) };
     }
 
+    private sealed class IdentityEqualState
+    {
+        public int Id;
+        public int Level;
+
+        public IdentityEqualState Clone() => new IdentityEqualState { Id = Id, Level = Level };
+
+        public override bool Equals(object? obj) => obj is IdentityEqualState other && other.Id == Id;
+
+        public override int GetHashCode() => Id;
+    }
+
     private readonly record struct ValueState(int Level);
 
     private ItemCatalog<string> _catalog = null!;
@@ -124,6 +136,27 @@ public class ItemStateRollbackTests
         Assert.That(instance.State, Is.SameAs(original));
         Assert.That(instance.State.Level, Is.EqualTo(1));
         Assert.That(instance.State.Options, Is.Empty);
+    }
+
+    [Test]
+    public void Value_equal_state_replacement_does_not_corrupt_the_snapshot()
+    {
+        var inventory = Inventory<IdentityEqualState>(_ => new IdentityEqualState { Id = 1, Level = 1 }, s => s.Clone());
+        inventory.TryAdd(_sword, 1);
+        var instance = Single(inventory, _sword);
+        var original = instance.State;
+
+        using (_transaction.Begin())
+        {
+            instance.State = new IdentityEqualState { Id = 1, Level = 5 };
+            using (var scope = instance.BeginStateChange())
+            {
+                scope.State.Level = 9;
+            }
+        }
+
+        Assert.That(instance.State, Is.SameAs(original));
+        Assert.That(instance.State.Level, Is.EqualTo(1));
     }
 
     [Test]

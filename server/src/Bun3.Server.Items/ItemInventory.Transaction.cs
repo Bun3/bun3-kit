@@ -127,12 +127,11 @@ namespace Bun3.Server.Items
                 return;   // Created within this transaction — rollback drops it wholesale.
             }
 
-            // Promote only while the snapshot still holds what the instance holds: after a State
-            // assignment the snapshot holds the original and a deep copy of the current value
-            // would overwrite it.
+            // Promote only when the instance still holds the exact object the snapshot captured —
+            // value-equality (an overridden Equals) must not be mistaken for identity here.
             var snapshot = _txSnapshots[index];
             if (!snapshot.StateSnapshotted
-                && EqualityComparer<TState>.Default.Equals(snapshot.State, instance.State))
+                && (typeof(TState).IsValueType || ReferenceEquals(snapshot.State, instance.State)))
             {
                 _txSnapshots[index] = snapshot.WithState(_snapshotState(instance.State));
             }
