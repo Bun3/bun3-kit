@@ -28,9 +28,7 @@ namespace Bun3.Gameplay.Tags.Catalog
                 throw new ArgumentException("태그 경로 문법이 올바르지 않습니다.", nameof(canonicalName));
             }
 
-            return _byCanonicalName.TryGetValue(folded, out var contributions)
-                ? contributions
-                : EmptyContributions;
+            return _byCanonicalName.GetValueOrDefault(folded, EmptyContributions);
         }
     }
 }

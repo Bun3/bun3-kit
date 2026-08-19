@@ -402,3 +402,40 @@ Build 예외 전 경로(오류 하나당 테스트 하나).
 
 기능 추가(파괴 없음): `Bun3.Gameplay` 0.12.0 → 0.13.0, UPM 동반. 시섬 태그 예약 루트가
 게임 카탈로그에 처음 등장하므로 카탈로그 스키마 영향은 없음(일반 태그일 뿐).
+
+## 15. 부록 — 슬라이스 2.1 어휘 확장 (2026-08-19 승인)
+
+idlez·growninja Buff 충족 검토와 라이브러리 조사(GAS 컴포넌트·WoW 관례·Unity AnimationCurve)에서
+확정한 추가 어휘. 전부 스키마 비파괴 추가이며 코어 기계(수명·집계·체인·페이즈)는 불변이다.
+
+### 15.1 레벨 테이블 — 레벨 스케일링의 정본
+
+레벨은 이산값이므로 **밀집 배열이 손실 없는 완전 표현**이다. 런타임 정본은
+`BigNum[MaxLevel]` 레벨 테이블 + tail 정책(`Clamp` 기본 | `Extrapolate` — 마지막 값 +
+증분 선형 외삽, 무한 레벨 방치형 대응)이고, 저작 표기 4종이 전부 같은 배열로 컴파일된다:
+
+| 표기 | 형태 | 용도 |
+|---|---|---|
+| ① 선형 | base + perLevel | 현행 호환(배열의 축약) |
+| ② 명시 배열 | 값 나열 | 시트 생성 파이프라인 |
+| ③ 결정론 수식 | BigNum 다항(`+ - * /`, 정수 거듭제곱, `x`) — 로더/Build 사전 평가 | 손 저작 |
+| ④ 희소 키 + 선형 보간 | [(레벨, 값)] — 프레임워크 결정론 보간기가 Build 시 배열화 | 커브형 저작(Unity 불요) |
+
+Unity `AnimationCurve`는 **저작 스킨**이다 — 인스펙터 커브 편집 후 에디터 도구가 정수
+레벨을 샘플링(Unity 네이티브 Evaluate, 굽는 시점 고정이라 결정론 무관)해 ②로 export.
+런타임 평가는 불채택: UnityEngine 타입이라 서버에 부재하고 float 에르밋 보간은 크로스
+플랫폼 결정론이 없다. 수식·배열 사용 시 스펙에 `MaxLevel` 선언 필수(Build 검증 —
+체인 Fixed 레벨 초과 등).
+
+### 15.2 추가 어휘 6종
+
+| id | 어휘 | 근거 | 형태 |
+|---|---|---|---|
+| G1 | `RemoveOnApplyTags` | idlez BuffGroup UseHighestTier, growninja ReactBuff.REPLACE, GAS RemoveOther 컴포넌트 | 적용 성공 시 대상의 매칭(계층) 활성 효과를 Prematurely 경로로 제거 — 기존 RemoveByTags 기계 재사용 |
+| G2 | `ChanceToApply` | idlez BuffApplyResistance 계열, GAS ChanceToApply | `MagnitudeDef`(상수·대상 저항 속성·calc) → [0,1] 확률, World 시드 Rng 롤. 실패 = 조용한 무산+카운터 |
+| G3 | 지속 스케일 | growninja time×(1−저항)×(1−면역)·레벨 지속, GAS 지속 커브 | 지속을 레벨 테이블화 + `DurationScale: MagnitudeDef`(적용 시 1회 평가, 틱 곱 후 절사, 최소 1틱) |
+| G4 | `LevelFromStack` | idlez LevelUpOnStacked ≡ growninja LEVEL_IS_STACK(독립 수렴) | 스택 변화 시 인스턴스 Level = Stack 동기화 — 레벨 테이블과 결합해 스택별 비선형 크기 |
+| G5 | `StackReapply.ExtendCapped` | WoW Pandemic 관례, growninja AddTime의 유계판 | 재적용 시 남은 지속 += 신규 지속, 상한 = 신규 지속 × 상한 배수(기본 1.3) |
+| G6 | 체감 저항(DR) | WoW CC 관례 | 스펙에 DR 계열 태그 + 대상별 (계열→적용 횟수·마지막 틱) 이력, 리셋 창(틱), 단계별 지속 배수 테이블(BigNum[], 마지막 단계 0 = 면역). G3의 지속 배수 경로에 합성 |
+
+2차원 레벨(growninja outLevel/inLevel)은 **비채택** — 레벨 1개 + 시섬으로 근사한다(사용자 결정).

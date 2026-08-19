@@ -23,6 +23,8 @@
              Link="TagCatalogConformanceTests.cs" />
     <Compile Include="..\..\src\com.bun3.gameplay\Tests\Runtime\TagPerformanceFixture.cs"
              Link="TagPerformanceFixture.cs" />
+    <Compile Include="..\..\src\com.bun3.gameplay\Tests\Runtime\EffectScenario.cs"
+             Link="EffectScenario.cs" />
   </ItemGroup>
 
 </Project>

@@ -6,6 +6,151 @@ namespace Bun3.Gameplay.Numerics
     /// <summary>BigNum의 표시 포맷 파트 — 수학 코어(BigNum.cs)와 분리된 partial.</summary>
     public readonly partial struct BigNum
     {
+        /// <summary>
+        /// 문자열을 파싱해 BigNum을 만든다. Invariant 전용 문법: <c>-?\d+(\.\d+)?([eE][+-]?\d+)?</c>.
+        /// 정수 산술만 사용한다(float/double 경유 없음). 가수는 long 안전 범위(<see cref="long.MaxValue"/>)
+        /// 까지만 유효 숫자로 흡수하고, 그 밖의 자릿수는 지수로 밀어 올린다 — 정수부 초과 자릿수는
+        /// 자릿수만큼 지수를 올리고, 소수부 초과 자릿수는 0 방향으로 절사한다(지수는 이미 흡수된
+        /// 유효 자릿수만큼만 내려가 있다). 결과는 <see cref="FromParts"/>로 정규화한다.
+        /// 선행 0(정수부 앞, 소수부에서 유효 숫자 시작 전)은 값에 기여하지 않는다.
+        /// </summary>
+        /// <param name="text">파싱할 문자열입니다.</param>
+        /// <param name="value">성공 시 파싱된 값이고, 실패 시 <see cref="Zero"/>입니다.</param>
+        /// <returns>파싱에 성공했으면 <see langword="true"/>이고, 문법에 맞지 않거나 지수가
+        /// <see cref="MaxExponent"/>를 초과하면 <see langword="false"/>입니다(예외를 던지지 않습니다).</returns>
+        public static bool TryParse(ReadOnlySpan<char> text, out BigNum value)
+        {
+            value = default;
+            var length = text.Length;
+            if (length == 0)
+            {
+                return false;
+            }
+
+            var i = 0;
+            var negative = text[0] == '-';
+            if (negative)
+            {
+                i = 1;
+            }
+
+            var mantissa = 0L;
+            var exponent = 0L;
+            var seenNonZero = false;
+
+            var integerStart = i;
+            while (i < length && IsAsciiDigit(text[i]))
+            {
+                AbsorbIntegerDigit(text[i] - '0', ref mantissa, ref exponent, ref seenNonZero);
+                i++;
+            }
+
+            if (i == integerStart)
+            {
+                return false;   // 정수부는 최소 한 자리 필요 — 선행 부호만 있거나 숫자가 아님
+            }
+
+            if (i < length && text[i] == '.')
+            {
+                i++;
+                var fractionStart = i;
+                while (i < length && IsAsciiDigit(text[i]))
+                {
+                    AbsorbFractionDigit(text[i] - '0', ref mantissa, ref exponent, ref seenNonZero);
+                    i++;
+                }
+
+                if (i == fractionStart)
+                {
+                    return false;   // 소수점 뒤 최소 한 자리 필요
+                }
+            }
+
+            if (i < length && (text[i] == 'e' || text[i] == 'E'))
+            {
+                i++;
+                var exponentNegative = false;
+                if (i < length && (text[i] == '+' || text[i] == '-'))
+                {
+                    exponentNegative = text[i] == '-';
+                    i++;
+                }
+
+                var exponentDigitStart = i;
+                var explicitExponent = 0L;
+                while (i < length && IsAsciiDigit(text[i]))
+                {
+                    // MaxExponent를 넘으면 이미 실패가 확정이므로 더 누적하지 않는다(오버플로 방지).
+                    if (explicitExponent <= MaxExponent)
+                    {
+                        explicitExponent = explicitExponent * 10 + (text[i] - '0');
+                    }
+
+                    i++;
+                }
+
+                if (i == exponentDigitStart)
+                {
+                    return false;   // 지수부는 최소 한 자리 필요
+                }
+
+                exponent += exponentNegative ? -explicitExponent : explicitExponent;
+            }
+
+            if (i != length)
+            {
+                return false;   // 문법에 맞지 않는 문자가 남음
+            }
+
+            if (exponent > MaxExponent)
+            {
+                return false;   // FromParts가 BigNumOverflowException을 던지기 전에 미리 막는다
+            }
+
+            value = FromParts(negative ? -mantissa : mantissa, (int)exponent);
+            return true;
+        }
+
+        // 정수부 숫자 한 자리 흡수: 선행 0은 무시, 그 외에는 long 안전 범위 안이면 가수에 누적,
+        // 넘으면(19번째 근방) 지수를 올려 자릿값을 보존한다.
+        private static void AbsorbIntegerDigit(int digit, ref long mantissa, ref long exponent, ref bool seenNonZero)
+        {
+            if (digit == 0 && !seenNonZero)
+            {
+                return;
+            }
+
+            seenNonZero = true;
+            if (mantissa <= (long.MaxValue - digit) / 10)
+            {
+                mantissa = mantissa * 10 + digit;
+            }
+            else
+            {
+                exponent++;
+            }
+        }
+
+        // 소수부 숫자 한 자리 흡수: 유효 숫자 시작 전 선행 0도 자리는 내려간다(지수 감소).
+        // 용량을 넘는 소수 자릿수는 0 방향으로 그냥 절사(지수는 이미 흡수분만큼만 내려가 있어 추가 조정 불필요).
+        private static void AbsorbFractionDigit(int digit, ref long mantissa, ref long exponent, ref bool seenNonZero)
+        {
+            if (digit == 0 && !seenNonZero)
+            {
+                exponent--;
+                return;
+            }
+
+            seenNonZero = true;
+            if (mantissa <= (long.MaxValue - digit) / 10)
+            {
+                mantissa = mantissa * 10 + digit;
+                exponent--;
+            }
+        }
+
+        private static bool IsAsciiDigit(char c) => c >= '0' && c <= '9';
+
         /// <summary>최대 256자 예산으로 표시 문자열을 생성한다. 문자열 힙 할당이 발생하므로
         /// 매 프레임 UI 핫패스에서는 caller-owned 버퍼와 <see cref="TryFormat"/>을 사용한다.</summary>
         /// <param name="format">표시 형식. <see langword="null"/>이면 <see cref="BigNumFormat.Base"/>.</param>
