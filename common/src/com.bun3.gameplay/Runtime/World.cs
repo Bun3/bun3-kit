@@ -21,18 +21,57 @@ namespace Bun3.Gameplay
         private readonly EffectCatalog _effects;
         private readonly AbilityCatalog _abilities;
         private readonly IRng _rng;
+        private readonly int[][] _grantedAbilityIds;
 
         /// <summary>Creates a world over the given catalogs and random source.</summary>
         /// <param name="effects">Compiled effect catalog.</param>
         /// <param name="abilities">Compiled ability catalog.</param>
         /// <param name="rng">Seeded random source; shared with the pipeline.</param>
         /// <param name="applyBudgetPerTick">Maximum effect applications drained per tick.</param>
+        /// <exception cref="InvalidOperationException">An effect spec's GrantedAbilities names an
+        /// ability that is not in <paramref name="abilities"/>.</exception>
         public World(EffectCatalog effects, AbilityCatalog abilities, IRng rng, int applyBudgetPerTick = 64)
         {
             _effects = effects ?? throw new ArgumentNullException(nameof(effects));
             _abilities = abilities ?? throw new ArgumentNullException(nameof(abilities));
             _rng = rng ?? throw new ArgumentNullException(nameof(rng));
             Pipeline = new EffectPipeline(effects, this, rng, applyBudgetPerTick);
+            Pipeline.AbilityGrantHook = OnEffectAbilityGrant;
+
+            _grantedAbilityIds = new int[effects.Count][];
+            for (var specId = 0; specId < effects.Count; specId++)
+            {
+                var names = effects.GetSpec(specId).GrantedAbilityNames;
+                var ids = new int[names.Length];
+                for (var i = 0; i < names.Length; i++)
+                {
+                    if (!abilities.TryGetId(names[i], out ids[i]))
+                    {
+                        throw new InvalidOperationException(
+                            $"Effect spec {specId} grants unknown ability '{names[i]}'.");
+                    }
+                }
+
+                _grantedAbilityIds[specId] = ids;
+            }
+        }
+
+        private void OnEffectAbilityGrant(EffectTarget target, EffectInstance instance, bool granting)
+        {
+            if (!TryGetUnit(target.Id, out var unit) || unit is null) return;
+
+            var source = GrantSource.Effect(instance.Id);
+            if (!granting)
+            {
+                unit.Abilities.Revoke(source);
+                return;
+            }
+
+            var ids = _grantedAbilityIds[instance.SpecId];
+            for (var i = 0; i < ids.Length; i++)
+            {
+                unit.Abilities.Grant(ids[i], source, instance.Level);
+            }
         }
 
         /// <summary>Effect pipeline this world drives.</summary>

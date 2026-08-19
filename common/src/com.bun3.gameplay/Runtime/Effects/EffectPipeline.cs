@@ -56,6 +56,10 @@ namespace Bun3.Gameplay.Effects
         /// <summary>Number of selector calls whose result exceeded the fixed selection buffer.</summary>
         internal long SelectorTruncationCount { get; private set; }
 
+        /// <summary>Called when an instance starts granting (creation, or re-enable) and stops granting
+        /// (removal, or disable). Set by the owning world; null in pipeline-only tests.</summary>
+        internal Action<EffectTarget, EffectInstance, bool>? AbilityGrantHook { get; set; }
+
         // Deterministic [0,1) roll scale: 2^32, the range of _rng.NextUInt32(), so probability
         // comparison stays integer-only BigNum arithmetic (no floating point; 0/1 boundaries fall out naturally).
         private static readonly BigNum RngRollRange = (BigNum)4_294_967_296L;
@@ -854,6 +858,8 @@ namespace Bun3.Gameplay.Effects
                 target.Tags.Add(grantedTags[i]);
             }
 
+            AbilityGrantHook?.Invoke(target, instance, true);
+
             target.RaiseEffectEvent(new EffectLifecycleEvent(EffectLifecycleKind.Applied, instance.Id, pending.SpecId, instance.Stack));
 
             FireChain(spec.Chains, ChainTrigger.OnApplication, pending.Source, pending.Level, target.Id, target);
@@ -998,6 +1004,8 @@ namespace Bun3.Gameplay.Effects
                 target.Tags.Remove(grantedTags[i]);
             }
 
+            AbilityGrantHook?.Invoke(target, instance, false);
+
             target.RemoveActive(instance);
             target.RaiseEffectEvent(new EffectLifecycleEvent(eventKind, instance.Id, instance.SpecId, instance.Stack));
             EffectInstance.Return(instance);
@@ -1060,6 +1068,8 @@ namespace Bun3.Gameplay.Effects
                     {
                         for (var g = 0; g < grantedTags.Length; g++) target.Tags.Remove(grantedTags[g]);
                     }
+
+                    AbilityGrantHook?.Invoke(target, instance, satisfied);
 
                     MarkDirtyForModifiers(target, spec);
                 }

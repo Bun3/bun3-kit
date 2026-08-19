@@ -298,6 +298,9 @@ namespace Bun3.Gameplay.Effects
         /// <summary>Tags granted to the target while the effect is applied.</summary>
         public List<string> GrantedTags { get; set; } = new List<string>();
 
+        /// <summary>Abilities granted to the target while this effect is applied and enabled.</summary>
+        public List<string> GrantedAbilities { get; set; } = new List<string>();
+
         /// <summary>Asset tags classifying the effect itself.</summary>
         public List<string> AssetTags { get; set; } = new List<string>();
 

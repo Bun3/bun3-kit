@@ -73,6 +73,14 @@ namespace Bun3.Gameplay.Effects
             ValidateOngoingConditionsNoEventMagnitude(spec);
             ValidatePeriodicNoEventMagnitudeInModifiersOrExecutions(spec);
 
+            for (var i = 0; i < spec.GrantedAbilities.Count; i++)
+            {
+                if (string.IsNullOrEmpty(spec.GrantedAbilities[i]))
+                    throw new InvalidOperationException($"Effect '{spec.Name}': GrantedAbilities entry is empty.");
+            }
+
+            var grantedAbilityNames = spec.GrantedAbilities.ToArray();
+
             var grantedTags = MagnitudeCompiler.ResolveTags(spec.GrantedTags, $"Effect '{spec.Name}'", tags, "granted");
             var assetTags = MagnitudeCompiler.ResolveTags(spec.AssetTags, $"Effect '{spec.Name}'", tags, "asset");
             var immunityTags = MagnitudeCompiler.ResolveTags(spec.ImmunityTags, $"Effect '{spec.Name}'", tags, "immunity");
@@ -194,7 +202,7 @@ namespace Bun3.Gameplay.Effects
             return new CompiledEffectSpec(
                 spec.Name, spec.MaxLevel, spec.DurationType, spec.DurationTicks, spec.PeriodTicks, spec.Stack,
                 modifiers, executions, applicationConditions, ongoingConditions,
-                grantedTags, assetTags, immunityTags, chains, overflowEffectId,
+                grantedTags, grantedAbilityNames, assetTags, immunityTags, chains, overflowEffectId,
                 removeOnApplyTags, chanceToApply, durationPerLevel, durationScale,
                 drCategory, spec.DrWindowTicks, drStageMultipliers, raiseEvents);
         }
@@ -220,6 +228,12 @@ namespace Bun3.Gameplay.Effects
                     {
                         throw new InvalidOperationException(
                             $"Effect '{spec.Name}': Instant cannot have GrantedTags.");
+                    }
+
+                    if (spec.GrantedAbilities.Count != 0)
+                    {
+                        throw new InvalidOperationException(
+                            $"Effect '{spec.Name}': Instant cannot have GrantedAbilities.");
                     }
 
                     if (spec.Stack.MaxStack != 0)

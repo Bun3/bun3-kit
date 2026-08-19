@@ -251,6 +251,7 @@ namespace Bun3.Gameplay.Effects
             CompiledCondition[] applicationConditions,
             CompiledCondition[] ongoingConditions,
             GameplayTag[] grantedTags,
+            string[] grantedAbilityNames,
             GameplayTag[] assetTags,
             GameplayTag[] immunityTags,
             CompiledChain[] chains,
@@ -275,6 +276,7 @@ namespace Bun3.Gameplay.Effects
             ApplicationConditions = applicationConditions;
             OngoingConditions = ongoingConditions;
             GrantedTags = grantedTags;
+            GrantedAbilityNames = grantedAbilityNames;
             AssetTags = assetTags;
             ImmunityTags = immunityTags;
             Chains = chains;
@@ -329,6 +331,12 @@ namespace Bun3.Gameplay.Effects
 
         /// <summary>Resolved granted tags.</summary>
         internal GameplayTag[] GrantedTags { get; }
+
+        /// <summary>Names of the abilities this effect grants while active and enabled. Kept as names
+        /// rather than resolved ids because <see cref="EffectCatalog"/> builds before the ability
+        /// catalog exists; the owning world resolves them once against the ability catalog it is
+        /// handed and caches the ids.</summary>
+        internal string[] GrantedAbilityNames { get; }
 
         /// <summary>Resolved asset tags.</summary>
         internal GameplayTag[] AssetTags { get; }
