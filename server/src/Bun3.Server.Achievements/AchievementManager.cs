@@ -3,16 +3,17 @@ using System;
 namespace Bun3.Server.Achievements
 {
     /// <summary>
-    /// 플레이어당 1개의 업적 진행/달성/수령/가용성 추적기. 게임 Player 파생 클래스가
-    /// 소유하며 플레이어 상태와 같은 전제(세션 액터 안에서만 접근)로 락이 없다.
-    /// 조건 판정은 게임 몫이다 — 게임이 자기 이벤트를 인덱스/태그로 라우팅해
-    /// <see cref="Increase"/>·<see cref="IncreaseByTag(int, long)"/>를 부른다.
-    /// 핫패스는 무할당: 배열 인덱싱과 정수 연산, 캐시된 델리게이트 호출뿐이다.
-    /// 달성 횟수는 단조 증가라 같은 달성이 두 번 발화하지 않는다.
-    /// 반복 업적은 진행도가 누적되고 수령 시 목표치만큼 차감된다(idlez/growninja 동일 모델)
-    /// — 수령 대기 중 UI는 min(Progress, Target)/Target으로 "10/10 [보상받기]"가 된다.
+    /// Per-player tracker for achievement progress, completion, claiming, and availability. Owned
+    /// by the game's Player-derived class and lock-free under the same premise as player state
+    /// (accessed only inside the session actor).
+    /// Condition evaluation is the game's job — the game routes its events by index/tag and calls
+    /// <see cref="Increase"/> / <see cref="IncreaseByTag(int, long)"/>.
+    /// Hot paths are allocation-free: array indexing, integer arithmetic, and cached delegate calls.
+    /// The completion count is monotonic, so the same completion never fires twice.
+    /// Repeatable achievements accumulate progress; claiming subtracts one target — while a claim
+    /// is pending the UI shows min(Progress, Target)/Target as "10/10 [Claim]".
     /// </summary>
-    /// <typeparam name="TDef">게임의 업적 정의 타입.</typeparam>
+    /// <typeparam name="TDef">Game achievement definition type.</typeparam>
     public sealed class AchievementManager<TDef> where TDef : AchievementDefinition
     {
         private static readonly Func<long> DefaultClock = () => DateTime.UtcNow.Ticks;
@@ -22,18 +23,18 @@ namespace Bun3.Server.Achievements
         private readonly Action? _onDirty;
         private readonly Func<long> _utcNowTicks;
 
-        /// <summary>달성 직후 호출되는 훅 — (인덱스, 정의, 신규 달성 수). 상태 갱신이 끝난
-        /// 뒤 호출되므로 훅 안에서 다른 업적을 Increase/Activate(체인·티어 구성)해도 된다.
-        /// 자동 보상은 여기서 <see cref="TryClaim"/> 후 게임이 지급한다.</summary>
+        /// <summary>Hook fired right after completion — (index, definition, new completion count).
+        /// Called after state updates finish, so the hook may Increase/Activate other achievements
+        /// (chain/tier setups). Auto-rewards: call <see cref="TryClaim"/> here, then the game grants.</summary>
         public Action<int, TDef, int>? OnCompleted { get; set; }
 
-        /// <summary>추적 대상 업적 수 (= 카탈로그 정의 수).</summary>
+        /// <summary>Number of tracked achievements (= catalog definition count).</summary>
         public int Count => _states.Length;
 
-        /// <summary>추적기를 생성한다. 초기 가용성은 정의의 InitialAvailability를 따른다.
-        /// <paramref name="onDirty"/>에 Player의 MarkDirty를 넘기면 상태가 실제로 변할
-        /// 때마다 저장 스윕 대상으로 표시된다. <paramref name="utcNowTicks"/>는 달성
-        /// 시각원(기본 UTC 현재) — 테스트용 주입점.</summary>
+        /// <summary>Creates the tracker. Initial availability follows each definition's
+        /// InitialAvailability. Pass the Player's MarkDirty as <paramref name="onDirty"/> to flag
+        /// the save sweep whenever state actually changes. <paramref name="utcNowTicks"/> is the
+        /// completion time source (default UTC now) — an injection point for tests.</summary>
         public AchievementManager(AchievementCatalog<TDef> catalog, Action? onDirty = null, Func<long>? utcNowTicks = null)
         {
             _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
@@ -46,30 +47,32 @@ namespace Bun3.Server.Achievements
             }
         }
 
-        // ── 진행 ─────────────────────────────────────────────────────────────
+        // ── Progress ─────────────────────────────────────────────────────────
 
-        /// <summary>진행도를 증가시키고 신규 달성 수를 반환한다. Active가 아니면 no-op(0).
-        /// amount 0은 진행도 변경 없이 달성 재평가만 한다(Restore 후 목표 하향 재판정용).</summary>
-        /// <exception cref="ArgumentOutOfRangeException">amount가 음수일 때.</exception>
+        /// <summary>Increases progress and returns the new completion count. No-op (0) unless
+        /// Active. amount 0 re-evaluates completion without changing progress (for re-judging
+        /// after Restore with a lowered target).</summary>
+        /// <exception cref="ArgumentOutOfRangeException">When amount is negative.</exception>
         public int Increase(int index, long amount)
         {
-            if (amount < 0) throw new ArgumentOutOfRangeException(nameof(amount), amount, "진행도 증가량은 음수일 수 없습니다.");
+            if (amount < 0) throw new ArgumentOutOfRangeException(nameof(amount), amount, "Progress increase cannot be negative.");
 
             return IncreaseCore(index, _catalog.GetDefinition(index), amount);
         }
 
-        /// <summary>태그가 붙은 Active 업적 전부의 진행도를 증가시키고 신규 달성 수 합계를
-        /// 반환한다. 각 업적은 독립 카운터라 같은 양을 각자 받는다(공유 원장 없음) —
-        /// 티어 동시 개방(포함형)이 이걸로 성립한다. 대상은 호출 시점에 스냅샷된다:
-        /// 훅에서 Activate된 업적(체인 티어)은 이번 배치를 받지 않고 다음 이벤트부터
-        /// 쌓는다(신규 누적 의미론 — idlez의 스냅샷 순회와 동일). 배치 중 Lock된 업적은 스킵.</summary>
-        /// <exception cref="ArgumentOutOfRangeException">amount가 음수일 때.</exception>
+        /// <summary>Increases progress on every Active achievement carrying the tag and returns the
+        /// total new completions. Each achievement is an independent counter, so each receives the
+        /// same amount (no shared ledger) — this is what makes inclusive simultaneous tiers work.
+        /// Targets are snapshotted at call time: achievements Activated inside a hook (chain tiers)
+        /// do not receive this batch and start accruing from the next event (new-accrual semantics).
+        /// Achievements Locked mid-batch are skipped.</summary>
+        /// <exception cref="ArgumentOutOfRangeException">When amount is negative.</exception>
         public int IncreaseByTag(int tagIndex, long amount)
         {
-            if (amount < 0) throw new ArgumentOutOfRangeException(nameof(amount), amount, "진행도 증가량은 음수일 수 없습니다.");
+            if (amount < 0) throw new ArgumentOutOfRangeException(nameof(amount), amount, "Progress increase cannot be negative.");
 
             var indices = _catalog.GetIndicesByTag(tagIndex);
-            Span<ulong> eligible = stackalloc ulong[(indices.Length + 63) >> 6];   // 스냅샷 — 스택이라 무할당·재진입 안전
+            Span<ulong> eligible = stackalloc ulong[(indices.Length + 63) >> 6];   // Snapshot — stack memory, allocation-free and reentrancy-safe.
             for (var i = 0; i < indices.Length; i++)
             {
                 if (_states[indices[i]].Availability == AchievementStatus.Active)
@@ -93,17 +96,18 @@ namespace Bun3.Server.Achievements
             return total;
         }
 
-        /// <summary>필터를 통과한 태그 업적만 증가시킨다 — growninja AchievementCondition의
-        /// 조건값 비교 대응. static 람다 + <typeparamref name="TArg"/>로 넘기면 무할당:
+        /// <summary>Increases only the tagged achievements passing the filter — for condition-value
+        /// comparison. Passing a static lambda with <typeparamref name="TArg"/> keeps it
+        /// allocation-free:
         /// <c>IncreaseByTag(tag, 1, level, static (def, lv) =&gt; def.MinLevel &lt;= lv)</c>.</summary>
-        /// <exception cref="ArgumentOutOfRangeException">amount가 음수일 때.</exception>
+        /// <exception cref="ArgumentOutOfRangeException">When amount is negative.</exception>
         public int IncreaseByTag<TArg>(int tagIndex, long amount, TArg arg, Func<TDef, TArg, bool> filter)
         {
-            if (amount < 0) throw new ArgumentOutOfRangeException(nameof(amount), amount, "진행도 증가량은 음수일 수 없습니다.");
+            if (amount < 0) throw new ArgumentOutOfRangeException(nameof(amount), amount, "Progress increase cannot be negative.");
             if (filter == null) throw new ArgumentNullException(nameof(filter));
 
             var indices = _catalog.GetIndicesByTag(tagIndex);
-            Span<ulong> eligible = stackalloc ulong[(indices.Length + 63) >> 6];   // IncreaseByTag와 동일한 스냅샷 의미론
+            Span<ulong> eligible = stackalloc ulong[(indices.Length + 63) >> 6];   // Same snapshot semantics as IncreaseByTag.
             for (var i = 0; i < indices.Length; i++)
             {
                 if (_states[indices[i]].Availability == AchievementStatus.Active && filter(_catalog.GetDefinition(indices[i]), arg))
@@ -127,13 +131,14 @@ namespace Bun3.Server.Achievements
             return total;
         }
 
-        /// <summary>진행도를 설정하고 신규 달성 수를 반환한다. Active가 아니면 no-op(0).
-        /// 하향 설정해도 달성 횟수는 감소하지 않는다(단조 규칙 — 중복 달성 방지의 근거).
-        /// 용도: 로그인 시 파생값 동기화(레벨·수집 수 역산), 거대 재화의 포화 변환.</summary>
-        /// <exception cref="ArgumentOutOfRangeException">value가 음수일 때.</exception>
+        /// <summary>Sets progress and returns the new completion count. No-op (0) unless Active.
+        /// Lowering progress never decreases the completion count (monotonic rule — the basis of
+        /// duplicate-completion prevention). Uses: syncing derived values at login (level,
+        /// collection counts), saturating conversion of huge currencies.</summary>
+        /// <exception cref="ArgumentOutOfRangeException">When value is negative.</exception>
         public int SetProgress(int index, long value)
         {
-            if (value < 0) throw new ArgumentOutOfRangeException(nameof(value), value, "진행도는 음수일 수 없습니다.");
+            if (value < 0) throw new ArgumentOutOfRangeException(nameof(value), value, "Progress cannot be negative.");
 
             var def = _catalog.GetDefinition(index);
             ref var state = ref _states[index];
@@ -158,7 +163,7 @@ namespace Bun3.Server.Achievements
             long newProgress;
             if (def.Repeatable)
             {
-                // 오버플로 클램프 — progress ≥ 0, amount ≥ 0 전제라 뺄셈 비교가 안전하다.
+                // Overflow clamp — progress ≥ 0 and amount ≥ 0, so the subtraction comparison is safe.
                 newProgress = amount > long.MaxValue - progress ? long.MaxValue : progress + amount;
             }
             else
@@ -177,7 +182,7 @@ namespace Bun3.Server.Achievements
             int newCompletions;
             if (def.Repeatable)
             {
-                // 불변식: CompletedCount = ClaimedCount + Progress/Target — 수령 차감과 맞물린다.
+                // Invariant: CompletedCount = ClaimedCount + Progress/Target — pairs with the claim subtraction.
                 var pendingByProgress = newProgress / def.Target;
                 var delta = pendingByProgress - (state.CompletedCount - state.ClaimedCount);
                 if (delta <= 0)
@@ -215,12 +220,13 @@ namespace Bun3.Server.Achievements
             return newCompletions;
         }
 
-        // ── 수령 ─────────────────────────────────────────────────────────────
+        // ── Claiming ─────────────────────────────────────────────────────────
 
-        /// <summary>수령하지 않은 달성이 있으면 수령 횟수를 1 올리고 true. 반복 업적은
-        /// 진행도에서 목표치를 차감한다(다음 사이클 개시). 가용성과 무관하게 동작한다 —
-        /// 로테이션 아웃된 업적의 보상 정산이 가능해야 하므로. 지급은 게임이 true 반환 후
-        /// 수행하며, 일괄 수령은 <c>while (TryClaim(i))</c>.</summary>
+        /// <summary>If an unclaimed completion exists, increments the claim count and returns true.
+        /// Repeatable achievements subtract one target from progress (starting the next cycle).
+        /// Works regardless of availability — reward settlement must remain possible for
+        /// rotated-out achievements. The game grants after a true return; claim all with
+        /// <c>while (TryClaim(i))</c>.</summary>
         public bool TryClaim(int index)
         {
             ref var state = ref _states[index];
@@ -234,26 +240,27 @@ namespace Bun3.Server.Achievements
             if (def.Repeatable)
             {
                 var remaining = state.Progress - def.Target;
-                state.Progress = remaining > 0 ? remaining : 0;   // 느슨한 Restore 대비 바닥 0
+                state.Progress = remaining > 0 ? remaining : 0;   // Floor at 0 to tolerate a lenient Restore.
             }
 
             _onDirty?.Invoke();
             return true;
         }
 
-        /// <summary>수령 가능 횟수 (달성 횟수 − 수령 횟수).</summary>
+        /// <summary>Claimable count (completions − claims).</summary>
         public int GetClaimableCount(int index)
         {
             ref readonly var state = ref _states[index];
             return state.CompletedCount - state.ClaimedCount;
         }
 
-        // ── 상태 ─────────────────────────────────────────────────────────────
+        // ── Status ───────────────────────────────────────────────────────────
 
-        /// <summary>수명주기 상태를 파생 조회한다. Locked/Ready는 저장값 그대로, Active
-        /// 계열은 카운터에서 판정: 수령 가능분 있음 → Completed, 비반복 전량 수령 → Claimed
-        /// (종결), 그 외 Active(반복 업적은 수령 후 자동 복귀). 저장-파생 불일치가 원리적으로
-        /// 없다 — Completed/Claimed는 어디에도 저장되지 않는다.</summary>
+        /// <summary>Derives the lifecycle status. Locked/Ready return the stored value; the Active
+        /// family derives from counters: claimable pending → Completed, non-repeatable fully
+        /// claimed → Claimed (terminal), otherwise Active (repeatables return to Active after
+        /// claiming). Stored-vs-derived mismatch is impossible by construction — Completed/Claimed
+        /// are never stored.</summary>
         public AchievementStatus GetStatus(int index)
         {
             ref readonly var state = ref _states[index];
@@ -273,8 +280,9 @@ namespace Bun3.Server.Achievements
             return AchievementStatus.Active;
         }
 
-        /// <summary>Locked → Ready 전이(열림 — 목록 노출, 진행은 아직). 그 외 상태면 false.
-        /// "완료/수령 시 자식 열림"은 게임이 OnCompleted나 수령 핸들러에서 호출한다.</summary>
+        /// <summary>Locked → Ready transition (opened — listed, but not progressing yet). False in
+        /// any other state. "Open the child on completion/claim" is done by the game in OnCompleted
+        /// or its claim handler.</summary>
         public bool Unlock(int index)
         {
             ref var state = ref _states[index];
@@ -288,7 +296,7 @@ namespace Bun3.Server.Achievements
             return true;
         }
 
-        /// <summary>Locked/Ready → Active 전이(진행 개시). 이미 Active면 false.</summary>
+        /// <summary>Locked/Ready → Active transition (progress starts). False if already Active.</summary>
         public bool Activate(int index)
         {
             ref var state = ref _states[index];
@@ -302,8 +310,9 @@ namespace Bun3.Server.Achievements
             return true;
         }
 
-        /// <summary>→ Locked 전이(닫힘 — 로테이션 아웃 등). 카운터는 유지된다(되감기는
-        /// <see cref="Reset"/>). 이미 Locked면 false. 수령 대기분의 정산(우편 등)은 게임 몫.</summary>
+        /// <summary>→ Locked transition (closed — rotated out, etc.). Counters are kept (rewinding
+        /// is <see cref="Reset"/>). False if already Locked. Settling pending claims (mail, etc.)
+        /// is the game's job.</summary>
         public bool Lock(int index)
         {
             ref var state = ref _states[index];
@@ -317,37 +326,39 @@ namespace Bun3.Server.Achievements
             return true;
         }
 
-        // ── 저장 연계 ─────────────────────────────────────────────────────────
+        // ── Persistence ──────────────────────────────────────────────────────
 
-        /// <summary>상태를 복사 없이 열람한다 — 저장 직렬화는 게임이 이걸 순회한다.</summary>
+        /// <summary>Views the state without copying — the game iterates this for save serialization.</summary>
         public ref readonly AchievementState GetState(int index) => ref _states[index];
 
-        /// <summary>로드 복원 — 훅과 dirty를 발화하지 않는다. 불변식 위반(음수, 수령 &gt;
-        /// 달성, 비반복 다회 달성, Availability에 파생 상태 저장)은 예외로 저장 데이터
-        /// 손상을 표면화하고, 비반복 업적의 초과 진행도만 목표치로 클램프한다(밸런스
-        /// 패치로 목표 하향 대응 — 재판정은 다음 Increase(i, 0)).
-        /// 달성 횟수가 진행도 대비 모자란 상태를 복원하면 다음 Increase/SetProgress에서
-        /// 차액만큼 몰아 발화한다(at-least-once — 달성 처리 도중 크래시 복구에 안전한 방향).</summary>
-        /// <exception cref="ArgumentException">상태가 불변식을 위반할 때.</exception>
+        /// <summary>Load-time restore — fires neither hooks nor dirty. Invariant violations
+        /// (negatives, claims &gt; completions, multiple completions on a non-repeatable, derived
+        /// status stored in Availability) throw to surface save-data corruption; only excess
+        /// progress on non-repeatables is clamped to the target (handles balance patches lowering
+        /// the target — re-judge with the next Increase(i, 0)).
+        /// Restoring a state whose completion count lags its progress fires the difference in bulk
+        /// on the next Increase/SetProgress (at-least-once — the safe direction for crash recovery
+        /// mid-completion).</summary>
+        /// <exception cref="ArgumentException">When the state violates an invariant.</exception>
         public void Restore(int index, in AchievementState state)
         {
             if (state.Progress < 0 || state.CompletedCount < 0 || state.ClaimedCount < 0 || state.LastCompletedAtUtcTicks < 0)
             {
-                throw new ArgumentException("업적 상태에 음수 값이 있습니다.", nameof(state));
+                throw new ArgumentException("Achievement state contains a negative value.", nameof(state));
             }
             if (state.ClaimedCount > state.CompletedCount)
             {
-                throw new ArgumentException("수령 횟수가 달성 횟수를 초과합니다.", nameof(state));
+                throw new ArgumentException("Claim count exceeds completion count.", nameof(state));
             }
             if ((uint)state.Availability > (uint)AchievementStatus.Active)
             {
-                throw new ArgumentException($"Availability에는 Locked/Ready/Active만 저장됩니다 ({state.Availability}) — Completed/Claimed는 파생 상태입니다.", nameof(state));
+                throw new ArgumentException($"Only Locked/Ready/Active may be stored in Availability ({state.Availability}) — Completed/Claimed are derived.", nameof(state));
             }
 
             var def = _catalog.GetDefinition(index);
             if (!def.Repeatable && state.CompletedCount > 1)
             {
-                throw new ArgumentException($"비반복 업적 '{def.Id}'의 달성 횟수가 1을 초과합니다 ({state.CompletedCount}).", nameof(state));
+                throw new ArgumentException($"Non-repeatable achievement '{def.Id}' has a completion count above 1 ({state.CompletedCount}).", nameof(state));
             }
 
             _states[index] = state;
@@ -357,11 +368,11 @@ namespace Bun3.Server.Achievements
             }
         }
 
-        /// <summary>카운터(진행도·달성·수령·시각)를 0으로 되감는다 — 일간/주간 사이클
-        /// 교체용. 가용성은 건드리지 않는다(전이는 Unlock/Activate/Lock으로 별도).
-        /// 달성 횟수는 단조라 SetProgress(0)으로는 재달성이 불가능하므로, 카운터를 함께
-        /// 되감는 지점은 여기뿐이다. 변경이 있었으면 dirty 1회, 훅 없음. 미수령 보상
-        /// 정산(우편 발송 등)은 게임이 Reset 전에 처리할 것.</summary>
+        /// <summary>Rewinds the counters (progress, completions, claims, timestamp) to zero — for
+        /// daily/weekly cycle swaps. Availability is untouched (transitions go through
+        /// Unlock/Activate/Lock separately). The completion count is monotonic, so SetProgress(0)
+        /// cannot re-complete — this is the only place counters rewind together. Dirty fires once
+        /// if anything changed; no hooks. Settle unclaimed rewards (mail, etc.) before Reset.</summary>
         public void Reset(int index)
         {
             ref var state = ref _states[index];

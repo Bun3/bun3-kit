@@ -7,14 +7,14 @@ using UnityEditor;
 
 namespace Bun3.Gameplay.Editor.Tags
 {
-    /// <summary>현재 Unity Play 전환에서 binary 검증을 마친 단 하나의 불변 Catalog를 보관합니다.</summary>
+    /// <summary>Holds the single immutable catalog that passed binary verification for the current Unity play transition.</summary>
     public static class GameplayTagPlaySessionCatalog
     {
         private const string PathKey = "Bun3.Gameplay.Tags.PlaySession.Path";
         private const string CatalogIdKey = "Bun3.Gameplay.Tags.PlaySession.CatalogId";
         private const string FingerprintKey = "Bun3.Gameplay.Tags.PlaySession.Fingerprint";
 
-        /// <summary>활성 Play 전환에서 준비한 Catalog이며 일반 Edit Mode에서는 null입니다.</summary>
+        /// <summary>Catalog prepared by the active play transition; null in normal edit mode.</summary>
         public static TagCatalog? Current { get; private set; }
 
         internal static void Freeze(TagCatalog catalog)

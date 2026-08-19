@@ -1,34 +1,34 @@
-// PopupStack partial — 결과 대기 담당.
+// PopupStack partial — result awaiting.
 using Cysharp.Threading.Tasks;
 using UnityEngine;
 
 namespace Bun3.Unity.UI.Popups
 {
-    // 결과 경로: Popup<TResult>를 열고 닫힘 결과까지 대기하는 Push 계열.
+    // Result path: Push variants that open a Popup<TResult> and await its close result.
     public sealed partial class PopupStack
     {
         /// <summary>
-        /// 결과 팝업(<see cref="Popup{TResult}"/>)을 열고, 닫힐 때까지 기다린 뒤 결과를 돌려준다.
-        /// <c>SetResult</c> 없이 닫히면(back/취소) <paramref name="defaultResult"/>.
-        /// 중복 정책으로 열리지 않았거나 취소됐을 때도 <paramref name="defaultResult"/>.
+        /// Opens a result popup (<see cref="Popup{TResult}"/>), waits until it closes, and returns
+        /// the result. Closed without <c>SetResult</c> (back/cancel) yields
+        /// <paramref name="defaultResult"/>, as does not opening (duplicate policy) or cancellation.
         /// </summary>
         public async UniTask<TResult> PushForResultAsync<TResult>(PopupKey key, int layer = 0,
             PopupDuplicatePolicy duplicate = PopupDuplicatePolicy.Ignore, TResult defaultResult = default)
             => await WaitForResultCore(await PushAsync(key, layer, duplicate), defaultResult);
 
         /// <summary>
-        /// 초기 데이터를 실어 결과 팝업을 열고 결과까지 대기한다.
-        /// 제네릭 부분 추론이 없어 호출 시 두 타입을 명시한다:
-        /// <c>PushForResultAsync&lt;string, bool&gt;(key, "정말?")</c>.
+        /// Opens a result popup with initial data and awaits the result.
+        /// No partial generic inference — specify both types at the call site:
+        /// <c>PushForResultAsync&lt;string, bool&gt;(key, "Are you sure?")</c>.
         /// </summary>
         public async UniTask<TResult> PushForResultAsync<TArg, TResult>(PopupKey key, TArg arg, int layer = 0,
             PopupDuplicatePolicy duplicate = PopupDuplicatePolicy.Ignore, TResult defaultResult = default)
             => await WaitForResultCore(await PushWithArgAsync(key, arg, layer, duplicate), defaultResult);
 
         /// <summary>
-        /// 결과 팝업을 타입 키로 열고 결과까지 대기한다. <c>where TPopup : Popup&lt;TResult&gt;</c>
-        /// 제약이라 팝업↔결과 타입 불일치는 <b>컴파일 에러</b>다:
-        /// <c>PushForResultAsync&lt;ConfirmPopup, bool&gt;()</c>.
+        /// Opens a result popup by type key and awaits the result. The
+        /// <c>where TPopup : Popup&lt;TResult&gt;</c> constraint makes a popup/result type
+        /// mismatch a <b>compile error</b>: <c>PushForResultAsync&lt;ConfirmPopup, bool&gt;()</c>.
         /// </summary>
         public async UniTask<TResult> PushForResultAsync<TPopup, TResult>(string popupName = null,
             int layer = 0, PopupDuplicatePolicy duplicate = PopupDuplicatePolicy.Ignore,
@@ -36,7 +36,7 @@ namespace Bun3.Unity.UI.Popups
             => await WaitForResultCore(
                 await PushAsync(PopupKey.Of<TPopup>(popupName), layer, duplicate), defaultResult);
 
-        /// <summary>결과 팝업을 타입 키 + 초기 데이터로 연다. 세 타입 모두 명시한다.</summary>
+        /// <summary>Opens a result popup by type key with initial data. Specify all three types.</summary>
         public async UniTask<TResult> PushForResultAsync<TPopup, TArg, TResult>(TArg arg,
             string popupName = null, int layer = 0,
             PopupDuplicatePolicy duplicate = PopupDuplicatePolicy.Ignore,
@@ -52,9 +52,9 @@ namespace Bun3.Unity.UI.Popups
             if (popup is Popup<TResult> typed)
                 return await typed.WaitForResultAsync(defaultResult);
 
-            // 게임 코드 결선 오류 — 저빈도 경로라 문자열 할당 허용.
+            // Game wiring error — low-frequency path, string allocation OK.
             Debug.LogError(
-                $"팝업 {popup.GetType().Name}이(가) Popup<{typeof(TResult).Name}>가 아니라 결과를 받을 수 없다.",
+                $"Popup {popup.GetType().Name} is not a Popup<{typeof(TResult).Name}>; cannot receive a result.",
                 popup);
             return defaultResult;
         }

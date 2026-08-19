@@ -3,7 +3,7 @@ using Bun3.Gameplay.Numerics;
 
 namespace Bun3.Server.Items
 {
-    /// <summary>적용된 변경 1건 — CS 원장(ledger)의 한 줄이 되도록 변경 후 잔량을 포함한다.</summary>
+    /// <summary>One applied change — includes the post-change balance so it can serve as a ledger row.</summary>
     public readonly struct InventoryChange
     {
         internal InventoryChange(ItemId item, BigNum delta, BigNum balance)
@@ -13,22 +13,23 @@ namespace Bun3.Server.Items
             Balance = balance;
         }
 
-        /// <summary>대상 아이템.</summary>
+        /// <summary>Target item.</summary>
         public ItemId Item { get; }
 
-        /// <summary>부호 있는 변경량(지급 +, 소모 −).</summary>
+        /// <summary>Signed change amount (grant +, consume −).</summary>
         public BigNum Delta { get; }
 
-        /// <summary>적용 직후의 정의 총 보유량 — "왜 줄었나" CS 문의를 재생 없이 답하는 필드.</summary>
+        /// <summary>Total held for the definition immediately after applying.</summary>
         public BigNum Balance { get; }
     }
 
     /// <summary>
-    /// 성공한 커밋당 1회 호출되는 적용 통지 — 연산 순서대로의 순 델타와 변경 후 잔량.
-    /// 업적·퀘스트 카운팅 같은 기계 소비용이다. 문맥(어떤 행동이 왜)을 가진 CS 감사
-    /// 원장은 세션 공용 <see cref="Bun3.Server.Core.ActionLog"/> 쪽이 원천.
-    /// span은 호출 동안만 유효 — 보관은 복사로.
+    /// Applied notification, invoked once per successful commit — net deltas in operation
+    /// order plus post-change balances. Intended for machine consumers such as achievement
+    /// and quest counting. Contextual audit logging (which action, why) belongs to the
+    /// session-wide <see cref="Bun3.Server.Core.ActionLog"/>.
+    /// The span is valid only during the call — copy to retain.
     /// </summary>
-    /// <param name="applied">적용된 변경들.</param>
+    /// <param name="applied">The applied changes.</param>
     public delegate void InventoryAppliedHandler(ReadOnlySpan<InventoryChange> applied);
 }

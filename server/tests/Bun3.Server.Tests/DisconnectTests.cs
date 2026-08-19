@@ -29,18 +29,18 @@ public class DisconnectTests
         {
             var h = new Harness();
             var config = new RpcConfig<KickSession>();
-            // 기동 전수 검증 충족용 — GetGold는 게임 킥 트리거, 나머지는 스텁
+            // satisfies startup exhaustive validation — GetGold triggers a game kick, the rest are stubs
             config.OnRequest<GetGoldRequest, GetGoldResponse>((s, req) =>
             {
                 s.Kick(GameBanCode);
-                s.Kick(-99);   // 이중 킥 — 사유는 최초 1회만 송신(멱등), 클라는 GameBanCode를 받아야 한다
+                s.Kick(-99);   // double kick — reason sent only once (idempotent); client must receive GameBanCode
                 return new ValueTask<Reply<GetGoldResponse>>(Reply.Fail(GameBanCode));
             });
             config.OnRequest<LoginRequest, LoginResponse>((s, req) =>
                 new ValueTask<Reply<LoginResponse>>(new LoginResponse { Gold = 0 }));
             config.OnRequest<AddGoldRequest, AddGoldResponse>(async (s, req) =>
             {
-                await h.BlockHandlers.Task;   // 큐 초과 테스트용 블로커
+                await h.BlockHandlers.Task;   // blocker for the queue-overflow test
                 return new AddGoldResponse { Gold = 0 };
             });
 
@@ -86,7 +86,7 @@ public class DisconnectTests
         }
         catch (ConnectionClosedException)
         {
-            // 응답 송신과 close가 경합 — 응답을 못 받아도 무방, 사유 전달이 검증 대상
+            // response send races with close — missing the response is fine; reason delivery is what is verified
         }
 
         var info = await closed.Task.WaitAsync(Timeout);
@@ -112,7 +112,7 @@ public class DisconnectTests
     public async Task Idle_kick_delivers_reason()
     {
         await using var h = await Harness.StartAsync(idleKick: TimeSpan.FromMilliseconds(150));
-        using var client = await h.ConnectAsync(pingInterval: null);   // 핑 끔 — idle 유도
+        using var client = await h.ConnectAsync(pingInterval: null);   // ping off — induce idle
         var closed = Watch(client);
 
         var info = await closed.Task.WaitAsync(Timeout);
@@ -139,7 +139,7 @@ public class DisconnectTests
         using var client = await h.ConnectAsync();
         var closed = Watch(client);
 
-        // 블로킹 핸들러 1개 + 큐 상한 초과까지 요청 폭주 (응답은 기대하지 않음)
+        // one blocking handler + flood requests past the queue limit (no responses expected)
         var floods = new List<Task>();
         for (var i = 0; i < 10; i++)
         {
@@ -152,7 +152,7 @@ public class DisconnectTests
         h.BlockHandlers.TrySetResult(true);
         foreach (var flood in floods)
         {
-            try { await flood; } catch { /* ConnectionClosed/Timeout — 관전 처리만 */ }
+            try { await flood; } catch { /* ConnectionClosed/Timeout — observation only */ }
         }
     }
 
@@ -164,7 +164,7 @@ public class DisconnectTests
         var closed = Watch(client);
 
         client.Dispose();
-        client.Dispose();   // 멱등
+        client.Dispose();   // idempotent
 
         var info = await closed.Task.WaitAsync(Timeout);
         Assert.That(info.Code, Is.EqualTo(DisconnectCode.None));

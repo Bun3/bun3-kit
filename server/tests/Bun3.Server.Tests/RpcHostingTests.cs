@@ -58,7 +58,7 @@ public class RpcHostingTests
     {
         var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings { DisableDefaults = true });
         builder.Services.AddRpcServer<HostedSession, Request, Response, Update>(
-            rpc => { },   // 아무 핸들러도 등록하지 않음
+            rpc => { },   // no handlers registered
             serverOptions: options => options.Port = 0);
         using var host = builder.Build();
 

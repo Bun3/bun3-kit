@@ -10,7 +10,7 @@
     <Authors>Bun3</Authors>
     <RepositoryUrl>https://github.com/Bun3/bun3-kit</RepositoryUrl>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <Description>세션 액터 기반 게임 서버 코어 — Session/ServerBase, 연결당 단일 소비 루프, ActionLog 행동 원장</Description>
+    <Description>Session-actor game server core — Session/ServerBase, single consume loop per connection, ActionLog action ledger</Description>
   </PropertyGroup>
 
   <ItemGroup>

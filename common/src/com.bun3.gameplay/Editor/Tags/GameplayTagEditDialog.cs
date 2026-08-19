@@ -52,7 +52,7 @@ namespace Bun3.Gameplay.Editor.Tags
         private bool _requireValue;
         private bool _focusValue = true;
 
-        /// <summary>전체 경로를 읽기 전용 부모와 편집 가능한 마지막 세그먼트로 나눕니다.</summary>
+        /// <summary>Splits the full path into a read-only parent and an editable last segment.</summary>
         internal static GameplayTagTextEditRequest CreateRenameRequest(string path)
         {
             if (path is null) throw new ArgumentNullException(nameof(path));
@@ -92,7 +92,7 @@ namespace Bun3.Gameplay.Editor.Tags
                 "OK");
         }
 
-        /// <summary>마지막 세그먼트만 편집하는 이름 변경 modal을 열고 결과를 반환합니다.</summary>
+        /// <summary>Opens a rename modal editing only the last segment and returns the result.</summary>
         internal static GameplayTagTextEditResult ShowRename(string path)
         {
             return Show(
@@ -104,7 +104,7 @@ namespace Bun3.Gameplay.Editor.Tags
                 requireValue: true);
         }
 
-        /// <summary>전체 경로를 읽기 전용으로 보여 주는 comment 편집 modal을 열고 결과를 반환합니다.</summary>
+        /// <summary>Opens a comment-editing modal showing the full path read-only and returns the result.</summary>
         internal static GameplayTagTextEditResult ShowComment(string path, string comment)
         {
             if (path is null) throw new ArgumentNullException(nameof(path));

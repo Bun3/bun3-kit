@@ -8,20 +8,22 @@ namespace Bun3.Server.Transport.InProcess
 {
     internal sealed class InProcessConnection : IConnection
     {
-        // 종료(FIN) 센티널 — 참조 비교 전용. 사용자 패킷은 항상 복사된 새 배열(빈 패킷은
-        // Array.Empty)이라 이 인스턴스와 절대 겹치지 않는다.
+        // Close (FIN) sentinel — compared by reference only. User packets are always freshly
+        // copied arrays (empty packets use Array.Empty), so they can never collide with this
+        // instance.
         private static readonly byte[] ClosedByPeerSentinel = new byte[1];
 
-        // 닫힐 때 슬롯 세마포어에 방출해 백프레셔로 대기 중인 송신자를 전부 깨우는 수량.
-        // 현실적인 동시 대기자 수보다 충분히 크고, 각 세마포어당 최대 2회(자기 Close + 상대 Close,
-        // 둘 다 CAS 가드)만 방출되므로 오버플로 없다.
+        // Amount released into the slot semaphore on close to wake every sender blocked on
+        // backpressure. Far larger than any realistic number of concurrent waiters, and each
+        // semaphore is released at most twice (own Close + peer Close, both CAS-guarded), so it
+        // cannot overflow.
         private const int WakeAllSenders = 1 << 20;
 
         private readonly ConcurrentQueue<byte[]> _inbox = new ConcurrentQueue<byte[]>();
         private readonly SemaphoreSlim _items = new SemaphoreSlim(0);
-        private readonly SemaphoreSlim _slots; // 유한 인박스 — TCP 소켓 버퍼의 백프레셔에 해당
+        private readonly SemaphoreSlim _slots; // Bounded inbox — equivalent to TCP socket-buffer backpressure.
         private readonly IConnectionHandler _handler;
-        private InProcessConnection _peer = null!; // 페어 생성 직후 Link로 반드시 연결된다
+        private InProcessConnection _peer = null!; // Always set via Link right after the pair is created.
         private int _closed; // 0 = open, 1 = closed
 
         internal InProcessConnection(long id, int maxQueuedPackets, IConnectionHandler handler)
@@ -43,7 +45,7 @@ namespace Bun3.Server.Transport.InProcess
         {
             if (!IsOpen)
             {
-                return default; // 계약: 닫힌 연결에 대한 송신은 no-op
+                return default; // Contract: sending on a closed connection is a no-op.
             }
 
             return _peer.EnqueueFromPeerAsync(packet, this, ct);
@@ -54,17 +56,18 @@ namespace Bun3.Server.Transport.InProcess
         {
             if (!IsOpen)
             {
-                return; // 수신 측이 이미 닫힘 — 닫힌 소켓으로 사라지는 바이트처럼 드롭
+                return; // Receiver already closed — drop, like bytes vanishing into a closed socket.
             }
 
             await _slots.WaitAsync(ct).ConfigureAwait(false);
             if (!IsOpen || !sender.IsOpen)
             {
-                return; // 대기 중 어느 한쪽이 닫힘(WakeAllSenders 방출로 깨어난 경우 포함) — no-op 계약대로 드롭
+                return; // Either side closed while waiting (including a WakeAllSenders wake-up) — drop per the no-op contract.
             }
 
-            // 소유권 계약: OnPacket의 배열은 수신자 소유가 되므로 송신자 버퍼를 여기서 1회 복사한다.
-            // (Tcp도 수신 패킷당 새 배열 1개를 할당하므로 패킷당 할당 수는 동일)
+            // Ownership contract: OnPacket's array becomes receiver-owned, so copy the sender's
+            // buffer exactly once here. (TCP also allocates one new array per received packet, so
+            // allocations per packet are identical.)
             _inbox.Enqueue(packet.ToArray());
             _items.Release();
         }
@@ -73,29 +76,30 @@ namespace Bun3.Server.Transport.InProcess
         {
             if (Interlocked.Exchange(ref _closed, 1) != 0)
             {
-                return; // 멱등
+                return; // Idempotent.
             }
 
-            _items.Release();               // 자기 펌프를 깨워 종료·OnClosed 통지로 잇는다
-            _slots.Release(WakeAllSenders); // 이 인박스에 블록된 상대 송신자를 전부 깨운다
-            // 상대 인박스에 블록된 내 송신자도 깨운다 — TCP의 로컬 Close가 블록된 write를
-            // dispose로 깨워 no-op 반환시키는 동작에 해당. 깨어난 송신자는 sender.IsOpen으로
-            // 닫힘을 확인하고 드롭한다. 상대가 살아 있어도 이후 내 송신은 전부 IsOpen에서
-            // 걸러지므로 부풀려진 슬롯 카운트는 무해하다.
+            _items.Release();               // Wake our own pump so it exits and reports OnClosed.
+            _slots.Release(WakeAllSenders); // Wake every peer sender blocked on this inbox.
+            // Also wake our senders blocked on the peer's inbox — equivalent to TCP's local Close
+            // waking a blocked write via dispose so it returns as a no-op. Woken senders see the
+            // closure via sender.IsOpen and drop. Even if the peer stays alive, all our later
+            // sends are filtered by IsOpen, so the inflated slot count is harmless.
             _peer._slots.Release(WakeAllSenders);
             _peer.NotifyPeerClosed();
         }
 
         private void NotifyPeerClosed()
         {
-            // FIN에 해당 — 큐 꼬리에 넣어 먼저 큐잉된 패킷이 전부 전달(드레인)된 뒤 닫히게 한다
+            // Equivalent to FIN — enqueued at the tail so earlier packets are all delivered (drained) before the close.
             _inbox.Enqueue(ClosedByPeerSentinel);
             _items.Release();
         }
 
         /// <summary>
-        /// 수신 펌프. 연결당 1개, 해당 끝점의 OnConnected 반환 후에만 시작한다.
-        /// 종료 시 OnClosed를 정확히 1회 통지한다(이 finally가 유일한 통지 지점).
+        /// Receive pump. One per connection; starts only after that endpoint's OnConnected has
+        /// returned. Reports OnClosed exactly once on exit (this finally is the sole notification
+        /// point).
         /// </summary>
         internal async Task RunReceivePumpAsync()
         {
@@ -107,7 +111,7 @@ namespace Bun3.Server.Transport.InProcess
                     await _items.WaitAsync().ConfigureAwait(false);
                     if (!IsOpen)
                     {
-                        break; // 로컬 Close — 남은 큐잉분은 버린다(Tcp의 로컬 Close와 동일)
+                        break; // Local Close — discard whatever is still queued (same as TCP's local Close).
                     }
 
                     if (!_inbox.TryDequeue(out var packet))
@@ -117,20 +121,20 @@ namespace Bun3.Server.Transport.InProcess
 
                     if (ReferenceEquals(packet, ClosedByPeerSentinel))
                     {
-                        break; // 상대 종료 — 드레인 완료
+                        break; // Peer closed — drain complete.
                     }
 
                     _slots.Release();
-                    _handler.OnPacket(this, packet); // 배열 소유권 이전 — 이후 이 배열을 건드리지 않는다
+                    _handler.OnPacket(this, packet); // Array ownership transfers — never touch this array afterwards.
                 }
             }
             catch (Exception ex)
             {
-                error = ex; // OnPacket이 던짐 — Tcp 수신 루프와 동일하게 error로 종료
+                error = ex; // OnPacket threw — exit with error, same as the TCP receive loop.
             }
             finally
             {
-                Close(); // 상대에게 종료 통지 포함(이미 닫혔으면 멱등 no-op)
+                Close(); // Includes notifying the peer (idempotent no-op if already closed).
                 _handler.OnClosed(this, error);
             }
         }

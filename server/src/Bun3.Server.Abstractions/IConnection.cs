@@ -5,28 +5,29 @@ using System.Threading.Tasks;
 namespace Bun3.Server.Abstractions
 {
     /// <summary>
-    /// 연결된 원격 상대 하나. 전송(TCP/Steam/인프로세스)에 무관한 패킷 단위 송신 계약.
+    /// One connected remote peer. Packet-level send contract independent of the transport
+    /// (TCP/Steam/in-process).
     /// </summary>
     public interface IConnection
     {
         /// <summary>
-        /// 프로세스 내 유일 연결 식별자(단조 증가). 로그 상관·레지스트리 키 용도.
-        /// 계정/플레이어 ID가 아니며 재접속 시 새 값이 부여된다.
+        /// Process-unique connection identifier (monotonically increasing). Used for log
+        /// correlation and registry keys. Not an account/player ID; a reconnect gets a new value.
         /// </summary>
         long Id { get; }
 
-        /// <summary>전송별 원격 주소 표현. TCP는 "IP:포트", Steam은 SteamID 문자열.</summary>
+        /// <summary>Transport-specific remote address; "IP:port" for TCP, SteamID string for Steam.</summary>
         string? RemoteAddress { get; }
 
-        /// <summary>연결이 아직 열려 있는지 여부.</summary>
+        /// <summary>Whether the connection is still open.</summary>
         bool IsOpen { get; }
 
         /// <summary>
-        /// 패킷 하나를 송신한다. 닫힌 연결에 대한 호출은 no-op이다(예외를 던지지 않는다).
+        /// Sends one packet. Calling on a closed connection is a no-op (never throws).
         /// </summary>
         ValueTask SendAsync(ReadOnlyMemory<byte> packet, CancellationToken ct = default);
 
-        /// <summary>연결을 닫는다. 멱등. 이후 전송 구현이 OnClosed를 정확히 1회 통지한다.</summary>
+        /// <summary>Closes the connection. Idempotent. The transport then reports OnClosed exactly once.</summary>
         void Close();
     }
 }

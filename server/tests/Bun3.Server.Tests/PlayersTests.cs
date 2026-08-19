@@ -69,13 +69,13 @@ public class PlayersTests
                     var result = await s.SignInAsync($"guest:{req.DeviceId}");
                     if (req.DeviceId == "double")
                     {
-                        await s.SignInAsync($"guest:{req.DeviceId}");   // 이중 SignIn → 예외 → status 2
+                        await s.SignInAsync($"guest:{req.DeviceId}");   // double SignIn -> throws -> status 2
                     }
                     return new LoginResponse { Gold = result.Player.Gold, IsReconnect = result.IsReconnect };
                 }
                 catch (DuplicateLoginException)
                 {
-                    return Reply.Fail(-77);   // RejectNew 정책 테스트용
+                    return Reply.Fail(-77);   // for the RejectNew policy test
                 }
             });
             config.OnRequest<AddGoldRequest, AddGoldResponse>((s, req) =>
@@ -216,9 +216,9 @@ public class PlayersTests
         var loginB = await LoginAsync(connB, "a");
 
         Assert.That(loginB.Login.IsReconnect, Is.True);
-        Assert.That(loginB.Login.Gold, Is.EqualTo(105));   // 같은 Player
-        Assert.That(connA.IsOpen, Is.False);               // 옛 연결 킥
-        Assert.That(sessionA.Player, Is.Null);             // 옛 세션 즉시 무권한화 — 큐 잔여 요청은 게이트가 차단
+        Assert.That(loginB.Login.Gold, Is.EqualTo(105));   // same Player
+        Assert.That(connA.IsOpen, Is.False);               // old connection kicked
+        Assert.That(sessionA.Player, Is.Null);             // old session deauthorized immediately — the gate blocks queued leftovers
         Assert.That(h.LoaderCalls, Is.EqualTo(1));
         Assert.That(ReferenceEquals(h.Registry.TryGet("guest:a"), player), Is.True);
         await h.Server.StopAsync();
@@ -235,13 +235,13 @@ public class PlayersTests
         var connB = h.Transport.Connect(2);
         var loginB = await LoginAsync(connB, "a");
 
-        Assert.That(loginB.Status, Is.EqualTo(-77));   // 핸들러가 DuplicateLoginException을 잡아 변환
+        Assert.That(loginB.Status, Is.EqualTo(-77));   // handler catches DuplicateLoginException and converts it
         Assert.That(connA.IsOpen, Is.True);
         await h.Server.StopAsync();
     }
 
-    /// <summary>동시 중복 로그인: 로더는 1회, 생존자는 정확히 1명.
-    /// 패자의 로그인 응답은 킥에 밀려 유실될 수 있다(실서비스 의미론 — 킥 사유 전달은 v2).</summary>
+    /// <summary>Concurrent duplicate logins: loader runs once, exactly one survivor.
+    /// The loser's login response may be lost to the kick (production semantics — kick reason delivery is v2).</summary>
     [Test]
     public async Task Concurrent_same_key_logins_load_exactly_once()
     {
@@ -256,18 +256,18 @@ public class PlayersTests
 
         Assert.That(h.LoaderCalls, Is.EqualTo(1));
 
-        // 정확히 한 연결만 생존
+        // exactly one connection survives
         for (var i = 0; i < 100 && connA.IsOpen && connB.IsOpen; i++) await Task.Delay(20);
         Assert.That(connA.IsOpen ^ connB.IsOpen, Is.True);
 
-        // 생존자는 정상 동작한다
+        // the survivor works normally
         var survivor = connA.IsOpen ? connA : connB;
         var gold = await RoundtripAsync(survivor, new PlayersRequest { RequestId = 9, GetGold = new GetGoldRequest() });
         Assert.That(gold.Status, Is.EqualTo(RpcStatus.Ok));
         await h.Server.StopAsync();
     }
 
-    /// <summary>응답 수신 또는 연결 종료(응답 유실) 중 먼저 오는 쪽으로 끝나는 관대한 로그인.</summary>
+    /// <summary>Lenient login that ends with whichever comes first: a response, or connection close (response lost).</summary>
     private static async Task<PlayersResponse?> TryLoginAsync(FakeConnection conn, string device)
     {
         conn.ReceivePacket(Wrap(Channels.Request, new PlayersRequest { RequestId = 1, Login = new LoginRequest { DeviceId = device } }));
@@ -276,19 +276,20 @@ public class PlayersTests
         {
             if (conn.SentPackets.TryDequeue(out var packet) && packet[0] == Channels.Response)
             {
-                // SendAsync는 Enqueue 다음에 SentSignal.Release()를 호출한다 — 큐를 직접
-                // 폴링해 짝 없이 뽑아가면 신호가 하나 밀려 이후 같은 연결의 RoundtripAsync가
-                // 그 잔여 신호로 조기 반환해 버린다. 방금 뽑은 패킷의 신호를 여기서 마저 비운다.
+                // SendAsync calls SentSignal.Release() after Enqueue — polling the queue directly
+                // without consuming the matching signal leaves one behind, and a later RoundtripAsync
+                // on the same connection would return early on that leftover signal. Drain the
+                // signal for the packet we just dequeued here.
                 await conn.SentSignal.WaitAsync(Timeout);
                 return PlayersResponse.Parser.ParseFrom(packet.AsSpan(1).ToArray());
             }
             if (!conn.IsOpen)
             {
-                return null;   // 킥으로 응답 유실 — 합법
+                return null;   // response lost to the kick — legal
             }
             await Task.Delay(10);
         }
-        throw new TimeoutException("로그인 응답도 종료도 오지 않음");
+        throw new TimeoutException("neither a login response nor a close arrived");
     }
 
     [Test]

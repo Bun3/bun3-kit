@@ -1,17 +1,18 @@
-// ItemInventory partial — 레시피 제작(TryCraft) 담당.
+// ItemInventory partial — recipe crafting (TryCraft).
 using System.Collections.Generic;
 using Bun3.Gameplay.Numerics;
 
 namespace Bun3.Server.Items
 {
-    // 레시피 실행 — 커밋 코어 위의 얇은 조합.
+    // Recipe execution — a thin composition over the commit core.
     public sealed partial class ItemInventory<TState>
     {
         /// <summary>
-        /// 레시피를 실행한다 — 재료 소모와 결과 지급이 전부-아니면-전무. 재료가 먼저
-        /// 소모된 뒤 결과가 지급되므로 같은 정의가 재료·결과에 다 있어도(장비 합성류)
-        /// 순차 의미론으로 정확히 판정된다. <paramref name="failedIndex"/>는 재료(0부터),
-        /// 이어서 결과 순번이다. <paramref name="count"/>는 반복 제작 배수(수량 × count).
+        /// Executes a recipe — ingredient consumption and result grants are all-or-nothing.
+        /// Ingredients are consumed before results are granted, so a definition appearing in both
+        /// (equipment fusion, etc.) is resolved correctly under sequential semantics.
+        /// <paramref name="failedIndex"/> counts ingredients first (from 0), then results.
+        /// <paramref name="count"/> is the batch-craft multiplier (amounts × count).
         /// </summary>
         public InventoryError TryCraft(
             Recipe recipe,

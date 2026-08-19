@@ -6,7 +6,7 @@ using Bun3.Gameplay.Tags.Catalog;
 
 namespace Bun3.Gameplay.Editor.Tags
 {
-    /// <summary>완전한 Editor Workspace Source를 컴파일한 불변 미리보기입니다.</summary>
+    /// <summary>Immutable preview compiled from the complete editor workspace sources.</summary>
     public sealed class GameplayTagWorkspaceSnapshot
     {
         private readonly IReadOnlyList<TagSourceDocument> _sources;
@@ -28,13 +28,13 @@ namespace Bun3.Gameplay.Editor.Tags
             _sources = Array.AsReadOnly(copy);
         }
 
-        /// <summary>모든 Source를 병합한 불변 Runtime Catalog입니다.</summary>
+        /// <summary>Immutable runtime catalog merging all sources.</summary>
         public TagCatalog Catalog { get; }
 
-        /// <summary>병합된 태그의 Source별 작성 정보를 제공하는 색인입니다.</summary>
+        /// <summary>Index providing per-source authoring info for merged tags.</summary>
         public TagCatalogProvenance Provenance { get; }
 
-        /// <summary>미리보기를 만든 Game 및 읽기 전용 Source 문서입니다.</summary>
+        /// <summary>Game and read-only source documents the preview was built from.</summary>
         public IReadOnlyList<TagSourceDocument> Sources => _sources;
     }
 }

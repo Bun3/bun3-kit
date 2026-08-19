@@ -91,11 +91,11 @@ public class EchoE2ETests
         var (server, listener) = await StartEchoServerAsync();
         using var client = await ConnectAsync(listener);
         var stream = client.GetStream();
-        await AssertEchoAsync(stream, "warm-up"); // 세션 수립 보장
+        await AssertEchoAsync(stream, "warm-up"); // ensure session is established
 
         await server.StopAsync();
 
-        // 서버가 연결을 닫았으므로 클라이언트 읽기는 깨끗한 EOF(null) 또는 IO 예외로 끝난다
+        // server closed the connection, so the client read ends with a clean EOF (null) or an IO exception
         try
         {
             var packet = await PacketFormat.ReadPacketAsync(stream, 1024 * 1024).AsTask().WaitAsync(Timeout);
@@ -103,7 +103,7 @@ public class EchoE2ETests
         }
         catch (IOException)
         {
-            // RST로 끝나는 플랫폼 변형도 허용
+            // platform variants ending in RST are also allowed
         }
         Assert.That(server.IsRunning, Is.False);
         Assert.That(server.Sessions, Is.Empty);
@@ -113,7 +113,7 @@ public class EchoE2ETests
     public async Task New_connection_after_stop_is_refused()
     {
         var (server, listener) = await StartEchoServerAsync();
-        var port = listener.BoundPort!.Value; // Stop 전에 캡처
+        var port = listener.BoundPort!.Value; // capture before Stop
         await server.StopAsync();
 
         var late = new TcpClient();

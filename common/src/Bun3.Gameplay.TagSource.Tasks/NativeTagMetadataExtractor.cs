@@ -10,17 +10,17 @@ using Newtonsoft.Json;
 
 namespace Bun3.Gameplay.TagSource.Tasks
 {
-    /// <summary>Native GameplayTag C# 선언을 결정적인 Source 메타데이터로 추출합니다.</summary>
+    /// <summary>Extracts Native GameplayTag C# declarations into deterministic source metadata.</summary>
     public static class NativeTagMetadataExtractor
     {
         private const string SourceAttributeName = "Bun3.Gameplay.Tags.GameplayTagSourceAttribute";
         private const string TagAttributeName = "Bun3.Gameplay.Tags.NativeGameplayTagAttribute";
 
-        /// <summary>평가된 C# 파일과 참조 어셈블리에서 Native Source 메타데이터를 추출합니다.</summary>
-        /// <param name="sourceFiles">평가된 C# 소스 파일 경로입니다.</param>
-        /// <param name="referencePaths">Roslyn compilation에 제공할 참조 어셈블리 경로입니다.</param>
-        /// <param name="assemblyName">추출 대상의 어셈블리 이름입니다.</param>
-        /// <returns>성공 시 JSON, 실패 시 결정적인 진단을 담은 결과입니다.</returns>
+        /// <summary>Extracts native source metadata from evaluated C# files and reference assemblies.</summary>
+        /// <param name="sourceFiles">Evaluated C# source file paths.</param>
+        /// <param name="referencePaths">Reference assembly paths supplied to the Roslyn compilation.</param>
+        /// <param name="assemblyName">Assembly name of the extraction target.</param>
+        /// <returns>Result holding JSON on success or deterministic diagnostics on failure.</returns>
         public static NativeTagExtractionResult Extract(
             IReadOnlyList<string> sourceFiles,
             IReadOnlyList<string> referencePaths,
@@ -28,7 +28,7 @@ namespace Bun3.Gameplay.TagSource.Tasks
         {
             if (sourceFiles is null) throw new ArgumentNullException(nameof(sourceFiles));
             if (referencePaths is null) throw new ArgumentNullException(nameof(referencePaths));
-            if (string.IsNullOrWhiteSpace(assemblyName)) throw new ArgumentException("어셈블리 이름은 비어 있을 수 없습니다.", nameof(assemblyName));
+            if (string.IsNullOrWhiteSpace(assemblyName)) throw new ArgumentException("Assembly name cannot be empty.", nameof(assemblyName));
 
             var diagnostics = new List<string>();
             var trees = new List<SyntaxTree>(sourceFiles.Count);
@@ -66,8 +66,8 @@ namespace Bun3.Gameplay.TagSource.Tasks
 
             var sourceAttributeType = compilation.GetTypeByMetadataName(SourceAttributeName);
             var tagAttributeType = compilation.GetTypeByMetadataName(TagAttributeName);
-            if (sourceAttributeType is null) diagnostics.Add("B3TAG3001: GameplayTagSourceAttribute 참조를 찾을 수 없습니다.");
-            if (tagAttributeType is null) diagnostics.Add("B3TAG3001: NativeGameplayTagAttribute 참조를 찾을 수 없습니다.");
+            if (sourceAttributeType is null) diagnostics.Add("B3TAG3001: GameplayTagSourceAttribute reference not found.");
+            if (tagAttributeType is null) diagnostics.Add("B3TAG3001: NativeGameplayTagAttribute reference not found.");
             if (diagnostics.Count != 0) return NativeTagExtractionResult.Failure(diagnostics);
 
             var sourceAttributes = compilation.Assembly.GetAttributes()
@@ -75,7 +75,7 @@ namespace Bun3.Gameplay.TagSource.Tasks
                 .ToArray();
             if (sourceAttributes.Length != 1)
             {
-                diagnostics.Add("B3TAG3002: GameplayTagSource assembly 특성은 정확히 하나여야 합니다.");
+                diagnostics.Add("B3TAG3002: Exactly one GameplayTagSource assembly attribute is required.");
                 return NativeTagExtractionResult.Failure(diagnostics);
             }
 
@@ -86,7 +86,7 @@ namespace Bun3.Gameplay.TagSource.Tasks
                 || string.Equals(sourceId, "game", StringComparison.Ordinal)
                 || string.IsNullOrWhiteSpace(displayName))
             {
-                diagnostics.Add("B3TAG3003: GameplayTagSource의 Source ID 또는 표시 이름이 올바르지 않습니다: " + sourceId);
+                diagnostics.Add("B3TAG3003: Invalid GameplayTagSource source ID or display name: " + sourceId);
                 return NativeTagExtractionResult.Failure(diagnostics);
             }
 
@@ -97,7 +97,7 @@ namespace Bun3.Gameplay.TagSource.Tasks
             {
                 if (string.Equals(rows[index - 1].Name, rows[index].Name, StringComparison.Ordinal))
                 {
-                    diagnostics.Add("B3TAG3006: 중복된 Native GameplayTag입니다: " + rows[index].Name);
+                    diagnostics.Add("B3TAG3006: Duplicate Native GameplayTag: " + rows[index].Name);
                 }
             }
 
@@ -143,7 +143,7 @@ namespace Bun3.Gameplay.TagSource.Tasks
                 var location = FormatLocation(field.Locations.FirstOrDefault());
                 if (attributes.Length != 1)
                 {
-                    diagnostics.Add(location + " B3TAG3004: NativeGameplayTag 특성은 필드마다 하나여야 합니다.");
+                    diagnostics.Add(location + " B3TAG3004: Exactly one NativeGameplayTag attribute per field is required.");
                     continue;
                 }
 
@@ -156,7 +156,7 @@ namespace Bun3.Gameplay.TagSource.Tasks
 
                 if (!TryFoldTagName(value, out var canonical))
                 {
-                    diagnostics.Add(location + " B3TAG3005: Native GameplayTag 경로가 올바르지 않습니다: " + value);
+                    diagnostics.Add(location + " B3TAG3005: Invalid Native GameplayTag path: " + value);
                     continue;
                 }
 
@@ -300,7 +300,7 @@ namespace Bun3.Gameplay.TagSource.Tasks
         }
     }
 
-    /// <summary>Native GameplayTag 추출의 JSON 또는 진단 결과입니다.</summary>
+    /// <summary>JSON or diagnostic result of Native GameplayTag extraction.</summary>
     public sealed class NativeTagExtractionResult
     {
         private NativeTagExtractionResult(bool succeeded, string metadataJson, IReadOnlyList<string> diagnostics)
@@ -310,13 +310,13 @@ namespace Bun3.Gameplay.TagSource.Tasks
             Diagnostics = diagnostics;
         }
 
-        /// <summary>추출이 성공했는지 나타냅니다.</summary>
+        /// <summary>Whether extraction succeeded.</summary>
         public bool Succeeded { get; }
 
-        /// <summary>성공한 경우의 엄격한 Source 메타데이터 JSON입니다.</summary>
+        /// <summary>Strict source metadata JSON when successful.</summary>
         public string MetadataJson { get; }
 
-        /// <summary>실패한 경우의 결정적인 진단 목록입니다.</summary>
+        /// <summary>Deterministic diagnostics when failed.</summary>
         public IReadOnlyList<string> Diagnostics { get; }
 
         internal static NativeTagExtractionResult Success(string json) =>

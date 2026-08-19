@@ -5,7 +5,7 @@ using NUnit.Framework;
 
 namespace Bun3.Server.Tests;
 
-/// <summary>행동 로그(CS 감사 원장) — 세션 공용 스코프 트리.</summary>
+/// <summary>Action log (customer-support audit ledger) — session-wide shared scope tree.</summary>
 [TestFixture]
 public class ActionLogTests
 {
@@ -22,8 +22,8 @@ public class ActionLogTests
     public void SetUp()
     {
         _catalog = new ItemCatalogBuilder<string>()
-            .Register("gold", "골드")
-            .Register("sword", "검", unstackable: true)
+            .Register("gold", "Gold")
+            .Register("sword", "Sword", unstackable: true)
             .Build();
         _gold = _catalog.GetRequired("gold");
         _sword = _catalog.GetRequired("sword");
@@ -42,19 +42,19 @@ public class ActionLogTests
         inventory.TryAdd(_gold, 1000);
         _batches.Clear();
 
-        // 인벤토리 밖에서 시작·경유하는 체인: 획득 → (이벤트) 업적 클리어 → 업적 보상
+        // chain starting and passing outside the inventory: acquire -> (event) achievement clear -> reward
         using (_log.BeginScope("BuyItem product=1021 x1"))
         {
-            inventory.TryRemove(_gold, 500);                  // 인벤토리 — 자동 첨부
-            inventory.TryAdd(_sword, 1);                      // 획득 → 게임 이벤트 발화 가정
-            using (_log.BeginScope("Achievement first_sword"))  // 업적 시스템 — 같은 로그에 참여
+            inventory.TryRemove(_gold, 500);                  // inventory — auto-attached
+            inventory.TryAdd(_sword, 1);                      // acquire — assume a game event fires
+            using (_log.BeginScope("Achievement first_sword"))  // achievement system joins the same log
             {
-                _log.Log("cleared: first_sword");             // 인벤토리 아닌 시스템의 노트
-                inventory.TryAdd(_gold, 100);                 // 업적 보상 — 다시 자동 첨부
+                _log.Log("cleared: first_sword");             // note from a non-inventory system
+                inventory.TryAdd(_gold, 100);                 // achievement reward — auto-attached again
             }
         }
 
-        Assert.That(_batches, Has.Count.EqualTo(1), "루트 닫힘에 한 묶음 — 체인 전체가 한 트리");
+        Assert.That(_batches, Has.Count.EqualTo(1), "one batch on root close — the whole chain is one tree");
         var entries = _batches[0];
         Assert.That(entries.Select(e => (e.Kind, e.Depth)), Is.EqualTo(new[]
         {
@@ -63,9 +63,9 @@ public class ActionLogTests
             (ActionLogEntryKind.Data, 1),       // sword +1
             (ActionLogEntryKind.ScopeStart, 1),   // Achievement
             (ActionLogEntryKind.Note, 2),         // cleared
-            (ActionLogEntryKind.Data, 2),       // gold +100 (보상)
+            (ActionLogEntryKind.Data, 2),       // gold +100 (reward)
         }));
-        Assert.That(((InventoryChange)entries[1].Data!).Balance, Is.EqualTo((BigNum)500), "변경 후 잔량 — CS의 답");
+        Assert.That(((InventoryChange)entries[1].Data!).Balance, Is.EqualTo((BigNum)500), "balance after change — the CS answer");
         Assert.That(((InventoryChange)entries[5].Data!).Balance, Is.EqualTo((BigNum)600));
     }
 
@@ -97,8 +97,8 @@ public class ActionLogTests
     public void Unscoped_entries_flush_immediately_so_ledger_has_no_gaps()
     {
         var inventory = NewInventory();
-        inventory.TryAdd(_gold, 100);   // 스코프 밖 변경
-        _log.Log("standalone note");    // 스코프 밖 노트
+        inventory.TryAdd(_gold, 100);   // change outside any scope
+        _log.Log("standalone note");    // note outside any scope
 
         Assert.That(_batches, Has.Count.EqualTo(2));
         Assert.That(_batches[0].Single().Kind, Is.EqualTo(ActionLogEntryKind.Data));
@@ -115,13 +115,13 @@ public class ActionLogTests
             Assert.That(inventory.TryRemove(_gold, 5), Is.EqualTo(InventoryError.Insufficient));
 
             var inner = _log.BeginScope("inner");
-            Assert.That(() => outer.Dispose(), Throws.InvalidOperationException, "역순 닫기 강제");
+            Assert.That(() => outer.Dispose(), Throws.InvalidOperationException, "reverse-order close is enforced");
             inner.Dispose();
         }
 
         Assert.That(_batches, Has.Count.EqualTo(1));
         Assert.That(_batches[0].All(e => e.Kind == ActionLogEntryKind.ScopeStart), Is.True,
-            "실패 커밋은 Change 미기록");
+            "failed commits record no Change");
     }
 
     [Test]
@@ -135,6 +135,6 @@ public class ActionLogTests
         }
 
         Assert.That(_batches.Single().Single().Kind, Is.EqualTo(ActionLogEntryKind.ScopeStart),
-            "로그 미참조 인벤토리는 기록 안 됨");
+            "an inventory without a log reference records nothing");
     }
 }

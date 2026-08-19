@@ -48,11 +48,11 @@ namespace Bun3.Gameplay.Tags.Cli
         internal static CatalogFileInfo ReadInfo(byte[] bytes)
         {
             if (bytes.Length < 78 || bytes[0] != (byte)'B' || bytes[1] != (byte)'3'
-                || bytes[2] != (byte)'D' || bytes[3] != (byte)'K') throw new InvalidDataException("B3DK header가 올바르지 않습니다.");
+                || bytes[2] != (byte)'D' || bytes[3] != (byte)'K') throw new InvalidDataException("Invalid B3DK header.");
             var idLength = BinaryPrimitives.ReadUInt16LittleEndian(bytes.AsSpan(6, 2));
             var versionLength = BinaryPrimitives.ReadUInt16LittleEndian(bytes.AsSpan(8, 2));
             var payloadOffset = checked(78 + idLength + versionLength);
-            if (payloadOffset + 4 > bytes.Length) throw new InvalidDataException("B3DK identity 또는 payload가 잘렸습니다.");
+            if (payloadOffset + 4 > bytes.Length) throw new InvalidDataException("B3DK identity or payload is truncated.");
             var strictUtf8 = new UTF8Encoding(false, true);
             var catalogId = strictUtf8.GetString(bytes, 78, idLength);
             var version = strictUtf8.GetString(bytes, 78 + idLength, versionLength);
@@ -61,13 +61,13 @@ namespace Bun3.Gameplay.Tags.Cli
             var cursor = payloadOffset + 4;
             for (uint index = 0; index < tagCount; index++)
             {
-                if (cursor + 4 > bytes.Length) throw new InvalidDataException("B3DK tag entry가 잘렸습니다.");
+                if (cursor + 4 > bytes.Length) throw new InvalidDataException("B3DK tag entry is truncated.");
                 var nameLength = BinaryPrimitives.ReadUInt16LittleEndian(bytes.AsSpan(cursor + 2, 2));
                 cursor = checked(cursor + 8 + nameLength);
-                if (cursor > bytes.Length) throw new InvalidDataException("B3DK tag entry가 잘렸습니다.");
+                if (cursor > bytes.Length) throw new InvalidDataException("B3DK tag entry is truncated.");
             }
 
-            if (cursor + 4 > bytes.Length) throw new InvalidDataException("B3DK redirect count가 잘렸습니다.");
+            if (cursor + 4 > bytes.Length) throw new InvalidDataException("B3DK redirect count is truncated.");
             var redirectCount = BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(cursor, 4));
             return new CatalogFileInfo(catalogId, version, fingerprint, tagCount, redirectCount);
         }

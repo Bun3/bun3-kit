@@ -23,7 +23,7 @@ public sealed class FakeTransport : ITransportListener
         return Task.CompletedTask;
     }
 
-    /// <summary>클라이언트 접속을 시뮬레이션한다.</summary>
+    /// <summary>Simulates a client connection.</summary>
     public FakeConnection Connect(long id)
     {
         var connection = new FakeConnection(id, this);
@@ -64,7 +64,7 @@ public sealed class FakeConnection : IConnection
         return default;
     }
 
-    // 주의: 실제 TcpConnection과 달리 OnClosed를 호출 스레드에서 동기로 올린다 — 이 동기성에 의존하는 테스트를 작성하지 말 것.
+    // Note: unlike the real TcpConnection, OnClosed is raised synchronously on the calling thread — do not write tests that depend on this synchrony.
     public void Close()
     {
         if (Interlocked.Exchange(ref _closed, 1) == 0)
@@ -73,10 +73,10 @@ public sealed class FakeConnection : IConnection
         }
     }
 
-    /// <summary>원격에서 패킷이 도착한 것을 시뮬레이션한다.</summary>
+    /// <summary>Simulates a packet arriving from the remote side.</summary>
     public void ReceivePacket(byte[] packet) => _transport.RaisePacket(this, packet);
 
-    /// <summary>원격이 오류로 끊긴 것을 시뮬레이션한다.</summary>
+    /// <summary>Simulates the remote side disconnecting with an error.</summary>
     public void FailWith(Exception error)
     {
         if (Interlocked.Exchange(ref _closed, 1) == 0)

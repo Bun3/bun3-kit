@@ -10,8 +10,9 @@ namespace Bun3.Server.Transport.Tcp
 {
     internal sealed class TcpConnection : IConnection
     {
-        // 그레이스풀 종료 유예 상한 — 로컬호스트에서 잔여 수신 바이트를 드레인하기엔 충분히 크고,
-        // 비협조적인 원격(수신 루프 미사용 상대 등)에서도 종료가 이 이상 지연되지 않도록 상한을 둔다.
+        // Graceful-close grace cap — large enough to drain remaining inbound bytes on localhost,
+        // yet bounds the close delay against an uncooperative remote (e.g. one not running a
+        // receive loop).
         private static readonly TimeSpan GracefulCloseGrace = TimeSpan.FromMilliseconds(200);
 
         private readonly TcpClient _client;
@@ -20,7 +21,7 @@ namespace Bun3.Server.Transport.Tcp
         private readonly IConnectionHandler _handler;
         private readonly ILogger _logger;
         private readonly SemaphoreSlim _sendLock = new SemaphoreSlim(1, 1);
-        // 헤더 스크래치 — 송신은 _sendLock으로, 수신은 단일 루프로 직렬화되므로 재사용 안전.
+        // Header scratch buffers — sends are serialized by _sendLock, receives by the single loop, so reuse is safe.
         private readonly byte[] _sendHeader = new byte[PacketFormat.HeaderSize];
         private readonly byte[] _receiveHeader = new byte[PacketFormat.HeaderSize];
         private int _closed; // 0 = open, 1 = closed
@@ -53,7 +54,7 @@ namespace Bun3.Server.Transport.Tcp
         {
             if (!IsOpen)
             {
-                return; // 계약: 닫힌 연결에 대한 송신은 no-op
+                return; // Contract: sending on a closed connection is a no-op.
             }
 
             await _sendLock.WaitAsync(ct).ConfigureAwait(false);
@@ -68,7 +69,7 @@ namespace Bun3.Server.Transport.Tcp
             }
             catch (Exception) when (!IsOpen)
             {
-                // 송신 도중 로컬 Close와 경합 — 계약상 no-op
+                // Raced with a local Close mid-send — no-op per contract.
             }
             catch (Exception ex)
             {
@@ -91,23 +92,24 @@ namespace Bun3.Server.Transport.Tcp
 
             try
             {
-                // 아직 읽지 않은 수신 데이터가 남은 채로 소켓을 바로 닫으면 OS가 RST를 보내
-                // 방금 보낸 데이터(예: Kick의 Disconnect)까지 유실시킬 수 있다(Windows WSAECONNRESET 등).
-                // 송신 방향만 먼저 셧다운(FIN)해 상대가 마지막 데이터를 받게 하고, 수신 루프가
-                // 남은 바이트를 드레인할 짧은 유예를 준 뒤 실제 소켓을 정리한다.
+                // Closing the socket outright while unread inbound data remains can make the OS
+                // send RST, losing data just sent (e.g. Kick's Disconnect) — Windows
+                // WSAECONNRESET etc. Shut down only the send side first (FIN) so the peer gets
+                // the last data, give the receive loop a short grace to drain remaining bytes,
+                // then dispose the actual socket.
                 _client.Client.Shutdown(SocketShutdown.Send);
             }
             catch
             {
-                // 이미 끊겼거나 셧다운 불가 — 바로 정리해도 안전하다
+                // Already disconnected or shutdown impossible — safe to dispose right away.
                 DisposeSocket();
                 return;
             }
 
             if (!_receiveLoopStarted)
             {
-                // 수신 루프가 시작되지 않았다(연결 설정 실패 등) — 그 루프의 finally가
-                // 정리를 대신할 수 없으므로 여기서 직접 소켓을 해제한다.
+                // The receive loop never started (e.g. connection setup failed) — its finally
+                // cannot do the cleanup, so release the socket here directly.
                 DisposeSocket();
                 return;
             }
@@ -120,16 +122,16 @@ namespace Bun3.Server.Transport.Tcp
         {
             try
             {
-                _client.Close(); // 수신 루프의 Read를 깨워 OnClosed 통지로 이어진다
+                _client.Close(); // Wakes the receive loop's Read, which leads to the OnClosed notification.
             }
             catch
             {
-                // 소켓 정리 중 예외는 무시
+                // Ignore exceptions while disposing the socket.
             }
         }
 
         /// <summary>
-        /// 수신 루프. 연결당 1개 실행되며, 종료 시 OnClosed를 정확히 1회 통지한다.
+        /// Receive loop. Runs once per connection and reports OnClosed exactly once on exit.
         /// </summary>
         internal async Task RunReceiveLoopAsync()
         {
@@ -143,27 +145,27 @@ namespace Bun3.Server.Transport.Tcp
                         .ConfigureAwait(false);
                     if (packet == null)
                     {
-                        break; // 원격의 깨끗한 종료(또는 로컬 셧다운에 대한 응답)
+                        break; // Clean close by the remote (or its response to our local shutdown).
                     }
 
                     if (IsOpen)
                     {
-                        _handler.OnPacket(this, packet);   // half-close 유예 중(드레인)에는 전달하지 않는다
+                        _handler.OnPacket(this, packet);   // Not delivered during the half-close grace (drain).
                     }
                 }
             }
             catch (Exception) when (!IsOpen)
             {
-                // 로컬 Close()가 Read를 깨운 경우 — 정상 종료로 취급 (error = null)
+                // Local Close() woke the Read — treat as a clean close (error = null).
             }
             catch (Exception ex)
             {
-                error = ex; // InvalidDataException(패킷 초과), IOException(리셋) 등
+                error = ex; // InvalidDataException (packet too large), IOException (reset), etc.
             }
             finally
             {
-                // 루프가 끝났다는 것 자체가 "더 드레인할 것이 없다"는 신호 — 유예(Close의 200ms
-                // 지연 정리)를 거치지 않고 플래그만 확정한 뒤 즉시 정리한다.
+                // The loop ending is itself the signal that there is nothing left to drain — skip
+                // the grace (Close's 200ms deferred cleanup), just settle the flag and dispose now.
                 Interlocked.Exchange(ref _closed, 1);
                 DisposeSocket();
                 _handler.OnClosed(this, error ?? Volatile.Read(ref _closeError));

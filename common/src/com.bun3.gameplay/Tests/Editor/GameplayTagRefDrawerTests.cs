@@ -9,19 +9,19 @@ using UnityEngine;
 
 namespace Bun3.Gameplay.Unity.Tests
 {
-    /// <summary>GameplayTagRef Inspector의 SerializedProperty와 Workspace 동작을 검증합니다.</summary>
+    /// <summary>Verifies the GameplayTagRef inspector's SerializedProperty and workspace behavior.</summary>
     [TestFixture]
     public sealed class GameplayTagRefDrawerTests
     {
-        /// <summary>테스트마다 Unity Undo 기록을 격리합니다.</summary>
+        /// <summary>Isolates the Unity Undo history per test.</summary>
         [SetUp]
         public void SetUp() => Undo.ClearAll();
 
-        /// <summary>테스트 후 Unity Undo 기록을 제거합니다.</summary>
+        /// <summary>Clears the Unity Undo history after the test.</summary>
         [TearDown]
         public void TearDown() => Undo.ClearAll();
 
-        /// <summary>하나의 선택이 모든 선택 대상에 적용되고 한 번의 Undo로 복원되는지 검증합니다.</summary>
+        /// <summary>Verifies one selection applies to all selected targets and one Undo restores them.</summary>
         [Test]
         public void Apply_path_changes_all_targets_and_one_undo_restores_them()
         {
@@ -50,7 +50,7 @@ namespace Bun3.Gameplay.Unity.Tests
             }
         }
 
-        /// <summary>None clear가 모든 선택 대상의 직렬화 경로를 비우는지 검증합니다.</summary>
+        /// <summary>Verifies clearing to None empties the serialized path on all selected targets.</summary>
         [Test]
         public void Clear_path_writes_none_to_all_targets()
         {
@@ -74,7 +74,7 @@ namespace Bun3.Gameplay.Unity.Tests
             }
         }
 
-        /// <summary>서로 다른 다중 선택 값이 mixed 상태와 빈 Picker 초기값으로 투영되는지 검증합니다.</summary>
+        /// <summary>Verifies differing multi-selection values project as mixed state with an empty picker initial value.</summary>
         [Test]
         public void Mixed_values_are_reported_without_choosing_one_target_as_the_initial_value()
         {
@@ -97,7 +97,7 @@ namespace Bun3.Gameplay.Unity.Tests
             }
         }
 
-        /// <summary>잘못됐거나 사라진 raw 경로를 변경하지 않고 warning 상태로 설명하는지 검증합니다.</summary>
+        /// <summary>Verifies malformed or missing raw paths are described as warnings without being modified.</summary>
         [Test]
         public void Invalid_and_missing_raw_paths_remain_visible_with_warnings()
         {
@@ -110,15 +110,15 @@ namespace Bun3.Gameplay.Unity.Tests
 
             Assert.That(malformed.DisplayText, Is.EqualTo("Legacy..Broken"));
             Assert.That(malformed.HasWarning, Is.True);
-            Assert.That(malformed.Tooltip, Does.Contain("문법"));
+            Assert.That(malformed.Tooltip, Does.Contain("syntax"));
             Assert.That(missing.DisplayText, Is.EqualTo("Legacy.Missing"));
             Assert.That(missing.HasWarning, Is.True);
-            Assert.That(missing.Tooltip, Does.Contain("없"));
+            Assert.That(missing.Tooltip, Does.Contain("missing"));
             Assert.That(valid.DisplayText, Is.EqualTo("ABILITY.ATTACK"));
             Assert.That(valid.HasWarning, Is.False);
         }
 
-        /// <summary>잘못된 Workspace에서 raw 값은 유지하고 선택 가능 상태만 차단하는지 검증합니다.</summary>
+        /// <summary>Verifies an invalid workspace keeps the raw value and blocks only selectability.</summary>
         [Test]
         public void Invalid_workspace_keeps_raw_text_and_reports_a_warning()
         {
@@ -132,7 +132,7 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(state.Tooltip, Does.Contain("B3TAG3003"));
         }
 
-        /// <summary>잘못된 Workspace가 None 경고를 만들거나 raw 문법 경고를 가리지 않는지 검증합니다.</summary>
+        /// <summary>Verifies an invalid workspace neither creates a None warning nor hides the raw syntax warning.</summary>
         [Test]
         public void Invalid_workspace_preserves_none_and_malformed_raw_states()
         {
@@ -144,14 +144,14 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(none.DisplayText, Is.EqualTo("None"));
             Assert.That(none.HasWarning, Is.False);
             Assert.That(none.CanSelect, Is.False);
-            Assert.That(none.Tooltip, Does.Contain("참조하지"));
+            Assert.That(none.Tooltip, Does.Contain("referenced"));
             Assert.That(malformed.DisplayText, Is.EqualTo("Legacy..Broken"));
             Assert.That(malformed.HasWarning, Is.True);
             Assert.That(malformed.CanSelect, Is.False);
-            Assert.That(malformed.Tooltip, Does.Contain("문법"));
+            Assert.That(malformed.Tooltip, Does.Contain("syntax"));
         }
 
-        /// <summary>cache 만료 후 현재 invalid Workspace가 이전 정상 snapshot을 대체하는지 검증합니다.</summary>
+        /// <summary>Verifies the currently invalid workspace replaces the previous good snapshot after cache expiry.</summary>
         [Test]
         public void Workspace_cache_never_substitutes_a_last_good_snapshot_after_refresh()
         {

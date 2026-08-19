@@ -10,21 +10,21 @@ using Newtonsoft.Json.Linq;
 namespace Bun3.Gameplay.Tags.Catalog
 {
     /// <summary>
-    /// 작성 도구 호환용 레거시 JSON 카탈로그 로더입니다. 런타임 로딩 경로는
-    /// <see cref="TagCatalogBinary"/>이며, 이 형식은 저작 도구에서만 읽습니다.
+    /// Legacy JSON catalog loader for authoring-tool compatibility. The runtime loading path is
+    /// <see cref="TagCatalogBinary"/>; this format is read only by authoring tools.
     /// </summary>
     public static class TagCatalogJson
     {
-        /// <summary>UTF-8 JSON 스트림의 현재 위치부터 끝까지 읽어 불변 카탈로그를 만듭니다.</summary>
-        /// <param name="utf8Json">읽을 수 있는 UTF-8 JSON 스트림입니다.</param>
-        /// <returns>검증되고 색인화된 카탈로그입니다.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="utf8Json"/>이 null인 경우입니다.</exception>
-        /// <exception cref="ArgumentException">스트림을 읽을 수 없는 경우입니다.</exception>
-        /// <exception cref="TagCatalogException">JSON 또는 카탈로그가 유효하지 않은 경우입니다.</exception>
+        /// <summary>Reads the UTF-8 JSON stream from its current position to the end into an immutable catalog.</summary>
+        /// <param name="utf8Json">Readable UTF-8 JSON stream.</param>
+        /// <returns>Validated and indexed catalog.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="utf8Json"/> is null.</exception>
+        /// <exception cref="ArgumentException">The stream is not readable.</exception>
+        /// <exception cref="TagCatalogException">The JSON or catalog is invalid.</exception>
         public static TagCatalog Load(Stream utf8Json)
         {
             if (utf8Json is null) throw new ArgumentNullException(nameof(utf8Json));
-            if (!utf8Json.CanRead) throw new ArgumentException("읽을 수 있는 스트림이 필요합니다.", nameof(utf8Json));
+            if (!utf8Json.CanRead) throw new ArgumentException("A readable stream is required.", nameof(utf8Json));
             return Loader.Load(utf8Json);
         }
 
@@ -66,7 +66,7 @@ namespace Bun3.Gameplay.Tags.Catalog
                     });
                     if (reader.Read())
                     {
-                        throw Error("루트 JSON 값 뒤에 토큰이 있습니다.", root);
+                        throw Error("Unexpected token after the root JSON value.", root);
                     }
 
                     return ReadRoot(root);
@@ -93,13 +93,13 @@ namespace Bun3.Gameplay.Tags.Catalog
                     || schemaVersion is not JValue { Value: long schemaVersionValue }
                     || schemaVersionValue != 1)
                 {
-                    throw Error("schemaVersion은 정수 1이어야 합니다.", schemaVersion);
+                    throw Error("schemaVersion must be the integer 1.", schemaVersion);
                 }
 
                 var tags = RequireProperty(root, "tags") as JArray;
                 if (tags is null)
                 {
-                    throw Error("tags는 배열이어야 합니다.", RequireProperty(root, "tags"));
+                    throw Error("tags must be an array.", RequireProperty(root, "tags"));
                 }
 
                 var explicitTags = ReadTags(tags);
@@ -115,7 +115,7 @@ namespace Bun3.Gameplay.Tags.Catalog
                 {
                     if (token is not JObject tag)
                     {
-                        throw Error("tags의 항목은 객체여야 합니다.", token);
+                        throw Error("tags items must be objects.", token);
                     }
 
                     RequireAllowedProperties(tag, "name", "comment");
@@ -128,7 +128,7 @@ namespace Bun3.Gameplay.Tags.Catalog
                     if (!seen.Add(canonical))
                     {
                         throw new TagCatalogException(
-                            "대소문자를 제외하고 중복된 태그 이름입니다.",
+                            "Duplicate tag name ignoring case.",
                             name.Path,
                             name.LineNumber,
                             name.LinePosition);
@@ -137,7 +137,7 @@ namespace Bun3.Gameplay.Tags.Catalog
                     var comment = tag.Property("comment", StringComparison.Ordinal)?.Value;
                     if (comment is not null && comment.Type != JTokenType.String)
                     {
-                        throw Error("comment는 문자열이어야 합니다.", comment);
+                        throw Error("comment must be a string.", comment);
                     }
 
                     explicitTags.Add(canonical);
@@ -151,7 +151,7 @@ namespace Bun3.Gameplay.Tags.Catalog
                 if (redirects is null) return new List<TagCatalog.RedirectDefinition>();
                 if (redirects is not JArray redirectArray)
                 {
-                    throw Error("redirects는 배열이어야 합니다.", redirects);
+                    throw Error("redirects must be an array.", redirects);
                 }
 
                 var definitions = new List<TagCatalog.RedirectDefinition>(redirectArray.Count);
@@ -159,7 +159,7 @@ namespace Bun3.Gameplay.Tags.Catalog
                 {
                     if (token is not JObject redirect)
                     {
-                        throw Error("redirects의 항목은 객체여야 합니다.", token);
+                        throw Error("redirects items must be objects.", token);
                     }
 
                     RequireAllowedProperties(redirect, "from", "to");
@@ -186,7 +186,7 @@ namespace Bun3.Gameplay.Tags.Catalog
                 var token = RequireProperty(value, propertyName);
                 if (token.Type != JTokenType.String)
                 {
-                    throw Error($"{propertyName}은 문자열이어야 합니다.", token);
+                    throw Error($"{propertyName} must be a string.", token);
                 }
 
                 var lineInfo = (IJsonLineInfo)token;
@@ -202,7 +202,7 @@ namespace Bun3.Gameplay.Tags.Catalog
                 var property = value.Property(propertyName, StringComparison.Ordinal);
                 if (property is null)
                 {
-                    throw Error($"필수 필드 {propertyName}이(가) 없습니다.", value);
+                    throw Error($"Missing required field {propertyName}.", value);
                 }
 
                 return property.Value;
@@ -224,7 +224,7 @@ namespace Bun3.Gameplay.Tags.Catalog
 
                     if (!permitted)
                     {
-                        throw Error($"허용되지 않은 필드입니다: {property.Name}", property);
+                        throw Error($"Field not allowed: {property.Name}", property);
                     }
                 }
             }
@@ -265,7 +265,7 @@ namespace Bun3.Gameplay.Tags.Catalog
                 parser.SkipWhitespace();
                 if (!parser.End)
                 {
-                    parser.Fail("루트 JSON 값 뒤에 허용되지 않은 문자가 있습니다.");
+                    parser.Fail("Unexpected character after the root JSON value.");
                 }
             }
 
@@ -285,7 +285,7 @@ namespace Bun3.Gameplay.Tags.Catalog
                 internal void ParseValue()
                 {
                     SkipWhitespace();
-                    if (End) Fail("JSON 값이 필요합니다.");
+                    if (End) Fail("A JSON value is required.");
                     switch (Peek())
                     {
                         case '{': ParseObject(); return;
@@ -301,7 +301,7 @@ namespace Bun3.Gameplay.Tags.Catalog
                                 return;
                             }
 
-                            Fail("허용되지 않은 JSON 값입니다.");
+                            Fail("JSON value not allowed.");
                             return;
                     }
                 }
@@ -316,7 +316,7 @@ namespace Bun3.Gameplay.Tags.Catalog
                         if (TryConsume('}')) return;
                         while (true)
                         {
-                            if (End || Peek() != '"') Fail("객체 속성 이름은 큰따옴표 문자열이어야 합니다.");
+                            if (End || Peek() != '"') Fail("Object property names must be double-quoted strings.");
                             ParseString();
                             SkipWhitespace();
                             Expect(':');
@@ -325,7 +325,7 @@ namespace Bun3.Gameplay.Tags.Catalog
                             if (TryConsume('}')) return;
                             Expect(',');
                             SkipWhitespace();
-                            if (End || Peek() != '"') Fail("쉼표 뒤에는 객체 속성 이름이 필요합니다.");
+                            if (End || Peek() != '"') Fail("An object property name is required after a comma.");
                         }
                     }
                     finally
@@ -349,7 +349,7 @@ namespace Bun3.Gameplay.Tags.Catalog
                             if (TryConsume(']')) return;
                             Expect(',');
                             SkipWhitespace();
-                            if (End || Peek() == ']') Fail("쉼표 뒤에는 배열 값이 필요합니다.");
+                            if (End || Peek() == ']') Fail("An array value is required after a comma.");
                         }
                     }
                     finally
@@ -365,47 +365,47 @@ namespace Bun3.Gameplay.Tags.Catalog
                     {
                         var current = Read();
                         if (current == '"') return;
-                        if (current < 0x20) Fail("제어 문자는 JSON 문자열에 이스케이프되어야 합니다.");
+                        if (current < 0x20) Fail("Control characters must be escaped in JSON strings.");
                         if (current != '\\') continue;
 
-                        if (End) Fail("완전한 JSON 이스케이프가 필요합니다.");
+                        if (End) Fail("A complete JSON escape is required.");
                         var escape = Read();
                         if (escape == 'u')
                         {
                             for (var i = 0; i < 4; i++)
                             {
-                                if (End || !IsHex(Read())) Fail("\\u 이스케이프에는 네 개의 16진수가 필요합니다.");
+                                if (End || !IsHex(Read())) Fail("A \\u escape requires four hex digits.");
                             }
                         }
                         else if (escape != '"' && escape != '\\' && escape != '/' && escape != 'b'
                             && escape != 'f' && escape != 'n' && escape != 'r' && escape != 't')
                         {
-                            Fail("허용되지 않은 JSON 이스케이프입니다.");
+                            Fail("JSON escape not allowed.");
                         }
                     }
 
-                    Fail("닫히지 않은 JSON 문자열입니다.");
+                    Fail("Unterminated JSON string.");
                 }
 
                 internal void ParseNumber()
                 {
                     if (Peek() == '-') Read();
-                    if (End) Fail("숫자에는 숫자 부분이 필요합니다.");
+                    if (End) Fail("A number requires a digit part.");
                     if (Peek() == '0')
                     {
                         Read();
-                        if (!End && IsDigit(Peek())) Fail("선행 0은 허용되지 않습니다.");
+                        if (!End && IsDigit(Peek())) Fail("Leading zeros are not allowed.");
                     }
                     else
                     {
-                        if (!IsDigitOneToNine(Peek())) Fail("숫자에는 0 또는 1-9가 필요합니다.");
+                        if (!IsDigitOneToNine(Peek())) Fail("A number requires 0 or 1-9.");
                         do { Read(); } while (!End && IsDigit(Peek()));
                     }
 
                     if (!End && Peek() == '.')
                     {
                         Read();
-                        if (End || !IsDigit(Peek())) Fail("소수점 뒤에는 숫자가 필요합니다.");
+                        if (End || !IsDigit(Peek())) Fail("A digit is required after the decimal point.");
                         do { Read(); } while (!End && IsDigit(Peek()));
                     }
 
@@ -413,7 +413,7 @@ namespace Bun3.Gameplay.Tags.Catalog
                     {
                         Read();
                         if (!End && (Peek() == '+' || Peek() == '-')) Read();
-                        if (End || !IsDigit(Peek())) Fail("지수 뒤에는 숫자가 필요합니다.");
+                        if (End || !IsDigit(Peek())) Fail("A digit is required after the exponent.");
                         do { Read(); } while (!End && IsDigit(Peek()));
                     }
                 }
@@ -422,7 +422,7 @@ namespace Bun3.Gameplay.Tags.Catalog
                 {
                     for (var i = 0; i < literal.Length; i++)
                     {
-                        if (End || Read() != literal[i]) Fail("허용되지 않은 JSON 리터럴입니다.");
+                        if (End || Read() != literal[i]) Fail("JSON literal not allowed.");
                     }
                 }
 
@@ -435,7 +435,7 @@ namespace Bun3.Gameplay.Tags.Catalog
 
                 private void EnterContainer()
                 {
-                    if (_depth >= 8) Fail("JSON 중첩 깊이는 8을 넘을 수 없습니다.");
+                    if (_depth >= 8) Fail("JSON nesting depth cannot exceed 8.");
                     _depth++;
                 }
 
@@ -471,7 +471,7 @@ namespace Bun3.Gameplay.Tags.Catalog
 
                 private void Expect(char expected)
                 {
-                    if (End || Read() != expected) Fail($"'{expected}'가 필요합니다.");
+                    if (End || Read() != expected) Fail($"'{expected}' is required.");
                 }
 
                 private bool TryConsume(char expected)

@@ -44,16 +44,16 @@ public sealed class AttributeRegistryTests
         var order = registry.EvaluationOrder.ToArray();
         Assert.That(Array.IndexOf(order, MaxHp), Is.LessThan(Array.IndexOf(order, Hp)));
         Assert.That(Array.IndexOf(order, MaxMp), Is.LessThan(Array.IndexOf(order, Mp)));
-        // 독립 원소끼리는 id 오름차순
+        // independent elements sort by ascending id
         Assert.That(order, Is.EqualTo(new ushort[] { MaxHp, MaxMp, Hp, Mp }).Or.EqualTo(new ushort[] { MaxMp, MaxHp, Hp, Mp }));
-        Assert.That(order[0], Is.EqualTo(MaxHp));   // 동순위 타이브레이크 = id 오름차순이므로 2 < 4
+        Assert.That(order[0], Is.EqualTo(MaxHp));   // same-level tiebreak = ascending id, so 2 < 4
     }
 
     [Test]
     public void Build_rejects_missing_reference_cycle_and_meaningless_policy()
     {
         var missing = new AttributeRegistryBuilder();
-        missing.Register(Hp, max: Operand.Attribute(MaxHp));   // MaxHp 미등록
+        missing.Register(Hp, max: Operand.Attribute(MaxHp));   // MaxHp not registered
         Assert.Throws<InvalidOperationException>(() => missing.Build());
 
         var cyclic = new AttributeRegistryBuilder();
@@ -63,7 +63,7 @@ public sealed class AttributeRegistryTests
 
         var meaningless = new AttributeRegistryBuilder();
         meaningless.Register(Hp, max: Operand.Constant(100), onMaxIncrease: MaxIncreasePolicy.Follow);
-        Assert.Throws<InvalidOperationException>(() => meaningless.Build());   // max가 속성 참조 아님
+        Assert.Throws<InvalidOperationException>(() => meaningless.Build());   // max is not an attribute reference
 
         var duplicated = new AttributeRegistryBuilder();
         duplicated.Register(Hp);
@@ -92,14 +92,14 @@ public sealed class AttributeRegistryTests
     [Test]
     public void Evaluation_order_is_level_based_not_greedy_min()
     {
-        // 레벨별 Kahn과 greedy-min의 차이를 구분:
-        // 속성 1 (독립), 속성 2 (1 참조), 속성 5 (독립)
-        // 레벨별: [1, 5, 2] (레벨 0: 1,5; 레벨 1: 2)
-        // greedy-min: [1, 2, 5] (매 번 최솟값 선택)
+        // Distinguishes level-based Kahn from greedy-min:
+        // attribute 1 (independent), 2 (refs 1), 5 (independent)
+        // level-based: [1, 5, 2] (level 0: 1,5; level 1: 2)
+        // greedy-min: [1, 2, 5] (picks the minimum each time)
         var builder = new AttributeRegistryBuilder();
-        builder.Register(1);           // 독립
-        builder.Register(2, max: Operand.Attribute(1));  // 1 참조
-        builder.Register(5);           // 독립
+        builder.Register(1);           // independent
+        builder.Register(2, max: Operand.Attribute(1));  // refs 1
+        builder.Register(5);           // independent
         var registry = builder.Build();
 
         Assert.That(registry.EvaluationOrder.ToArray(), Is.EqualTo(new ushort[] { 1, 5, 2 }));

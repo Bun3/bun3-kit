@@ -14,26 +14,27 @@ using Newtonsoft.Json.Linq;
 namespace Bun3.Gameplay.Effects.Catalog
 {
     /// <summary>
-    /// 효과 스펙 저작 JSON 로더입니다. 문법·형태는 엄격히 검증하지만(중복 키·미지 필드·미지 열거형
-    /// 거부, BigNum 리터럴은 항상 문자열) 태그·시섬 참조의 의미 검증은 하지 않습니다 — 그건
-    /// <see cref="EffectCatalogBuilder.Build"/>의 몫입니다. 이 로더가 하는 유일한 의미 해석은
-    /// 속성 "이름" 문자열을 <see cref="Load"/>의 attributeNames 사전으로 id(ushort)로 바꾸는 것뿐입니다.
+    /// Authoring JSON loader for effect specs. Strictly validates syntax and shape (rejects
+    /// duplicate keys, unknown fields, unknown enum values; BigNum literals are always strings)
+    /// but performs no semantic validation of tag or seam references — that is
+    /// <see cref="EffectCatalogBuilder.Build"/>'s job. Its only semantic step is resolving
+    /// attribute name strings to ushort ids via <see cref="Load"/>'s attributeNames dictionary.
     /// </summary>
     public static class EffectSpecJson
     {
-        /// <summary>UTF-8 JSON 스트림의 현재 위치부터 끝까지 읽어 효과 스펙 목록을 만듭니다.</summary>
-        /// <param name="utf8Json">읽을 수 있는 UTF-8 JSON 스트림입니다.</param>
-        /// <param name="attributeNames">Operand·ModifierDef의 속성 이름을 id로 해석할 사전입니다.</param>
-        /// <returns>JSON에 나온 순서 그대로의 효과 스펙 목록입니다.</returns>
+        /// <summary>Reads the UTF-8 JSON stream from its current position to the end into a list of effect specs.</summary>
+        /// <param name="utf8Json">Readable UTF-8 JSON stream.</param>
+        /// <param name="attributeNames">Dictionary resolving attribute names in Operand/ModifierDef to ids.</param>
+        /// <returns>Effect specs in the order they appear in the JSON.</returns>
         /// <exception cref="ArgumentNullException">
-        /// <paramref name="utf8Json"/> 또는 <paramref name="attributeNames"/>가 null인 경우입니다.
+        /// <paramref name="utf8Json"/> or <paramref name="attributeNames"/> is null.
         /// </exception>
-        /// <exception cref="ArgumentException">스트림을 읽을 수 없는 경우입니다.</exception>
-        /// <exception cref="TagCatalogException">JSON 문법 또는 스펙 형식이 유효하지 않은 경우입니다.</exception>
+        /// <exception cref="ArgumentException">The stream is not readable.</exception>
+        /// <exception cref="TagCatalogException">The JSON syntax or spec shape is invalid.</exception>
         public static List<EffectSpec> Load(Stream utf8Json, IReadOnlyDictionary<string, ushort> attributeNames)
         {
             if (utf8Json is null) throw new ArgumentNullException(nameof(utf8Json));
-            if (!utf8Json.CanRead) throw new ArgumentException("읽을 수 있는 스트림이 필요합니다.", nameof(utf8Json));
+            if (!utf8Json.CanRead) throw new ArgumentException("A readable stream is required.", nameof(utf8Json));
             if (attributeNames is null) throw new ArgumentNullException(nameof(attributeNames));
 
             string text;
@@ -65,7 +66,7 @@ namespace Bun3.Gameplay.Effects.Catalog
                 });
                 if (reader.Read())
                 {
-                    throw Error("루트 JSON 값 뒤에 토큰이 있습니다.", root);
+                    throw Error("Unexpected token after the root JSON value.", root);
                 }
 
                 return ReadRoot(root, attributeNames);
@@ -91,7 +92,7 @@ namespace Bun3.Gameplay.Effects.Catalog
             var result = new List<EffectSpec>(specsArray.Count);
             foreach (var item in specsArray)
             {
-                result.Add(ReadSpec(AsObject(item, "specs의 항목은 객체여야 합니다."), attributeNames));
+                result.Add(ReadSpec(AsObject(item, "specs items must be objects."), attributeNames));
             }
 
             return result;
@@ -102,7 +103,7 @@ namespace Bun3.Gameplay.Effects.Catalog
             var token = RequireProperty(root, "schemaVersion");
             if (token.Type != JTokenType.Integer || token is not JValue { Value: long value } || value != 1)
             {
-                throw Error("schemaVersion은 정수 1이어야 합니다.", token);
+                throw Error("schemaVersion must be the integer 1.", token);
             }
         }
 
@@ -118,33 +119,33 @@ namespace Bun3.Gameplay.Effects.Catalog
             var maxLevel = ReadOptionalInt(spec, "maxLevel", 0);
             var (durationType, durationTicks, periodTicks) = ReadDuration(RequireObject(spec, "duration"));
             var stack = spec.Property("stack", StringComparison.Ordinal) is { } stackProperty
-                ? ReadStack(AsObject(stackProperty.Value, "stack은 객체여야 합니다."))
+                ? ReadStack(AsObject(stackProperty.Value, "stack must be an object."))
                 : new StackPolicy();
 
             var modifiers = new List<ModifierDef>();
             foreach (var item in RequireArray(spec, "modifiers"))
             {
-                modifiers.Add(ReadModifier(AsObject(item, "modifiers의 항목은 객체여야 합니다."), attributeNames));
+                modifiers.Add(ReadModifier(AsObject(item, "modifiers items must be objects."), attributeNames));
             }
 
             var executions = new List<ExecutionDef>();
             foreach (var item in RequireArray(spec, "executions"))
             {
-                executions.Add(ReadExecution(AsObject(item, "executions의 항목은 객체여야 합니다."), attributeNames));
+                executions.Add(ReadExecution(AsObject(item, "executions items must be objects."), attributeNames));
             }
 
             var applicationConditions = new List<ConditionDef>();
             foreach (var item in RequireArray(spec, "applicationConditions"))
             {
                 applicationConditions.Add(
-                    ReadCondition(AsObject(item, "applicationConditions의 항목은 객체여야 합니다."), attributeNames));
+                    ReadCondition(AsObject(item, "applicationConditions items must be objects."), attributeNames));
             }
 
             var ongoingConditions = new List<ConditionDef>();
             foreach (var item in RequireArray(spec, "ongoingConditions"))
             {
                 ongoingConditions.Add(
-                    ReadCondition(AsObject(item, "ongoingConditions의 항목은 객체여야 합니다."), attributeNames));
+                    ReadCondition(AsObject(item, "ongoingConditions items must be objects."), attributeNames));
             }
 
             var grantedTags = ReadStringArray(RequireArray(spec, "grantedTags"));
@@ -154,7 +155,7 @@ namespace Bun3.Gameplay.Effects.Catalog
             var chains = new List<ChainEdgeDef>();
             foreach (var item in RequireArray(spec, "chains"))
             {
-                chains.Add(ReadChain(AsObject(item, "chains의 항목은 객체여야 합니다."), attributeNames));
+                chains.Add(ReadChain(AsObject(item, "chains items must be objects."), attributeNames));
             }
 
             var removeOnApplyTags = spec.Property("removeOnApplyTags", StringComparison.Ordinal) != null
@@ -165,7 +166,7 @@ namespace Bun3.Gameplay.Effects.Catalog
             if (spec.Property("chanceToApply", StringComparison.Ordinal) is { } chanceToApplyProperty)
             {
                 chanceToApply = ReadMagnitude(
-                    AsObject(chanceToApplyProperty.Value, "chanceToApply는 객체여야 합니다."), attributeNames);
+                    AsObject(chanceToApplyProperty.Value, "chanceToApply must be an object."), attributeNames);
             }
 
             List<BigNum>? durationPerLevel = null;
@@ -182,7 +183,7 @@ namespace Bun3.Gameplay.Effects.Catalog
             if (spec.Property("durationScale", StringComparison.Ordinal) is { } durationScaleProperty)
             {
                 durationScale = ReadMagnitude(
-                    AsObject(durationScaleProperty.Value, "durationScale는 객체여야 합니다."), attributeNames);
+                    AsObject(durationScaleProperty.Value, "durationScale must be an object."), attributeNames);
             }
 
             var drCategory = spec.Property("drCategory", StringComparison.Ordinal) != null
@@ -304,7 +305,7 @@ namespace Bun3.Gameplay.Effects.Catalog
             };
         }
 
-        // magnitude JSON은 판별 프로퍼티로 세 형태 중 하나: calc | base(+perLevel?) | 맨몸 Operand.
+        // magnitude JSON is discriminated into one of three shapes: calc | base(+perLevel?) | bare operand.
         private static MagnitudeDef ReadMagnitude(JObject magnitude, IReadOnlyDictionary<string, ushort> attributeNames)
         {
             if (magnitude.Property("calc", StringComparison.Ordinal) != null)
@@ -320,7 +321,7 @@ namespace Bun3.Gameplay.Effects.Catalog
                 Operand? perLevel = null;
                 if (magnitude.Property("perLevel", StringComparison.Ordinal) is { } perLevelProperty)
                 {
-                    perLevel = ReadOperand(AsObject(perLevelProperty.Value, "perLevel은 객체여야 합니다."), attributeNames);
+                    perLevel = ReadOperand(AsObject(perLevelProperty.Value, "perLevel must be an object."), attributeNames);
                 }
 
                 return new MagnitudeDef { Base = baseOperand, PerLevel = perLevel };
@@ -353,7 +354,7 @@ namespace Bun3.Gameplay.Effects.Catalog
                 var keys = new List<LevelKey>();
                 foreach (var item in RequireArray(magnitude, "curveKeys"))
                 {
-                    var keyObject = AsObject(item, "curveKeys의 항목은 객체여야 합니다.");
+                    var keyObject = AsObject(item, "curveKeys items must be objects.");
                     RequireAllowedProperties(keyObject, "level", "value");
                     keys.Add(new LevelKey
                     {
@@ -368,7 +369,7 @@ namespace Bun3.Gameplay.Effects.Catalog
             return new MagnitudeDef { Base = ReadOperand(magnitude, attributeNames) };
         }
 
-        // "tail"·"extrapolateIncrement"는 레벨 테이블 표기(②③④) 공통 선택 필드다.
+        // "tail" and "extrapolateIncrement" are optional fields shared by the level-table shapes.
         private static (LevelTail Tail, BigNum Increment) ReadLevelTailOptions(JObject magnitude)
         {
             var tail = magnitude.Property("tail", StringComparison.Ordinal) != null
@@ -385,7 +386,7 @@ namespace Bun3.Gameplay.Effects.Catalog
             var inputs = new List<Operand>();
             foreach (var item in RequireArray(execution, "inputs"))
             {
-                inputs.Add(ReadOperand(AsObject(item, "inputs의 항목은 객체여야 합니다."), attributeNames));
+                inputs.Add(ReadOperand(AsObject(item, "inputs items must be objects."), attributeNames));
             }
 
             return new ExecutionDef { CalcTag = calcTag, Inputs = inputs };
@@ -415,7 +416,7 @@ namespace Bun3.Gameplay.Effects.Catalog
             var selectorParams = new List<BigNum>();
             if (chain.Property("selectorParams", StringComparison.Ordinal) is { } selectorParamsProperty)
             {
-                foreach (var item in AsArray(selectorParamsProperty.Value, "selectorParams는 배열이어야 합니다."))
+                foreach (var item in AsArray(selectorParamsProperty.Value, "selectorParams must be an array."))
                 {
                     selectorParams.Add(RequireBigNumToken(item));
                 }
@@ -424,9 +425,9 @@ namespace Bun3.Gameplay.Effects.Catalog
             var conditions = new List<ConditionDef>();
             if (chain.Property("conditions", StringComparison.Ordinal) is { } conditionsProperty)
             {
-                foreach (var item in AsArray(conditionsProperty.Value, "conditions는 배열이어야 합니다."))
+                foreach (var item in AsArray(conditionsProperty.Value, "conditions must be an array."))
                 {
-                    conditions.Add(ReadCondition(AsObject(item, "conditions의 항목은 객체여야 합니다."), attributeNames));
+                    conditions.Add(ReadCondition(AsObject(item, "conditions items must be objects."), attributeNames));
                 }
             }
 
@@ -449,7 +450,7 @@ namespace Bun3.Gameplay.Effects.Catalog
             };
         }
 
-        // level은 문자열 "Inherit" 또는 JSON 정수(고정 레벨) 중 하나여야 한다.
+        // level must be either the string "Inherit" or a JSON integer (fixed level).
         private static (ChainLevelRule Rule, int Fixed) ReadChainLevel(JToken token)
         {
             if (token.Type == JTokenType.String)
@@ -459,7 +460,7 @@ namespace Bun3.Gameplay.Effects.Catalog
                     return (ChainLevelRule.Inherit, 0);
                 }
 
-                throw Error("level 문자열은 \"Inherit\"만 허용됩니다.", token);
+                throw Error("The only allowed level string is \"Inherit\".", token);
             }
 
             if (token.Type == JTokenType.Integer && token is JValue { Value: long fixedValue }
@@ -468,10 +469,10 @@ namespace Bun3.Gameplay.Effects.Catalog
                 return (ChainLevelRule.Fixed, (int)fixedValue);
             }
 
-            throw Error("level은 \"Inherit\" 또는 정수여야 합니다.", token);
+            throw Error("level must be \"Inherit\" or an integer.", token);
         }
 
-        // Operand 판별: constant | attribute(+coefficient?) | sourceAttribute(+coefficient?) 중 정확히 하나.
+        // Operand discrimination: exactly one of constant | attribute(+coefficient?) | sourceAttribute(+coefficient?).
         private static Operand ReadOperand(JObject operand, IReadOnlyDictionary<string, ushort> attributeNames)
         {
             var hasConstant = operand.Property("constant", StringComparison.Ordinal) != null;
@@ -480,7 +481,7 @@ namespace Bun3.Gameplay.Effects.Catalog
             var discriminatorCount = (hasConstant ? 1 : 0) + (hasAttribute ? 1 : 0) + (hasSourceAttribute ? 1 : 0);
             if (discriminatorCount != 1)
             {
-                throw Error("피연산자는 constant, attribute, sourceAttribute 중 정확히 하나를 가져야 합니다.", operand);
+                throw Error("An operand must have exactly one of constant, attribute, or sourceAttribute.", operand);
             }
 
             if (hasConstant)
@@ -510,7 +511,7 @@ namespace Bun3.Gameplay.Effects.Catalog
             var name = RequireStringValue(token, propertyName);
             if (!attributeNames.TryGetValue(name, out var id))
             {
-                throw Error($"알 수 없는 속성 이름입니다: {name}", token);
+                throw Error($"Unknown attribute name: {name}", token);
             }
 
             return id;
@@ -527,14 +528,14 @@ namespace Bun3.Gameplay.Effects.Catalog
             return result;
         }
 
-        // ---- 원시 필드 판독 유틸 (TagCatalogJson/TagSourceJson과 같은 패턴) ----
+        // ---- Primitive field readers (same pattern as TagCatalogJson/TagSourceJson) ----
 
         private static JToken RequireProperty(JObject value, string propertyName)
         {
             var property = value.Property(propertyName, StringComparison.Ordinal);
             if (property is null)
             {
-                throw Error($"필수 필드 {propertyName}이(가) 없습니다.", value);
+                throw Error($"Missing required field {propertyName}.", value);
             }
 
             return property.Value;
@@ -556,16 +557,16 @@ namespace Bun3.Gameplay.Effects.Catalog
 
                 if (!permitted)
                 {
-                    throw Error($"허용되지 않은 필드입니다: {property.Name}", property);
+                    throw Error($"Field not allowed: {property.Name}", property);
                 }
             }
         }
 
         private static JObject RequireObject(JObject value, string propertyName) =>
-            AsObject(RequireProperty(value, propertyName), $"{propertyName}는 객체여야 합니다.");
+            AsObject(RequireProperty(value, propertyName), $"{propertyName} must be an object.");
 
         private static JArray RequireArray(JObject value, string propertyName) =>
-            AsArray(RequireProperty(value, propertyName), $"{propertyName}는 배열이어야 합니다.");
+            AsArray(RequireProperty(value, propertyName), $"{propertyName} must be an array.");
 
         private static string RequireString(JObject value, string propertyName) =>
             RequireStringValue(RequireProperty(value, propertyName), propertyName);
@@ -574,7 +575,7 @@ namespace Bun3.Gameplay.Effects.Catalog
         {
             if (token.Type != JTokenType.String)
             {
-                throw Error($"{propertyName}은 문자열이어야 합니다.", token);
+                throw Error($"{propertyName} must be a string.", token);
             }
 
             return token.Value<string>()!;
@@ -586,7 +587,7 @@ namespace Bun3.Gameplay.Effects.Catalog
             if (token.Type != JTokenType.Integer || token is not JValue { Value: long longValue }
                 || longValue < int.MinValue || longValue > int.MaxValue)
             {
-                throw Error($"{propertyName}은 정수여야 합니다.", token);
+                throw Error($"{propertyName} must be an integer.", token);
             }
 
             return (int)longValue;
@@ -600,7 +601,7 @@ namespace Bun3.Gameplay.Effects.Catalog
             var token = RequireProperty(value, propertyName);
             if (token.Type != JTokenType.Boolean || token is not JValue { Value: bool boolValue })
             {
-                throw Error($"{propertyName}은 불리언이어야 합니다.", token);
+                throw Error($"{propertyName} must be a boolean.", token);
             }
 
             return boolValue;
@@ -609,7 +610,7 @@ namespace Bun3.Gameplay.Effects.Catalog
         private static bool ReadOptionalBool(JObject value, string propertyName, bool fallback) =>
             value.Property(propertyName, StringComparison.Ordinal) != null ? RequireBool(value, propertyName) : fallback;
 
-        // BigNum 리터럴은 항상 JSON 문자열이어야 한다 — number로 오면(double 경유 우회) 오류.
+        // BigNum literals must always be JSON strings — a JSON number (a detour through double) is an error.
         private static BigNum RequireBigNum(JObject value, string propertyName) =>
             RequireBigNumToken(RequireProperty(value, propertyName));
 
@@ -617,13 +618,13 @@ namespace Bun3.Gameplay.Effects.Catalog
         {
             if (token.Type != JTokenType.String)
             {
-                throw Error("BigNum 값은 문자열이어야 합니다.", token);
+                throw Error("A BigNum value must be a string.", token);
             }
 
             var text = token.Value<string>()!;
             if (!BigNum.TryParse(text, out var parsed))
             {
-                throw Error($"BigNum으로 파싱할 수 없습니다: {text}", token);
+                throw Error($"Cannot parse as BigNum: {text}", token);
             }
 
             return parsed;
@@ -640,7 +641,7 @@ namespace Bun3.Gameplay.Effects.Catalog
             var text = RequireStringValue(token, propertyName);
             if (!Enum.TryParse<T>(text, false, out var parsed) || !Enum.IsDefined(typeof(T), parsed))
             {
-                throw Error($"허용되지 않은 값입니다: {propertyName} = {text}", token);
+                throw Error($"Value not allowed: {propertyName} = {text}", token);
             }
 
             return parsed;

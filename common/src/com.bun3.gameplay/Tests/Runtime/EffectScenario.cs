@@ -10,11 +10,12 @@ using Bun3.Gameplay.Tags;
 namespace Bun3.Gameplay.Tests
 {
     /// <summary>
-    /// 결정론 오라클 — 태그 없는 미니 우주(속성·스택·주기·체인·조건만)를 코드로 조립해 고정 시드로
-    /// 적용/디스펠/틱을 뒤섞어 돌린 뒤 최종 상태를 FNV-1a 64비트 해시로 접는 순수 함수입니다.
-    /// Unity Player 어셈블리(Bun3.Gameplay.Runtime.Tests)와 .NET 테스트 어셈블리 양쪽에 링크되므로
-    /// 저작 전용 로더(TagCatalogJson 등)나 NUnit·EffectTestKit을 참조하지 않고 프레임워크
-    /// 런타임 타입만 사용합니다.
+    /// Determinism oracle — a pure function that assembles a tagless mini universe (attributes,
+    /// stacks, periods, chains, conditions only) in code, runs interleaved apply/dispel/tick with a
+    /// fixed seed, and folds the final state into an FNV-1a 64-bit hash.
+    /// Linked into both the Unity player assembly (Bun3.Gameplay.Runtime.Tests) and the .NET test
+    /// assembly, so it uses only framework runtime types — no authoring-only loaders
+    /// (TagCatalogJson etc.), NUnit, or EffectTestKit.
     /// </summary>
     internal static class EffectScenario
     {
@@ -24,9 +25,9 @@ namespace Bun3.Gameplay.Tests
 
         private const int TargetCount = 3;
 
-        /// <summary>고정 시드로 미니 우주를 조립해 ticks회 실행한 뒤 최종 상태의 FNV-1a 64비트 해시를 반환합니다.</summary>
-        /// <param name="seed">파이프라인 난수·시나리오 드라이버 난수의 시드입니다.</param>
-        /// <param name="ticks">진행할 파이프라인 틱 수입니다.</param>
+        /// <summary>Assembles the mini universe with a fixed seed, runs it for the given ticks, and returns the FNV-1a 64-bit hash of the final state.</summary>
+        /// <param name="seed">Seed for the pipeline RNG and scenario driver RNG.</param>
+        /// <param name="ticks">Number of pipeline ticks to advance.</param>
         internal static ulong Run(int seed, int ticks)
         {
             var world = BuildWorld(seed);
@@ -34,7 +35,7 @@ namespace Bun3.Gameplay.Tests
             return HashState(world.Targets);
         }
 
-        /// <summary>월드를 조립만 하고 진행하지 않습니다 — 스냅샷/복원 왕복 테스트가 중간에 개입할 수 있도록 노출합니다.</summary>
+        /// <summary>Assembles the world without advancing it — exposed so snapshot/restore round-trip tests can intervene midway.</summary>
         internal static World BuildWorld(int seed)
         {
             var tagCatalog = TagCatalog.Create(new List<string>(), new List<TagCatalog.RedirectDefinition>());
@@ -71,8 +72,8 @@ namespace Bun3.Gameplay.Tests
             return new World(catalog, resolver, targets, pipeline, driverRng);
         }
 
-        /// <summary>월드를 ticks회 더 진행합니다. 매 틱 랜덤 적용/디스펠 액션 하나를 섞은 뒤 Tick()을 부르고,
-        /// 이벤트/변경 버퍼를 비웁니다.</summary>
+        /// <summary>Advances the world by the given ticks. Each tick mixes in one random apply/dispel action,
+        /// calls Tick(), then drains the event/change buffers.</summary>
         internal static void RunTicks(World world, int ticks)
         {
             for (var t = 0; t < ticks; t++)
@@ -88,7 +89,7 @@ namespace Bun3.Gameplay.Tests
             }
         }
 
-        /// <summary>대상들의 최종 상태(속성 Base/Current, 활성 인스턴스 필드)를 FNV-1a 64비트로 접습니다.</summary>
+        /// <summary>Folds the targets' final state (attribute Base/Current, active instance fields) into FNV-1a 64-bit.</summary>
         internal static ulong HashState(EffectTarget[] targets)
         {
             var hash = FnvOffset;
@@ -136,7 +137,7 @@ namespace Bun3.Gameplay.Tests
                     world.Pipeline.RemoveById(target.Id, active[index].Id);
                 }
             }
-            // roll 2·3: 이번 틱은 적용/디스펠 없이 그대로 진행 — 정착 구간을 섞어 넣는다.
+            // roll 2-3: advance this tick with no apply/dispel — mixes in settle periods.
         }
 
         private static ulong FoldAttribute(ulong hash, EffectTarget target, ushort attributeId)
@@ -168,9 +169,10 @@ namespace Bun3.Gameplay.Tests
 
         private static ulong NonZero(ulong value) => value == 0 ? 1UL : value;
 
-        // 6종(체인은 트리거+추종 두 스펙) — Instant 데미지, Duration 버프×스택, 독(Duration+Period),
-        // 만감 체인(적용 시 추종 효과 발동), Ongoing 조건(저체력일 때만 공격력 보너스), 체인 폭탄
-        // (지속시간 만료 시 폭발 데미지). 전부 태그 없음 — GrantedTags/AssetTags/ImmunityTags 빈 리스트.
+        // Six kinds (chains use trigger + follower specs) — instant damage, duration buff with
+        // stacks, poison (duration + period), on-apply chain (follower fires on apply), ongoing
+        // condition (attack bonus only at low health), chain bomb (explosion damage on duration
+        // expiry). All tagless — GrantedTags/AssetTags/ImmunityTags are empty lists.
         private static void AddSpecs(EffectCatalogBuilder builder)
         {
             builder.Add(new EffectSpec
@@ -306,11 +308,11 @@ namespace Bun3.Gameplay.Tests
             public IReadOnlyList<TargetId> TargetIds => _ids;
         }
 
-        /// <summary>조립된 미니 우주 — 스냅샷/복원 테스트가 중간 지점에 개입할 수 있도록 값들을 노출합니다.
-        /// <see cref="DriverRng"/>는 XorShiftRng(클래스, 참조 공유)를 필드로 노출합니다 — 특정 시점의
-        /// 스트림 상태를 독립적으로 보존하려면 호출자가 <see cref="XorShiftRng.Clone"/>을 명시적으로 써야 합니다.
-        /// <see cref="Pipeline"/>은 스냅샷 복원 재생 테스트가 큐 잔여물 없는 새 파이프라인으로
-        /// 교체할 수 있도록 세터를 엽니다(대기 큐는 스냅샷 범위 밖이라 새 인스턴스로 비운다).</summary>
+        /// <summary>Assembled mini universe — exposes its values so snapshot/restore tests can intervene midway.
+        /// <see cref="DriverRng"/> exposes an XorShiftRng (class, shared reference) field — callers
+        /// must explicitly use <see cref="XorShiftRng.Clone"/> to preserve a stream state independently.
+        /// <see cref="Pipeline"/> has an open setter so snapshot-restore replay tests can swap in a
+        /// fresh pipeline with no queue residue (the pending queue is outside snapshot scope).</summary>
         internal sealed class World
         {
             internal World(

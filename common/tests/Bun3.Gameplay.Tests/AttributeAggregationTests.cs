@@ -39,7 +39,7 @@ public sealed class AttributeAggregationTests
         set.AttachModifier(other, 0, Attack, AttributeModifierOp.Multiply, BigNum.FromParts(2, -1), scaleWithStack: false); // +20%
         set.RebuildDirty();
 
-        // (100 + 20) × (1 + 0.3 + 0.2) = 180 — 합산식
+        // (100 + 20) × (1 + 0.3 + 0.2) = 180 — aggregation formula
         Assert.That(set.GetCurrent(Attack), Is.EqualTo((BigNum)180));
     }
 
@@ -56,7 +56,7 @@ public sealed class AttributeAggregationTests
 
         set.DetachModifiers(buff);
         set.RebuildDirty();
-        Assert.That(set.GetCurrent(Attack), Is.EqualTo(before));   // 무흔적
+        Assert.That(set.GetCurrent(Attack), Is.EqualTo(before));   // no residue
     }
 
     [Test]
@@ -69,7 +69,7 @@ public sealed class AttributeAggregationTests
         set.AttachModifier(late, 0, Attack, AttributeModifierOp.Override, 55, scaleWithStack: false);
         set.AttachModifier(early, 0, Attack, AttributeModifierOp.Override, 77, scaleWithStack: false);
         set.RebuildDirty();
-        Assert.That(set.GetCurrent(Attack), Is.EqualTo((BigNum)55));   // Id 최대 승리
+        Assert.That(set.GetCurrent(Attack), Is.EqualTo((BigNum)55));   // highest id wins
 
         var stacked = new FakeSource { Id = 3, Stack = 4 };
         set.DetachModifiers(late);
@@ -81,13 +81,13 @@ public sealed class AttributeAggregationTests
         stacked.Enabled = false;
         set.MarkDirty(Attack);
         set.RebuildDirty();
-        Assert.That(set.GetCurrent(Attack), Is.EqualTo((BigNum)100)); // 비활성 = 건너뜀
+        Assert.That(set.GetCurrent(Attack), Is.EqualTo((BigNum)100)); // inactive = skipped
     }
 
     [Test]
     public void Aggregation_is_bit_identical_regardless_of_attach_order()
     {
-        // canonical 순서 오라클 — BigNum 절사 비결합성 때문에 자명하지 않다.
+        // Canonical-order oracle — non-trivial because BigNum truncation is non-associative.
         var random = new Random(20260817);
         for (var round = 0; round < 200; round++)
         {
@@ -123,7 +123,7 @@ public sealed class AttributeAggregationTests
             }
 
             Assert.That(Aggregate(shuffled), Is.EqualTo(Aggregate(forward)),
-                $"round {round}: 적용 순서가 결과를 바꿨습니다.");
+                $"round {round}: application order changed the result.");
         }
     }
 }

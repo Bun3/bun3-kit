@@ -42,7 +42,7 @@ namespace Bun3.Unity.UI.Tests
             Disable(button, handler, "not enough gold");
             Click(button);
 
-            Assert.AreEqual(0, clicked, "비활성 버튼의 onClick은 발화하면 안 된다.");
+            Assert.AreEqual(0, clicked, "A disabled button's onClick must not fire.");
             Assert.AreEqual(1, handler.CallCount);
         }
 
@@ -64,7 +64,7 @@ namespace Bun3.Unity.UI.Tests
             Assert.AreEqual(1, handler.CallCount);
             Assert.AreSame(popup, handler.Last.DisabledAction);
 
-            // 재생 방식은 핸들러 구현의 책임이다. SpyHandler는 실행하지 않는다.
+            // How to replay is the handler implementation's job; SpyHandler does not invoke it.
             Assert.AreEqual(0, invoked);
         }
 
@@ -83,12 +83,9 @@ namespace Bun3.Unity.UI.Tests
         [Test]
         public void AllConditionsMet_NoReceiverIsAdded_AndOnClickFires()
         {
-            // 이전에는 이 시나리오(모든 조건 통과)와 "비활성 버튼을 클릭했을 때 재생하지
-            // 않는다"는 별개의 테스트로 나뉘어 있었다. 후자는 조건을 항상 통과시켜
-            // 리시버 자체가 붙지 않으므로, 클릭 가드(IsInteractable 검사)를 전혀
-            // 실행하지 않고도 통과했다 — 이름이 약속하는 커버리지가 없었다.
-            // 그 가드는 아래 ClickAfterInteractableRestoredDirectly_DoesNotReplay /
-            // ClickWhileParentCanvasGroupBlocksInteraction_... 이 대신 검증한다.
+            // The click guard (IsInteractable check) is covered by
+            // ClickAfterInteractableRestoredDirectly_DoesNotReplay /
+            // ClickWhileParentCanvasGroupBlocksInteraction_... below.
             var button = NewButton();
             var handler = new SpyHandler();
             var clicked = 0;
@@ -100,7 +97,7 @@ namespace Bun3.Unity.UI.Tests
             }
 
             Assert.IsFalse(button.TryGetComponent(out ButtonDisabledClickReceiver _),
-                "비활성화될 일이 없는 버튼에는 컴포넌트가 붙지 않아야 한다.");
+                "A button that never disables must not get the component.");
 
             Click(button);
 
@@ -111,30 +108,28 @@ namespace Bun3.Unity.UI.Tests
         [Test]
         public void ClickAfterInteractableRestoredDirectly_DoesNotReplay()
         {
-            // 리시버가 실제로 존재하고(사유 보관 중) 버튼이 진짜로 상호작용 가능한
-            // 상태를 만든다. OnPointerClick의 `IsInteractable()` 가드를 통째로
-            // 지워도 기존 테스트는 모두 통과했다 — 이 테스트가 그 뮤테이션을 잡는다.
+            // Receiver exists (holding a reason) while the button is genuinely interactable —
+            // this is the test that catches deleting the OnPointerClick IsInteractable() guard.
             var button = NewButton();
             var handler = new SpyHandler();
             Disable(button, handler, "not enough gold");
 
-            // 스코프를 거치지 않고 raw 필드를 직접 되돌린다.
-            // 리시버는 이전 사유를 여전히 들고 있다.
+            // Restore the raw field directly, bypassing the scope.
+            // The receiver still holds the previous reason.
             button.interactable = true;
 
             Click(button);
 
             Assert.AreEqual(0, handler.CallCount,
-                "버튼이 실제로 상호작용 가능하면, 리시버에 남은 사유가 있어도 재생하면 안 된다.");
+                "When the button is actually interactable, a leftover reason must not replay.");
         }
 
         [Test]
         public void ClickWhileParentCanvasGroupBlocksInteraction_ReplaysReason_EvenThoughButtonFieldIsTrue()
         {
-            // interactable 필드 자체는 true이지만 부모 CanvasGroup이 상호작용을
-            // 막고 있어 IsInteractable()은 false인 상태를 만든다. 이 테스트는
-            // `_button.IsInteractable()`을 `_button.interactable`로 바꿔치기하는
-            // 뮤테이션에서만 실패한다.
+            // The interactable field is true, but a parent CanvasGroup blocks interaction so
+            // IsInteractable() is false. Fails only if `_button.IsInteractable()` were swapped
+            // for `_button.interactable`.
             var groupGo = new GameObject("BlockingGroup", typeof(CanvasGroup));
             Track(groupGo);
             groupGo.GetComponent<CanvasGroup>().interactable = false;
@@ -142,17 +137,17 @@ namespace Bun3.Unity.UI.Tests
             var button = NewButton("GroupedButton");
             var handler = new SpyHandler();
             Disable(button, handler, "not enough gold");
-            button.interactable = true; // raw 필드는 true로 되돌린다.
+            button.interactable = true; // Restore the raw field to true.
 
-            // SetParent는 OnTransformParentChanged -> OnCanvasGroupChanged를 동기
-            // 호출해 Selectable의 그룹 상호작용 캐시(m_GroupsAllowInteraction)를
-            // 즉시 갱신시킨다. 프레임을 기다릴 필요가 없다.
+            // SetParent synchronously runs OnTransformParentChanged -> OnCanvasGroupChanged,
+            // refreshing Selectable's group-interaction cache (m_GroupsAllowInteraction)
+            // immediately — no frame wait needed.
             button.transform.SetParent(groupGo.transform, false);
 
             Click(button);
 
             Assert.AreEqual(1, handler.CallCount,
-                "IsInteractable()은 부모 CanvasGroup의 차단을 반영해야 한다.");
+                "IsInteractable() must reflect the parent CanvasGroup's blocking.");
             Assert.AreEqual("not enough gold", handler.Last.DisabledMessage);
         }
 
@@ -169,30 +164,29 @@ namespace Bun3.Unity.UI.Tests
 
             Assert.AreEqual(1, handler.CallCount);
             Assert.AreEqual("reason B", handler.Last.DisabledMessage,
-                "두 번째 비활성화의 사유로 덮어써야 한다.");
+                "The second disable's reason must overwrite.");
             Assert.AreEqual(1, button.GetComponents<ButtonDisabledClickReceiver>().Length,
-                "리시버는 재사용해야 하며, 추가로 붙으면 안 된다.");
+                "The receiver must be reused, not added again.");
         }
 
         [UnityTest]
         public IEnumerator GraphicRaycastOnDisabledButton_DispatchesToReceiver_AndReplaysReason()
         {
-            // 이 기능 전체의 전제: Selectable.interactable = false여도 레이캐스트는
-            // 막히지 않아, 같은 GameObject의 다른 IPointerClickHandler(리시버)가
-            // 클릭을 받을 수 있다. 다른 테스트들은 ExecuteEvents.Execute로 이미 알고
-            // 있는 GameObject에 직접 디스패치했을 뿐, 실제 레이캐스트 경로는 검증하지
-            // 않았다. 여기서는 진짜 Canvas + GraphicRaycaster + EventSystem을 구성해
-            // RaycastAll이 비활성 버튼을 히트하는지, 그리고 그 히트 결과로 디스패치한
-            // 클릭이 실제로 리시버까지 도달해 사유를 재생하는지를 한 흐름으로 검증한다.
+            // Core premise of the feature: Selectable.interactable = false does not block
+            // raycasts, so another IPointerClickHandler (the receiver) on the same GameObject
+            // can receive the click. Other tests dispatch directly via ExecuteEvents.Execute;
+            // this one builds a real Canvas + GraphicRaycaster + EventSystem and verifies in one
+            // flow that RaycastAll hits the disabled button and that a click dispatched from that
+            // hit reaches the receiver and replays the reason.
             var canvasGo = new GameObject(
                 "RaycastCanvas", typeof(RectTransform), typeof(Canvas), typeof(GraphicRaycaster));
             Track(canvasGo);
             canvasGo.GetComponent<Canvas>().renderMode = RenderMode.ScreenSpaceOverlay;
 
-            // 입력 모듈은 일부러 붙이지 않는다: EventSystem.RaycastAll은 등록된
-            // Raycaster를 순회할 뿐 입력 모듈에 의존하지 않고, 이 프로젝트는 새
-            // Input System을 사용하므로 StandaloneInputModule(레거시 Input 사용)을
-            // 붙이면 EventSystem.Update()에서 UnityEngine.Input 접근 예외가 난다.
+            // Deliberately no input module: EventSystem.RaycastAll only iterates registered
+            // raycasters and does not need one, and this project uses the new Input System —
+            // attaching StandaloneInputModule (legacy Input) would throw on UnityEngine.Input
+            // access in EventSystem.Update().
             var eventSystemGo = new GameObject("RaycastEventSystem", typeof(EventSystem));
             Track(eventSystemGo);
 
@@ -228,10 +222,10 @@ namespace Bun3.Unity.UI.Tests
 
             var hitIndex = results.FindIndex(r => r.gameObject == buttonGo);
             Assert.GreaterOrEqual(hitIndex, 0,
-                "Selectable.interactable = false여도 GraphicRaycaster는 레이캐스트를 막지 않아야 한다.");
+                "GraphicRaycaster must not block the raycast even with Selectable.interactable = false.");
 
-            // 레이캐스트가 돌려준 GameObject를 그대로 디스패치 대상으로 쓴다.
-            // 미리 들고 있던 참조를 쓰면 두 반쪽(히트 → 디스패치)이 만나지 않는다.
+            // Dispatch to the GameObject the raycast returned; using a pre-held reference would
+            // disconnect the two halves (hit → dispatch).
             var hit = results[hitIndex];
             pointerData.pointerCurrentRaycast = hit;
             pointerData.pointerPressRaycast = hit;
@@ -239,7 +233,7 @@ namespace Bun3.Unity.UI.Tests
             ExecuteEvents.Execute(hit.gameObject, pointerData, ExecuteEvents.pointerClickHandler);
 
             Assert.AreEqual(1, handler.CallCount,
-                "실제 레이캐스트 히트로 디스패치한 클릭이 리시버까지 도달해야 한다.");
+                "A click dispatched from a real raycast hit must reach the receiver.");
             Assert.AreEqual("raycast reason", handler.Last.DisabledMessage);
         }
 
@@ -282,9 +276,9 @@ namespace Bun3.Unity.UI.Tests
 
             Assert.IsTrue(button.interactable);
             Assert.IsTrue(button.TryGetComponent(out ButtonDisabledClickReceiver _),
-                "한 번 붙은 컴포넌트는 제거하지 않는다.");
+                "Once attached, the component is not removed.");
 
-            // 버튼을 다시 비활성화하되 사유는 주지 않는다.
+            // Disable the button again, this time without a reason.
             using (var scope = new ButtonInteractableScope(button, handler))
             {
                 scope.Require(false);
@@ -292,16 +286,16 @@ namespace Bun3.Unity.UI.Tests
 
             Click(button);
 
-            Assert.AreEqual(0, handler.CallCount, "이전 프레임의 사유가 남아 있으면 안 된다.");
+            Assert.AreEqual(0, handler.CallCount, "The previous frame's reason must not linger.");
         }
 
         [Test]
         public void ClickAfterHandlerObjectDestroyed_DoesNotReplay_AndDoesNotThrow()
         {
-            // 리시버는 버튼과 함께 살지만 핸들러는 더 짧게 살 수 있다. _handler는
-            // 인터페이스 타입이라 `_handler == null`은 UnityEngine.Object의 오버로드된
-            // == 연산자를 타지 않는다. 파괴된 MonoBehaviour 핸들러는 그 검사를 그냥
-            // 통과하므로, 별도 가드가 없으면 Handle()이 죽은 오브젝트 위에서 실행된다.
+            // The receiver lives as long as the button, but the handler can die sooner. _handler
+            // is an interface type, so `_handler == null` bypasses UnityEngine.Object's
+            // overloaded == — a destroyed MonoBehaviour handler passes that check, and without a
+            // separate guard Handle() would run on a dead object.
             var handlerGo = new GameObject("MonoHandler", typeof(MonoSpyHandler));
             Track(handlerGo);
             var handler = handlerGo.GetComponent<MonoSpyHandler>();
@@ -316,14 +310,14 @@ namespace Bun3.Unity.UI.Tests
 
             Assert.DoesNotThrow(() => Click(button));
             Assert.AreEqual(0, handler.CallCount,
-                "파괴된 UnityEngine.Object 핸들러에는 사유를 전달하면 안 된다.");
+                "A destroyed UnityEngine.Object handler must not receive the reason.");
         }
     }
 
     /// <summary>
-    /// <see cref="MonoBehaviour"/>로 구현한 핸들러(전형적인 토스트 매니저 형태).
-    /// 파괴된 뒤 <see cref="Handle"/>이 호출되면 첫 Unity API 접근에서
-    /// MissingReferenceException이 나도록 일부러 <c>gameObject</c>를 만진다.
+    /// Handler implemented as a <see cref="MonoBehaviour"/> (typical toast-manager shape).
+    /// Deliberately touches <c>gameObject</c> so that calling <see cref="Handle"/> after
+    /// destruction throws MissingReferenceException on the first Unity API access.
     /// </summary>
     internal sealed class MonoSpyHandler : MonoBehaviour, IButtonDisabledHandler
     {

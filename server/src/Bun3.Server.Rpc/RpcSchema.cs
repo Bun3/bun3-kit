@@ -7,8 +7,8 @@ using Google.Protobuf.Reflection;
 namespace Bun3.Server.Rpc
 {
     /// <summary>
-    /// 게임 소유 루트 3형(Request/Response/Update)의 디스크립터에서 기동 1회 구축되는 스키마 맵.
-    /// 규약: 세 루트 모두 oneof "body"; TRequest/TResponse에 int64 request_id; TResponse에 int32 status.
+    /// Schema map built once at startup from the descriptors of the three game-owned roots (Request/Response/Update).
+    /// Contract: all three roots have oneof "body"; TRequest/TResponse have int64 request_id; TResponse has int32 status.
     /// </summary>
     public sealed class RpcSchema<TRequest, TResponse, TUpdate>
         where TRequest : class, IMessage<TRequest>, new()
@@ -41,7 +41,7 @@ namespace Bun3.Server.Rpc
             StatusOfResponse = statusOfResponse;
         }
 
-        /// <summary>루트 규약 위반 시 전체 목록과 함께 RpcValidationException.</summary>
+        /// <summary>Throws RpcValidationException with the full list on root contract violations.</summary>
         public static RpcSchema<TRequest, TResponse, TUpdate> Create()
         {
             var errors = new List<string>();
@@ -74,7 +74,7 @@ namespace Bun3.Server.Rpc
             var field = message.FindFieldByName(fieldName);
             if (field == null || field.FieldType != fieldType || field.IsRepeated || field.ContainingOneof != null)
             {
-                errors.Add($"{rootLabel}({message.Name}): 단일(non-repeated, oneof 밖) {fieldType} {fieldName} 필드 필요");
+                errors.Add($"{rootLabel}({message.Name}): requires a singular (non-repeated, outside oneof) {fieldType} field {fieldName}");
                 return null;
             }
 
@@ -91,11 +91,11 @@ namespace Bun3.Server.Rpc
             foreach (var group in map.DuplicatePayloadTypeGroups())
             {
                 var caseNames = string.Join(", ", group.Select(c => c.Name));
-                errors.Add($"{rootLabel}({messageName}): 케이스 {caseNames}가 같은 payload 타입 {group.Key.Name} — 타입 기반 디스패치 불가");
+                errors.Add($"{rootLabel}({messageName}): cases {caseNames} share payload type {group.Key.Name} — type-based dispatch impossible");
             }
         }
 
-        /// <summary>등록표를 스키마에 대해 전수 검증한다. 위반 전체 목록과 함께 throw.</summary>
+        /// <summary>Fully validates the registration table against the schema. Throws with the full list of violations.</summary>
         public void Validate<TSession>(RpcConfig<TSession> config) where TSession : Session
         {
             var errors = new List<string>();
@@ -104,7 +104,7 @@ namespace Bun3.Server.Rpc
             {
                 if (!config.Registrations.ContainsKey(requestCase.PayloadType))
                 {
-                    errors.Add($"핸들러 미등록: {requestCase.Name} ({requestCase.PayloadType.Name})");
+                    errors.Add($"Handler not registered: {requestCase.Name} ({requestCase.PayloadType.Name})");
                 }
             }
 
@@ -114,7 +114,7 @@ namespace Bun3.Server.Rpc
                 var requestCase = RequestMap.ByPayloadType(registration.RequestType);
                 if (requestCase == null)
                 {
-                    errors.Add($"Request oneof에 없는 타입 등록: {registration.RequestType.Name}");
+                    errors.Add($"Registered type not in Request oneof: {registration.RequestType.Name}");
                     continue;
                 }
 
@@ -122,14 +122,14 @@ namespace Bun3.Server.Rpc
                 if (responseCase == null || responseCase.Name != requestCase.Name)
                 {
                     errors.Add(
-                        $"응답 케이스 불일치: {requestCase.Name}(#{requestCase.FieldNumber}) — " +
-                        "Response.body에 같은 이름·번호의 케이스 필요");
+                        $"Response case mismatch: {requestCase.Name}(#{requestCase.FieldNumber}) — " +
+                        "Response.body requires a case with the same name and number");
                 }
                 else if (responseCase.PayloadType != registration.ResponseType)
                 {
                     errors.Add(
-                        $"응답 타입 불일치: {requestCase.Name} — 등록 {registration.ResponseType.Name}, " +
-                        $"스키마 {responseCase.PayloadType.Name}");
+                        $"Response type mismatch: {requestCase.Name} — registered {registration.ResponseType.Name}, " +
+                        $"schema {responseCase.PayloadType.Name}");
                 }
             }
 

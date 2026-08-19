@@ -5,15 +5,16 @@ using Bun3.Gameplay.Numerics;
 namespace Bun3.Gameplay.Effects
 {
     /// <summary>
-    /// <see cref="EffectTarget.CreateSnapshot"/>이 만든, 한 대상의 결정론적 상태를 메모리에 깊은
-    /// 복사한 불변 스냅샷입니다. 저장 대상은 속성 Base(선언 순서)와 활성 효과 인스턴스 목록(Id
-    /// 오름차순, 각 인스턴스가 부착한 수정자 행 포함)뿐입니다 — Current는 저장하지 않습니다(복원이
-    /// 수정자 재부착 후 전체 재계산으로 재구성하며, 그 결정론이 비트 동일성을 보장합니다). 보유 태그도
-    /// 저장하지 않습니다 — 슬라이스 2 범위에서 태그는 전부 활성 인스턴스의 GrantedTags를 경유해서만
-    /// 붙으므로 인스턴스 복원이 재부여로 충분합니다. 대기 적용 큐·파이프라인 틱 카운터·다음 발급
-    /// Id는 이 스냅샷의 책임 밖입니다(호출자가 별도로 관리). 불투명 토큰입니다 — 멤버가 전부
-    /// internal이며 <see cref="EffectTarget.CreateSnapshot"/>/<see cref="EffectTarget.RestoreSnapshot"/>
-    /// 전용이고, 호출자는 인스턴스를 보관·전달만 할 뿐 내부를 들여다보지 않습니다.
+    /// Immutable in-memory deep copy of one target's deterministic state, created by
+    /// <see cref="EffectTarget.CreateSnapshot"/>. Stores only attribute Base values (declared order)
+    /// and active effect instances (Id ascending, each with the modifier rows it attached) —
+    /// Current is not stored (restore reattaches modifiers and runs a full recompute; that
+    /// determinism guarantees bit-identical results). Owned tags are not stored either — tags are
+    /// only granted via active instances' GrantedTags, so restoring instances regrants them.
+    /// Pending application queue, pipeline tick counter, and next issued id are outside this
+    /// snapshot's responsibility (managed separately by the caller). Opaque token — all members are
+    /// internal, for <see cref="EffectTarget.CreateSnapshot"/>/<see cref="EffectTarget.RestoreSnapshot"/>
+    /// only; callers just hold and pass instances without inspecting them.
     /// </summary>
     public sealed class EffectTargetSnapshot
     {
@@ -26,20 +27,20 @@ namespace Bun3.Gameplay.Effects
             DrHistory = drHistory;
         }
 
-        /// <summary>이 스냅샷이 속한 대상 식별자입니다. 다른 대상으로의 복원을 막는 데 쓰입니다.</summary>
+        /// <summary>Target id this snapshot belongs to. Used to reject restoring onto another target.</summary>
         internal TargetId TargetId { get; }
 
-        /// <summary>속성 Base 값들 — <see cref="AttributeSet.DeclaredAttributeIdAt"/> 선언 순서와 1:1입니다.</summary>
+        /// <summary>Attribute Base values — 1:1 with <see cref="AttributeSet.DeclaredAttributeIdAt"/> declaration order.</summary>
         internal BigNum[] AttributeBases { get; }
 
-        /// <summary>활성 효과 인스턴스 상태들 — Id 오름차순입니다.</summary>
+        /// <summary>Active effect instance states — Id ascending.</summary>
         internal InstanceRow[] Instances { get; }
 
-        /// <summary>DR(체감 저항, 스펙 §15 G6) 계열별 적용 이력입니다. 이 이력이 지속시간 계산에
-        /// 쓰이므로 결정론 재생을 위해 스냅샷·복원 양쪽에 포함됩니다.</summary>
+        /// <summary>Per-category application history for DR (diminishing returns). This history feeds
+        /// duration calculation, so it is included in both snapshot and restore for deterministic replay.</summary>
         internal DrHistoryRow[] DrHistory { get; }
 
-        /// <summary>스냅샷 인스턴스 하나의 필드와, 그 인스턴스가 부착했던 수정자 행들입니다.</summary>
+        /// <summary>Fields of one snapshotted instance, plus the modifier rows it had attached.</summary>
         internal sealed class InstanceRow
         {
             internal InstanceRow(
@@ -71,8 +72,8 @@ namespace Bun3.Gameplay.Effects
             internal ModifierRow[] Modifiers { get; }
         }
 
-        /// <summary>인스턴스가 속성 슬롯에 부착했던 수정자 행 하나입니다. Magnitude는 적용 시점에
-        /// 평가된 값 그대로 저장됩니다(복원 시 재평가하지 않음).</summary>
+        /// <summary>One modifier row an instance had attached to an attribute slot. Magnitude is stored
+        /// as evaluated at application time (not re-evaluated on restore).</summary>
         internal readonly struct ModifierRow
         {
             internal ModifierRow(
@@ -92,7 +93,7 @@ namespace Bun3.Gameplay.Effects
             internal bool ScaleWithStack { get; }
         }
 
-        /// <summary>DR 계열 태그 하나의 스냅샷 적용 이력 행입니다.</summary>
+        /// <summary>Snapshotted application-history row for one DR category tag.</summary>
         internal readonly struct DrHistoryRow
         {
             internal DrHistoryRow(ushort categoryTagIndex, int appliedCount, long lastAppliedTick)

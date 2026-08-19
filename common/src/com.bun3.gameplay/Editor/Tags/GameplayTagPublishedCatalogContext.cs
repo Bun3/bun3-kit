@@ -4,29 +4,29 @@ using Bun3.Gameplay.Tags;
 
 namespace Bun3.Gameplay.Editor.Tags
 {
-    /// <summary>Unity 게시 빌드가 포함하고 검증할 Catalog artifact 입력입니다.</summary>
+    /// <summary>Catalog artifact input a Unity publish build embeds and verifies.</summary>
     public sealed class GameplayTagPublishedCatalogContext
     {
         private readonly byte[] _expectedFingerprint;
 
-        /// <summary>게시된 <c>GameplayTags.catalog</c> artifact 경로입니다.</summary>
+        /// <summary>Path of the published <c>GameplayTags.catalog</c> artifact.</summary>
         public string ArtifactPath { get; }
 
-        /// <summary>artifact가 가져야 하는 Catalog ID입니다.</summary>
+        /// <summary>Catalog ID the artifact must have.</summary>
         public string CatalogId { get; }
 
-        /// <summary>artifact가 가져야 하는 Catalog Version입니다.</summary>
+        /// <summary>Catalog version the artifact must have.</summary>
         public string CatalogVersion { get; }
 
-        /// <summary>빌드 metadata가 고정한 32바이트 semantic fingerprint입니다.</summary>
+        /// <summary>32-byte semantic fingerprint pinned by build metadata.</summary>
         public ReadOnlySpan<byte> ExpectedFingerprint => _expectedFingerprint;
 
-        /// <summary>artifact 경로, 식별 정보와 복사된 fingerprint로 게시 입력을 만듭니다.</summary>
-        /// <param name="artifactPath">게시 artifact 경로입니다.</param>
-        /// <param name="catalogId">게임 제품의 Catalog ID입니다.</param>
-        /// <param name="catalogVersion">게시된 Catalog Version입니다.</param>
-        /// <param name="expectedFingerprint">외부 build metadata가 고정한 32바이트 fingerprint입니다.</param>
-        /// <exception cref="ArgumentException">문자열이 비어 있거나 fingerprint 길이가 32바이트가 아닌 경우입니다.</exception>
+        /// <summary>Creates the publish input from the artifact path, identity, and a copied fingerprint.</summary>
+        /// <param name="artifactPath">Publish artifact path.</param>
+        /// <param name="catalogId">Catalog ID of the game product.</param>
+        /// <param name="catalogVersion">Published catalog version.</param>
+        /// <param name="expectedFingerprint">32-byte fingerprint pinned by external build metadata.</param>
+        /// <exception cref="ArgumentException">A string is empty or the fingerprint is not 32 bytes.</exception>
         public GameplayTagPublishedCatalogContext(
             string artifactPath,
             string catalogId,
@@ -39,14 +39,14 @@ namespace Bun3.Gameplay.Editor.Tags
             if (!TagCatalogVersions.IsPublished(CatalogVersion))
             {
                 throw new ArgumentException(
-                    "예약된 개발 Catalog Version은 Published build에 사용할 수 없습니다.",
+                    "The reserved development catalog version cannot be used in a published build.",
                     nameof(catalogVersion));
             }
 
             if (expectedFingerprint.Length != 32)
             {
                 throw new ArgumentException(
-                    "게시 fingerprint는 정확히 32바이트여야 합니다.",
+                    "The publish fingerprint must be exactly 32 bytes.",
                     nameof(expectedFingerprint));
             }
 
@@ -57,7 +57,7 @@ namespace Bun3.Gameplay.Editor.Tags
         {
             if (string.IsNullOrWhiteSpace(value))
             {
-                throw new ArgumentException(label + "는 비어 있을 수 없습니다.", parameterName);
+                throw new ArgumentException(label + " cannot be empty.", parameterName);
             }
 
             return value;

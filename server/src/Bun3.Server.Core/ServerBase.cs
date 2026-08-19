@@ -11,8 +11,8 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace Bun3.Server.Core
 {
     /// <summary>
-    /// 전송 리스너 위에서 연결→세션 바인딩과 수명주기를 관리하는 서버 베이스.
-    /// 게임 코드와의 결합점은 CreateSession 팩토리 하나다.
+    /// Server base that manages connection-to-session binding and lifecycle on top of a transport
+    /// listener. The single coupling point with game code is the CreateSession factory.
     /// </summary>
     public abstract class ServerBase<TSession> where TSession : Session
     {
@@ -27,8 +27,9 @@ namespace Bun3.Server.Core
         private readonly Handler _handler;
         private volatile bool _running;
 
-        /// <summary>서버 베이스를 구성한다. transport는 시작 시 handler를 바인딩받는다.
-        /// slowWorkWarning: 세션 큐 항목이 이 시간을 넘기면 경고 로그(null=1초, 0 이하=끔).</summary>
+        /// <summary>Constructs the server base. The transport is bound to the handler at start.
+        /// slowWorkWarning: log a warning when a session queue item exceeds this duration
+        /// (null = 1 second, zero or less = off).</summary>
         protected ServerBase(
             ITransportListener transport,
             ILogger? logger = null,
@@ -42,20 +43,20 @@ namespace Bun3.Server.Core
             _handler = new Handler(this);
         }
 
-        /// <summary>StartAsync 이후 StopAsync 전까지 true.</summary>
+        /// <summary>True after StartAsync until StopAsync.</summary>
         public bool IsRunning => _running;
 
-        /// <summary>현재 연결되어 있는 세션들의 스냅샷.</summary>
+        /// <summary>Snapshot of currently connected sessions.</summary>
         public IReadOnlyCollection<TSession> Sessions =>
             _sessions.Values.Select(e => e.Session).ToArray();
 
-        /// <summary>새 연결에 대응하는 세션 인스턴스를 생성한다. 게임 코드와의 유일한 결합점.</summary>
+        /// <summary>Creates the session instance for a new connection. The only coupling point with game code.</summary>
         protected abstract TSession CreateSession(IConnection connection);
 
-        /// <remarks>단일 사용: StopAsync 이후 재시작할 수 없다. 새 인스턴스를 생성할 것.</remarks>
+        /// <remarks>Single use: cannot be restarted after StopAsync. Create a new instance instead.</remarks>
         public async Task StartAsync(CancellationToken ct = default)
         {
-            // transport 기동 직후(플래그 세팅 전) 유입된 연결이 킥되지 않도록 먼저 올린다.
+            // Set the flag first so connections arriving right after transport start are not kicked.
             _running = true;
             try
             {
@@ -71,7 +72,8 @@ namespace Bun3.Server.Core
         }
 
         /// <summary>
-        /// 신규 수락을 중단하고 전 세션을 종료한 뒤, 소비 루프들이 끝나기를 drainTimeout까지 기다린다.
+        /// Stops accepting new connections, kicks all sessions, then waits up to drainTimeout for
+        /// the consume loops to finish.
         /// </summary>
         public async Task StopAsync(TimeSpan? drainTimeout = null, CancellationToken ct = default)
         {
@@ -91,8 +93,8 @@ namespace Bun3.Server.Core
                 var finished = await Task.WhenAny(drain, Task.Delay(timeout, delayCts.Token)).ConfigureAwait(false);
                 if (finished == drain)
                 {
-                    delayCts.Cancel(); // 드레인 완료 — 잔여 타이머 즉시 정리
-                    await drain.ConfigureAwait(false); // 결과 관찰(Completion은 폴트하지 않지만 규율상)
+                    delayCts.Cancel(); // Drain done — dispose the leftover timer promptly.
+                    await drain.ConfigureAwait(false); // Observe the result (Completion never faults, but for discipline).
                 }
                 else
                 {
@@ -131,8 +133,9 @@ namespace Bun3.Server.Core
             var entry = new SessionEntry(session);
             if (!_sessions.TryAdd(connection.Id, entry))
             {
-                // 전송 계약 위반(id 중복) — 기존 세션을 보존하고 신규 연결만 닫는다.
-                // 세션은 RunAsync에 바인딩되지 않았으므로 수명주기 콜백 없이 폐기된다.
+                // Transport contract violation (duplicate id) — keep the existing session and close
+                // only the new connection. The session was never bound to RunAsync, so it is
+                // discarded without lifecycle callbacks.
                 _logger.LogError(
                     "Duplicate connection id {ConnectionId} from transport; closing new connection.", connection.Id);
                 connection.Close();
@@ -148,17 +151,17 @@ namespace Bun3.Server.Core
             {
                 entry.Session.EnqueuePacket(packet);
             }
-            else if (_logger.IsEnabled(LogLevel.Debug))   // 패킷 경로 — 레벨 꺼짐 시 인자 박싱 회피
+            else if (_logger.IsEnabled(LogLevel.Debug))   // Packet path — avoid argument boxing when the level is off.
             {
-                // 정지/킥과의 경합에서도 유입될 수 있으므로 Debug 수준으로만 남긴다.
+                // Can happen legitimately when racing stop/kick, so log at Debug only.
                 _logger.LogDebug("Packet from unknown connection {ConnectionId}; dropped.", connection.Id);
             }
         }
 
         private void HandleClosed(IConnection connection, Exception? error)
         {
-            // netstandard2.1에는 TryRemove(KeyValuePair)가 없어 ICollection.Remove로
-            // 값 일치 조건부 제거를 원자적으로 수행한다.
+            // netstandard2.1 lacks TryRemove(KeyValuePair), so use ICollection.Remove for an
+            // atomic value-matched conditional removal.
             if (TryGetOwnedEntry(connection, out var entry)
                 && ((ICollection<KeyValuePair<long, SessionEntry>>)_sessions).Remove(
                     new KeyValuePair<long, SessionEntry>(connection.Id, entry)))
@@ -167,8 +170,9 @@ namespace Bun3.Server.Core
             }
         }
 
-        /// <summary>이 연결 소유의 세션 엔트리만 찾는다 — 중복 id로 거부된 연결의 잔여
-        /// 프레임/OnClosed가 같은 id의 원래 세션에 오폭되지 않게 참조 동일성으로 거른다.</summary>
+        /// <summary>Finds the session entry owned by this connection only — reference identity
+        /// filters out stray frames/OnClosed from a connection rejected for a duplicate id, so
+        /// they cannot hit the original session with the same id.</summary>
         private bool TryGetOwnedEntry(IConnection connection, out SessionEntry entry) =>
             _sessions.TryGetValue(connection.Id, out entry)
             && ReferenceEquals(entry.Session.Connection, connection);
@@ -184,8 +188,9 @@ namespace Bun3.Server.Core
                 Session = session;
             }
 
-            /// <summary>실제 RunAsync 태스크가 끝날 때 완료된다. 바인딩 전에는 완료되지 않으므로
-            /// StopAsync가 등록~바인딩 사이의 엔트리를 관찰해도 드레인을 건너뛰지 않는다.</summary>
+            /// <summary>Completes when the actual RunAsync task ends. Never completes before
+            /// binding, so StopAsync observing an entry between registration and binding still
+            /// waits for the drain.</summary>
             public Task Completion => _completion.Task;
 
             public void BindRunTask(Task runTask)

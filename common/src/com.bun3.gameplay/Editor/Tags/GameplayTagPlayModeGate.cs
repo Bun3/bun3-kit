@@ -6,18 +6,18 @@ using UnityEngine;
 
 namespace Bun3.Gameplay.Editor.Tags
 {
-    /// <summary>Play 진입 전에 fresh Source를 binary round-trip하고 실패한 진입을 차단합니다.</summary>
+    /// <summary>Round-trips fresh sources through binary before entering play mode and blocks failed entries.</summary>
     public static class GameplayTagPlayModeGate
     {
         private static bool _isRegistered;
 
         internal static bool IsRegistered => _isRegistered;
 
-        /// <summary>Workspace를 개발 binary로 검증하고 활성 Play 전환 Catalog로 고정합니다.</summary>
-        /// <param name="workspace">fresh Source에서 연 Workspace입니다.</param>
-        /// <param name="catalog">성공하면 binary에서 재로드한 Catalog입니다.</param>
-        /// <param name="diagnostic">실패 원인과 Source 진단입니다.</param>
-        /// <returns>Play 진입을 계속할 수 있으면 true입니다.</returns>
+        /// <summary>Verifies the workspace via the development binary and pins it as the active play-transition catalog.</summary>
+        /// <param name="workspace">Workspace opened from fresh sources.</param>
+        /// <param name="catalog">Catalog reloaded from binary on success.</param>
+        /// <param name="diagnostic">Failure cause and source diagnostics.</param>
+        /// <returns>True if entering play mode may continue.</returns>
         public static bool TryPrepare(
             GameplayTagEditorWorkspace workspace,
             out TagCatalog? catalog,

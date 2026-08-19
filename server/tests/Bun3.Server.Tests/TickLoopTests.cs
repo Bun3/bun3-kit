@@ -26,7 +26,7 @@ public class TickLoopTests
         foreach (var delta in deltas)
         {
             Assert.That(delta, Is.GreaterThan(TimeSpan.Zero));
-            Assert.That(delta, Is.LessThan(TimeSpan.FromSeconds(2)));   // CI 스톨 대비 느슨한 상한
+            Assert.That(delta, Is.LessThan(TimeSpan.FromSeconds(2)));   // loose upper bound to tolerate CI stalls
         }
     }
 
@@ -46,7 +46,7 @@ public class TickLoopTests
         await Task.Delay(400);
         await loop.StopAsync();
 
-        Assert.That(healthyRuns, Is.GreaterThanOrEqualTo(3));   // 폭탄 잡이 루프를 못 죽였다
+        Assert.That(healthyRuns, Is.GreaterThanOrEqualTo(3));   // the bomb job could not kill the loop
     }
 
     [Test]
@@ -83,14 +83,14 @@ public class TickLoopTests
         await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
         await loop.StopAsync();
 
-        Assert.That(completed, Is.GreaterThanOrEqualTo(1));   // 진행 중이던 잡이 끝난 뒤에 정지했다
+        Assert.That(completed, Is.GreaterThanOrEqualTo(1));   // stop happened only after the in-flight job finished
     }
 
-    // NextDailyOccurrence — 순수 함수 결정적 검증 (가짜 시계 불필요, UTC 전용)
-    [TestCase("2026-01-15T02:00:00+00:00", 5, "2026-01-15T05:00:00+00:00")]   // 오늘 아직 안 지남
-    [TestCase("2026-01-15T06:00:00+00:00", 5, "2026-01-16T05:00:00+00:00")]   // 오늘 지남 → 내일
-    [TestCase("2026-01-15T05:00:00+00:00", 5, "2026-01-16T05:00:00+00:00")]   // 정확히 발생 시각 → 다음날 (전진 보장)
-    [TestCase("2026-01-15T05:00:00+09:00", 20, "2026-01-15T20:00:00+00:00")]  // now가 비UTC 오프셋이어도 UTC로 정규화
+    // NextDailyOccurrence — deterministic pure-function checks (no fake clock needed, UTC only)
+    [TestCase("2026-01-15T02:00:00+00:00", 5, "2026-01-15T05:00:00+00:00")]   // not yet passed today
+    [TestCase("2026-01-15T06:00:00+00:00", 5, "2026-01-16T05:00:00+00:00")]   // passed today -> tomorrow
+    [TestCase("2026-01-15T05:00:00+00:00", 5, "2026-01-16T05:00:00+00:00")]   // exactly at fire time -> next day (guaranteed progress)
+    [TestCase("2026-01-15T05:00:00+09:00", 20, "2026-01-15T20:00:00+00:00")]  // non-UTC offset now is normalized to UTC
     public void NextDailyOccurrence_computes_next_fire_time(
         string nowIso, int hourOfDay, string expectedIso)
     {
@@ -108,7 +108,7 @@ public class TickLoopTests
         var timeOfDay = now.TimeOfDay + TimeSpan.FromMilliseconds(300);
         if (timeOfDay >= TimeSpan.FromHours(24))
         {
-            Assert.Inconclusive("자정 직전 — 재실행하면 통과한다.");
+            Assert.Inconclusive("Just before midnight — rerun to pass.");
         }
 
         var fired = 0;
@@ -123,7 +123,7 @@ public class TickLoopTests
         await Task.Delay(1200);
         await loop.StopAsync();
 
-        Assert.That(fired, Is.EqualTo(1));   // 발화 1회 — 다음 발생은 내일이므로 재발화 없음
+        Assert.That(fired, Is.EqualTo(1));   // fires once — next occurrence is tomorrow, so no refire
     }
 
     [Test]
@@ -135,7 +135,7 @@ public class TickLoopTests
         loop.Every(TimeSpan.FromMilliseconds(10), async _ =>
         {
             entered.TrySetResult(true);
-            await block.Task;   // 잡이 행 — ct가 기다림을 포기하게 한다
+            await block.Task;   // job hangs — the ct makes the wait give up
         });
 
         loop.Start();
@@ -145,7 +145,7 @@ public class TickLoopTests
         cts.Cancel();
         Assert.ThrowsAsync<TaskCanceledException>(() => loop.StopAsync(cts.Token));
 
-        block.TrySetResult(true);          // 잡 해제 — 루프는 취소 신호를 받았으므로 스스로 종료
-        await loop.StopAsync();            // ct 없는 재호출은 정상 대기로 완료
+        block.TrySetResult(true);          // release the job — the loop got the cancel signal and exits on its own
+        await loop.StopAsync();            // re-calling without a ct completes with a normal wait
     }
 }

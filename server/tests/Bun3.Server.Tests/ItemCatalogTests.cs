@@ -10,8 +10,8 @@ public class ItemCatalogTests
 
     private static ItemCatalog<TestDef> BuildSample() =>
         new ItemCatalogBuilder<TestDef>()
-            .Register("potion.small", new TestDef("소형 물약"), maxCount: 999)
-            .Register("gold", new TestDef("골드"))
+            .Register("potion.small", new TestDef("Small Potion"), maxCount: 999)
+            .Register("gold", new TestDef("Gold"))
             .Build();
 
     [Test]
@@ -23,9 +23,9 @@ public class ItemCatalogTests
         Assert.That(catalog.TryGet("potion.small", out var potion), Is.True);
         Assert.That(catalog.Contains(potion), Is.True);
         Assert.That(catalog.GetIdString(potion), Is.EqualTo("potion.small"));
-        // 인터닝 — 같은 참조를 돌려준다
+        // Interning — returns the same reference
         Assert.That(ReferenceEquals(catalog.GetIdString(potion), catalog.GetIdString(potion)), Is.True);
-        Assert.That(catalog.GetDefinition(potion).DisplayName, Is.EqualTo("소형 물약"));
+        Assert.That(catalog.GetDefinition(potion).DisplayName, Is.EqualTo("Small Potion"));
         Assert.That(catalog.GetMaxCount(potion), Is.EqualTo(999));
         Assert.That(catalog.GetMaxCount(catalog.GetRequired("gold")), Is.EqualTo(long.MaxValue));
     }
@@ -46,10 +46,10 @@ public class ItemCatalogTests
     [Test]
     public void Register_rejects_duplicate_empty_id_and_bad_max_stack()
     {
-        var builder = new ItemCatalogBuilder<TestDef>().Register("gold", new TestDef("골드"));
+        var builder = new ItemCatalogBuilder<TestDef>().Register("gold", new TestDef("Gold"));
 
-        Assert.That(() => builder.Register("gold", new TestDef("중복")), Throws.TypeOf<ItemCatalogException>());
-        Assert.That(() => builder.Register("  ", new TestDef("공백")), Throws.ArgumentException);
+        Assert.That(() => builder.Register("gold", new TestDef("Duplicate")), Throws.TypeOf<ItemCatalogException>());
+        Assert.That(() => builder.Register("  ", new TestDef("Blank")), Throws.ArgumentException);
         Assert.That(() => builder.Register("x", new TestDef("x"), maxCount: -1),
             Throws.TypeOf<ArgumentOutOfRangeException>());
     }
@@ -59,9 +59,9 @@ public class ItemCatalogTests
     {
         var ran = 0;
         var builder = new ItemCatalogBuilder<TestDef>()
-            .Register("gold", new TestDef("골드"))
+            .Register("gold", new TestDef("Gold"))
             .AddValidator(_ => ran++)
-            .AddValidator(c => throw new ItemCatalogException($"검증 실패: {c.Count}개"));
+            .AddValidator(c => throw new ItemCatalogException($"validation failed: {c.Count} entries"));
 
         Assert.That(() => builder.Build(), Throws.TypeOf<ItemCatalogException>());
         Assert.That(ran, Is.EqualTo(1));
@@ -71,8 +71,8 @@ public class ItemCatalogTests
     public void External_id_maps_both_directions_and_is_optional()
     {
         var catalog = new ItemCatalogBuilder<TestDef>()
-            .Register("potion.small", new TestDef("소형 물약"), externalId: 1021)
-            .Register("gold", new TestDef("골드"))
+            .Register("potion.small", new TestDef("Small Potion"), externalId: 1021)
+            .Register("gold", new TestDef("Gold"))
             .Build();
         var potion = catalog.GetRequired("potion.small");
         var gold = catalog.GetRequired("gold");
@@ -108,24 +108,24 @@ public class ItemCatalogTests
         var byName = builder.CreateIndex(def => def.DisplayName);
         var byChar = builder.CreateMultiIndex(def => def.DisplayName.ToCharArray().Distinct());
 
-        Assert.That(() => byName.Get("골드"), Throws.InvalidOperationException, "Build 전 조회 금지");
+        Assert.That(() => byName.Get("Gold"), Throws.InvalidOperationException, "no queries before Build");
 
-        builder.Register("gold", new TestDef("골드"))
-            .Register("gold2", new TestDef("골드"))
-            .Register("gem", new TestDef("보석"))
+        builder.Register("gold", new TestDef("Gold"))
+            .Register("gold2", new TestDef("Gold"))
+            .Register("gem", new TestDef("Gem"))
             .Build();
 
-        Assert.That(byName.Get("골드").Length, Is.EqualTo(2));
-        Assert.That(byName.Get("보석").Length, Is.EqualTo(1));
-        Assert.That(byName.Get("없음").Length, Is.EqualTo(0), "미등록 키는 빈 span");
-        Assert.That(byChar.Get('골').Length, Is.EqualTo(2));
-        Assert.That(byChar.Contains('석'), Is.True);
+        Assert.That(byName.Get("Gold").Length, Is.EqualTo(2));
+        Assert.That(byName.Get("Gem").Length, Is.EqualTo(1));
+        Assert.That(byName.Get("Missing").Length, Is.EqualTo(0), "unknown key yields empty span");
+        Assert.That(byChar.Get('o').Length, Is.EqualTo(2));
+        Assert.That(byChar.Contains('m'), Is.True);
     }
 
     [Test]
     public void Build_is_single_use()
     {
-        var builder = new ItemCatalogBuilder<TestDef>().Register("gold", new TestDef("골드"));
+        var builder = new ItemCatalogBuilder<TestDef>().Register("gold", new TestDef("Gold"));
         builder.Build();
 
         Assert.That(() => builder.Build(), Throws.InvalidOperationException);

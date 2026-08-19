@@ -10,31 +10,31 @@ using Newtonsoft.Json.Linq;
 namespace Bun3.Gameplay.Tags.Catalog
 {
     /// <summary>
-    /// 엄격한 태그 Source JSON 문서를 읽고 씁니다.
+    /// Reads and writes strict tag source JSON documents.
     /// </summary>
     public static class TagSourceJson
     {
         private static readonly TagSourceDescriptor GameDescriptor = new TagSourceDescriptor("game", "Game", TagSourceKind.GameJson, false);
 
-        /// <summary>게임이 소유한 태그 Source JSON 문서를 읽습니다.</summary>
+        /// <summary>Reads a game-owned tag source JSON document.</summary>
         public static TagSourceDocument LoadGame(Stream json, string origin) => Load(json, origin, false);
 
-        /// <summary>패키지 또는 네이티브 메타데이터 태그 Source JSON 문서를 읽습니다.</summary>
+        /// <summary>Reads a package or native metadata tag source JSON document.</summary>
         public static TagSourceDocument LoadMetadata(Stream json, string origin) => Load(json, origin, true);
 
-        /// <summary>게임이 소유한 태그 Source JSON 문서를 씁니다.</summary>
+        /// <summary>Writes a game-owned tag source JSON document.</summary>
         public static void WriteGame(Stream destination, TagSourceDocument document)
         {
             if (document is null) throw new ArgumentNullException(nameof(document));
-            if (document.Descriptor.Kind != TagSourceKind.GameJson) throw new ArgumentException("Game JSON에는 GameJson Source만 쓸 수 있습니다.", nameof(document));
+            if (document.Descriptor.Kind != TagSourceKind.GameJson) throw new ArgumentException("Only a GameJson source can be written as game JSON.", nameof(document));
             Write(destination, document, false);
         }
 
-        /// <summary>패키지 또는 네이티브 메타데이터 태그 Source JSON 문서를 씁니다.</summary>
+        /// <summary>Writes a package or native metadata tag source JSON document.</summary>
         public static void WriteMetadata(Stream destination, TagSourceDocument document)
         {
             if (document is null) throw new ArgumentNullException(nameof(document));
-            if (document.Descriptor.Kind == TagSourceKind.GameJson) throw new ArgumentException("메타데이터 JSON에는 읽기 전용 Source만 쓸 수 있습니다.", nameof(document));
+            if (document.Descriptor.Kind == TagSourceKind.GameJson) throw new ArgumentException("Only read-only sources can be written as metadata JSON.", nameof(document));
             Write(destination, document, true);
         }
 
@@ -69,7 +69,7 @@ namespace Bun3.Gameplay.Tags.Catalog
                     DuplicatePropertyNameHandling = DuplicatePropertyNameHandling.Error,
                     LineInfoHandling = LineInfoHandling.Load,
                 });
-                if (reader.Read()) throw Error("루트 JSON 값 뒤에 토큰이 있습니다.", root);
+                if (reader.Read()) throw Error("Unexpected token after the root JSON value.", root);
 
                 return ReadDocument(root, origin, metadata);
             }
@@ -102,7 +102,7 @@ namespace Bun3.Gameplay.Tags.Catalog
             var descriptor = metadata ? ReadDescriptor(RequireObject(root, "source")) : GameDescriptor;
             var tags = ReadTags(RequireArray(root, "tags"));
             var redirects = root.Property("redirects", StringComparison.Ordinal)?.Value;
-            if (redirects is null && metadata) throw Error("필수 필드 redirects이(가) 없습니다.", root);
+            if (redirects is null && metadata) throw Error("Missing required field redirects.", root);
             return new TagSourceDocument(descriptor, origin, tags, ReadRedirects(redirects));
         }
 
@@ -114,7 +114,7 @@ namespace Bun3.Gameplay.Tags.Catalog
             var kindText = RequireString(source, "kind");
             var kind = kindText == "packageJson" ? TagSourceKind.PackageJson
                 : kindText == "native" ? TagSourceKind.Native
-                : throw Error("source.kind는 packageJson 또는 native여야 합니다.", source);
+                : throw Error("source.kind must be packageJson or native.", source);
             try
             {
                 return new TagSourceDescriptor(sourceId, displayName, kind, true);
@@ -131,12 +131,12 @@ namespace Bun3.Gameplay.Tags.Catalog
             var seen = new HashSet<string>(StringComparer.Ordinal);
             foreach (var item in tags)
             {
-                if (item is not JObject tag) throw Error("tags의 항목은 객체여야 합니다.", item);
+                if (item is not JObject tag) throw Error("tags items must be objects.", item);
                 RequireAllowedProperties(tag, "name", "comment");
                 var name = RequireString(tag, "name");
                 var comment = RequireString(tag, "comment");
                 var canonical = ValidateTagName(name, tag);
-                if (!seen.Add(canonical)) throw Error("대소문자를 제외하고 중복된 태그 이름입니다.", tag);
+                if (!seen.Add(canonical)) throw Error("Duplicate tag name ignoring case.", tag);
                 result.Add(new TagSourceTag(canonical, comment));
             }
 
@@ -146,16 +146,16 @@ namespace Bun3.Gameplay.Tags.Catalog
         private static List<TagSourceRedirect> ReadRedirects(JToken? token)
         {
             if (token is null) return new List<TagSourceRedirect>();
-            if (token is not JArray redirects) throw Error("redirects는 배열이어야 합니다.", token);
+            if (token is not JArray redirects) throw Error("redirects must be an array.", token);
             var result = new List<TagSourceRedirect>(redirects.Count);
             var seen = new HashSet<string>(StringComparer.Ordinal);
             foreach (var item in redirects)
             {
-                if (item is not JObject redirect) throw Error("redirects의 항목은 객체여야 합니다.", item);
+                if (item is not JObject redirect) throw Error("redirects items must be objects.", item);
                 RequireAllowedProperties(redirect, "from", "to");
                 var from = ValidateTagName(RequireString(redirect, "from"), redirect);
                 var to = ValidateTagName(RequireString(redirect, "to"), redirect);
-                if (!seen.Add(from)) throw Error("대소문자를 제외하고 중복된 리디렉션 원본입니다.", redirect);
+                if (!seen.Add(from)) throw Error("Duplicate redirect origin ignoring case.", redirect);
                 result.Add(new TagSourceRedirect(from, to));
             }
 
@@ -173,35 +173,35 @@ namespace Bun3.Gameplay.Tags.Catalog
             var token = RequireProperty(root, "schemaVersion");
             if (token.Type != JTokenType.Integer || token is not JValue { Value: long value } || value != 1)
             {
-                throw Error("schemaVersion은 정수 1이어야 합니다.", token);
+                throw Error("schemaVersion must be the integer 1.", token);
             }
         }
 
         private static JArray RequireArray(JObject value, string propertyName)
         {
             var token = RequireProperty(value, propertyName);
-            if (token is not JArray result) throw Error($"{propertyName}는 배열이어야 합니다.", token);
+            if (token is not JArray result) throw Error($"{propertyName} must be an array.", token);
             return result;
         }
 
         private static JObject RequireObject(JObject value, string propertyName)
         {
             var token = RequireProperty(value, propertyName);
-            if (token is not JObject result) throw Error($"{propertyName}는 객체여야 합니다.", token);
+            if (token is not JObject result) throw Error($"{propertyName} must be an object.", token);
             return result;
         }
 
         private static string RequireString(JObject value, string propertyName)
         {
             var token = RequireProperty(value, propertyName);
-            if (token.Type != JTokenType.String) throw Error($"{propertyName}은 문자열이어야 합니다.", token);
+            if (token.Type != JTokenType.String) throw Error($"{propertyName} must be a string.", token);
             return token.Value<string>()!;
         }
 
         private static JToken RequireProperty(JObject value, string propertyName)
         {
             var property = value.Property(propertyName, StringComparison.Ordinal);
-            if (property is null) throw Error($"필수 필드 {propertyName}이(가) 없습니다.", value);
+            if (property is null) throw Error($"Missing required field {propertyName}.", value);
             return property.Value;
         }
 
@@ -219,7 +219,7 @@ namespace Bun3.Gameplay.Tags.Catalog
                     }
                 }
 
-                if (!permitted) throw Error($"허용되지 않은 필드입니다: {property.Name}", property);
+                if (!permitted) throw Error($"Field not allowed: {property.Name}", property);
             }
         }
 

@@ -81,7 +81,7 @@ namespace Bun3.Gameplay.Editor.Tags
         internal GameplayTagTreeSelectionKey SelectionKey =>
             new GameplayTagTreeSelectionKey(SourceId, Path);
 
-        // Task 10의 shared TreeView renderer가 Source projection과 merged projection에 같은 shape를 쓸 수 있게 둔다.
+        // Kept so the shared TreeView renderer can use the same shape for source and merged projections.
         internal int Index => Id;
         internal int ParentIndex => ParentId;
     }

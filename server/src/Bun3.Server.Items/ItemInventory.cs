@@ -6,20 +6,24 @@ using Bun3.Server.Core;
 namespace Bun3.Server.Items
 {
     /// <summary>
-    /// 스택/인스턴스 통합 인벤토리 — 유일한 플레이어 아이템 컨테이너. 재화도 스택형
-    /// 정의의 아이템 행으로 처리한다(idlez 실물 구조). 스택형·비스택형 판정은 카탈로그
-    /// 메타로 내부에서 정확히 한 번 수행하며, 스택형은 정의당 싱글턴 인스턴스로 자동
-    /// 병합, 비스택형은 수량 1 인스턴스 N개. 수량은 <see cref="BigNum"/>(long 암시 변환).
-    /// 모든 변경 연산은 원자적이며 실패 시 완전 무변경. 락 없음(세션 액터 단일 스레드 계약).
-    /// 조회·열거·소모 경로는 무할당, 인스턴스 생성만 본질적 할당(저빈도).
-    /// 파일 구성: 이 파일(생성·조회) / Operations(지급·소모·트랜잭션) / Crafting(제작) /
-    /// Rewards(보상 지급) / Regen(리젠 정산) / Transfer(인벤토리 간 이동) / Tracking(변경 추적·로드).
+    /// Unified stack/instance inventory — the single player item container. Currencies are
+    /// handled as item rows of stackable definitions. The stackable/unstackable decision is
+    /// made exactly once internally from catalog metadata: stackables auto-merge into a
+    /// singleton instance per definition, unstackables are N amount-1 instances. Amounts are
+    /// <see cref="BigNum"/> (long converts implicitly).
+    /// All mutating operations are atomic; on failure the inventory is fully unchanged.
+    /// No locks (single-threaded session-actor contract).
+    /// Query, enumeration, and consume paths are allocation-free; only instance creation
+    /// allocates (low frequency).
+    /// File layout: this file (construction, queries) / Operations (grant, consume, transactions) /
+    /// Crafting / Rewards / Regen / Transfer / Tracking (change tracking, load).
     /// </summary>
-    /// <typeparam name="TState">게임이 정의하는 인스턴스 상태 타입.</typeparam>
+    /// <typeparam name="TState">Game-defined instance state type.</typeparam>
     public sealed partial class ItemInventory<TState>
     {
-        // ponytail: 비스택형 1회 연산 인스턴스 수 상한 — 무제한 maxCount 정의에 대량 지급 시
-        // 생성 루프 폭주를 막는다. 정당한 대량 지급이 필요해지면 옵션으로 승격.
+        // ponytail: cap on instances created per operation for unstackables — prevents a runaway
+        // creation loop when mass-granting into an unlimited-maxCount definition. Promote to an
+        // option if legitimate mass grants become necessary.
         internal const int MaxInstancesPerOperation = 1000;
 
         private readonly ItemCatalog _catalog;
@@ -33,7 +37,7 @@ namespace Bun3.Server.Items
         private readonly List<ItemInstance<TState>> _removeScratch = new List<ItemInstance<TState>>();
         private bool _hasChanges;
 
-        // 트랜잭션 스크래치 — 전부 생성 시 1회 할당 후 재사용(커밋 경로 무할당).
+        // Transaction scratch — allocated once at construction, reused (commit path is allocation-free).
         private readonly List<TxOp> _txOps = new List<TxOp>();
         private readonly List<TxOp> _applyOps = new List<TxOp>();
         private readonly List<long> _txUnstackableTargets = new List<long>();
@@ -48,31 +52,33 @@ namespace Bun3.Server.Items
         private readonly List<long> _regenScratchBasis = new List<long>();
         private int _txToken;
 
-        // onApplied 통지용 재사용 버퍼 — 핸들러 미지정 시 기록 자체를 생략한다.
+        // Reusable buffer for onApplied notifications — recording is skipped entirely when no handler is set.
         private readonly InventoryAppliedHandler? _onApplied;
         private InventoryChange[] _applied = Array.Empty<InventoryChange>();
         private int _appliedCount;
 
-        // 행동 로그(CS 원장) — 세션 공용 ActionLog 참조. 미지정 시 기록 no-op.
+        // Action log (audit ledger) — session-wide ActionLog reference. Recording is a no-op when unset.
         private readonly ActionLog? _log;
         private readonly string? _logLabel;
 
-        /// <summary>인벤토리를 만든다.</summary>
-        /// <param name="catalog">아이템 카탈로그.</param>
-        /// <param name="instanceIdIssuer">인스턴스 id 발급자 — 세션 간 고유해야 한다
-        /// (스노플레이크·하이로우·DB 시퀀스 등은 게임 선택). 검증 통과 후에만 호출된다.</param>
-        /// <param name="stateFactory">인스턴스 생성 시 초기 상태 팩토리.</param>
-        /// <param name="capacity">초기 용량(0이면 기본).</param>
-        /// <param name="onChanged">성공한 변경 연산당 1회 + <see cref="ItemInstance{TState}.MarkChanged"/>당
-        /// 1회 호출 — 게임은 Player.MarkDirty를 넘겨 저장 주기와 맞물린다.</param>
-        /// <param name="removeBlockingFlags">이 마스크에 걸리는 플래그의 인스턴스는 소모
-        /// 후보에서 제외된다(예: 사용 중·유저 잠금). 0이면 잠금 없음.</param>
-        /// <param name="onApplied">성공한 커밋당 1회, 적용된 순 델타를 받는 통지 —
-        /// 업적/퀘스트/랭킹 카운팅용. 미지정 시 기록 비용 없음.</param>
-        /// <param name="log">세션 공용 행동 로그(<see cref="ActionLog"/>) — 지정하면 이
-        /// 인벤토리의 모든 변경(델타·잔량)이 현재 열린 스코프에 자동 첨부된다.
-        /// 여러 인벤토리가 같은 로그를 공유해 한 행동 트리에 남을 수 있다.</param>
-        /// <param name="logLabel">복수 인벤토리 공유 시 변경 출처 구분 라벨(예: "bag"/"warehouse").</param>
+        /// <summary>Creates the inventory.</summary>
+        /// <param name="catalog">Item catalog.</param>
+        /// <param name="instanceIdIssuer">Instance id issuer — must be unique across sessions
+        /// (snowflake, hi-lo, DB sequence, etc. is the game's choice). Called only after validation passes.</param>
+        /// <param name="stateFactory">Initial state factory for created instances.</param>
+        /// <param name="capacity">Initial capacity (0 = default).</param>
+        /// <param name="onChanged">Called once per successful mutating operation plus once per
+        /// <see cref="ItemInstance{TState}.MarkChanged"/> — games pass Player.MarkDirty to tie
+        /// into the save cadence.</param>
+        /// <param name="removeBlockingFlags">Instances with flags matching this mask are excluded
+        /// as consume candidates (e.g. in use, user-locked). 0 = no locking.</param>
+        /// <param name="onApplied">Called once per successful commit with the applied net deltas —
+        /// for achievement/quest/ranking counting. No recording cost when unset.</param>
+        /// <param name="log">Session-wide action log (<see cref="ActionLog"/>) — when set, every
+        /// change of this inventory (delta and balance) is auto-attached to the currently open scope.
+        /// Multiple inventories may share one log to land in a single action tree.</param>
+        /// <param name="logLabel">Label distinguishing the change source when inventories share a log
+        /// (e.g. "bag"/"warehouse").</param>
         public ItemInventory(
             ItemCatalog catalog,
             Func<long> instanceIdIssuer,
@@ -96,13 +102,14 @@ namespace Bun3.Server.Items
             _stackSingletons = new Dictionary<ItemId, long>();
         }
 
-        /// <summary>이 인벤토리가 묶인 카탈로그.</summary>
+        /// <summary>The catalog this inventory is bound to.</summary>
         public ItemCatalog Catalog => _catalog;
 
-        /// <summary>보유 인스턴스 수(스택 싱글턴 포함).</summary>
+        /// <summary>Number of held instances (including stack singletons).</summary>
         public int InstanceCount => _instances.Count;
 
-        /// <summary>정의의 총 보유 수량 — 스택형은 싱글턴 수량, 비스택형은 인스턴스 수. 미보유면 0.</summary>
+        /// <summary>Total held amount for a definition — singleton amount for stackables,
+        /// instance count for unstackables. 0 if not held.</summary>
         public BigNum GetQuantity(ItemId item)
         {
             if (_stackSingletons.TryGetValue(item, out var singletonId))
@@ -111,7 +118,8 @@ namespace Bun3.Server.Items
             }
 
             long count = 0;
-            // ponytail: 정의별 색인 없이 전체 스캔(O(인스턴스 수)) — 플레이어 인벤 수백 규모 전제.
+            // ponytail: full scan without a per-definition index (O(instance count)) — assumes
+            // player inventories in the hundreds.
             foreach (var entry in _instances)
             {
                 if (entry.Value.Item == item)
@@ -123,7 +131,7 @@ namespace Bun3.Server.Items
             return count;
         }
 
-        /// <summary>인스턴스 id로 조회한다.</summary>
+        /// <summary>Looks up an instance by id.</summary>
         public bool TryGetInstance(long instanceId, out ItemInstance<TState> instance)
         {
             if (_instances.TryGetValue(instanceId, out var found))
@@ -136,7 +144,7 @@ namespace Bun3.Server.Items
             return false;
         }
 
-        /// <summary>정의의 보유 인스턴스를 버퍼에 이어 담고 담은 수를 반환한다.</summary>
+        /// <summary>Appends the definition's held instances to the buffer and returns the count added.</summary>
         public int CollectInstances(ItemId item, List<ItemInstance<TState>> buffer)
         {
             if (buffer == null)
@@ -157,10 +165,10 @@ namespace Bun3.Server.Items
             return count;
         }
 
-        /// <summary>만료된 인스턴스(<see cref="ItemInstance{TState}.ExpiresAtTicksUtc"/>가
-        /// 0이 아니고 <paramref name="nowTicksUtc"/> 이하)를 버퍼에 이어 담고 담은 수를
-        /// 반환한다. 수집만 한다 — 만료 처리(소모·후속 보상·멱등 마커)는 게임 몫이며,
-        /// 시간은 항상 게임이 주입한다(결정론·테스트 용이).</summary>
+        /// <summary>Appends expired instances (<see cref="ItemInstance{TState}.ExpiresAtTicksUtc"/>
+        /// non-zero and at most <paramref name="nowTicksUtc"/>) to the buffer and returns the count
+        /// added. Collection only — expiry handling (consume, follow-up reward, idempotency marker)
+        /// is the game's job, and time is always game-injected (determinism, testability).</summary>
         public int CollectExpired(long nowTicksUtc, List<ItemInstance<TState>> buffer)
         {
             if (buffer == null)
@@ -182,10 +190,10 @@ namespace Bun3.Server.Items
             return count;
         }
 
-        /// <summary>보유 인스턴스 열거 — foreach 무할당(struct 열거자).</summary>
+        /// <summary>Enumerates held instances — allocation-free foreach (struct enumerator).</summary>
         public Enumerator GetEnumerator() => new Enumerator(_instances.Values.GetEnumerator());
 
-        /// <summary>딕셔너리 값 struct 열거자를 감싼 인스턴스 열거자.</summary>
+        /// <summary>Instance enumerator wrapping the dictionary value struct enumerator.</summary>
         public struct Enumerator
         {
             private Dictionary<long, ItemInstance<TState>>.ValueCollection.Enumerator _inner;
@@ -195,10 +203,10 @@ namespace Bun3.Server.Items
                 _inner = inner;
             }
 
-            /// <summary>현재 인스턴스.</summary>
+            /// <summary>Current instance.</summary>
             public ItemInstance<TState> Current => _inner.Current;
 
-            /// <summary>다음 인스턴스로 이동한다.</summary>
+            /// <summary>Advances to the next instance.</summary>
             public bool MoveNext() => _inner.MoveNext();
         }
     }

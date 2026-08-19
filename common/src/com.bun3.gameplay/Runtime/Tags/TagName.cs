@@ -16,7 +16,7 @@ namespace Bun3.Gameplay.Tags
             if (!TryFold(value, out var folded))
             {
                 throw new TagCatalogException(
-                    "태그 이름은 1..255자의 ASCII 영숫자 세그먼트를 점으로 연결한 최대 16단계 경로여야 합니다.",
+                    "Tag name must be a dot-joined path of 1..255 ASCII alphanumeric segments, at most 16 levels deep.",
                     jsonPath,
                     lineNumber,
                     linePosition);

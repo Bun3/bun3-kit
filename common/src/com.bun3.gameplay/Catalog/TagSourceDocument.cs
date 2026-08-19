@@ -5,23 +5,23 @@ using System.Collections.Generic;
 namespace Bun3.Gameplay.Tags.Catalog
 {
     /// <summary>
-    /// 한 태그 Source에서 읽거나 쓸 전체 문서입니다.
+    /// Entire document read from or written to one tag source.
     /// </summary>
     public sealed class TagSourceDocument
     {
-        /// <summary>문서를 소유한 Source의 설명자입니다.</summary>
+        /// <summary>Descriptor of the source that owns the document.</summary>
         public TagSourceDescriptor Descriptor { get; }
 
-        /// <summary>오류 진단에 쓰는 원본 경로 또는 선언 레이블입니다.</summary>
+        /// <summary>Origin path or declaration label used in error diagnostics.</summary>
         public string Origin { get; }
 
-        /// <summary>Source가 명시적으로 선언한 태그입니다.</summary>
+        /// <summary>Tags the source declared explicitly.</summary>
         public IReadOnlyList<TagSourceTag> Tags { get; }
 
-        /// <summary>Source가 선언한 태그 리디렉션입니다.</summary>
+        /// <summary>Tag redirects the source declared.</summary>
         public IReadOnlyList<TagSourceRedirect> Redirects { get; }
 
-        /// <summary>방어적으로 복사한 태그 Source 문서를 만듭니다.</summary>
+        /// <summary>Creates a defensively copied tag source document.</summary>
         public TagSourceDocument(
             TagSourceDescriptor descriptor,
             string origin,

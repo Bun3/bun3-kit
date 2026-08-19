@@ -1,4 +1,4 @@
-// Popup partial — 입력 보호·딤 클릭 담당.
+// Popup partial — input guarding and dim clicks.
 using System;
 using System.Threading;
 using Bun3.Unity.Core.Utils;
@@ -8,30 +8,30 @@ using UnityEngine.EventSystems;
 
 namespace Bun3.Unity.UI.Popups
 {
-    // 입력 보호: 전환 중 레이캐스트 차단, 열림 직후 오입력 유예, 딤 클릭 닫기,
-    // 열림 시 EventSystem 선택 해제, 최상단 진입/이탈 훅.
+    // Input guarding: raycast blocking during transitions, post-open input grace period,
+    // dim-click close, EventSystem deselection on open, topmost enter/leave hooks.
     public abstract partial class Popup
     {
         [SerializeField]
-        [Tooltip("열림/닫힘 연출 중 레이캐스트를 차단해 연타 오입력을 막는다.")]
+        [Tooltip("Block raycasts during open/close transitions to prevent rapid-tap misinputs.")]
         private bool _blockInteractionDuringTransition = true;
 
         [SerializeField]
-        [Tooltip("열림 완료 후 추가로 입력을 무시할 시간(초, unscaled). 0이면 없음. 레거시 ignoreInteractDuration 대응.")]
+        [Tooltip("Extra time to ignore input after the open completes (seconds, unscaled). 0 disables.")]
         private float _postOpenInteractionDelay;
 
         [SerializeField]
-        [Tooltip("딤 클릭 시 팝업을 닫는다(레거시 HideIfClickedOutside 대응). 닫기 잠금은 존중된다.")]
+        [Tooltip("Close the popup when the dim is clicked. Close locks are respected.")]
         private bool _closeOnDimClick;
 
         [SerializeField]
-        [Tooltip("열릴 때 EventSystem 선택을 해제해 키보드/패드 오입력을 막는다.")]
+        [Tooltip("Clear the EventSystem selection on open to prevent keyboard/gamepad misinputs.")]
         private bool _clearSelectionOnOpen = true;
 
         private CanvasGroup _interactionGroup;
         private bool _isTopmost;
 
-        /// <summary>딤 클릭 닫기 여부. 딤(<see cref="BackgroundDim"/>)에 레이캐스트 타깃(Image 등)이 있어야 동작한다.</summary>
+        /// <summary>Whether dim clicks close the popup. The dim (<see cref="BackgroundDim"/>) needs a raycast target (e.g. Image).</summary>
         public bool CloseOnDimClick
         {
             get => _closeOnDimClick;
@@ -39,12 +39,13 @@ namespace Bun3.Unity.UI.Popups
         }
 
         /// <summary>
-        /// 이 팝업이 전체 스택의 최상단이 됐을 때(처음 열릴 때 포함). 위 팝업이 닫혀
-        /// 다시 드러난 경우도 여기로 온다 — 갱신/포커스 복원 지점. 기본은 아무것도 안 한다.
+        /// Called when this popup becomes topmost of the whole stack (including first open),
+        /// and when re-exposed after a popup above closes — refresh/focus-restore point.
+        /// Default does nothing.
         /// </summary>
         protected virtual void OnBecameTopmost() { }
 
-        /// <summary>다른 팝업이 위에 열려 최상단에서 벗어났을 때. 기본은 아무것도 안 한다.</summary>
+        /// <summary>Called when another popup opens on top, leaving topmost. Default does nothing.</summary>
         protected virtual void OnCovered() { }
 
         internal void UpdateTopmost(bool isTopmost)
@@ -63,7 +64,7 @@ namespace Bun3.Unity.UI.Popups
                 OnCovered();
         }
 
-        /// <summary>Opening/Closing 진입 시 스택이 호출 — 전환 중 오입력 차단.</summary>
+        /// <summary>Called by the stack on Opening/Closing entry — blocks misinputs during the transition.</summary>
         internal void OnTransitionStarted()
         {
             if (!_blockInteractionDuringTransition)
@@ -73,7 +74,7 @@ namespace Bun3.Unity.UI.Popups
             _interactionGroup.blocksRaycasts = false;
         }
 
-        /// <summary>Open 전이 시 스택이 호출 — 유예 시간 뒤 입력 복원.</summary>
+        /// <summary>Called by the stack on transition to Open — restores input after the grace period.</summary>
         internal void OnOpenCompleted(CancellationToken cancellationToken)
         {
             if (!_blockInteractionDuringTransition)
@@ -95,7 +96,7 @@ namespace Bun3.Unity.UI.Popups
                 _interactionGroup.blocksRaycasts = true;
         }
 
-        /// <summary>Attach 시 입력 보호 상태를 새 세션으로 초기화한다.</summary>
+        /// <summary>Resets input-guard state for the new session on Attach.</summary>
         private void SetUpInteractionForSession()
         {
             _isTopmost = false;
@@ -109,8 +110,8 @@ namespace Bun3.Unity.UI.Popups
     }
 
     /// <summary>
-    /// 딤 클릭을 소유 팝업의 <see cref="Popup.Close"/>로 라우팅하는 내부 컴포넌트.
-    /// <see cref="Popup.CloseOnDimClick"/>가 켜진 팝업의 딤에 자동으로 붙는다.
+    /// Internal component that routes dim clicks to the owner's <see cref="Popup.Close"/>.
+    /// Attached automatically to the dim of popups with <see cref="Popup.CloseOnDimClick"/> enabled.
     /// </summary>
     internal sealed class PopupDimClickCatcher : MonoBehaviour, IPointerClickHandler
     {

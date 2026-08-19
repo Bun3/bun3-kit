@@ -129,15 +129,15 @@ public sealed class EffectDurationScaleTests
         pipeline.Tick();
         Assert.That(kit.Defender.ActiveEffects[0].RemainingTicks, Is.EqualTo(20));
 
-        for (var i = 0; i < 5; i++) pipeline.Tick();   // 남은 15
+        for (var i = 0; i < 5; i++) pipeline.Tick();   // 15 remaining
         pipeline.EnqueueApply(kit.SpecId("dot"), kit.Attacker.Id, kit.Defender.Id);
         pipeline.Tick();
 
-        // 병합: min(15+20, 20*1.3=26)=26, 같은 틱 AdvanceTime이 1을 깎아 25로 관측된다.
+        // Merge: min(15+20, 20*1.3=26)=26; same-tick AdvanceTime subtracts 1, so 25 is observed.
         Assert.That(kit.Defender.ActiveEffects[0].RemainingTicks, Is.EqualTo(25));
     }
 
-    // ---- G6: 체감 저항(DR) ----
+    // ---- G6: diminishing returns (DR) ----
 
     private static EffectSpec DrCcSpec(string name) => new EffectSpec
     {
@@ -152,7 +152,7 @@ public sealed class EffectDurationScaleTests
     private static void RunUntilExpired(EffectPipeline pipeline, EffectTarget target)
     {
         for (var i = 0; i < 50 && target.ActiveEffectCount > 0; i++) pipeline.Tick();
-        Assert.That(target.ActiveEffectCount, Is.Zero, "테스트 전제: 효과가 만료되지 않았습니다.");
+        Assert.That(target.ActiveEffectCount, Is.Zero, "test precondition: effect did not expire.");
     }
 
     [Test]
@@ -162,24 +162,24 @@ public sealed class EffectDurationScaleTests
         kit.AddSpec(DrCcSpec("cc"));
         var pipeline = kit.BuildPipeline();
 
-        // 1차 적용: 배수 1 -> 지속 10.
+        // 1st application: multiplier 1 -> duration 10.
         pipeline.EnqueueApply(kit.SpecId("cc"), kit.Attacker.Id, kit.Defender.Id);
         pipeline.Tick();
         Assert.That(kit.Defender.ActiveEffects[0].RemainingTicks, Is.EqualTo(10));
         RunUntilExpired(pipeline, kit.Defender);
 
-        // 2차 적용(만료 후): 배수 0.5 -> 지속 5.
+        // 2nd application (after expiry): multiplier 0.5 -> duration 5.
         pipeline.EnqueueApply(kit.SpecId("cc"), kit.Attacker.Id, kit.Defender.Id);
         pipeline.Tick();
         Assert.That(kit.Defender.ActiveEffects[0].RemainingTicks, Is.EqualTo(5));
         RunUntilExpired(pipeline, kit.Defender);
 
-        // 3차 적용: 배수 0 -> 지속 0 -> 면역(무산), 인스턴스가 생기지 않는다.
+        // 3rd application: multiplier 0 -> duration 0 -> immune (fizzles), no instance created.
         pipeline.EnqueueApply(kit.SpecId("cc"), kit.Attacker.Id, kit.Defender.Id);
         pipeline.Tick();
         Assert.That(kit.Defender.ActiveEffectCount, Is.Zero);
 
-        // 창(100틱) 경과 후 4차 적용: 카운트 리셋 -> 배수 1 -> 다시 지속 10.
+        // 4th application after the window (100 ticks): count resets -> multiplier 1 -> duration 10 again.
         for (var i = 0; i < 101; i++) pipeline.Tick();
         pipeline.EnqueueApply(kit.SpecId("cc"), kit.Attacker.Id, kit.Defender.Id);
         pipeline.Tick();
@@ -189,8 +189,9 @@ public sealed class EffectDurationScaleTests
     [Test]
     public void Dr_window_boundary_is_still_within_window_when_exactly_equal()
     {
-        // 창 경계 고정: lastAppliedTick + DrWindowTicks == 현재 틱일 때 현재 구현은 "<"(strict)라
-        // 아직 리셋되지 않는다 — 리셋됐다면 배수 1(지속 10)이었을 자리에 배수 0.5(지속 5)가 나와야 한다.
+        // Pins the window boundary: when lastAppliedTick + DrWindowTicks == current tick, the
+        // implementation compares with "<" (strict), so no reset yet — expect multiplier 0.5
+        // (duration 5) where a reset would have given 1 (duration 10).
         var kit = EffectTestKit.Create();
         kit.AddSpec(DrCcSpec("cc"));
         var pipeline = kit.BuildPipeline();
@@ -212,8 +213,9 @@ public sealed class EffectDurationScaleTests
     [Test]
     public void Dr_immune_application_does_not_dispel_via_remove_on_apply_tags()
     {
-        // 회귀: DR 면역 판정이 RemoveOnApplyTags(G1) 부수효과보다 먼저 끝나야 한다 — 면역인 적용이
-        // 대상의 기존(매칭) 효과를 먼저 지워버리면 관측 가능한 왜곡이 생긴다.
+        // Regression: the DR immunity check must finish before RemoveOnApplyTags (G1) side effects —
+        // an immune application dispelling the target's existing (matching) effects would be an
+        // observable distortion.
         var kit = EffectTestKit.Create();
 
         var guard = EffectTestKit.MinimalInfinite("guard");
@@ -226,8 +228,8 @@ public sealed class EffectDurationScaleTests
 
         var pipeline = kit.BuildPipeline();
 
-        // DR 카운트를 2까지 올려 3차 적용이 면역이 되도록 만든다(guard 부여 전에 끝낸다 — 1·2차는
-        // 면역이 아니라서 RemoveOnApplyTags가 정상 발화하므로 guard가 아직 없어야 한다).
+        // Raise the DR count to 2 so the 3rd application is immune (done before granting guard —
+        // the 1st/2nd are not immune, so RemoveOnApplyTags fires normally and guard must not exist yet).
         pipeline.EnqueueApply(kit.SpecId("cc"), kit.Attacker.Id, kit.Defender.Id);
         pipeline.Tick();
         RunUntilExpired(pipeline, kit.Defender);
@@ -239,7 +241,7 @@ public sealed class EffectDurationScaleTests
         pipeline.Tick();
         Assert.That(kit.Defender.ActiveEffectCount, Is.EqualTo(1));
 
-        // 3차(면역) 적용 — guard가 디스펠되지 않고 cc 인스턴스도 생기지 않아야 한다.
+        // 3rd (immune) application — guard must not be dispelled and no cc instance created.
         pipeline.EnqueueApply(kit.SpecId("cc"), kit.Attacker.Id, kit.Defender.Id);
         pipeline.Tick();
 
@@ -255,19 +257,19 @@ public sealed class EffectDurationScaleTests
         var pipeline = kit.BuildPipeline();
 
         pipeline.EnqueueApply(kit.SpecId("cc"), kit.Attacker.Id, kit.Defender.Id);
-        pipeline.Tick();   // 1차: 카운트 1 기록.
+        pipeline.Tick();   // 1st application: records count 1.
         RunUntilExpired(pipeline, kit.Defender);
 
         var snapshot = kit.Defender.CreateSnapshot();
 
-        // 스냅샷 시점 이후 원본에 2차 적용 -> 배수 0.5 -> 지속 5(참고용 관측).
+        // After the snapshot, apply the 2nd on the original -> multiplier 0.5 -> duration 5 (reference).
         pipeline.EnqueueApply(kit.SpecId("cc"), kit.Attacker.Id, kit.Defender.Id);
         pipeline.Tick();
         var referenceTicks = kit.Defender.ActiveEffects[0].RemainingTicks;
         Assert.That(referenceTicks, Is.EqualTo(5));
         RunUntilExpired(pipeline, kit.Defender);
 
-        // 스냅샷으로 되돌린 뒤 같은 2차 적용을 재생하면 같은 DR 단계(0.5 -> 5)가 나와야 한다.
+        // Restoring the snapshot and replaying the same 2nd application must give the same DR stage (0.5 -> 5).
         kit.Defender.RestoreSnapshot(snapshot, kit.Catalog);
         pipeline.EnqueueApply(kit.SpecId("cc"), kit.Attacker.Id, kit.Defender.Id);
         pipeline.Tick();
@@ -321,7 +323,7 @@ public sealed class EffectDurationScaleTests
         Assert.Throws<InvalidOperationException>(() => EffectTestKit.BuildCatalog(builder));
     }
 
-    // ---- 라이더: LevelFromStack × ScaleWithStack 복합 경고 ----
+    // ---- Rider: LevelFromStack x ScaleWithStack combination warning ----
 
     [Test]
     public void LevelFromStack_with_scale_with_stack_modifier_emits_build_warning()
@@ -333,7 +335,7 @@ public sealed class EffectDurationScaleTests
         {
             AttributeId = EffectTestKit.Attack, Op = AttributeModifierOp.Add,
             Magnitude = new MagnitudeDef { Formula = "x*10" },
-            // ScaleWithStack 기본값 true 유지 — 경고 트리거 조건.
+            // ScaleWithStack stays default true — the warning trigger condition.
         });
 
         var builder = new EffectCatalogBuilder();

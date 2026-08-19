@@ -25,7 +25,7 @@ namespace Bun3.Unity.UI.Editor.Tests
                 Assert.IsNotNull(manager.Pool);
                 Assert.IsNotNull(manager.Arranger);
                 Assert.IsTrue(manager.BackKeyRouter);
-                Assert.AreSame(manager.Stack, manager.BackKeyRouter.Stack, "라우터에 스택이 주입돼야 한다.");
+                Assert.AreSame(manager.Stack, manager.BackKeyRouter.Stack, "The stack must be injected into the router.");
 
                 manager.Pool.MarkPooled("p1");
                 manager.Stack.Push("p1");
@@ -33,11 +33,11 @@ namespace Bun3.Unity.UI.Editor.Tests
                 manager.Stack.Pop();
                 manager.Stack.Push("p1");
 
-                Assert.AreSame(first, manager.Stack.Top, "풀이 스택에 배선돼 인스턴스가 재사용돼야 한다.");
+                Assert.AreSame(first, manager.Stack.Top, "The pool must be wired to the stack so the instance is reused.");
 
                 manager.Dispose();
 
-                Assert.IsFalse((bool)manager.BackKeyRouter, "Dispose가 라우터 컴포넌트를 제거해야 한다.");
+                Assert.IsFalse((bool)manager.BackKeyRouter, "Dispose must remove the router component.");
                 Assert.Throws<ObjectDisposedException>(() => manager.Stack.Push("p1"));
             }
             finally
@@ -85,10 +85,10 @@ namespace Bun3.Unity.UI.Editor.Tests
             PopupManager.Instance = first;
 
             second.Dispose();
-            Assert.AreSame(first, PopupManager.Instance, "다른 인스턴스의 Dispose는 슬롯을 건드리면 안 된다.");
+            Assert.AreSame(first, PopupManager.Instance, "Dispose of another instance must not touch the slot.");
 
             first.Dispose();
-            Assert.IsNull(PopupManager.Instance, "자기 자신이 슬롯이면 Dispose가 비워야 한다.");
+            Assert.IsNull(PopupManager.Instance, "Dispose must clear the slot when it holds itself.");
         }
 
         [Test]
@@ -110,16 +110,16 @@ namespace Bun3.Unity.UI.Editor.Tests
             WithDim = true;
             Stack.Push("p1");
 
-            Assert.IsTrue(Created[0].BackgroundDim.activeSelf, "혼자 있으면 자기 딤이 켜진다.");
+            Assert.IsTrue(Created[0].BackgroundDim.activeSelf, "Alone, its own dim turns on.");
 
             Stack.Push("p2");
 
             Assert.IsFalse(Created[0].BackgroundDim.activeSelf);
-            Assert.IsTrue(Created[1].BackgroundDim.activeSelf, "딤은 항상 한 장 — 최상단 소유자만.");
+            Assert.IsTrue(Created[1].BackgroundDim.activeSelf, "Always exactly one dim — the topmost owner's.");
 
             Stack.Pop();
 
-            Assert.IsTrue(Created[0].BackgroundDim.activeSelf, "위가 닫히면 아래 소유자에게 돌아온다.");
+            Assert.IsTrue(Created[0].BackgroundDim.activeSelf, "The dim returns to the owner below when the top closes.");
         }
 
         [Test]
@@ -129,11 +129,11 @@ namespace Bun3.Unity.UI.Editor.Tests
             Stack.Push("p1");
 
             WithDim = false;
-            Stack.Push("p2"); // 딤 없는 팝업이 최상단
+            Stack.Push("p2"); // A dimless popup is topmost.
 
             Assert.IsNull(Created[1].BackgroundDim);
             Assert.IsTrue(Created[0].BackgroundDim.activeSelf,
-                "최상단이 딤을 안 쓰면 그 아래 딤 보유 팝업의 딤이 유지돼야 한다.");
+                "When the topmost has no dim, the dim of the dim-owning popup below must stay on.");
 
             Stack.Pop();
 

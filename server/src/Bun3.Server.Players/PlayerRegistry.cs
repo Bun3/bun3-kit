@@ -12,8 +12,8 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace Bun3.Server.Players
 {
     /// <summary>
-    /// accountKey → Player 레지스트리. 프로세스 내 메모리 전제(다중 서버 스케일아웃은
-    /// 별도 설계). 계정 키 단위 직렬화는 스트라이프 락 256개로 수행한다.
+    /// accountKey → Player registry. In-process memory only (multi-server scale-out is a
+    /// separate design). Per-account-key serialization uses 256 stripe locks.
     /// </summary>
     public sealed class PlayerRegistry<TPlayer> : IDisposable where TPlayer : Player
     {
@@ -23,7 +23,7 @@ namespace Bun3.Server.Players
         {
             public readonly TPlayer Player;
             public PlayerSession<TPlayer>? Session;
-            public long DetachedAtTicksUtc;   // 0 = 접속 중
+            public long DetachedAtTicksUtc;   // 0 = connected
 
             public Entry(TPlayer player) => Player = player;
         }
@@ -41,8 +41,8 @@ namespace Bun3.Server.Players
         private int _disposed;
 
         /// <summary>
-        /// 계정 키 로더, 옵션, 로거로 레지스트리를 생성한다. GracePeriod &gt; 0이면
-        /// 백그라운드 유예 스윕 루프를 즉시 시작한다.
+        /// Creates the registry from the account-key loader, options, and logger. When
+        /// GracePeriod &gt; 0, the background grace sweep loop starts immediately.
         /// </summary>
         public PlayerRegistry(
             Func<string, ValueTask<TPlayer>> loader,
@@ -51,7 +51,7 @@ namespace Bun3.Server.Players
         {
             _loader = loader ?? throw new ArgumentNullException(nameof(loader));
             var effectiveOptions = options ?? new PlayersOptions();
-            _gracePeriod = effectiveOptions.GracePeriod;   // 생성 시점 스냅샷 — 이후 옵션 변이는 무시
+            _gracePeriod = effectiveOptions.GracePeriod;   // snapshot at construction — later option mutation is ignored
             _saveInterval = effectiveOptions.SaveInterval;
             _duplicatePolicy = effectiveOptions.DuplicatePolicy;
             _logger = new SafeLogger(logger ?? NullLogger.Instance);
@@ -67,12 +67,12 @@ namespace Bun3.Server.Players
             }
         }
 
-        /// <summary>현재 레지스트리의 Player 스냅샷 (브로드캐스트용). 호출마다 배열을
-        /// 할당한다 — 주기 순회는 <see cref="ForEachPlayer"/>를 쓸 것.</summary>
+        /// <summary>Snapshot of current players (for broadcast). Allocates an array per
+        /// call — periodic iteration should use <see cref="ForEachPlayer"/>.</summary>
         public IReadOnlyCollection<TPlayer> Players => _entries.Values.Select(e => e.Player).ToArray();
 
-        /// <summary>무할당 순회 — ConcurrentDictionary 열거자는 스냅샷 없이 락프리로 순회한다
-        /// (순회 중 추가/제거 안전, 그 시점 반영 여부는 미정의). PlayerTicker의 틱 경로용.</summary>
+        /// <summary>Allocation-free iteration — the ConcurrentDictionary enumerator iterates lock-free
+        /// without a snapshot (concurrent add/remove is safe; visibility is unspecified). For PlayerTicker's tick path.</summary>
         internal void ForEachPlayer(Action<TPlayer> action)
         {
             foreach (var pair in _entries)
@@ -81,18 +81,18 @@ namespace Bun3.Server.Players
             }
         }
 
-        /// <summary>accountKey로 조회. 없으면 null.</summary>
+        /// <summary>Looks up by accountKey; null when absent.</summary>
         public TPlayer? TryGet(string accountKey) =>
             _entries.TryGetValue(accountKey, out var entry) ? entry.Player : null;
 
-        /// <summary>세션 팩토리를 감싸 레지스트리·허용 목록을 부착한다. Players 사용의 필수 경로.</summary>
+        /// <summary>Wraps the session factory to attach the registry and allowlist. Required path for using Players.</summary>
         public Func<IConnection, TSession> Wrap<TSession>(
             PlayersConfig<TSession> config, Func<IConnection, TSession> factory)
             where TSession : PlayerSession<TPlayer>
         {
             if (config == null) throw new ArgumentNullException(nameof(config));
             if (factory == null) throw new ArgumentNullException(nameof(factory));
-            var unauthenticatedTypes = new HashSet<Type>(config.UnauthenticatedTypes);   // 검증 시점 스냅샷 — 뒤늦은 등록이 게이트를 몰래 열지 못한다
+            var unauthenticatedTypes = new HashSet<Type>(config.UnauthenticatedTypes);   // snapshot at validation time — late registrations cannot silently open the gate
             return connection =>
             {
                 var session = factory(connection);
@@ -106,17 +106,17 @@ namespace Bun3.Server.Players
         {
             if (string.IsNullOrEmpty(accountKey))
             {
-                throw new ArgumentException("accountKey가 비어 있다.", nameof(accountKey));
+                throw new ArgumentException("accountKey is empty.", nameof(accountKey));
             }
 
             if (session.Player != null)
             {
-                throw new InvalidOperationException("이미 인증된 세션에서 SignInAsync를 재호출했다.");
+                throw new InvalidOperationException("SignInAsync called again on an already authenticated session.");
             }
 
             if (_retired)
             {
-                throw new InvalidOperationException("레지스트리가 은퇴됨(서버 종료 중) — SignIn 불가.");
+                throw new InvalidOperationException("Registry retired (server shutting down) — SignIn unavailable.");
             }
 
             PlayerSession<TPlayer>? kickAfterRelease = null;
@@ -124,10 +124,10 @@ namespace Bun3.Server.Players
             await stripe.WaitAsync().ConfigureAwait(false);
             try
             {
-                // 락 안 재확인 — 위 빠른 검사와 여기 사이(스트라이프 대기 중)에 RetireAll이 끼어들 수 있다.
+                // Re-check inside the lock — RetireAll can slip in between the fast check above and here (while waiting on the stripe).
                 if (_retired)
                 {
-                    throw new InvalidOperationException("레지스트리가 은퇴됨(서버 종료 중) — SignIn 불가.");
+                    throw new InvalidOperationException("Registry retired (server shutting down) — SignIn unavailable.");
                 }
 
                 if (_entries.TryGetValue(accountKey, out var entry))
@@ -137,11 +137,11 @@ namespace Bun3.Server.Players
                         throw new DuplicateLoginException(accountKey);
                     }
 
-                    kickAfterRelease = entry.Session;   // NewWins: 락 해제 후 킥 (재진입 교착 방지)
-                    // 구 세션 즉시 무권한화 — 킥 완료 전까지 구 세션 큐에 남아 있던 요청이
-                    // 게이트(Unauthenticated)에서 차단되어 이전된 Player를 만질 수 없다.
-                    // 이미 실행 "중"인 핸들러 1건까지는 선점할 수 없다 — 그 핸들러가
-                    // Player를 다시 읽으면 null을 보고 실패하며, 세션은 어차피 킥 중이다.
+                    kickAfterRelease = entry.Session;   // NewWins: kick after lock release (avoids reentrant deadlock)
+                    // De-authorize the old session immediately — until the kick completes, requests still
+                    // queued on it are blocked at the gate (Unauthenticated) and cannot touch the transferred Player.
+                    // One handler already executing cannot be preempted — if it re-reads Player it sees
+                    // null and fails, and the session is being kicked anyway.
                     kickAfterRelease?.SetPlayer(null);
                     entry.DetachedAtTicksUtc = 0;
                     Attach(entry, session);
@@ -149,28 +149,28 @@ namespace Bun3.Server.Players
                     return new SignInResult<TPlayer>(entry.Player, true);
                 }
 
-                // ponytail: 스트라이프 락 안 DB 로드 — 같은 스트라이프의 다른 키가 로드 시간만큼
-                // 대기한다(256 스트라이프라 희박). 병목이 측정되면 키별 락 승격.
+                // ponytail: DB load inside the stripe lock — other keys on the same stripe wait for
+                // the load duration (rare with 256 stripes). Promote to per-key locks if a bottleneck is measured.
                 var player = await _loader(accountKey).ConfigureAwait(false);
 
-                // 로더가 느린 동안 RetireAll이 끝났을 수 있다 — 삽입 직전 재확인해야 고아 entry를 막는다.
+                // RetireAll may have finished while the loader was slow — re-check just before insert to prevent an orphan entry.
                 if (_retired)
                 {
-                    throw new InvalidOperationException("레지스트리가 은퇴됨(서버 종료 중) — SignIn 불가.");
+                    throw new InvalidOperationException("Registry retired (server shutting down) — SignIn unavailable.");
                 }
 
                 player.AccountKey = accountKey;
                 var created = new Entry(player);
                 _entries[accountKey] = created;
 
-                // 삽입 직후 재확인 — 위 확인과 삽입 사이에 RetireAll이 스냅샷을 떠 완료했다면
-                // 이 entry는 회수 대상에서 빠져 있다. 삽입자가 스스로 되돌려 고아를 막는다.
-                // (_retired가 여기서 false였다면 삽입은 RetireAll의 스냅샷 이전에 가시화된 것 —
-                // ConcurrentDictionary 삽입/열거의 락 펜스가 이를 보장한다.)
+                // Re-check right after insert — if RetireAll took its snapshot and completed between
+                // the check above and the insert, this entry is missing from reclamation; the inserter
+                // rolls itself back to prevent the orphan. (If _retired was false here, the insert became
+                // visible before RetireAll's snapshot — guaranteed by ConcurrentDictionary's insert/enumeration lock fences.)
                 if (_retired)
                 {
                     _entries.TryRemove(accountKey, out _);
-                    throw new InvalidOperationException("레지스트리가 은퇴됨(서버 종료 중) — SignIn 불가.");
+                    throw new InvalidOperationException("Registry retired (server shutting down) — SignIn unavailable.");
                 }
 
                 Attach(created, session);
@@ -189,7 +189,7 @@ namespace Bun3.Server.Players
             var player = session.Player;
             if (player == null)
             {
-                return;   // 미인증 세션
+                return;   // unauthenticated session
             }
 
             var accountKey = player.AccountKey;
@@ -200,7 +200,7 @@ namespace Bun3.Server.Players
                 if (!_entries.TryGetValue(accountKey, out var entry)
                     || !ReferenceEquals(entry.Session, session))
                 {
-                    return;   // 이미 다른 세션으로 재바인딩(중복 로그인)되었거나 은퇴함
+                    return;   // already rebound to another session (duplicate login) or retired
                 }
 
                 entry.Session = null;
@@ -209,7 +209,7 @@ namespace Bun3.Server.Players
 
                 if (player.IsDirty)
                 {
-                    await player.TrySaveAsync(_logger).ConfigureAwait(false);   // detach 즉시 저장 → 유예 중 = 항상 저장됨
+                    await player.TrySaveAsync(_logger).ConfigureAwait(false);   // save on detach → during grace the state is always saved
                 }
 
                 if (_gracePeriod <= TimeSpan.Zero)
@@ -228,8 +228,8 @@ namespace Bun3.Server.Players
             }
         }
 
-        /// <summary>전 Player 은퇴(저장 플러시) — 서버 정지 후 호출. 스윕도 함께 멈춘다.</summary>
-        /// <param name="ct">호스트 종료 기한 — 취소 시 남은 키의 은퇴를 중단한다(이미 처리된 키는 완료됨).</param>
+        /// <summary>Retires all players (save flush) — call after stopping the server. Also stops the sweep.</summary>
+        /// <param name="ct">Host shutdown deadline — cancellation aborts retirement of remaining keys (already processed keys are complete).</param>
         public async ValueTask RetireAllAsync(CancellationToken ct = default)
         {
             _retired = true;
@@ -242,12 +242,12 @@ namespace Bun3.Server.Players
             }
             catch (ObjectDisposedException)
             {
-                // Dispose와의 경합 — 스윕은 이미 멈췄다
+                // race with Dispose — the sweep is already stopped
             }
 
-            // 단일 순회로 충분하다: 삽입자는 스트라이프 안에서 _retired를 삽입 전후로
-            // 재확인하고, 스냅샷을 놓친 늦은 삽입은 스스로 되돌린다(고아 불가).
-            // RetireAll은 in-flight 로더를 기다리지 않는다 — 종료가 느린 DB 로드에 볼모잡히지 않는다.
+            // A single pass suffices: inserters re-check _retired inside the stripe before and after
+            // insert, and a late insert that missed the snapshot rolls itself back (no orphans possible).
+            // RetireAll does not wait for in-flight loaders — shutdown is never held hostage by a slow DB load.
             foreach (var accountKey in _entries.Keys.ToArray())
             {
                 ct.ThrowIfCancellationRequested();
@@ -272,7 +272,7 @@ namespace Bun3.Server.Players
             finally
             {
                 stripe.Release();
-                toKick?.Kick(DisconnectCode.ServerShutdown);   // 비호스팅에서 직접 RetireAll을 불러도 사유 전달
+                toKick?.Kick(DisconnectCode.ServerShutdown);   // reason is delivered even when RetireAll is called directly outside hosting
             }
         }
 
@@ -281,8 +281,8 @@ namespace Bun3.Server.Players
             entry.Session = session;
             entry.Player.CurrentSession = session;
             var now = DateTime.UtcNow.Ticks;
-            entry.Player.LastTickAtTicksUtc = now;                          // delta 리셋 — 오프라인 구간 미합산
-            entry.Player.NextSaveAtTicksUtc = now + _saveInterval.Ticks;    // 저장 주기 재무장
+            entry.Player.LastTickAtTicksUtc = now;                          // delta reset — offline span not accumulated
+            entry.Player.NextSaveAtTicksUtc = now + _saveInterval.Ticks;    // re-arm the save interval
             session.SetPlayer(entry.Player);
         }
 
@@ -297,7 +297,7 @@ namespace Bun3.Server.Players
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Player 훅 {Hook} 예외", name);
+                _logger.LogError(ex, "Player hook {Hook} exception", name);
             }
         }
 
@@ -327,11 +327,11 @@ namespace Bun3.Server.Players
             }
             catch (OperationCanceledException)
             {
-                // RetireAll/종료로 인한 정상 취소
+                // normal cancellation from RetireAll/shutdown
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "유예 스윕 루프 예외 — 스윕 중단");
+                _logger.LogError(ex, "Grace sweep loop exception — sweep stopped");
             }
         }
 
@@ -356,9 +356,9 @@ namespace Bun3.Server.Players
             }
         }
 
-        /// <summary>유예 스윕을 멈추고 내부 자원을 정리한다. 멱등.
-        /// **은퇴가 아니다** — 저장 훅을 부르지 않는다. 우아한 종료는 RetireAllAsync를 먼저 호출할 것.
-        /// (Dispose는 테스트/비정상 정리용)</summary>
+        /// <summary>Stops the grace sweep and cleans up internals. Idempotent.
+        /// This is NOT retirement — it does not call save hooks. For graceful shutdown call RetireAllAsync first.
+        /// (Dispose is for tests / abnormal cleanup.)</summary>
         public void Dispose()
         {
             if (Interlocked.Exchange(ref _disposed, 1) != 0)

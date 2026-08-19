@@ -4,7 +4,7 @@ using Cysharp.Threading.Tasks;
 
 namespace Bun3.Unity.UI.Popups
 {
-    /// <summary>대기열 항목에 실린 초기 데이터. 저빈도 경로라 박싱/할당을 허용한다.</summary>
+    /// <summary>Initial data carried by a queued entry. Low-frequency path — boxing/allocation OK.</summary>
     internal interface IQueuedPopupArg
     {
         void Deliver(Popup popup);
@@ -20,15 +20,17 @@ namespace Bun3.Unity.UI.Popups
     }
 
     /// <summary>
-    /// 채널형 순차 표시 큐. <see cref="PopupStack.Enqueue"/>(스택이 완전히 비어야 표시)와 달리,
-    /// <b>이 큐가 연 팝업이 닫혔는가</b>만 기준으로 하나씩 표시한다 — 다른 팝업(우편함 등) 위에도
-    /// 뜬다. 여러 소스가 밀어 넣는 획득 아이템/승급 알림처럼 "그룹 내 1개씩" 규칙이 필요한 곳에 쓴다.
+    /// Channel-style sequential display queue. Unlike <see cref="PopupStack.Enqueue"/> (which
+    /// waits for the whole stack to empty), this shows one at a time based only on
+    /// <b>whether the popup this queue opened has closed</b> — it appears even above other popups
+    /// (mailbox, etc.). For "one at a time within a group" rules, such as item-gain or promotion
+    /// notices pushed by multiple sources.
     /// </summary>
     /// <remarks>
-    /// <paramref name="priority"/>가 높은 항목이 먼저 표시되고, 같은 우선순위끼리는 삽입 순서를
-    /// 지킨다(예: 승급 2 &gt; 특별 아이템 1 &gt; 일반 묶음 0). 채널이 여러 개 필요하면 인스턴스를
-    /// 여러 개 만들면 된다. 스택 <c>Clear()</c> 후에도 남은 항목은 계속 표시된다 — 씬 전환 시
-    /// 대기 항목까지 버리려면 <see cref="Clear"/>를 함께 부를 것.
+    /// Higher <paramref name="priority"/> shows first; equal priorities keep insertion order
+    /// (e.g. promotion 2 &gt; special item 1 &gt; normal batch 0). Need multiple channels — create
+    /// multiple instances. Remaining entries keep showing after a stack <c>Clear()</c>; to drop
+    /// pending entries on scene change, call <see cref="Clear"/> too.
     /// </remarks>
     public sealed class PopupQueue
     {
@@ -50,41 +52,41 @@ namespace Bun3.Unity.UI.Popups
 
         private readonly PopupStack _stack;
 
-        // 정렬 불변식: (Priority 내림차순, 삽입 순서). 머리 = 다음 표시 대상.
+        // Sort invariant: (Priority descending, insertion order). Head = next to show.
         private readonly List<Entry> _entries = new();
 
         private Popup _current;
         private bool _draining;
 
-        /// <param name="stack">이 큐가 팝업을 열 대상 스택.</param>
+        /// <param name="stack">Stack this queue opens popups on.</param>
         public PopupQueue(PopupStack stack)
             => _stack = stack ?? throw new ArgumentNullException(nameof(stack));
 
-        /// <summary>표시를 기다리는 항목 수.</summary>
+        /// <summary>Number of entries waiting to be shown.</summary>
         public int Count => _entries.Count;
 
-        /// <summary>이 큐가 열어 현재 표시 중인 팝업. 없으면 null.</summary>
+        /// <summary>Popup currently shown by this queue, or null.</summary>
         public Popup Current => _current;
 
-        /// <summary>대기열에 넣는다. 표시 가능하면 즉시 열린다.</summary>
+        /// <summary>Adds to the queue. Opens immediately when displayable.</summary>
         public void Enqueue(PopupKey key, int layer = 0, int priority = 0)
             => EnqueueCore(key, layer, priority, null);
 
-        /// <summary>타입을 키로 대기열에 넣는다.</summary>
+        /// <summary>Adds to the queue by type key.</summary>
         public void Enqueue<TPopup>(string popupName = null, int layer = 0, int priority = 0)
             where TPopup : Popup
             => EnqueueCore(PopupKey.Of<TPopup>(popupName), layer, priority, null);
 
-        /// <summary>초기 데이터를 실어 대기열에 넣는다. 팝업은 <see cref="IPopupArg{TArg}"/>를 구현해야 한다.</summary>
+        /// <summary>Adds to the queue with initial data. The popup must implement <see cref="IPopupArg{TArg}"/>.</summary>
         public void EnqueueWithArg<TArg>(PopupKey key, TArg arg, int layer = 0, int priority = 0)
             => EnqueueCore(key, layer, priority, new QueuedPopupArg<TArg>(arg));
 
-        /// <summary>타입을 키로, 초기 데이터를 실어 대기열에 넣는다.</summary>
+        /// <summary>Adds to the queue by type key, with initial data.</summary>
         public void EnqueueWithArg<TPopup, TArg>(TArg arg, string popupName = null, int layer = 0, int priority = 0)
             where TPopup : Popup
             => EnqueueCore(PopupKey.Of<TPopup>(popupName), layer, priority, new QueuedPopupArg<TArg>(arg));
 
-        /// <summary>대기 항목을 전부 버린다. 이미 표시 중인 팝업은 건드리지 않는다.</summary>
+        /// <summary>Drops all waiting entries. The popup currently shown is untouched.</summary>
         public void Clear() => _entries.Clear();
 
         private void EnqueueCore(PopupKey key, int layer, int priority, IQueuedPopupArg arg)
@@ -116,20 +118,20 @@ namespace Bun3.Unity.UI.Popups
                     }
                     catch (Exception exception)
                     {
-                        // 항목 하나의 로드 실패가 대기열 전체를 정지시키지 않게 — 기록하고 다음으로.
+                        // One entry's load failure must not stall the whole queue — log and continue.
                         UnityEngine.Debug.LogException(exception);
                         continue;
                     }
 
                     if (popup == null)
-                        continue; // 로드 실패/취소 → 다음 항목으로.
+                        continue; // Load failed/canceled → next entry.
 
                     _current = popup;
 
                     if (popup.Phase != PopupPhase.None)
                         await popup.WaitUntilClosedAsync();
 
-                    _current = null; // 다음 항목 로딩 동안 닫힌 팝업을 가리키지 않게.
+                    _current = null; // Do not point at a closed popup while the next entry loads.
                 }
             }
             finally

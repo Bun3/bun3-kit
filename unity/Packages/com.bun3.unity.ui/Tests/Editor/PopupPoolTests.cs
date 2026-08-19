@@ -32,15 +32,15 @@ namespace Bun3.Unity.UI.Editor.Tests
 
             stack.Pop();
 
-            Assert.IsTrue(first, "풀 대상 키는 파괴되지 않아야 한다.");
-            Assert.IsFalse(first.gameObject.activeSelf, "반납된 인스턴스는 비활성화돼야 한다.");
+            Assert.IsTrue(first, "Pooled keys must not be destroyed.");
+            Assert.IsFalse(first.gameObject.activeSelf, "Returned instances must be deactivated.");
 
             stack.Push("p1");
 
-            Assert.AreEqual(1, _loads, "풀 히트면 로더가 다시 불리면 안 된다.");
+            Assert.AreEqual(1, _loads, "A pool hit must not call the loader again.");
             Assert.AreSame(first, stack.Top);
             Assert.IsTrue(first.gameObject.activeSelf);
-            Assert.AreEqual(PopupPhase.Open, first.Phase, "재사용 세션도 정상 전이해야 한다.");
+            Assert.AreEqual(PopupPhase.Open, first.Phase, "A reuse session must transition normally too.");
 
             stack.Dispose();
             pool.Dispose();
@@ -57,7 +57,7 @@ namespace Bun3.Unity.UI.Editor.Tests
 
             stack.Pop();
 
-            Assert.IsFalse((bool)first, "풀 대상이 아닌 키는 반납 시 파괴돼야 한다.");
+            Assert.IsFalse((bool)first, "Unpooled keys must be destroyed on return.");
 
             stack.Dispose();
             pool.Dispose();
@@ -72,11 +72,11 @@ namespace Bun3.Unity.UI.Editor.Tests
             pool.PreloadAsync("p1").GetAwaiter().GetResult();
 
             Assert.AreEqual(1, _loads);
-            Assert.IsFalse(Created[0].gameObject.activeSelf, "프리로드 인스턴스는 비활성 보관돼야 한다.");
+            Assert.IsFalse(Created[0].gameObject.activeSelf, "Preloaded instances must be stored deactivated.");
 
             stack.Push("p1");
 
-            Assert.AreEqual(1, _loads, "프리로드된 인스턴스를 써야 한다.");
+            Assert.AreEqual(1, _loads, "The preloaded instance must be used.");
             Assert.AreSame(Created[0], stack.Top);
             Assert.IsTrue(Created[0].gameObject.activeSelf);
 
@@ -98,7 +98,7 @@ namespace Bun3.Unity.UI.Editor.Tests
             stack.PushWithArg("p1", arg: 20);
 
             Assert.AreSame(popup, stack.Top);
-            Assert.AreEqual(20, popup.ReceivedArg, "재사용 세션에도 인자가 다시 전달돼야 한다.");
+            Assert.AreEqual(20, popup.ReceivedArg, "The arg must be delivered again in a reuse session.");
 
             stack.Dispose();
             pool.Dispose();
@@ -135,7 +135,7 @@ namespace Bun3.Unity.UI.Editor.Tests
                 using var arranger = new PopupSiblingArranger(Stack);
                 arranger.Arrange();
 
-                // 스택 순서: [1, 3, 2(layer10)] → sibling index도 같은 순서.
+                // Stack order: [1, 3, 2(layer10)] → sibling indices in the same order.
                 Assert.AreEqual(0, Created[0].transform.GetSiblingIndex());
                 Assert.AreEqual(1, Created[2].transform.GetSiblingIndex());
                 Assert.AreEqual(2, Created[1].transform.GetSiblingIndex());
@@ -144,11 +144,11 @@ namespace Bun3.Unity.UI.Editor.Tests
                 Assert.IsFalse(Created[0].LastIsTopmost);
                 Assert.IsFalse(Created[2].LastIsTopmost);
 
-                Stack.Pop(); // 최상단(2) 닫힘 → 자동 재정렬
+                Stack.Pop(); // Topmost (2) closes → auto rearrange.
 
                 Assert.AreEqual(0, Created[0].transform.GetSiblingIndex());
                 Assert.AreEqual(1, Created[2].transform.GetSiblingIndex());
-                Assert.IsTrue(Created[2].LastIsTopmost, "닫힌 뒤 새 최상단이 통지받아야 한다.");
+                Assert.IsTrue(Created[2].LastIsTopmost, "The new topmost must be notified after a close.");
                 Assert.AreEqual(1, Created[2].LastOrderIndex);
             }
             finally

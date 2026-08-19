@@ -32,12 +32,12 @@ public sealed class AttributeClampPolicyTests
     {
         var set = CreateSet(MaxIncreasePolicy.Stay, MaxDecreasePolicy.Follow);
         set.SetBase(Hp, 800);
-        set.SetBase(MaxHp, 500);                       // 저주
-        Assert.That(set.GetCurrent(Hp), Is.EqualTo((BigNum)500));   // 즉시 전파 — 관찰 창 없음
-        Assert.That(set.GetBase(Hp), Is.EqualTo((BigNum)500));      // Base 기록
+        set.SetBase(MaxHp, 500);                       // curse
+        Assert.That(set.GetCurrent(Hp), Is.EqualTo((BigNum)500));   // immediate propagation — no observation window
+        Assert.That(set.GetBase(Hp), Is.EqualTo((BigNum)500));      // base recorded
 
-        set.SetBase(MaxHp, 1000);                      // 저주 해제
-        Assert.That(set.GetCurrent(Hp), Is.EqualTo((BigNum)500));   // 소실 영구
+        set.SetBase(MaxHp, 1000);                      // curse lifted
+        Assert.That(set.GetCurrent(Hp), Is.EqualTo((BigNum)500));   // loss is permanent
     }
 
     [Test]
@@ -46,11 +46,11 @@ public sealed class AttributeClampPolicyTests
         var set = CreateSet(MaxIncreasePolicy.Stay, MaxDecreasePolicy.Stay);
         set.SetBase(Hp, 800);
         set.SetBase(MaxHp, 500);
-        Assert.That(set.GetCurrent(Hp), Is.EqualTo((BigNum)500));   // 안전망
-        Assert.That(set.GetBase(Hp), Is.EqualTo((BigNum)800));      // 보존
+        Assert.That(set.GetCurrent(Hp), Is.EqualTo((BigNum)500));   // safety net
+        Assert.That(set.GetBase(Hp), Is.EqualTo((BigNum)800));      // preserved
 
         set.SetBase(MaxHp, 1000);
-        Assert.That(set.GetCurrent(Hp), Is.EqualTo((BigNum)800));   // 복원
+        Assert.That(set.GetCurrent(Hp), Is.EqualTo((BigNum)800));   // restored
     }
 
     [Test]
@@ -59,11 +59,11 @@ public sealed class AttributeClampPolicyTests
         var set = CreateSet(MaxIncreasePolicy.Follow, MaxDecreasePolicy.Follow);
         set.SetBase(Hp, 600);
 
-        set.SetBase(MaxHp, 1500);                      // +500 버프
-        Assert.That(set.GetCurrent(Hp), Is.EqualTo((BigNum)1100)); // Δ 동반
+        set.SetBase(MaxHp, 1500);                      // +500 buff
+        Assert.That(set.GetCurrent(Hp), Is.EqualTo((BigNum)1100)); // delta moves with max
 
-        set.SetBase(MaxHp, 1000);                      // 버프 만료
-        Assert.That(set.GetCurrent(Hp), Is.EqualTo((BigNum)1000)); // 잘림 — 순 +400 (알려진 성질)
+        set.SetBase(MaxHp, 1000);                      // buff expires
+        Assert.That(set.GetCurrent(Hp), Is.EqualTo((BigNum)1000)); // clamped — net +400 (known property)
     }
 
     [Test]

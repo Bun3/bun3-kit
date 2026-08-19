@@ -9,8 +9,9 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace Bun3.Server.Core
 {
     /// <summary>
-    /// 연결 1개의 서버측 대응물(연결과 수명을 같이한다). 패킷은 세션별 큐에 쌓이고
-    /// 단일 소비 루프가 순서대로 처리하므로, 한 세션의 핸들러는 절대 동시에 실행되지 않는다.
+    /// Server-side counterpart of one connection (shares its lifetime). Packets accumulate in a
+    /// per-session queue consumed by a single loop in order, so handlers of one session never run
+    /// concurrently.
     /// </summary>
     public abstract class Session
     {
@@ -23,49 +24,51 @@ namespace Bun3.Server.Core
         private Exception? _closeError;
         private int _queuedCount;
 
-        /// <summary>주어진 연결에 바인딩된 세션을 생성한다.</summary>
+        /// <summary>Creates a session bound to the given connection.</summary>
         protected Session(IConnection connection)
         {
             Connection = connection ?? throw new ArgumentNullException(nameof(connection));
         }
 
-        /// <summary>연결 식별자와 동일한 세션 식별자.</summary>
+        /// <summary>Session identifier; same as the connection identifier.</summary>
         public long Id => Connection.Id;
 
-        /// <summary>이 세션이 바인딩된 연결.</summary>
+        /// <summary>Connection this session is bound to.</summary>
         public IConnection Connection { get; }
 
-        /// <summary>연결이 수립되어 소비 루프가 시작될 때 1회 호출된다.</summary>
+        /// <summary>Called once when the connection is established and the consume loop starts.</summary>
         protected virtual ValueTask OnConnectedAsync() => default;
 
-        /// <summary>패킷 하나를 처리한다. 같은 세션에서 동시 실행되지 않는다.</summary>
+        /// <summary>Handles one packet. Never runs concurrently within the same session.</summary>
         protected abstract ValueTask OnPacketAsync(ReadOnlyMemory<byte> packet);
 
-        /// <summary>세션 종료 시 1회 호출된다. 정상 종료면 error는 null.</summary>
+        /// <summary>Called once when the session ends. error is null on a clean close.</summary>
         protected virtual ValueTask OnDisconnectedAsync(Exception? error) => default;
 
         /// <summary>
-        /// OnConnectedAsync/OnPacketAsync가 던진 예외의 처리 방침. 기본값은 세션 종료.
-        /// "이 예외는 무시해도 안전하다"는 지식이 있는 게임만 재정의한다.
+        /// Policy for exceptions thrown by OnConnectedAsync/OnPacketAsync. Defaults to closing the
+        /// session. Override only when the game knows the exception is safe to ignore.
         /// </summary>
         protected virtual ErrorDecision OnHandlerError(Exception ex) => ErrorDecision.CloseSession;
 
-        /// <summary>패킷 하나를 이 세션의 연결로 송신한다.</summary>
+        /// <summary>Sends one packet over this session's connection.</summary>
         public ValueTask SendAsync(ReadOnlyMemory<byte> packet, CancellationToken ct = default) =>
             Connection.SendAsync(packet, ct);
 
-        /// <summary>서버 주도로 연결을 끊는다. 전송의 OnClosed 통지를 거쳐 세션이 정리된다.</summary>
+        /// <summary>Server-initiated disconnect. The session is cleaned up via the transport's OnClosed notification.</summary>
         public void Kick() => Connection.Close();
 
-        /// <summary>사유 코드와 함께 연결을 끊는다. Core는 와이어 전달을 모르므로 기본은
-        /// 사유 없는 킥과 동일 — Rpc 계층(RpcSession)이 재정의해 Disconnect를 best-effort 송신한다.</summary>
+        /// <summary>Disconnects with a reason code. Core does not know the wire format, so the base
+        /// behaves like a reasonless kick — the Rpc layer (RpcSession) overrides this to send
+        /// Disconnect best-effort.</summary>
         public virtual void Kick(int reasonCode) => Kick();
 
         /// <summary>
-        /// 세션 액터 큐에 작업을 주입한다 — 패킷 처리와 같은 줄에서 순차 실행되므로
-        /// 핸들러와 같은 상태를 락 없이 만질 수 있다. 세션이 닫혔거나 큐가 상한이면
-        /// false(작업 미실행). 작업의 미처리 예외는 로그만 남기고 세션은 유지된다.
-        /// 종료 직전 경합 시 true를 반환하고도 실행되지 않을 수 있다(최선 노력).
+        /// Posts work onto the session actor queue — it runs sequentially in the same lane as
+        /// packet handling, so it may touch handler state without locks. Returns false (work not
+        /// run) if the session is closed or the queue is at its cap. Unhandled exceptions from the
+        /// work are logged and the session keeps running. A race near shutdown may return true yet
+        /// never run the work (best effort).
         /// </summary>
         public bool Post(Func<ValueTask> work)
         {
@@ -78,7 +81,7 @@ namespace Bun3.Server.Core
             if (Interlocked.Increment(ref _queuedCount) > _maxQueuedPackets)
             {
                 Interlocked.Decrement(ref _queuedCount);
-                return false;   // 패킷 오버플로와 달리 킥하지 않는다 — 호출자가 스킵을 판단
+                return false;   // Unlike packet overflow this does not kick — the caller decides how to handle the skip.
             }
 
             _inbox.Enqueue(work);
@@ -109,7 +112,7 @@ namespace Bun3.Server.Core
                 return;
             }
 
-            _inbox.Enqueue(packet); // 소유권 이전 계약(IConnectionHandler) — 복사 없이 그대로 큐잉
+            _inbox.Enqueue(packet); // Ownership-transfer contract (IConnectionHandler) — queued as-is, no copy.
             _signal.Release();
         }
 
@@ -117,7 +120,7 @@ namespace Bun3.Server.Core
         {
             _closeError = error;
             _closed = true;
-            _signal.Release(); // 소비 루프를 깨워 종료시킨다
+            _signal.Release(); // Wake the consume loop so it can exit.
         }
 
         internal async Task RunAsync()
@@ -138,7 +141,7 @@ namespace Bun3.Server.Core
                     await _signal.WaitAsync().ConfigureAwait(false);
                     if (_closed)
                     {
-                        break; // 종료 후 잔여 항목(패킷·Post 작업)은 처리하지 않는다
+                        break; // Remaining items (packets, posted work) are not processed after close.
                     }
 
                     var dequeued = _inbox.TryDequeue(out var item);
@@ -183,12 +186,12 @@ namespace Bun3.Server.Core
             }
         }
 
-        // 진행 중인 ValueTask를 직접 받는다 — 호출부에서 클로저를 만들지 않는 무할당 fast path.
+        // Takes the in-flight ValueTask directly — allocation-free fast path with no closure at the call site.
         private async ValueTask WatchAsync(ValueTask pending, string kind)
         {
             if (pending.IsCompleted || _slowWorkWarning <= TimeSpan.Zero)
             {
-                await pending.ConfigureAwait(false);   // 동기 완료 또는 감시 꺼짐 — 감시 기계 진입 없음
+                await pending.ConfigureAwait(false);   // Completed synchronously or watching disabled — skip the watch machinery.
                 return;
             }
 
@@ -202,7 +205,7 @@ namespace Bun3.Server.Core
                     Id, kind, _slowWorkWarning);
             }
 
-            delayCts.Cancel();   // 타이머 즉시 정리 (고부하에서 타이머 적체 방지)
+            delayCts.Cancel();   // Dispose the timer promptly (avoids timer buildup under load).
             await task.ConfigureAwait(false);
         }
 

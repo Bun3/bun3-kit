@@ -10,8 +10,8 @@ using Microsoft.Extensions.Logging;
 namespace Bun3.Server.Rpc
 {
     /// <summary>
-    /// 메시징 계층의 세션 베이스. 원시 패킷 처리(OnPacketAsync)는 프레임워크가 소유하고,
-    /// 게임은 OnSessionOpenedAsync/OnSessionClosedAsync 훅과 등록된 핸들러로만 참여한다.
+    /// Session base of the messaging layer. Raw packet handling (OnPacketAsync) is framework-owned;
+    /// games participate only through the OnSessionOpenedAsync/OnSessionClosedAsync hooks and registered handlers.
     /// </summary>
     public abstract class RpcSession : Session
     {
@@ -20,43 +20,43 @@ namespace Bun3.Server.Rpc
         private long _lastReceivedTicksUtc;
         private int _disconnectSent;
 
-        /// <summary>주어진 연결에 바인딩된 메시징 세션을 생성한다.</summary>
+        /// <summary>Creates a messaging session bound to the given connection.</summary>
         protected RpcSession(IConnection connection) : base(connection) { }
 
-        /// <summary>메시징 기본값: 핸들러 예외는 status=2 응답 + 세션 유지. 게임이 재정의 가능.</summary>
+        /// <summary>Messaging default: a handler exception replies status=2 and keeps the session. Games may override.</summary>
         protected override ErrorDecision OnHandlerError(Exception ex) => ErrorDecision.Continue;
 
-        /// <summary>연결 수립 훅 (v0 OnConnectedAsync 대체). 여기서 예외가 나가면 세션은 무조건 킥된다(OnHandlerError 무관).</summary>
+        /// <summary>Connection-opened hook (replaces v0 OnConnectedAsync). An exception here always kicks the session (regardless of OnHandlerError).</summary>
         protected virtual ValueTask OnSessionOpenedAsync() => default;
 
-        /// <summary>세션 종료 훅 (v0 OnDisconnectedAsync 대체). 정상 종료면 error는 null.</summary>
+        /// <summary>Session-closed hook (replaces v0 OnDisconnectedAsync). error is null on normal close.</summary>
         protected virtual ValueTask OnSessionClosedAsync(Exception? error) => default;
 
         /// <summary>
-        /// 요청 디스패치 직전 호출되는 게이트. RpcStatus.Ok(0)이면 진행,
-        /// 비0이면 그 상태코드로 즉시 응답하고 핸들러에 도달하지 않는다.
-        /// Control 채널(Ping)은 게이트 대상이 아니다.
+        /// Gate called just before request dispatch. RpcStatus.Ok (0) proceeds;
+        /// non-zero replies immediately with that status code and never reaches the handler.
+        /// The Control channel (Ping) is not gated.
         /// </summary>
         protected internal virtual int OnGateRequest(Type requestType) => RpcStatus.Ok;
 
-        /// <summary>서버 푸시. update는 게임 Update oneof의 케이스 타입이어야 한다.</summary>
+        /// <summary>Server push. update must be a case type of the game's Update oneof.</summary>
         public ValueTask SendUpdateAsync(IMessage update) =>
             RequireRuntime().SendUpdateAsync(this, update);
 
-        /// <summary>사유 코드와 함께 킥한다 — Disconnect{code}를 best-effort 송신(1초 상한,
-        /// 예외 무시, 최초 1회만) 후 연결을 닫는다. 멱등.</summary>
+        /// <summary>Kicks with a reason code — best-effort sends Disconnect{code} (1-second cap,
+        /// exceptions ignored, first call only), then closes the connection. Idempotent.</summary>
         public override void Kick(int reasonCode)
         {
             if (reasonCode == DisconnectCode.None)
             {
-                Kick();   // 0은 와이어에 싣지 않는다 — 사유 없는 킥과 동일 처리 (원샷 가드도 소모 안 함)
+                Kick();   // 0 never goes on the wire — treated as a reasonless kick (does not consume the one-shot guard)
                 return;
             }
 
             if (Interlocked.Exchange(ref _disconnectSent, 1) != 0)
             {
-                // 사유는 이미 송신 중 — 그 작업의 finally가 닫기를 보장한다(최대 1초 상한).
-                // 여기서 raw Kick()으로 즉시 닫으면 아직 플러시 중인 송신을 끊어버릴 수 있다.
+                // A reason is already being sent — that task's finally guarantees the close (1-second cap).
+                // Calling raw Kick() here could cut off a send still being flushed.
                 return;
             }
 
@@ -73,7 +73,7 @@ namespace Bun3.Server.Rpc
             }
             catch
             {
-                // best-effort — 어차피 끊는 중
+                // best-effort — closing anyway
             }
             finally
             {
@@ -81,7 +81,7 @@ namespace Bun3.Server.Rpc
             }
         }
 
-        /// <summary>v0 연결 훅. 메시징 계층이 소유하므로 봉인되어 있다 — 게임은 OnSessionOpenedAsync를 재정의한다.</summary>
+        /// <summary>v0 connect hook. Sealed because the messaging layer owns it — games override OnSessionOpenedAsync.</summary>
         protected sealed override async ValueTask OnConnectedAsync()
         {
             Volatile.Write(ref _lastReceivedTicksUtc, DateTime.UtcNow.Ticks);
@@ -92,20 +92,20 @@ namespace Bun3.Server.Rpc
             }
             catch (Exception ex)
             {
-                // open 훅 실패 = 반초기화 상태 — 에러 정책 역전(요청 핸들러 한정)과 무관하게 항상 킥
+                // open hook failure = half-initialized state — always kick, regardless of the error policy (which applies to request handlers only)
                 RequireRuntime().Logger.LogError(ex, "Session {SessionId}: OnSessionOpenedAsync threw; kicking.", Id);
                 Kick();
             }
         }
 
-        /// <summary>v0 패킷 훅. 메시징 계층이 소유하므로 봉인되어 있다 — 원시 패킷은 항상 런타임이 처리한다.</summary>
+        /// <summary>v0 packet hook. Sealed because the messaging layer owns it — raw packets always go to the runtime.</summary>
         protected sealed override ValueTask OnPacketAsync(ReadOnlyMemory<byte> packet)
         {
             Volatile.Write(ref _lastReceivedTicksUtc, DateTime.UtcNow.Ticks);
             return RequireRuntime().ProcessPacketAsync(this, packet);
         }
 
-        /// <summary>v0 연결 종료 훅. 메시징 계층이 소유하므로 봉인되어 있다 — 게임은 OnSessionClosedAsync를 재정의한다.</summary>
+        /// <summary>v0 disconnect hook. Sealed because the messaging layer owns it — games override OnSessionClosedAsync.</summary>
         protected sealed override ValueTask OnDisconnectedAsync(Exception? error)
         {
             _watchdogCts?.Cancel();
@@ -118,7 +118,7 @@ namespace Bun3.Server.Rpc
 
         private IRpcRuntime RequireRuntime() =>
             _runtime ?? throw new InvalidOperationException(
-                "런타임 미부착 — RpcSession은 RpcServer를 통해서만 생성되어야 한다.");
+                "Runtime not attached — RpcSession must be created through RpcServer.");
 
         private void StartIdleWatchdog()
         {
@@ -152,7 +152,7 @@ namespace Bun3.Server.Rpc
             }
             catch (OperationCanceledException)
             {
-                // 세션 종료로 인한 정상 취소
+                // normal cancellation from session close
             }
         }
     }

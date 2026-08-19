@@ -7,22 +7,22 @@ using Microsoft.Build.Utilities;
 
 namespace Bun3.Gameplay.TagSource.Tasks
 {
-    /// <summary>평가된 MSBuild 항목에서 Native GameplayTag 메타데이터를 추출합니다.</summary>
+    /// <summary>Extracts Native GameplayTag metadata from evaluated MSBuild items.</summary>
     public sealed class ExtractNativeGameplayTagsTask : Task
     {
-        /// <summary>평가된 Compile 항목입니다.</summary>
+        /// <summary>Evaluated Compile items.</summary>
         [Required]
         public ITaskItem[] Sources { get; set; } = Array.Empty<ITaskItem>();
 
-        /// <summary>평가된 ReferencePath 항목입니다.</summary>
+        /// <summary>Evaluated ReferencePath items.</summary>
         [Required]
         public ITaskItem[] References { get; set; } = Array.Empty<ITaskItem>();
 
-        /// <summary>빌드된 대상 어셈블리 경로입니다.</summary>
+        /// <summary>Path of the built target assembly.</summary>
         [Required]
         public string TargetPath { get; set; } = string.Empty;
 
-        /// <summary>생성할 Source 메타데이터 JSON 경로입니다.</summary>
+        /// <summary>Output path of the source metadata JSON.</summary>
         [Required]
         public string OutputPath { get; set; } = string.Empty;
 

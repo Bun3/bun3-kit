@@ -14,7 +14,7 @@ public class RpcGateTests
 {
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(5);
 
-    /// <summary>BuyItemRequest만 상태 7로 거부하는 게이트.</summary>
+    /// <summary>Gate that rejects only BuyItemRequest with status 7.</summary>
     private sealed class GatedSession : RpcSession
     {
         public int HandlerCalls;
@@ -68,7 +68,7 @@ public class RpcGateTests
         Assert.That(response.RequestId, Is.EqualTo(1));
         Assert.That(response.BodyCase, Is.EqualTo(Response.BodyOneofCase.None));
         Assert.That(session.HandlerCalls, Is.EqualTo(0));
-        Assert.That(conn.IsOpen, Is.True);   // 게이트 거부는 위반이 아니다 — 세션 유지
+        Assert.That(conn.IsOpen, Is.True);   // gate rejection is not a violation — session kept
         await server.StopAsync();
     }
 
@@ -87,7 +87,7 @@ public class RpcGateTests
         conn.ReceivePacket(Wrap(Channels.Control, new Control { Ping = new Ping { ClientTimeUnixMs = 9 } }));
         await conn.SentSignal.WaitAsync(Timeout);
         Assert.That(conn.SentPackets.TryDequeue(out var pong), Is.True);
-        Assert.That(pong![0], Is.EqualTo(Channels.Control));   // Ping은 게이트 무관
+        Assert.That(pong![0], Is.EqualTo(Channels.Control));   // Ping bypasses the gate
         await server.StopAsync();
     }
 }

@@ -93,9 +93,9 @@ namespace Bun3.Gameplay.Editor.Tags
                 Array.Empty<GameplayTagReferenceMatch>(),
                 errors ?? throw new ArgumentNullException(nameof(errors)));
 
-        /// <summary>파일 열거 실패를 합쳐 불완전한 증거로 정리 판정을 내리지 못하게 합니다.</summary>
-        /// <param name="enumerationErrors">접근할 수 없어 훑지 못한 디렉터리 진단입니다.</param>
-        /// <returns>열거 실패가 없으면 이 결과 그대로, 있으면 불완전 결과입니다.</returns>
+        /// <summary>Merges file enumeration failures so incomplete evidence cannot justify cleanup.</summary>
+        /// <param name="enumerationErrors">Diagnostics for directories that could not be accessed and scanned.</param>
+        /// <returns>This result unchanged when there are no enumeration failures; otherwise an incomplete result.</returns>
         internal GameplayTagReferenceSearchResult WithEnumerationErrors(
             IReadOnlyList<string> enumerationErrors)
         {
@@ -181,7 +181,7 @@ namespace Bun3.Gameplay.Editor.Tags
                 }
                 catch (Exception exception)
                 {
-                    // 임의의 프로젝트 파일을 읽으므로 잠금·권한·경로 예외를 모두 부분 실패로 기록한다.
+                    // Arbitrary project files are read, so lock, permission, and path exceptions are all recorded as partial failures.
                     errors.Add(file.DisplayPath + ": " + exception.Message);
                 }
             }
@@ -191,7 +191,7 @@ namespace Bun3.Gameplay.Editor.Tags
                 : GameplayTagReferenceSearchResult.Complete(matches);
         }
 
-        /// <summary>하나의 canonical 태그 경로와 정확히 같은 토큰만 검색합니다.</summary>
+        /// <summary>Searches only tokens exactly equal to a single canonical tag path.</summary>
         internal GameplayTagReferenceSearchResult SearchExact(
             IReadOnlyList<GameplayTagReferenceFile> files,
             string canonicalPath,

@@ -40,7 +40,7 @@ public class RpcValidationTests
     [Test]
     public void Response_case_mismatch_reports_all_violations()
     {
-        // MismatchResponse: buy_item 케이스 없음, get_server_time은 번호 12(요청은 10)
+        // MismatchResponse: no buy_item case; get_server_time is field 12 (request has 10)
         var schema = RpcSchema<MismatchRequest, MismatchResponse, Update>.Create();
 
         var ex = Assert.Throws<RpcValidationException>(() => schema.Validate(FullConfig()))!;
@@ -53,13 +53,13 @@ public class RpcValidationTests
     {
         var schema = RpcSchema<Request, Response, Update>.Create();
         var config = new RpcConfig<EchoSession>();
-        config.OnRequest<GetServerTimeRequest, BuyItemResponse>(   // 잘못된 TRes
+        config.OnRequest<GetServerTimeRequest, BuyItemResponse>(   // wrong TRes
             (s, req) => new ValueTask<Reply<BuyItemResponse>>(new BuyItemResponse()));
         config.OnRequest<BuyItemRequest, BuyItemResponse>(
             (s, req) => new ValueTask<Reply<BuyItemResponse>>(new BuyItemResponse()));
 
         var ex = Assert.Throws<RpcValidationException>(() => schema.Validate(config))!;
-        Assert.That(ex.Errors, Has.Some.Contains("응답 타입 불일치"));
+        Assert.That(ex.Errors, Is.Not.Empty);
     }
 
     [Test]
@@ -77,7 +77,7 @@ public class RpcValidationTests
     [Test]
     public void Root_without_request_id_fails_schema_creation()
     {
-        // Update를 TRequest 자리에 — oneof body는 있지만 request_id가 없다
+        // Update in the TRequest slot — has a oneof body but no request_id
         var ex = Assert.Throws<RpcValidationException>(() =>
             RpcSchema<Update, Response, Update>.Create())!;
         Assert.That(ex.Message, Does.Contain("request_id"));

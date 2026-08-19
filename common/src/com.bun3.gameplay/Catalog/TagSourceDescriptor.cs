@@ -4,47 +4,47 @@ using System;
 namespace Bun3.Gameplay.Tags.Catalog
 {
     /// <summary>
-    /// 태그 Source의 안정적인 식별자와 표시 정보를 나타냅니다.
+    /// Stable identifier and display info of a tag source.
     /// </summary>
     public sealed class TagSourceDescriptor
     {
-        /// <summary>태그 Source 식별자입니다.</summary>
+        /// <summary>Tag source identifier.</summary>
         public string SourceId { get; }
 
-        /// <summary>사용자에게 표시할 Source 이름입니다.</summary>
+        /// <summary>Source name shown to users.</summary>
         public string DisplayName { get; }
 
-        /// <summary>Source의 제공 형식입니다.</summary>
+        /// <summary>Delivery kind of the source.</summary>
         public TagSourceKind Kind { get; }
 
-        /// <summary>Source가 읽기 전용인지 나타냅니다.</summary>
+        /// <summary>Whether the source is read-only.</summary>
         public bool IsReadOnly { get; }
 
-        /// <summary>검증된 태그 Source 설명자를 만듭니다.</summary>
+        /// <summary>Creates a validated tag source descriptor.</summary>
         public TagSourceDescriptor(string sourceId, string displayName, TagSourceKind kind, bool isReadOnly)
         {
             if (!IsValidSourceId(sourceId))
             {
-                throw new ArgumentException("Source ID는 소문자 영숫자 세그먼트를 점 또는 하이픈으로 연결해야 합니다.", nameof(sourceId));
+                throw new ArgumentException("A source ID must be lowercase alphanumeric segments joined by dots or hyphens.", nameof(sourceId));
             }
 
             if (string.IsNullOrWhiteSpace(displayName))
             {
-                throw new ArgumentException("표시 이름은 비어 있을 수 없습니다.", nameof(displayName));
+                throw new ArgumentException("Display name cannot be empty.", nameof(displayName));
             }
 
             if (kind == TagSourceKind.GameJson)
             {
                 if (!string.Equals(sourceId, "game", StringComparison.Ordinal) || isReadOnly)
                 {
-                    throw new ArgumentException("GameJson Source는 ID가 game이고 편집 가능해야 합니다.", nameof(sourceId));
+                    throw new ArgumentException("A GameJson source must have the ID \"game\" and be editable.", nameof(sourceId));
                 }
             }
             else
             {
                 if (string.Equals(sourceId, "game", StringComparison.Ordinal) || !isReadOnly)
                 {
-                    throw new ArgumentException("game ID 이외의 Source는 읽기 전용이어야 합니다.", nameof(sourceId));
+                    throw new ArgumentException("Sources other than the \"game\" ID must be read-only.", nameof(sourceId));
                 }
 
                 if (kind != TagSourceKind.PackageJson && kind != TagSourceKind.Native)

@@ -7,18 +7,18 @@ using Cysharp.Threading.Tasks;
 namespace Bun3.Unity.UI.Toasts
 {
     /// <summary>
-    /// 토스트 순차 표시 큐(레거시 Toast 정적 큐 대응). 한 번에 하나씩 표시하고,
-    /// 대기 상한 초과분은 버리며, 선택적 중복 억제와 강제 표시(<c>force</c>)를 지원한다.
-    /// 팝업 스택과 무관하게 흐른다 — back 키/딤/스택 정렬에 참여하지 않는다.
+    /// Sequential toast display queue. Shows one at a time, drops requests over the pending cap,
+    /// and supports optional duplicate suppression and forced display (<c>force</c>).
+    /// Flows independently of the popup stack — no back-key/dim/stack-ordering participation.
     /// </summary>
     /// <remarks>
-    /// 뷰 인스턴스는 팩토리로 1회 생성해 재사용한다(SetActive 토글). 표시 흐름:
-    /// <c>OnData → PlayShowAsync → WaitAsync(duration) → PlayHideAsync → 다음</c>.
-    /// 저빈도 UI 경로라 대기열 항목 보관 등의 소량 할당을 허용한다.
+    /// The view instance is created once via the factory and reused (SetActive toggling).
+    /// Display flow: <c>OnData → PlayShowAsync → WaitAsync(duration) → PlayHideAsync → next</c>.
+    /// Low-frequency UI path — small allocations (pending entries, etc.) are OK.
     /// </remarks>
     public sealed class ToastQueue<TData> : IDisposable
     {
-        /// <summary>토스트 뷰를 만든다(1회). 로딩 방식·부모 배치는 게임 몫.</summary>
+        /// <summary>Creates the toast view (once). Loading strategy and parenting are the game's job.</summary>
         public delegate UniTask<ToastView<TData>> ViewFactory(CancellationToken cancellationToken);
 
         private readonly struct Entry
@@ -47,10 +47,10 @@ namespace Bun3.Unity.UI.Toasts
         private bool _draining;
         private bool _disposed;
 
-        /// <param name="factory">뷰 생성(1회 호출 후 재사용).</param>
-        /// <param name="defaultDuration">기본 표시 시간(초).</param>
-        /// <param name="capacity">대기 상한 — 초과 요청은 버려진다(레거시 최대 개수 대응).</param>
-        /// <param name="duplicateComparer">주면 표시 중·대기 중과 같은 데이터를 억제한다. null이면 억제 없음.</param>
+        /// <param name="factory">View creation (called once, then reused).</param>
+        /// <param name="defaultDuration">Default display time in seconds.</param>
+        /// <param name="capacity">Pending cap — requests over it are dropped.</param>
+        /// <param name="duplicateComparer">If given, suppresses data equal to the showing/pending ones. Null disables suppression.</param>
         public ToastQueue(ViewFactory factory, float defaultDuration = 2f, int capacity = 10,
             IEqualityComparer<TData> duplicateComparer = null)
         {
@@ -60,19 +60,19 @@ namespace Bun3.Unity.UI.Toasts
             _duplicateComparer = duplicateComparer;
         }
 
-        /// <summary>표시를 기다리는 항목 수.</summary>
+        /// <summary>Number of entries waiting to be shown.</summary>
         public int PendingCount => _pending.Count;
 
-        /// <summary>지금 표시 중인지.</summary>
+        /// <summary>Whether a toast is currently showing.</summary>
         public bool IsShowing => _hasCurrent;
 
         /// <summary>
-        /// 토스트를 요청한다. 표시 가능하면 즉시, 아니면 순서를 기다린다.
+        /// Requests a toast. Shows immediately when possible, otherwise waits its turn.
         /// </summary>
-        /// <param name="data">표시 데이터.</param>
-        /// <param name="duration">표시 시간(초). 음수면 기본값.</param>
-        /// <param name="force">true면 대기열 맨 앞에 끼어들고, 표시 중인 토스트는 즉시 숨김으로 넘어간다.</param>
-        /// <returns>수용 여부 — 중복 억제·대기 상한으로 버려지면 false.</returns>
+        /// <param name="data">Display data.</param>
+        /// <param name="duration">Display time in seconds. Negative uses the default.</param>
+        /// <param name="force">True cuts to the front of the queue; a showing toast skips straight to hide.</param>
+        /// <returns>Whether accepted — false when dropped by duplicate suppression or the pending cap.</returns>
         public bool Show(TData data, float duration = -1f, bool force = false)
         {
             ThrowIfDisposed();
@@ -88,13 +88,13 @@ namespace Bun3.Unity.UI.Toasts
                 if (!force)
                     return false;
 
-                _pending.RemoveAt(_pending.Count - 1); // 끼어들기 — 가장 늦은 대기분을 버린다.
+                _pending.RemoveAt(_pending.Count - 1); // Cutting in — drop the latest pending entry.
             }
 
             if (force)
             {
                 _pending.Insert(0, new Entry(data, duration));
-                _skip?.TrySetResult(); // 표시 중이면 유지 시간을 건너뛰고 숨김으로.
+                _skip?.TrySetResult(); // If showing, skip the hold time and go to hide.
             }
             else
             {
@@ -107,10 +107,10 @@ namespace Bun3.Unity.UI.Toasts
             return true;
         }
 
-        /// <summary>대기 항목을 전부 버린다. 표시 중인 토스트는 그대로 끝난다.</summary>
+        /// <summary>Drops all pending entries. A showing toast finishes normally.</summary>
         public void Clear() => _pending.Clear();
 
-        /// <summary>대기 정리 + 진행 취소 + 뷰 파괴. 이후 <see cref="Show"/>는 예외.</summary>
+        /// <summary>Clears pending + cancels in-flight + destroys the view. <see cref="Show"/> throws afterward.</summary>
         public void Dispose()
         {
             if (_disposed)
@@ -153,7 +153,7 @@ namespace Bun3.Unity.UI.Toasts
 
                     var view = await GetViewAsync(token);
                     if (view == null)
-                        break; // 팩토리 실패/취소 — 대기분은 다음 Show에서 재시도된다.
+                        break; // Factory failed/canceled — pending entries retry on the next Show.
 
                     _currentData = entry.Data;
                     _hasCurrent = true;
@@ -169,7 +169,7 @@ namespace Bun3.Unity.UI.Toasts
                     }
                     catch (OperationCanceledException)
                     {
-                        break; // Dispose — 정리로 넘어간다.
+                        break; // Disposed — fall through to cleanup.
                     }
                     finally
                     {

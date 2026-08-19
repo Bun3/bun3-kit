@@ -3,7 +3,7 @@ using System;
 
 namespace Bun3.Gameplay.Tags
 {
-    /// <summary>런타임 B3DK 카탈로그에 요구할 명시적인 개발 또는 게시 식별 정보입니다.</summary>
+    /// <summary>Explicit development or published identity to require from the runtime B3DK catalog.</summary>
     public sealed class TagCatalogExpectations
     {
         private readonly byte[]? _expectedFingerprint;
@@ -20,33 +20,33 @@ namespace Bun3.Gameplay.Tags
         internal ReadOnlySpan<byte> ExpectedFingerprint => _expectedFingerprint;
         internal bool RequiresFingerprint => _expectedFingerprint is not null;
 
-        /// <summary>정확한 Catalog ID와 개발 Version을 요구하는 기대 조건을 만듭니다.</summary>
-        /// <param name="catalogId">게임 제품의 정확한 Catalog ID입니다.</param>
-        /// <returns>fingerprint를 미리 고정하지 않는 개발 기대 조건입니다.</returns>
-        /// <exception cref="ArgumentException"><paramref name="catalogId"/>가 비어 있는 경우입니다.</exception>
+        /// <summary>Creates expectations requiring the exact catalog ID and the development version.</summary>
+        /// <param name="catalogId">Exact catalog ID of the game product.</param>
+        /// <returns>Development expectations that do not pin a fingerprint up front.</returns>
+        /// <exception cref="ArgumentException"><paramref name="catalogId"/> is empty.</exception>
         public static TagCatalogExpectations ForDevelopment(string catalogId)
         {
             ValidateText(catalogId, nameof(catalogId), "Catalog ID");
             return new TagCatalogExpectations(catalogId, TagCatalogVersions.Development, null);
         }
 
-        /// <summary>정확한 Catalog ID, Version과 외부에서 고정한 fingerprint를 요구하는 기대 조건을 만듭니다.</summary>
-        /// <param name="catalogId">게임 제품의 정확한 Catalog ID입니다.</param>
-        /// <param name="catalogVersion">게시된 Catalog의 정확한 Version입니다.</param>
-        /// <param name="expectedFingerprint">빌드 metadata가 고정한 32바이트 semantic fingerprint입니다.</param>
-        /// <returns>입력을 방어적으로 복사한 게시 기대 조건입니다.</returns>
-        /// <exception cref="ArgumentException">문자열이 비어 있거나 fingerprint가 32바이트가 아닌 경우입니다.</exception>
+        /// <summary>Creates expectations requiring the exact catalog ID, version, and an externally pinned fingerprint.</summary>
+        /// <param name="catalogId">Exact catalog ID of the game product.</param>
+        /// <param name="catalogVersion">Exact version of the published catalog.</param>
+        /// <param name="expectedFingerprint">32-byte semantic fingerprint pinned by build metadata.</param>
+        /// <returns>Published expectations with defensively copied input.</returns>
+        /// <exception cref="ArgumentException">A string is empty or the fingerprint is not 32 bytes.</exception>
         public static TagCatalogExpectations ForPublished(
             string catalogId,
             string catalogVersion,
             ReadOnlySpan<byte> expectedFingerprint)
         {
             ValidateText(catalogId, nameof(catalogId), "Catalog ID");
-            ValidateText(catalogVersion, nameof(catalogVersion), "Catalog Version");
+            ValidateText(catalogVersion, nameof(catalogVersion), "Catalog version");
             if (!TagCatalogVersions.IsPublished(catalogVersion))
             {
                 throw new ArgumentException(
-                    "예약된 개발 Catalog Version은 게시 기대 조건에 사용할 수 없습니다.",
+                    "The reserved development catalog version cannot be used for published expectations.",
                     nameof(catalogVersion));
             }
 
@@ -72,7 +72,7 @@ namespace Bun3.Gameplay.Tags
             if (expectedFingerprint.Length != 32)
             {
                 throw new ArgumentException(
-                    "게시 fingerprint는 정확히 32바이트여야 합니다.",
+                    "Published fingerprint must be exactly 32 bytes.",
                     nameof(expectedFingerprint));
             }
 
@@ -83,7 +83,7 @@ namespace Bun3.Gameplay.Tags
         {
             if (string.IsNullOrWhiteSpace(value))
             {
-                throw new ArgumentException(label + "는 비어 있을 수 없습니다.", parameterName);
+                throw new ArgumentException(label + " cannot be empty.", parameterName);
             }
         }
     }

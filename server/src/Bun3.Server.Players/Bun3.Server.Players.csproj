@@ -10,7 +10,7 @@
     <Authors>Bun3</Authors>
     <RepositoryUrl>https://github.com/Bun3/bun3-kit</RepositoryUrl>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <Description>재접속에 살아남는 Player 계층 — SignIn 수명주기(유예/중복 로그인), 미인증 게이트</Description>
+    <Description>Player layer that survives reconnects — SignIn lifecycle (grace period, duplicate login), unauthenticated gate</Description>
   </PropertyGroup>
 
   <ItemGroup>

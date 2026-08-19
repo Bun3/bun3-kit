@@ -34,7 +34,7 @@ namespace Bun3.Unity.UI.Editor.Tests
 
             Assert.AreEqual(42, Created[0].ReceivedArg);
             Assert.AreEqual(PopupPhase.None, Created[0].PhaseAtArg,
-                "데이터는 스택 삽입(Attach) 전에 전달돼야 한다.");
+                "The data must be delivered before stack insertion (Attach).");
             Assert.AreEqual(PopupPhase.Open, Created[0].Phase);
         }
 
@@ -77,16 +77,16 @@ namespace Bun3.Unity.UI.Editor.Tests
         {
             LogAssert.Expect(LogType.Error, new Regex("IPopupArg"));
 
-            Stack.PushWithArg("p1", arg: 1.5f); // TestPopup은 IPopupArg<float> 미구현
+            Stack.PushWithArg("p1", arg: 1.5f); // TestPopup does not implement IPopupArg<float>.
 
-            Assert.AreEqual(1, Stack.Count, "결선 오류여도 팝업 자체는 열려야 한다.");
+            Assert.AreEqual(1, Stack.Count, "The popup itself must still open on a wiring error.");
             Assert.AreEqual(PopupPhase.Open, Created[0].Phase);
         }
 
         [Test]
         public void MultipleArgInterfaces_DispatchByStaticType()
         {
-            // 같은 팝업이 코드 경로(int)와 데이터 경로(string 토큰)를 함께 노출한다.
+            // The same popup exposes both a code path (int) and a data path (string token).
             Stack.PushWithArg("p1", arg: 1001);
             Stack.PushWithArg("p2", arg: "1001");
 

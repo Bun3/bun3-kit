@@ -14,7 +14,7 @@ public class RpcClientTests
 {
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(5);
 
-    /// <summary>수신 원시 패킷마다 콜백을 실행하는 스크립트형 서버 대역.</summary>
+    /// <summary>Scripted server stand-in that runs a callback for each received raw packet.</summary>
     private sealed class ScriptedResponder : IConnectionHandler
     {
         public Action<IConnection, byte[]>? OnPacketReceived;
@@ -84,7 +84,7 @@ public class RpcClientTests
     [Test]
     public async Task Silent_server_causes_TimeoutException()
     {
-        var responder = new ScriptedResponder();   // 응답하지 않음
+        var responder = new ScriptedResponder();   // never responds
         var client = await ConnectAsync(responder, new RpcClientOptions
         {
             RequestTimeout = TimeSpan.FromMilliseconds(200),
@@ -99,7 +99,7 @@ public class RpcClientTests
     public async Task Connection_close_fails_pending_requests()
     {
         var responder = new ScriptedResponder();
-        responder.OnPacketReceived = (conn, _) => conn.Close();   // 응답 대신 끊음
+        responder.OnPacketReceived = (conn, _) => conn.Close();   // disconnects instead of responding
         var client = await ConnectAsync(responder);
 
         Assert.ThrowsAsync<ConnectionClosedException>(async () =>
@@ -114,7 +114,7 @@ public class RpcClientTests
         var responder = new ScriptedResponder();
         var client = await ConnectAsync(responder, new RpcClientOptions
         {
-            RequestTimeout = TimeSpan.FromSeconds(30),   // 타임아웃 경로로 새면 테스트가 초과로 실패
+            RequestTimeout = TimeSpan.FromSeconds(30),   // if it leaks into the timeout path, the test fails by exceeding it
         });
         client.Close();
 
@@ -150,7 +150,7 @@ public class RpcClientTests
         _ = connector.ServerConnection!.SendAsync(
             Wrap(Channels.Update, new Update { Broadcasted = new BroadcastedUpdate { Text = "nobody listens" } }));
 
-        // 여전히 정상 동작
+        // still works normally
         var reply = await client.RequestAsync<GetServerTimeResponse>(new GetServerTimeRequest())
             .AsTask().WaitAsync(Timeout);
         Assert.That(reply.IsOk, Is.True);

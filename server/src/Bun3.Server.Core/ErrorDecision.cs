@@ -1,12 +1,12 @@
 namespace Bun3.Server.Core
 {
-    /// <summary>핸들러 예외 발생 시 세션 처리 방침.</summary>
+    /// <summary>Session policy when a handler throws.</summary>
     public enum ErrorDecision
     {
-        /// <summary>세션을 종료한다(기본값). 반쯤 적용된 상태를 재접속으로 복구시킨다.</summary>
+        /// <summary>Close the session (default). Lets a reconnect recover from half-applied state.</summary>
         CloseSession,
 
-        /// <summary>예외를 무시하고 다음 프레임을 계속 처리한다.</summary>
+        /// <summary>Ignore the exception and keep processing the next frame.</summary>
         Continue,
     }
 }

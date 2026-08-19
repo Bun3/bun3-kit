@@ -8,7 +8,7 @@ using System.Text;
 
 namespace Bun3.Gameplay.Tags
 {
-    /// <summary>엄격한 schema 1 B3DK 스트림을 불변 런타임 태그 카탈로그로 읽습니다.</summary>
+    /// <summary>Reads a strict schema 1 B3DK stream into an immutable runtime tag catalog.</summary>
     public static class TagCatalogBinary
     {
         private const int HeaderSize = 78;
@@ -18,26 +18,26 @@ namespace Bun3.Gameplay.Tags
         private const ushort SupportedSchema = 1;
         private static readonly Encoding StrictUtf8 = new UTF8Encoding(false, true);
 
-        /// <summary>현재 위치부터 끝까지 B3DK를 읽고 형식과 실행 기대 조건을 검증합니다.</summary>
-        /// <param name="input">읽을 수 있는 B3DK 스트림이며 seek를 지원하지 않아도 됩니다.</param>
-        /// <param name="expectations">실행 대상이 요구하는 Catalog 식별 정보입니다.</param>
-        /// <returns>검증된 불변 태그 카탈로그입니다.</returns>
-        /// <exception cref="ArgumentNullException">입력 또는 기대 조건이 null인 경우입니다.</exception>
-        /// <exception cref="ArgumentException">입력 스트림을 읽을 수 없는 경우입니다.</exception>
-        /// <exception cref="TagCatalogFormatException">B3DK 형식, checksum 또는 payload 구조가 유효하지 않은 경우입니다.</exception>
-        /// <exception cref="TagCatalogCompatibilityException">ID, Version 또는 외부 fingerprint 기대가 다른 경우입니다.</exception>
+        /// <summary>Reads B3DK from the current position to the end, validating format and runtime expectations.</summary>
+        /// <param name="input">Readable B3DK stream; seeking is not required.</param>
+        /// <param name="expectations">Catalog identity required by the running target.</param>
+        /// <returns>The validated immutable tag catalog.</returns>
+        /// <exception cref="ArgumentNullException">The input or expectations is null.</exception>
+        /// <exception cref="ArgumentException">The input stream is not readable.</exception>
+        /// <exception cref="TagCatalogFormatException">The B3DK format, checksum, or payload structure is invalid.</exception>
+        /// <exception cref="TagCatalogCompatibilityException">The ID, version, or external fingerprint expectation differs.</exception>
         public static TagCatalog Load(Stream input, TagCatalogExpectations expectations)
         {
             if (input is null) throw new ArgumentNullException(nameof(input));
             if (expectations is null) throw new ArgumentNullException(nameof(expectations));
-            if (!input.CanRead) throw new ArgumentException("읽을 수 있는 스트림이 필요합니다.", nameof(input));
+            if (!input.CanRead) throw new ArgumentException("A readable stream is required.", nameof(input));
 
             var bytes = ReadToEnd(input);
             ValidateMagic(bytes);
             ValidateSchema(bytes);
             if (bytes.Length < HeaderSize)
             {
-                throw Format("B3DK header가 잘렸습니다.");
+                throw Format("B3DK header is truncated.");
             }
 
             var catalogIdLength = ReadUInt16(bytes, 6);
@@ -46,17 +46,17 @@ namespace Bun3.Gameplay.Tags
             var expectedLength = (ulong)HeaderSize + catalogIdLength + catalogVersionLength + payloadLength;
             if (expectedLength != (ulong)bytes.Length)
             {
-                throw Format("B3DK 길이 필드와 실제 파일 길이가 다릅니다.");
+                throw Format("B3DK length fields do not match the actual file length.");
             }
 
             var versionOffset = HeaderSize + catalogIdLength;
             ValidateChecksum(bytes);
 
             var catalogId = Decode(bytes, HeaderSize, catalogIdLength, "Catalog ID");
-            var catalogVersion = Decode(bytes, versionOffset, catalogVersionLength, "Catalog Version");
+            var catalogVersion = Decode(bytes, versionOffset, catalogVersionLength, "Catalog version");
             if (catalogId.Length == 0 || catalogVersion.Length == 0)
             {
-                throw Format("Catalog ID와 Version은 비어 있을 수 없습니다.");
+                throw Format("Catalog ID and version must not be empty.");
             }
 
             ValidateExpectations(bytes, catalogId, catalogVersion, expectations);
@@ -65,14 +65,14 @@ namespace Bun3.Gameplay.Tags
             var catalog = ReadPayload(bytes, payloadOffset, checked((int)payloadLength), catalogId, catalogVersion);
             if (!catalog.MatchesFingerprint(bytes.AsSpan(FingerprintOffset, HashLength)))
             {
-                throw Format("payload 의미와 semantic fingerprint가 다릅니다.");
+                throw Format("Payload semantics do not match the semantic fingerprint.");
             }
 
             return catalog;
         }
 
-        // 최대 태그 수(65,535) × 최대 이름 길이(255) + redirect·header 여유 — 이 상한을 넘는 입력은
-        // 정상 catalog일 수 없으므로 OOM으로 죽기 전에 형식 오류로 끊는다.
+        // Max tag count (65,535) x max name length (255) + redirect/header headroom — larger input
+        // cannot be a valid catalog, so fail as a format error instead of dying on OOM.
         private const int MaximumCatalogBytes = 64 * 1024 * 1024;
 
         private static byte[] ReadToEnd(Stream input)
@@ -85,7 +85,7 @@ namespace Bun3.Gameplay.Tags
                 if (read == 0) return output.ToArray();
                 if (output.Length + read > MaximumCatalogBytes)
                 {
-                    throw Format("B3DK 입력이 허용 크기를 넘었습니다.");
+                    throw Format("B3DK input exceeds the allowed size.");
                 }
 
                 output.Write(buffer, 0, read);
@@ -97,7 +97,7 @@ namespace Bun3.Gameplay.Tags
             if (bytes.Length < 4 || bytes[0] != (byte)'B' || bytes[1] != (byte)'3'
                 || bytes[2] != (byte)'D' || bytes[3] != (byte)'K')
             {
-                throw Format("B3DK magic이 없습니다.");
+                throw Format("B3DK magic is missing.");
             }
         }
 
@@ -105,12 +105,12 @@ namespace Bun3.Gameplay.Tags
         {
             if (bytes.Length < 6)
             {
-                throw Format("B3DK schema field가 잘렸습니다.");
+                throw Format("B3DK schema field is truncated.");
             }
 
             if (ReadUInt16(bytes, 4) != SupportedSchema)
             {
-                throw Format("지원하지 않는 B3DK schema입니다.");
+                throw Format("Unsupported B3DK schema.");
             }
         }
 
@@ -127,7 +127,7 @@ namespace Bun3.Gameplay.Tags
             stored.CopyTo(bytes, ChecksumOffset);
             if (!actual.AsSpan().SequenceEqual(stored))
             {
-                throw Format("B3DK content checksum이 일치하지 않습니다.");
+                throw Format("B3DK content checksum mismatch.");
             }
         }
 
@@ -139,18 +139,18 @@ namespace Bun3.Gameplay.Tags
         {
             if (!string.Equals(catalogId, expectations.CatalogId, StringComparison.Ordinal))
             {
-                throw new TagCatalogCompatibilityException("Catalog ID가 실행 기대와 다릅니다.");
+                throw new TagCatalogCompatibilityException("Catalog ID does not match the runtime expectation.");
             }
 
             if (!string.Equals(catalogVersion, expectations.CatalogVersion, StringComparison.Ordinal))
             {
-                throw new TagCatalogCompatibilityException("Catalog Version이 실행 기대와 다릅니다.");
+                throw new TagCatalogCompatibilityException("Catalog version does not match the runtime expectation.");
             }
 
             if (expectations.RequiresFingerprint
                 && !bytes.AsSpan(FingerprintOffset, HashLength).SequenceEqual(expectations.ExpectedFingerprint))
             {
-                throw new TagCatalogCompatibilityException("Catalog semantic fingerprint가 실행 기대와 다릅니다.");
+                throw new TagCatalogCompatibilityException("Catalog semantic fingerprint does not match the runtime expectation.");
             }
         }
 
@@ -166,7 +166,7 @@ namespace Bun3.Gameplay.Tags
             var remainingAfterCount = reader.Remaining;
             if (tagCountValue > ushort.MaxValue || tagCountValue > (uint)(remainingAfterCount / 8))
             {
-                throw Format("tag count가 파일 길이 또는 runtime 한계를 넘습니다.");
+                throw Format("Tag count exceeds the file length or runtime limit.");
             }
 
             var tagCount = checked((int)tagCountValue);
@@ -181,14 +181,14 @@ namespace Bun3.Gameplay.Tags
                 var index = reader.ReadUInt16("tag index");
                 if (index != ordinal)
                 {
-                    throw Format("tag index는 1부터 중복 없이 오름차순이어야 합니다.");
+                    throw Format("Tag indices must ascend from 1 without duplicates.");
                 }
 
                 var name = reader.ReadString("tag name");
                 ValidateCanonicalName(name, "tag name");
                 if (ordinal > 1 && StringComparer.Ordinal.Compare(previousName, name) >= 0)
                 {
-                    throw Format("tag name은 중복 없이 canonical 순서여야 합니다.");
+                    throw Format("Tag names must be in canonical order without duplicates.");
                 }
 
                 var parent = reader.ReadUInt16("parent index");
@@ -197,12 +197,12 @@ namespace Bun3.Gameplay.Tags
                 var expectedParent = (ushort)0;
                 if (lastDot >= 0 && !indices.TryGetValue(name.Substring(0, lastDot), out expectedParent))
                 {
-                    throw Format("tag의 canonical 부모가 앞선 index에 없습니다.");
+                    throw Format("Tag's canonical parent is missing at an earlier index.");
                 }
 
                 if (parent != expectedParent)
                 {
-                    throw Format("tag parent index가 canonical hierarchy와 다릅니다.");
+                    throw Format("Tag parent index does not match the canonical hierarchy.");
                 }
 
                 canonicalNames[ordinal] = name;
@@ -217,7 +217,7 @@ namespace Bun3.Gameplay.Tags
             var redirectCountValue = reader.ReadUInt32("redirect count");
             if (redirectCountValue > (uint)(reader.Remaining / 5) || redirectCountValue > int.MaxValue)
             {
-                throw Format("redirect count가 파일 길이 한계를 넘습니다.");
+                throw Format("Redirect count exceeds the file length limit.");
             }
 
             var redirectCount = checked((int)redirectCountValue);
@@ -229,13 +229,13 @@ namespace Bun3.Gameplay.Tags
                 ValidateCanonicalName(from, "redirect source");
                 if (ordinal > 0 && StringComparer.Ordinal.Compare(previousName, from) >= 0)
                 {
-                    throw Format("redirect source는 중복 없이 canonical 순서여야 합니다.");
+                    throw Format("Redirect sources must be in canonical order without duplicates.");
                 }
 
                 var target = reader.ReadUInt16("redirect target");
                 if (target == 0 || target > tagCount)
                 {
-                    throw Format("redirect target index가 활성 tag 범위를 벗어났습니다.");
+                    throw Format("Redirect target index is outside the active tag range.");
                 }
 
                 redirects[ordinal] = new CompiledRedirect(from, canonicalNames[target]);
@@ -244,7 +244,7 @@ namespace Bun3.Gameplay.Tags
 
             if (reader.Remaining != 0)
             {
-                throw Format("payload 뒤에 해석되지 않은 byte가 있습니다.");
+                throw Format("Unparsed bytes remain after the payload.");
             }
 
             return TagCatalog.CreateCompiled(
@@ -260,7 +260,7 @@ namespace Bun3.Gameplay.Tags
             if (!TagName.TryFold(name, out var canonical)
                 || !string.Equals(name, canonical, StringComparison.Ordinal))
             {
-                throw Format(label + "이 canonical 소문자 태그 경로가 아닙니다.");
+                throw Format(label + " is not a canonical lowercase tag path.");
             }
         }
 
@@ -278,7 +278,7 @@ namespace Bun3.Gameplay.Tags
             {
                 if (actual[index] != expected[index])
                 {
-                    throw Format("tag subtree end index가 canonical hierarchy와 다릅니다.");
+                    throw Format("Tag subtree end index does not match the canonical hierarchy.");
                 }
             }
         }
@@ -291,7 +291,7 @@ namespace Bun3.Gameplay.Tags
             }
             catch (DecoderFallbackException exception)
             {
-                throw new TagCatalogFormatException(label + "이 strict UTF-8이 아닙니다.", exception);
+                throw new TagCatalogFormatException(label + " is not strict UTF-8.", exception);
             }
         }
 
@@ -337,7 +337,7 @@ namespace Bun3.Gameplay.Tags
             internal string ReadString(string field)
             {
                 var length = ReadUInt16(field + " length");
-                if (length == 0) throw Format(field + " length는 0일 수 없습니다.");
+                if (length == 0) throw Format(field + " length must not be 0.");
                 Require(length, field);
                 var value = Decode(_bytes, _offset, length, field);
                 _offset += length;
@@ -348,7 +348,7 @@ namespace Bun3.Gameplay.Tags
             {
                 if (length < 0 || length > Remaining)
                 {
-                    throw Format(field + "이 payload 경계를 벗어났습니다.");
+                    throw Format(field + " extends past the payload boundary.");
                 }
             }
         }

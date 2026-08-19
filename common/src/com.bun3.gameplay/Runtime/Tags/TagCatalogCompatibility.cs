@@ -3,14 +3,14 @@ using System;
 
 namespace Bun3.Gameplay.Tags
 {
-    /// <summary>네트워크 peer와 GameplayTag Catalog 호환성을 검사합니다.</summary>
+    /// <summary>Checks GameplayTag catalog compatibility with a network peer.</summary>
     public static class TagCatalogCompatibility
     {
-        /// <summary>peer fingerprint가 로컬 Catalog와 정확히 같은지 요구합니다.</summary>
-        /// <param name="local">현재 실행 중인 로컬 Catalog입니다.</param>
-        /// <param name="peerFingerprint">peer가 handshake에서 제공한 semantic fingerprint입니다.</param>
-        /// <exception cref="ArgumentNullException"><paramref name="local"/>이 null인 경우입니다.</exception>
-        /// <exception cref="TagCatalogCompatibilityException">fingerprint가 일치하지 않는 경우입니다.</exception>
+        /// <summary>Requires the peer fingerprint to match the local catalog exactly.</summary>
+        /// <param name="local">Local catalog currently running.</param>
+        /// <param name="peerFingerprint">Semantic fingerprint the peer provided during handshake.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="local"/> is null.</exception>
+        /// <exception cref="TagCatalogCompatibilityException">The fingerprints do not match.</exception>
         public static void RequirePeerFingerprint(
             TagCatalog local,
             ReadOnlySpan<byte> peerFingerprint)
@@ -19,7 +19,7 @@ namespace Bun3.Gameplay.Tags
             if (!local.MatchesFingerprint(peerFingerprint))
             {
                 throw new TagCatalogCompatibilityException(
-                    "peer GameplayTag Catalog semantic fingerprint가 로컬 Catalog와 다릅니다.");
+                    "Peer GameplayTag catalog semantic fingerprint differs from the local catalog.");
             }
         }
     }

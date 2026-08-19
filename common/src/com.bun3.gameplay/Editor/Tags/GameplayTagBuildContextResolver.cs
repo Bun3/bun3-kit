@@ -7,7 +7,7 @@ using Bun3.Gameplay.Tags.Catalog;
 
 namespace Bun3.Gameplay.Editor.Tags
 {
-    /// <summary>Unity Editor provider와 설치된 package에서 Catalog build context를 resolve합니다.</summary>
+    /// <summary>Resolves the catalog build context from the Unity editor provider and installed packages.</summary>
     public static class GameplayTagBuildContextResolver
     {
         private const string PackageMetadataRelativePath = "Bun3/GameplayTags/TagSource.json";
@@ -16,9 +16,9 @@ namespace Bun3.Gameplay.Editor.Tags
         private const string SourceLoadCode = "B3TAG3003";
         private const string ProjectSettingsConfigurationCode = "B3TAG3004";
 
-        /// <summary>Unity의 타입 cache와 설치 package를 사용해 개발 build context를 resolve합니다.</summary>
-        /// <param name="gameSourcePath">고정 Game Source 절대 경로입니다.</param>
-        /// <returns>완전한 context 또는 작업을 막는 진단입니다.</returns>
+        /// <summary>Resolves the development build context using Unity's type cache and installed packages.</summary>
+        /// <param name="gameSourcePath">Fixed absolute path of the game source.</param>
+        /// <returns>Complete context, or diagnostics that block the operation.</returns>
         public static GameplayTagBuildContextResolution ResolveDevelopment(string gameSourcePath)
             => ResolveDevelopment(
                 gameSourcePath,
@@ -254,7 +254,7 @@ namespace Bun3.Gameplay.Editor.Tags
                 var path = values[index];
                 if (string.IsNullOrWhiteSpace(path))
                 {
-                    throw new ArgumentException("Source Metadata path는 비어 있을 수 없습니다.", nameof(values));
+                    throw new ArgumentException("Source metadata path cannot be empty.", nameof(values));
                 }
 
                 destination.Add(Path.GetFullPath(path));

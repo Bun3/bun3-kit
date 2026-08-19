@@ -1,4 +1,4 @@
-// TagCatalog partial — 빌드(태그 트리 구성·사전순 배치) 담당.
+// TagCatalog partial — build (tag tree construction, ordinal-order layout).
 #nullable enable
 using System;
 using System.Collections.Generic;
@@ -18,7 +18,7 @@ namespace Bun3.Gameplay.Tags
 
             if (nodes.Count > ushort.MaxValue)
             {
-                throw new TagCatalogException("활성 태그 노드는 65,535개를 넘을 수 없습니다.", string.Empty, 1, 1);
+                throw new TagCatalogException("Active tag nodes must not exceed 65,535.", string.Empty, 1, 1);
             }
 
             var root = new BuildNode(string.Empty);
@@ -61,7 +61,7 @@ namespace Bun3.Gameplay.Tags
             internal ushort[] SubtreeEnds { get; }
         }
 
-        // 명시 태그와 그 조상 경로를 모두 노드로 만든다 — 부모는 암묵적으로 활성화된다.
+        // Creates nodes for the explicit tag and every ancestor path — parents are implicitly activated.
         private static void AddPath(Dictionary<string, BuildNode> nodes, string canonicalName)
         {
             var start = 0;

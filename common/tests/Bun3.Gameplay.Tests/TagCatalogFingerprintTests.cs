@@ -6,11 +6,11 @@ using NUnit.Framework;
 
 namespace Bun3.Gameplay.Tests
 {
-    /// <summary>태그 카탈로그 fingerprint 계약을 검증합니다.</summary>
+    /// <summary>Verifies the tag catalog fingerprint contract.</summary>
     [TestFixture]
     public sealed class TagCatalogFingerprintTests
     {
-        /// <summary>BTAG big-endian canonical hash golden을 검증합니다.</summary>
+        /// <summary>Verifies the BTAG big-endian canonical hash golden.</summary>
         [Test]
         public void Fingerprint_matches_BTAG_big_endian_golden()
         {
@@ -31,15 +31,15 @@ namespace Bun3.Gameplay.Tests
                 Is.EqualTo("f41c48acaf18fc8d239fd042554f07a67a46e8a4170b792bbc5aeee0fd344ce5"));
         }
 
-        /// <summary>표현상 차이가 catalog identity를 바꾸지 않는지 검증합니다.</summary>
+        /// <summary>Verifies representational differences do not change catalog identity.</summary>
         [Test]
         public void Formatting_order_comments_and_display_case_do_not_change_identity()
         {
             var left = TagCatalogTestData.Load(
-                """{"schemaVersion":1,"tags":[{"name":"State.Dead","comment":"왼쪽"},{"name":"Ability.Jump"}]}""");
+                """{"schemaVersion":1,"tags":[{"name":"State.Dead","comment":"left"},{"name":"Ability.Jump"}]}""");
             var right = TagCatalogTestData.Load(
                 """
-                { "tags": [{"name":"ability.jump"},{"comment":"오른쪽","name":"state.dead"}],
+                { "tags": [{"name":"ability.jump"},{"comment":"right","name":"state.dead"}],
                   "schemaVersion": 1, "redirects": [] }
                 """);
 
@@ -47,7 +47,7 @@ namespace Bun3.Gameplay.Tests
             Assert.That(right.GetRequired("STATE.DEAD").Index, Is.EqualTo(left.GetRequired("state.dead").Index));
         }
 
-        /// <summary>경로 또는 redirect 의미 변화가 fingerprint를 바꾸는지 검증합니다.</summary>
+        /// <summary>Verifies path or redirect semantic changes change the fingerprint.</summary>
         [Test]
         public void Semantic_path_parent_or_redirect_change_changes_fingerprint()
         {
@@ -62,7 +62,7 @@ namespace Bun3.Gameplay.Tests
             Assert.That(baseline.MatchesFingerprint(renamed.Fingerprint), Is.False);
         }
 
-        /// <summary>암시 부모와 redirect 행 순서가 identity를 바꾸지 않는지 검증합니다.</summary>
+        /// <summary>Verifies implicit parents and redirect row order do not change identity.</summary>
         [Test]
         public void Implicit_parent_and_redirect_row_order_do_not_change_fingerprint()
         {
@@ -74,7 +74,7 @@ namespace Bun3.Gameplay.Tests
             Assert.That(explicitParent.Fingerprint.ToArray(), Is.EqualTo(implicitParent.Fingerprint.ToArray()));
         }
 
-        /// <summary>반환 span의 길이와 내부 bytes 보호를 검증합니다.</summary>
+        /// <summary>Verifies the returned span's length and that internal bytes cannot be mutated.</summary>
         [Test]
         public void Fingerprint_is_fixed_length_and_cannot_be_mutated_by_callers()
         {

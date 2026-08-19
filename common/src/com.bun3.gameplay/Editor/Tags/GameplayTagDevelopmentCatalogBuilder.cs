@@ -8,15 +8,15 @@ using UnityEngine;
 
 namespace Bun3.Gameplay.Editor.Tags
 {
-    /// <summary>유효한 Editor Workspace를 원자적인 Local Development Catalog로 만듭니다.</summary>
+    /// <summary>Builds a valid editor workspace into an atomic local development catalog.</summary>
     public static class GameplayTagDevelopmentCatalogBuilder
     {
         private const string MenuPath = "Gameplay/Build Local Tag Catalog";
 
-        /// <summary>Workspace의 불변 미리보기를 개발 cache에 쓰고 실제 binary reader로 재로드합니다.</summary>
-        /// <param name="workspace">완전하고 유효한 제품 전체 Source Workspace입니다.</param>
-        /// <returns>검증된 개발 binary에서 재로드한 불변 Catalog입니다.</returns>
-        /// <exception cref="InvalidOperationException">Workspace가 개발 Catalog를 만들 수 없는 경우입니다.</exception>
+        /// <summary>Writes the workspace's immutable preview to the development cache and reloads it with the real binary reader.</summary>
+        /// <param name="workspace">Complete and valid product-wide source workspace.</param>
+        /// <returns>Immutable catalog reloaded from the verified development binary.</returns>
+        /// <exception cref="InvalidOperationException">The workspace cannot build a development catalog.</exception>
         public static TagCatalog Build(GameplayTagEditorWorkspace workspace) =>
             Build(workspace, localApplicationDataOverride: null);
 

@@ -8,13 +8,13 @@ using NUnit.Framework;
 
 namespace Bun3.Gameplay.Unity.Tests
 {
-    /// <summary>개발 Catalog의 원자적 binary round-trip 계약을 검증합니다.</summary>
+    /// <summary>Verifies the development catalog's atomic binary round-trip contract.</summary>
     [TestFixture]
     public sealed class GameplayTagDevelopmentCatalogTests
     {
         private string _temporaryDirectory = null!;
 
-        /// <summary>각 테스트의 개발 Catalog cache를 격리할 임시 디렉토리를 준비합니다.</summary>
+        /// <summary>Prepares a temp directory isolating each test's development catalog cache.</summary>
         [SetUp]
         public void SetUp()
         {
@@ -24,14 +24,14 @@ namespace Bun3.Gameplay.Unity.Tests
             Directory.CreateDirectory(_temporaryDirectory);
         }
 
-        /// <summary>테스트가 생성한 임시 Catalog cache를 정리합니다.</summary>
+        /// <summary>Cleans up the temp catalog cache created by the test.</summary>
         [TearDown]
         public void TearDown()
         {
             if (Directory.Exists(_temporaryDirectory)) Directory.Delete(_temporaryDirectory, true);
         }
 
-        /// <summary>개발 Catalog가 정확한 cache 경로에 쓰이고 binary에서 다시 로드되는지 검증합니다.</summary>
+        /// <summary>Verifies the development catalog is written to the exact cache path and reloaded from binary.</summary>
         [Test]
         public void Build_writes_the_exact_development_path_and_returns_the_binary_reloaded_catalog()
         {
@@ -54,7 +54,7 @@ namespace Bun3.Gameplay.Unity.Tests
                 Is.EqualTo(catalog.Fingerprint.ToArray()));
         }
 
-        /// <summary>무효한 Workspace build 실패가 기존 cache byte를 보존하는지 검증합니다.</summary>
+        /// <summary>Verifies an invalid workspace build failure preserves the existing cache bytes.</summary>
         [Test]
         public void Invalid_workspace_preserves_the_last_good_cache_bytes()
         {
@@ -76,7 +76,7 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(File.ReadAllBytes(destination), Is.EqualTo(previous));
         }
 
-        /// <summary>binary readback 실패가 기존 cache를 보존하고 임시 파일을 제거하는지 검증합니다.</summary>
+        /// <summary>Verifies a binary readback failure preserves the existing cache and removes the temp file.</summary>
         [Test]
         public void Binary_readback_failure_preserves_the_last_good_cache_and_removes_the_temporary_file()
         {

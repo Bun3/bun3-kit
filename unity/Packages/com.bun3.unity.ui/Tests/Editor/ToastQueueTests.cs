@@ -37,7 +37,7 @@ namespace Bun3.Unity.UI.Editor.Tests
         [SetUp]
         public void SetUp()
         {
-            _view = null; // NUnit 픽스처 재사용 — 이전 테스트의 파괴된 참조 제거
+            _view = null; // NUnit reuses the fixture — drop the previous test's destroyed reference.
             _queue = new ToastQueue<string>(CreateView, defaultDuration: 2f, capacity: 2,
                 duplicateComparer: StringComparer.Ordinal);
         }
@@ -61,25 +61,25 @@ namespace Bun3.Unity.UI.Editor.Tests
             Assert.IsTrue(_view.gameObject.activeSelf);
             Assert.AreEqual(1, _queue.PendingCount);
 
-            _view.WaitSource.TrySetResult(); // a의 유지 시간 종료
+            _view.WaitSource.TrySetResult(); // End a's hold time.
 
-            Assert.AreEqual("b", _view.Last, "앞이 끝나면 다음이 표시돼야 한다.");
+            Assert.AreEqual("b", _view.Last, "The next toast must show when the previous finishes.");
             Assert.AreEqual(0, _queue.PendingCount);
 
             _view.WaitSource.TrySetResult();
 
             Assert.IsFalse(_queue.IsShowing);
-            Assert.IsFalse(_view.gameObject.activeSelf, "다 끝나면 뷰는 비활성 보관된다.");
+            Assert.IsFalse(_view.gameObject.activeSelf, "The view is kept deactivated when everything is done.");
         }
 
         [Test]
         public void Show_OverCapacity_Dropped()
         {
-            _queue.Show("a");           // 표시 중
+            _queue.Show("a");           // Showing.
             _queue.Show("b");
             _queue.Show("c");           // pending 2 = capacity
 
-            Assert.IsFalse(_queue.Show("d"), "대기 상한 초과분은 버려져야 한다.");
+            Assert.IsFalse(_queue.Show("d"), "Requests over the pending cap must be dropped.");
             Assert.AreEqual(2, _queue.PendingCount);
         }
 
@@ -88,10 +88,10 @@ namespace Bun3.Unity.UI.Editor.Tests
         {
             _queue.Show("a");
 
-            Assert.IsFalse(_queue.Show("a"), "표시 중인 것과 같은 데이터는 억제돼야 한다.");
+            Assert.IsFalse(_queue.Show("a"), "Data equal to the showing toast must be suppressed.");
 
             _queue.Show("b");
-            Assert.IsFalse(_queue.Show("b"), "대기 중인 것과 같은 데이터도 억제돼야 한다.");
+            Assert.IsFalse(_queue.Show("b"), "Data equal to a pending toast must also be suppressed.");
         }
 
         [Test]
@@ -102,8 +102,8 @@ namespace Bun3.Unity.UI.Editor.Tests
 
             Assert.IsTrue(_queue.Show("c", force: true));
 
-            Assert.AreEqual("c", _view.Last, "force는 표시 중을 건너뛰고 즉시 표시돼야 한다.");
-            Assert.AreEqual(1, _queue.PendingCount, "b는 뒤에 남는다.");
+            Assert.AreEqual("c", _view.Last, "Force must skip the showing toast and display immediately.");
+            Assert.AreEqual(1, _queue.PendingCount, "b stays behind.");
         }
 
         [Test]

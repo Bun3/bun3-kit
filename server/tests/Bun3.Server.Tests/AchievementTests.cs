@@ -23,10 +23,10 @@ public class AchievementTests
 
     private static AchievementCatalog<GameDef> Catalog(params GameDef[] defs) => new(defs);
 
-    // ── 카탈로그 ──────────────────────────────────────────────────────────
+    // ── Catalog ──────────────────────────────────────────────────────────
 
     [Test]
-    public void Catalog_인터닝_인덱스와_정의_조회()
+    public void Catalog_interning_index_and_definition_lookup()
     {
         var catalog = Catalog(new GameDef("a", 10), new GameDef("b", 5, repeatable: true));
 
@@ -34,33 +34,33 @@ public class AchievementTests
         Assert.That(catalog.GetIndex("b"), Is.EqualTo(1));
         Assert.That(catalog.TryGetIndex("a", out var idx), Is.True);
         Assert.That(idx, Is.EqualTo(0));
-        Assert.That(catalog.TryGetIndex("없음", out _), Is.False);
-        Assert.That(() => catalog.GetIndex("없음"), Throws.TypeOf<KeyNotFoundException>());
+        Assert.That(catalog.TryGetIndex("missing", out _), Is.False);
+        Assert.That(() => catalog.GetIndex("missing"), Throws.TypeOf<KeyNotFoundException>());
         Assert.That(catalog.GetDefinition(1).Id, Is.EqualTo("b"));
     }
 
     [TestCase("", 10)]
     [TestCase("dup", 0)]
     [TestCase("dup", -1)]
-    public void Catalog_빈_id_또는_비양수_Target은_예외(string id, long target)
+    public void Catalog_empty_id_or_nonpositive_target_throws(string id, long target)
     {
         Assert.That(() => Catalog(new GameDef(id, target)), Throws.ArgumentException);
     }
 
     [Test]
-    public void Catalog_중복_id는_예외()
+    public void Catalog_duplicate_id_throws()
     {
         Assert.That(() => Catalog(new GameDef("x", 1), new GameDef("x", 2)), Throws.ArgumentException);
     }
 
     [Test]
-    public void Catalog_null_정의는_예외()
+    public void Catalog_null_definition_throws()
     {
         Assert.That(() => new AchievementCatalog<GameDef>(new GameDef[] { null! }), Throws.ArgumentException);
     }
 
     [Test]
-    public void Catalog_상한_초과는_예외()
+    public void Catalog_exceeding_max_definitions_throws()
     {
         var defs = new GameDef[AchievementCatalog<GameDef>.MaxDefinitions + 1];
         for (var i = 0; i < defs.Length; i++) defs[i] = new GameDef($"a{i}", 1);
@@ -68,24 +68,24 @@ public class AchievementTests
     }
 
     [Test]
-    public void Catalog_게임_validator_예외가_전파된다()
+    public void Catalog_game_validator_exception_propagates()
     {
         Assert.That(
             () => new AchievementCatalog<GameDef>(
                 new[] { new GameDef("a", 1, rewardTable: "") },
-                def => { if (def.RewardTable.Length == 0) throw new InvalidOperationException("보상 없음"); }),
+                def => { if (def.RewardTable.Length == 0) throw new InvalidOperationException("no reward"); }),
             Throws.InvalidOperationException);
     }
 
     [Test]
-    public void Catalog_초기_가용성에_파생_상태는_예외()
+    public void Catalog_derived_status_as_initial_availability_throws()
     {
         Assert.That(() => Catalog(new GameDef("a", 1, initialAvailability: AchievementStatus.Completed)),
             Throws.ArgumentException);
     }
 
     [Test]
-    public void Catalog_태그_인터닝과_그룹_조회()
+    public void Catalog_tag_interning_and_group_lookup()
     {
         var catalog = Catalog(
             new GameDef("kill_10", 10, tags: new[] { "KILL", "DAILY" }),
@@ -95,21 +95,21 @@ public class AchievementTests
         Assert.That(catalog.TagCount, Is.EqualTo(2));
         Assert.That(catalog.GetIndicesByTag(catalog.GetTagIndex("KILL")).ToArray(), Is.EqualTo(new[] { 0, 1 }));
         Assert.That(catalog.GetIndicesByTag(catalog.GetTagIndex("DAILY")).ToArray(), Is.EqualTo(new[] { 0 }));
-        Assert.That(catalog.TryGetTagIndex("없는태그", out _), Is.False);
-        Assert.That(() => catalog.GetTagIndex("없는태그"), Throws.TypeOf<KeyNotFoundException>());
+        Assert.That(catalog.TryGetTagIndex("no_such_tag", out _), Is.False);
+        Assert.That(() => catalog.GetTagIndex("no_such_tag"), Throws.TypeOf<KeyNotFoundException>());
     }
 
     [Test]
-    public void Catalog_빈_태그와_같은_정의_내_중복_태그는_예외()
+    public void Catalog_empty_tag_or_duplicate_tag_in_definition_throws()
     {
         Assert.That(() => Catalog(new GameDef("a", 1, tags: new[] { "" })), Throws.ArgumentException);
         Assert.That(() => Catalog(new GameDef("a", 1, tags: new[] { "T", "T" })), Throws.ArgumentException);
     }
 
-    // ── 비반복 달성 ───────────────────────────────────────────────────────
+    // ── Non-repeatable completion ────────────────────────────────────────
 
     [Test]
-    public void 비반복_도달_시_1회_달성하고_시각을_기록한다()
+    public void Nonrepeatable_completes_once_on_reach_and_records_timestamp()
     {
         var catalog = Catalog(new GameDef("kill", 10));
         var manager = new AchievementManager<GameDef>(catalog, utcNowTicks: () => 777);
@@ -125,13 +125,13 @@ public class AchievementTests
     }
 
     [Test]
-    public void 비반복_초과_Increase는_클램프되고_재달성하지_않는다()
+    public void Nonrepeatable_excess_increase_clamps_without_recompletion()
     {
         var catalog = Catalog(new GameDef("kill", 10));
         var manager = new AchievementManager<GameDef>(catalog);
 
         Assert.That(manager.Increase(0, 100), Is.EqualTo(1));
-        Assert.That(manager.Increase(0, 100), Is.EqualTo(0));   // 중복 달성 방지
+        Assert.That(manager.Increase(0, 100), Is.EqualTo(0));   // no re-completion
 
         ref readonly var state = ref manager.GetState(0);
         Assert.That(state.Progress, Is.EqualTo(10));
@@ -139,90 +139,90 @@ public class AchievementTests
     }
 
     [Test]
-    public void 비반복_수령_후_Claimed_종결_상태가_된다()
+    public void Nonrepeatable_claim_reaches_terminal_claimed_status()
     {
         var manager = new AchievementManager<GameDef>(Catalog(new GameDef("kill", 10)));
 
         manager.Increase(0, 10);
         Assert.That(manager.TryClaim(0), Is.True);
         Assert.That(manager.GetStatus(0), Is.EqualTo(AchievementStatus.Claimed));
-        Assert.That(manager.TryClaim(0), Is.False);             // 중복 수령 방지
-        Assert.That(manager.GetState(0).Progress, Is.EqualTo(10));   // 비반복은 차감 없음
+        Assert.That(manager.TryClaim(0), Is.False);             // no double claim
+        Assert.That(manager.GetState(0).Progress, Is.EqualTo(10));   // non-repeatable: no deduction
     }
 
-    // ── 반복 달성 — 누적 + 수령 시 차감 ──────────────────────────────────
+    // ── Repeatable completion — accumulate + deduct on claim ─────────────
 
     [Test]
-    public void 반복_다회_달성과_큰_점프_몰아_발화()
+    public void Repeatable_multiple_completions_from_large_jump()
     {
         var catalog = Catalog(new GameDef("daily", 10, repeatable: true));
         var manager = new AchievementManager<GameDef>(catalog);
 
         Assert.That(manager.Increase(0, 10), Is.EqualTo(1));
-        Assert.That(manager.Increase(0, 35), Is.EqualTo(3));    // 45/10 = 대기 4 → 신규 3
+        Assert.That(manager.Increase(0, 35), Is.EqualTo(3));    // 45/10 = 4 pending -> 3 new
         ref readonly var state = ref manager.GetState(0);
-        Assert.That(state.Progress, Is.EqualTo(45));            // 수령 전엔 누적 유지
+        Assert.That(state.Progress, Is.EqualTo(45));            // accumulates until claimed
         Assert.That(state.CompletedCount, Is.EqualTo(4));
     }
 
     [Test]
-    public void 반복_수령이_목표치를_차감하고_10에_10_UI가_성립한다()
+    public void Repeatable_claim_deducts_target_and_supports_10_of_10_ui()
     {
         var catalog = Catalog(new GameDef("daily", 10, repeatable: true));
         var manager = new AchievementManager<GameDef>(catalog);
 
-        manager.Increase(0, 25);                                 // 달성 2, 대기 2
+        manager.Increase(0, 25);                                 // 2 completions, 2 pending
         Assert.That(manager.GetStatus(0), Is.EqualTo(AchievementStatus.Completed));
-        Assert.That(Math.Min(manager.GetState(0).Progress, 10), Is.EqualTo(10));   // "10/10 [보상받기]"
+        Assert.That(Math.Min(manager.GetState(0).Progress, 10), Is.EqualTo(10));   // "10/10 [Claim]" UI
 
         Assert.That(manager.TryClaim(0), Is.True);
         Assert.That(manager.GetState(0).Progress, Is.EqualTo(15));
-        Assert.That(manager.GetStatus(0), Is.EqualTo(AchievementStatus.Completed));   // 대기 1건 남음
+        Assert.That(manager.GetStatus(0), Is.EqualTo(AchievementStatus.Completed));   // 1 pending left
 
         Assert.That(manager.TryClaim(0), Is.True);
         Assert.That(manager.GetState(0).Progress, Is.EqualTo(5));
-        Assert.That(manager.GetStatus(0), Is.EqualTo(AchievementStatus.Active));      // 다음 사이클 5/10
+        Assert.That(manager.GetStatus(0), Is.EqualTo(AchievementStatus.Active));      // next cycle 5/10
 
-        Assert.That(manager.Increase(0, 5), Is.EqualTo(1));      // 불변식 유지 확인 — 3번째 달성
+        Assert.That(manager.Increase(0, 5), Is.EqualTo(1));      // invariant holds -> 3rd completion
     }
 
     [Test]
-    public void 반복_오버플로_클램프()
+    public void Repeatable_overflow_clamps()
     {
         var catalog = Catalog(new GameDef("inf", 10, repeatable: true));
         var manager = new AchievementManager<GameDef>(catalog);
 
         manager.Increase(0, long.MaxValue - 5);
-        manager.Increase(0, long.MaxValue);                      // 클램프, 예외 없음
+        manager.Increase(0, long.MaxValue);                      // clamps, no exception
         Assert.That(manager.GetState(0).Progress, Is.EqualTo(long.MaxValue));
     }
 
     // ── SetProgress ──────────────────────────────────────────────────────
 
     [Test]
-    public void SetProgress_상향은_달성하고_하향은_달성_수를_유지한다()
+    public void SetProgress_up_completes_and_down_keeps_completed_count()
     {
         var catalog = Catalog(new GameDef("daily", 10, repeatable: true));
         var manager = new AchievementManager<GameDef>(catalog);
 
         Assert.That(manager.SetProgress(0, 25), Is.EqualTo(2));
-        Assert.That(manager.SetProgress(0, 3), Is.EqualTo(0));   // 하향 — 단조 유지
+        Assert.That(manager.SetProgress(0, 3), Is.EqualTo(0));   // downward: completions stay monotonic
         ref readonly var state = ref manager.GetState(0);
         Assert.That(state.Progress, Is.EqualTo(3));
         Assert.That(state.CompletedCount, Is.EqualTo(2));
     }
 
     [Test]
-    public void 비반복_SetProgress_포화_변환은_목표치에_클램프된다()
+    public void Nonrepeatable_SetProgress_saturation_clamps_to_target()
     {
         var manager = new AchievementManager<GameDef>(Catalog(new GameDef("gold", 1_000)));
 
-        Assert.That(manager.SetProgress(0, long.MaxValue), Is.EqualTo(1));   // 거대 재화 포화 시나리오
+        Assert.That(manager.SetProgress(0, long.MaxValue), Is.EqualTo(1));   // currency saturation scenario
         Assert.That(manager.GetState(0).Progress, Is.EqualTo(1_000));
     }
 
     [Test]
-    public void Increase_SetProgress_음수는_예외()
+    public void Increase_and_SetProgress_negative_throws()
     {
         var manager = new AchievementManager<GameDef>(Catalog(new GameDef("a", 1, tags: new[] { "T" })));
         Assert.That(() => manager.Increase(0, -1), Throws.TypeOf<ArgumentOutOfRangeException>());
@@ -230,10 +230,10 @@ public class AchievementTests
         Assert.That(() => manager.IncreaseByTag(0, -1), Throws.TypeOf<ArgumentOutOfRangeException>());
     }
 
-    // ── 가용성 ───────────────────────────────────────────────────────────
+    // ── Availability ─────────────────────────────────────────────────────
 
     [Test]
-    public void 초기_가용성은_정의를_따르고_Locked_Ready는_진행을_받지_않는다()
+    public void Initial_availability_follows_definition_and_locked_ready_ignore_progress()
     {
         var catalog = Catalog(
             new GameDef("locked", 10, initialAvailability: AchievementStatus.Locked),
@@ -250,36 +250,36 @@ public class AchievementTests
     }
 
     [Test]
-    public void Unlock_Activate_Lock_전이와_dirty()
+    public void Unlock_Activate_Lock_transitions_and_dirty()
     {
         var catalog = Catalog(new GameDef("a", 10, initialAvailability: AchievementStatus.Locked));
         var dirtyCount = 0;
         var manager = new AchievementManager<GameDef>(catalog, () => dirtyCount++);
 
-        Assert.That(manager.Unlock(0), Is.True);                 // Locked → Ready
-        Assert.That(manager.Unlock(0), Is.False);                // Ready에서 재호출 no-op
-        Assert.That(manager.Activate(0), Is.True);               // Ready → Active
+        Assert.That(manager.Unlock(0), Is.True);                 // Locked -> Ready
+        Assert.That(manager.Unlock(0), Is.False);                // no-op when already Ready
+        Assert.That(manager.Activate(0), Is.True);               // Ready -> Active
         Assert.That(manager.Activate(0), Is.False);
-        Assert.That(manager.Increase(0, 10), Is.EqualTo(1));     // 이제 진행됨
-        Assert.That(manager.Lock(0), Is.True);                   // 로테이션 아웃 — 카운터 유지
+        Assert.That(manager.Increase(0, 10), Is.EqualTo(1));     // now progresses
+        Assert.That(manager.Lock(0), Is.True);                   // rotated out — counters kept
         Assert.That(manager.GetState(0).CompletedCount, Is.EqualTo(1));
-        Assert.That(dirtyCount, Is.EqualTo(4));                  // Unlock+Activate+달성+Lock
+        Assert.That(dirtyCount, Is.EqualTo(4));                  // Unlock + Activate + completion + Lock
     }
 
     [Test]
-    public void Locked_상태에서도_수령_정산은_가능하다()
+    public void Claim_is_allowed_while_locked()
     {
         var manager = new AchievementManager<GameDef>(Catalog(new GameDef("weekly", 10)));
 
         manager.Increase(0, 10);
-        manager.Lock(0);                                         // 주간 교체로 닫힘
-        Assert.That(manager.TryClaim(0), Is.True);               // 미수령 보상 정산은 허용
+        manager.Lock(0);                                         // closed by weekly rotation
+        Assert.That(manager.TryClaim(0), Is.True);               // unclaimed rewards still claimable
     }
 
-    // ── 태그 라우팅 ──────────────────────────────────────────────────────
+    // ── Tag routing ──────────────────────────────────────────────────────
 
     [Test]
-    public void IncreaseByTag는_Active_업적에만_각각_적용된다()
+    public void IncreaseByTag_applies_independently_to_active_only()
     {
         var catalog = Catalog(
             new GameDef("kill_10", 10, tags: new[] { "KILL" }),
@@ -288,14 +288,14 @@ public class AchievementTests
         var manager = new AchievementManager<GameDef>(catalog);
         var kill = catalog.GetTagIndex("KILL");
 
-        Assert.That(manager.IncreaseByTag(kill, 10), Is.EqualTo(1));   // kill_10만 달성
+        Assert.That(manager.IncreaseByTag(kill, 10), Is.EqualTo(1));   // only kill_10 completes
         Assert.That(manager.GetState(0).Progress, Is.EqualTo(10));
-        Assert.That(manager.GetState(1).Progress, Is.EqualTo(10));     // 독립 카운터로 같은 양
-        Assert.That(manager.GetState(2).Progress, Is.EqualTo(0));      // Locked 스킵
+        Assert.That(manager.GetState(1).Progress, Is.EqualTo(10));     // same amount on independent counters
+        Assert.That(manager.GetState(2).Progress, Is.EqualTo(0));      // Locked skipped
     }
 
     [Test]
-    public void IncreaseByTag_필터_오버로드는_조건값_게이트로_동작한다()
+    public void IncreaseByTag_filter_overload_gates_by_condition_value()
     {
         var catalog = Catalog(
             new GameDef("grade1", 1, tags: new[] { "GOT" }, minGrade: 1),
@@ -305,11 +305,11 @@ public class AchievementTests
 
         Assert.That(manager.IncreaseByTag(got, 1, 3, static (def, grade) => def.MinGrade <= grade), Is.EqualTo(1));
         Assert.That(manager.GetState(0).CompletedCount, Is.EqualTo(1));
-        Assert.That(manager.GetState(1).Progress, Is.EqualTo(0));      // 필터 미통과
+        Assert.That(manager.GetState(1).Progress, Is.EqualTo(0));      // filtered out
     }
 
     [Test]
-    public void 포함형_티어는_동시_Active로_한_번에_전부_진행된다()
+    public void Inclusive_tiers_progress_together_when_all_active()
     {
         var catalog = Catalog(
             new GameDef("ruby_1", 1, tags: new[] { "RUBY" }),
@@ -317,11 +317,11 @@ public class AchievementTests
             new GameDef("ruby_100", 100, tags: new[] { "RUBY" }));
         var manager = new AchievementManager<GameDef>(catalog);
 
-        Assert.That(manager.IncreaseByTag(catalog.GetTagIndex("RUBY"), 100), Is.EqualTo(3));   // 100개 한 방에 3티어 전부
+        Assert.That(manager.IncreaseByTag(catalog.GetTagIndex("RUBY"), 100), Is.EqualTo(3));   // 100 at once completes all 3 tiers
     }
 
     [Test]
-    public void 신규누적형_티어는_체인_Activate로_0부터_시작한다()
+    public void Fresh_accumulation_tiers_start_at_zero_via_chained_activate()
     {
         var catalog = Catalog(
             new GameDef("kill_1", 1, tags: new[] { "KILL" }),
@@ -330,51 +330,51 @@ public class AchievementTests
         var next = catalog.GetIndex("kill_10");
         manager.OnCompleted = (index, _, _) => { if (index == 0) manager.Activate(next); };
 
-        manager.IncreaseByTag(catalog.GetTagIndex("KILL"), 1000);      // 대량 이벤트
+        manager.IncreaseByTag(catalog.GetTagIndex("KILL"), 1000);      // bulk event
 
         Assert.That(manager.GetStatus(0), Is.EqualTo(AchievementStatus.Completed));
         Assert.That(manager.GetStatus(next), Is.EqualTo(AchievementStatus.Active));
-        Assert.That(manager.GetState(next).Progress, Is.EqualTo(0));   // 이월 없이 새로 쌓기
+        Assert.That(manager.GetState(next).Progress, Is.EqualTo(0));   // starts fresh, no carry-over
     }
 
-    // ── 수령 ─────────────────────────────────────────────────────────────
+    // ── Claim ────────────────────────────────────────────────────────────
 
     [Test]
-    public void 클레임은_달성_횟수만큼만_성공한다()
+    public void Claim_succeeds_only_up_to_completed_count()
     {
         var catalog = Catalog(new GameDef("daily", 10, repeatable: true));
         var manager = new AchievementManager<GameDef>(catalog);
 
-        Assert.That(manager.TryClaim(0), Is.False);              // 미달성
-        manager.Increase(0, 30);                                 // 달성 3회
+        Assert.That(manager.TryClaim(0), Is.False);              // not completed yet
+        manager.Increase(0, 30);                                 // 3 completions
         Assert.That(manager.GetClaimableCount(0), Is.EqualTo(3));
         var claimed = 0;
-        while (manager.TryClaim(0)) claimed++;                   // 일괄 수령 패턴
+        while (manager.TryClaim(0)) claimed++;                   // claim-all pattern
         Assert.That(claimed, Is.EqualTo(3));
         Assert.That(manager.GetState(0).Progress, Is.EqualTo(0));
     }
 
-    // ── Reset (일간/주간 사이클) ─────────────────────────────────────────
+    // ── Reset (daily/weekly cycles) ──────────────────────────────────────
 
     [Test]
-    public void Reset_후_반복_업적이_재달성된다()
+    public void Reset_allows_repeatable_recompletion()
     {
         var catalog = Catalog(new GameDef("daily_kill", 10, repeatable: true));
         var manager = new AchievementManager<GameDef>(catalog);
 
-        Assert.That(manager.Increase(0, 10), Is.EqualTo(1));     // 1일차 달성
+        Assert.That(manager.Increase(0, 10), Is.EqualTo(1));     // day 1 completion
         manager.TryClaim(0);
-        manager.Reset(0);                                        // 자정 리셋
+        manager.Reset(0);                                        // midnight reset
 
         ref readonly var state = ref manager.GetState(0);
         Assert.That(state.Progress, Is.EqualTo(0));
         Assert.That(state.CompletedCount, Is.EqualTo(0));
-        Assert.That(state.Availability, Is.EqualTo(AchievementStatus.Active));   // 가용성은 유지
-        Assert.That(manager.Increase(0, 10), Is.EqualTo(1));     // 2일차 재달성
+        Assert.That(state.Availability, Is.EqualTo(AchievementStatus.Active));   // availability kept
+        Assert.That(manager.Increase(0, 10), Is.EqualTo(1));     // day 2 re-completion
     }
 
     [Test]
-    public void Reset_후_비반복_업적도_재달성된다()
+    public void Reset_allows_nonrepeatable_recompletion()
     {
         var manager = new AchievementManager<GameDef>(Catalog(new GameDef("daily_once", 5)));
 
@@ -384,18 +384,18 @@ public class AchievementTests
     }
 
     [Test]
-    public void Reset은_변경_시에만_dirty이고_훅을_발화하지_않는다()
+    public void Reset_marks_dirty_only_on_change_and_never_fires_hook()
     {
         var catalog = Catalog(new GameDef("daily", 10, repeatable: true));
         var dirtyCount = 0;
         var manager = new AchievementManager<GameDef>(catalog, () => dirtyCount++);
 
-        manager.Reset(0);                                        // 이미 0 — 변경 없음
+        manager.Reset(0);                                        // already 0 — no change
         Assert.That(dirtyCount, Is.EqualTo(0));
 
         manager.Increase(0, 10);
         dirtyCount = 0;
-        manager.OnCompleted = (_, _, _) => Assert.Fail("Reset이 훅을 발화했습니다");
+        manager.OnCompleted = (_, _, _) => Assert.Fail("Reset fired hook");
         manager.Reset(0);
         Assert.That(dirtyCount, Is.EqualTo(1));
     }
@@ -403,12 +403,12 @@ public class AchievementTests
     // ── Restore ──────────────────────────────────────────────────────────
 
     [Test]
-    public void Restore는_훅과_dirty를_발화하지_않는다()
+    public void Restore_fires_neither_hook_nor_dirty()
     {
         var catalog = Catalog(new GameDef("kill", 10));
         var dirtyCount = 0;
         var manager = new AchievementManager<GameDef>(catalog, () => dirtyCount++);
-        manager.OnCompleted = (_, _, _) => Assert.Fail("Restore가 훅을 발화했습니다");
+        manager.OnCompleted = (_, _, _) => Assert.Fail("Restore fired hook");
 
         manager.Restore(0, new AchievementState
         {
@@ -422,31 +422,31 @@ public class AchievementTests
     }
 
     [Test]
-    public void Restore_불변식_위반은_예외()
+    public void Restore_invariant_violation_throws()
     {
         var manager = new AchievementManager<GameDef>(Catalog(new GameDef("a", 10)));
 
         Assert.That(() => manager.Restore(0, new AchievementState { Progress = -1 }), Throws.ArgumentException);
         Assert.That(() => manager.Restore(0, new AchievementState { ClaimedCount = 1, CompletedCount = 0 }), Throws.ArgumentException);
-        Assert.That(() => manager.Restore(0, new AchievementState { Progress = 10, CompletedCount = 2 }), Throws.ArgumentException);   // 비반복 다회
-        Assert.That(() => manager.Restore(0, new AchievementState { Availability = AchievementStatus.Completed }), Throws.ArgumentException);   // 파생 상태 저장 금지
+        Assert.That(() => manager.Restore(0, new AchievementState { Progress = 10, CompletedCount = 2 }), Throws.ArgumentException);   // non-repeatable multi-completion
+        Assert.That(() => manager.Restore(0, new AchievementState { Availability = AchievementStatus.Completed }), Throws.ArgumentException);   // derived status must not be persisted
     }
 
     [Test]
-    public void Restore_목표_하향_시_비반복_진행도는_클램프되고_Increase0으로_재판정한다()
+    public void Restore_clamps_nonrepeatable_progress_on_lowered_target_and_reevaluates_via_increase_zero()
     {
-        var catalog = Catalog(new GameDef("kill", 10));          // 저장 당시 목표 100 → 10으로 하향된 상황
+        var catalog = Catalog(new GameDef("kill", 10));          // target lowered from 100 to 10 since save
         var manager = new AchievementManager<GameDef>(catalog);
 
         manager.Restore(0, new AchievementState { Progress = 42, Availability = AchievementStatus.Active });
         Assert.That(manager.GetState(0).Progress, Is.EqualTo(10));
-        Assert.That(manager.Increase(0, 0), Is.EqualTo(1));      // 재평가로 달성 발화
+        Assert.That(manager.Increase(0, 0), Is.EqualTo(1));      // re-evaluation fires completion
     }
 
-    // ── dirty 연계 ───────────────────────────────────────────────────────
+    // ── dirty integration ────────────────────────────────────────────────
 
     [Test]
-    public void 실제_변경_시에만_onDirty가_호출된다()
+    public void OnDirty_fires_only_on_actual_change()
     {
         var catalog = Catalog(new GameDef("a", 10));
         var dirtyCount = 0;
@@ -454,28 +454,28 @@ public class AchievementTests
 
         manager.Increase(0, 3);
         Assert.That(dirtyCount, Is.EqualTo(1));
-        manager.Increase(0, 0);                                  // 변경 없음
-        manager.SetProgress(0, 3);                               // 같은 값
+        manager.Increase(0, 0);                                  // no change
+        manager.SetProgress(0, 3);                               // same value
         Assert.That(dirtyCount, Is.EqualTo(1));
-        manager.Increase(0, 7);                                  // 달성
+        manager.Increase(0, 7);                                  // completes
         Assert.That(dirtyCount, Is.EqualTo(2));
-        manager.Increase(0, 5);                                  // 클램프 후 변경 없음
+        manager.Increase(0, 5);                                  // clamped, no change
         Assert.That(dirtyCount, Is.EqualTo(2));
         manager.TryClaim(0);
         Assert.That(dirtyCount, Is.EqualTo(3));
     }
 
-    // ── OnCompleted 체인 ─────────────────────────────────────────────────
+    // ── OnCompleted chaining ─────────────────────────────────────────────
 
     [Test]
-    public void OnCompleted_훅에서_다른_업적을_진행할_수_있다()
+    public void OnCompleted_hook_can_progress_other_achievements()
     {
         var catalog = Catalog(new GameDef("tier1", 10), new GameDef("meta", 2));
         var manager = new AchievementManager<GameDef>(catalog);
         var metaIdx = catalog.GetIndex("meta");
         manager.OnCompleted = (index, def, count) =>
         {
-            if (index != metaIdx) manager.Increase(metaIdx, count);   // 메타 체인 = 게임 몫
+            if (index != metaIdx) manager.Increase(metaIdx, count);   // meta chaining is game code's job
         };
 
         manager.Increase(0, 10);
@@ -483,7 +483,7 @@ public class AchievementTests
     }
 
     [Test]
-    public void OnCompleted는_인덱스_정의_신규달성수를_받는다()
+    public void OnCompleted_receives_index_definition_and_new_completion_count()
     {
         var catalog = Catalog(new GameDef("daily", 10, repeatable: true));
         var manager = new AchievementManager<GameDef>(catalog);

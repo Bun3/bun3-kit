@@ -11,7 +11,7 @@ public class SessionActorTests
 {
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(5);
 
-    // ---- 테스트용 세션/서버 ----
+    // ---- test session/server ----
 
     private sealed class ScriptedSession : Session
     {
@@ -59,7 +59,7 @@ public class SessionActorTests
         protected override ScriptedSession CreateSession(IConnection connection) => _factory(connection);
     }
 
-    // ---- 테스트 ----
+    // ---- tests ----
 
     [Test]
     public async Task Packets_are_processed_in_order()
@@ -118,7 +118,7 @@ public class SessionActorTests
             conn => new ScriptedSession(conn, async (_, _) =>
             {
                 firstPacketEntered.TrySetResult();
-                await release.Task; // 첫 패킷에서 블록 → 큐 적체 유도
+                await release.Task; // block on the first packet to build up the queue
             }),
             maxQueuedPackets: 8);
         await server.StartAsync();
@@ -126,10 +126,10 @@ public class SessionActorTests
         var conn = transport.Connect(1);
         conn.ReceivePacket(new byte[] { 0 });
         await firstPacketEntered.Task.WaitAsync(Timeout);
-        var session = server.Sessions.Single(); // 종료 전에 세션 캡처
-        for (var i = 0; i < 20; i++) conn.ReceivePacket(new byte[] { 1 }); // 8개 초과
+        var session = server.Sessions.Single(); // capture the session before shutdown
+        for (var i = 0; i < 20; i++) conn.ReceivePacket(new byte[] { 1 }); // exceeds 8
 
-        release.TrySetResult(); // 블록 해제 → 루프가 종료 신호를 소비
+        release.TrySetResult(); // unblock so the loop consumes the shutdown signal
         await session.Disconnected.Task.WaitAsync(Timeout);
         Assert.That(conn.IsOpen, Is.False);
     }
@@ -201,8 +201,8 @@ public class SessionActorTests
         await server.StartAsync();
 
         var conn = transport.Connect(1);
-        conn.ReceivePacket(new byte[] { 1 }); // 예외 — 무시됨
-        conn.ReceivePacket(new byte[] { 2 }); // 계속 처리되어야 함
+        conn.ReceivePacket(new byte[] { 1 }); // throws — ignored
+        conn.ReceivePacket(new byte[] { 2 }); // must still be processed
 
         await done.Task.WaitAsync(Timeout);
         Assert.That(processed, Is.EqualTo(new byte[] { 2 }));
@@ -259,7 +259,7 @@ public class SessionActorTests
         {
             processed.Add(packet.Span[0]);
             firstPacketEntered.TrySetResult();
-            await release.Task; // 첫 패킷에서 블록 — 뒤 패킷들이 큐에 남게 한다
+            await release.Task; // block on the first packet — later packets stay queued
         }));
         await server.StartAsync();
 
@@ -270,7 +270,7 @@ public class SessionActorTests
         conn.ReceivePacket(new byte[] { 2 });
         conn.ReceivePacket(new byte[] { 3 });
 
-        conn.Close(); // 종료 신호 — 큐에 남은 2, 3은 처리되지 않아야 한다
+        conn.Close(); // close signal — queued 2 and 3 must not be processed
         release.TrySetResult();
 
         await session.Disconnected.Task.WaitAsync(Timeout);
@@ -312,13 +312,13 @@ public class SessionActorTests
 
         var first = transport.Connect(1);
         var session = server.Sessions.Single();
-        var duplicate = transport.Connect(1); // 전송 계약 위반 시뮬레이션 — 같은 id 재사용
+        var duplicate = transport.Connect(1); // simulate a transport contract violation — same id reused
 
-        Assert.That(duplicate.IsOpen, Is.False); // 신규 연결만 거부
+        Assert.That(duplicate.IsOpen, Is.False); // only the new connection is rejected
         Assert.That(first.IsOpen, Is.True);
-        Assert.That(server.Sessions.Single(), Is.SameAs(session)); // 기존 세션 유지
+        Assert.That(server.Sessions.Single(), Is.SameAs(session)); // existing session kept
 
-        first.ReceivePacket(new byte[] { 7 }); // 기존 세션은 계속 동작
+        first.ReceivePacket(new byte[] { 7 }); // existing session keeps working
         await done.Task.WaitAsync(Timeout);
         Assert.That(processed, Is.EqualTo(new byte[] { 7 }));
     }
@@ -333,11 +333,11 @@ public class SessionActorTests
         var conn = transport.Connect(1);
         var session = server.Sessions.Single();
 
-        conn.Close(); // 1차 OnClosed
+        conn.Close(); // first OnClosed
         await session.Disconnected.Task.WaitAsync(Timeout);
-        Assert.DoesNotThrow(() => transport.RaiseClosed(conn, new IOException("late"))); // 2차 — 무해해야 한다
+        Assert.DoesNotThrow(() => transport.RaiseClosed(conn, new IOException("late"))); // second — must be harmless
         Assert.That(server.Sessions, Is.Empty);
-        Assert.That(await session.Disconnected.Task, Is.Null); // 1차 결과(null)가 유지된다
+        Assert.That(await session.Disconnected.Task, Is.Null); // first result (null) is kept
     }
 
     [Test]
@@ -363,7 +363,7 @@ public class SessionActorTests
         var server = new TestServer(transport, conn => new ScriptedSession(conn, async (_, _) =>
         {
             firstPacketEntered.TrySetResult();
-            await release.Task; // 드레인 불가 세션
+            await release.Task; // session that cannot drain
         }));
         await server.StartAsync();
         var conn = transport.Connect(1);
@@ -371,9 +371,9 @@ public class SessionActorTests
         await firstPacketEntered.Task.WaitAsync(Timeout);
 
         using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
-        await server.StopAsync(TimeSpan.FromSeconds(30), cts.Token).WaitAsync(Timeout); // 30초 대기 대신 취소로 반환
+        await server.StopAsync(TimeSpan.FromSeconds(30), cts.Token).WaitAsync(Timeout); // returns via cancel instead of the 30s wait
 
-        release.TrySetResult(); // 블록된 핸들러 정리
+        release.TrySetResult(); // clean up the blocked handler
     }
 
     [Test]

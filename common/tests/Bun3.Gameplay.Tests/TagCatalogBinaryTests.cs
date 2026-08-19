@@ -9,7 +9,7 @@ using NUnit.Framework;
 
 namespace Bun3.Gameplay.Tests;
 
-/// <summary>B3DK 카탈로그의 결정성과 정상 로딩 계약을 검증합니다.</summary>
+/// <summary>Verifies determinism and happy-path loading contracts of the B3DK catalog.</summary>
 [TestFixture]
 public sealed class TagCatalogBinaryTests
 {

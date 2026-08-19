@@ -5,17 +5,17 @@ using Cysharp.Threading.Tasks;
 namespace Bun3.Unity.UI.Toasts
 {
     /// <summary>
-    /// 토스트 프리팹의 베이스 컴포넌트. <see cref="ToastQueue{TData}"/>가 생명주기를 소유하며,
-    /// 게임은 데이터 바인딩(<see cref="OnData"/>)과 연출(<see cref="UIView.PlayShowAsync"/> —
-    /// 내장 스케일/페이드 플래그로 대체 가능)만 구현한다.
-    /// 텍스트 바인딩은 ZString + TMP <c>SetText</c> 관례를 따를 것.
+    /// Base component for toast prefabs. <see cref="ToastQueue{TData}"/> owns the lifecycle;
+    /// the game implements only data binding (<see cref="OnData"/>) and animation
+    /// (<see cref="UIView.PlayShowAsync"/> — or the built-in scale/fade flags).
+    /// Text binding should follow the ZString + TMP <c>SetText</c> convention.
     /// </summary>
     public abstract class ToastView<TData> : UIView
     {
-        /// <summary>표시할 데이터를 바인딩한다. 재사용 인스턴스라 매 표시마다 호출된다.</summary>
+        /// <summary>Binds the data to display. Called on every show — the instance is reused.</summary>
         protected internal abstract void OnData(TData data);
 
-        /// <summary>표시 유지 시간 대기. 기본은 unscaled 딜레이 — 테스트/특수 연출은 오버라이드.</summary>
+        /// <summary>Waits out the hold time. Default is an unscaled delay — override for tests/special effects.</summary>
         protected internal virtual UniTask WaitAsync(float duration, CancellationToken cancellationToken)
             => UniTask.Delay(TimeSpan.FromSeconds(duration), ignoreTimeScale: true,
                 cancellationToken: cancellationToken);

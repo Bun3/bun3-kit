@@ -70,7 +70,7 @@ namespace Bun3.Gameplay.Editor.Tags
 
                 using (new EditorGUI.DisabledScope(!isMixed && pathProperty.stringValue.Length == 0))
                 {
-                    if (GUI.Button(clearRect, new GUIContent("×", "None으로 지웁니다."), EditorStyles.miniButton))
+                    if (GUI.Button(clearRect, new GUIContent("×", "Clear to None."), EditorStyles.miniButton))
                     {
                         ApplyPath(
                             property.serializedObject.targetObjects,
@@ -91,7 +91,7 @@ namespace Bun3.Gameplay.Editor.Tags
         {
             if (property is null) throw new ArgumentNullException(nameof(property));
             var pathProperty = property.FindPropertyRelative("_path")
-                ?? throw new ArgumentException("GameplayTagRef path property가 없습니다.", nameof(property));
+                ?? throw new ArgumentException("GameplayTagRef path property is missing.", nameof(property));
             isMixed = pathProperty.hasMultipleDifferentValues;
             return isMixed ? string.Empty : pathProperty.stringValue ?? string.Empty;
         }

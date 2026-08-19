@@ -48,7 +48,7 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(result, Does.Not.StartWith(Path.GetFullPath(dataPath) + Path.DirectorySeparatorChar));
         }
 
-        /// <summary>설정되지 않은 Catalog와 여러 Provider를 안정적인 진단으로 구분하는지 검증합니다.</summary>
+        /// <summary>Verifies an unconfigured catalog and multiple providers are distinguished by stable diagnostics.</summary>
         [Test]
         public void Resolver_reports_unconfigured_settings_and_multiple_providers_with_stable_diagnostics()
         {
@@ -83,7 +83,7 @@ namespace Bun3.Gameplay.Unity.Tests
             }));
         }
 
-        /// <summary>코드 Provider가 없어도 Project Settings ID로 완전한 개발 context를 만드는지 검증합니다.</summary>
+        /// <summary>Verifies a complete development context is built from the project settings ID even without a code provider.</summary>
         [Test]
         public void Project_settings_catalog_id_is_the_development_fallback_without_a_provider()
         {
@@ -97,7 +97,7 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(resolution.Context.Sources, Has.Count.EqualTo(1));
         }
 
-        /// <summary>개발 context가 Provider와 Project Settings의 선택 매트릭스를 따르는지 검증합니다.</summary>
+        /// <summary>Verifies the development context follows the provider vs project settings selection matrix.</summary>
         [Test]
         public void Resolver_selects_development_context_from_the_provider_and_settings_matrix()
         {
@@ -130,7 +130,7 @@ namespace Bun3.Gameplay.Unity.Tests
             }));
         }
 
-        /// <summary>Provider Catalog ID가 canonical 형식이 아니면 같은 설정 ID로 정규화되더라도 거부하는지 검증합니다.</summary>
+        /// <summary>Verifies a non-canonical provider catalog ID is rejected even if it normalizes to the same settings ID.</summary>
         [Test]
         public void Resolver_rejects_a_noncanonical_provider_catalog_id_before_matching_project_settings()
         {
@@ -151,7 +151,7 @@ namespace Bun3.Gameplay.Unity.Tests
             }));
         }
 
-        /// <summary>비정규형 Project Settings ID를 Provider와 비교하기 전에 거부하는지 검증합니다.</summary>
+        /// <summary>Verifies a non-canonical project settings ID is rejected before comparing with the provider.</summary>
         [Test]
         public void Resolver_requires_a_raw_ordinal_catalog_id_match_with_project_settings()
         {
@@ -171,7 +171,7 @@ namespace Bun3.Gameplay.Unity.Tests
                 "canonical lowercase ASCII-hyphen form"));
         }
 
-        /// <summary>전역 Provider 탐색이 현재 Unity 테스트 어셈블리의 더블을 반환하지 않는지 검증합니다.</summary>
+        /// <summary>Verifies global provider discovery does not return doubles from the current Unity test assembly.</summary>
         [Test]
         public void Global_discovery_excludes_providers_from_test_assemblies()
         {

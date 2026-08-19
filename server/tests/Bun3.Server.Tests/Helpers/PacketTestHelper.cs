@@ -2,7 +2,7 @@ using Google.Protobuf;
 
 namespace Bun3.Server.Tests.Helpers;
 
-/// <summary>[채널:1][protobuf] 테스트 패킷 조립 헬퍼.</summary>
+/// <summary>Helper for assembling [channel:1][protobuf] test packets.</summary>
 internal static class PacketTestHelper
 {
     public static byte[] Wrap(byte channel, IMessage message)

@@ -21,15 +21,15 @@ namespace Bun3.Gameplay.Unity.Tests
             var session = OpenGame(
                 "{\"schemaVersion\":1,\"tags\":[{\"name\":\"ABILITY\",\"comment\":\"\"}]}");
 
-            session.Add("Ability.Jump", "점프");
-            session.SetComment("ABILITY", "능력");
+            session.Add("Ability.Jump", "Jump skill");
+            session.SetComment("ABILITY", "Skill root");
 
             var json = session.Serialize();
             Assert.That(json, Does.Contain("\"name\": \"ability\""));
             Assert.That(json, Does.Contain("\"name\": \"ability.jump\""));
             Assert.That(json, Does.Not.Contain("Ability"));
             Assert.That(json, Does.Not.Contain("ABILITY"));
-            Assert.That(json, Does.Contain("\"comment\": \"능력\""));
+            Assert.That(json, Does.Contain("\"comment\": \"Skill root\""));
             Assert.That(json.EndsWith("\n", StringComparison.Ordinal), Is.True);
         }
 

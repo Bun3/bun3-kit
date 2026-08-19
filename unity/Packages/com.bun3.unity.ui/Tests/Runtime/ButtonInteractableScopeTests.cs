@@ -47,7 +47,7 @@ namespace Bun3.Unity.UI.Tests
                 scope.Require(false, "not enough gold");
             }
 
-            Assert.AreEqual(0, handler.CallCount, "사유는 Dispose가 아니라 클릭 시점에만 재생돼야 한다.");
+            Assert.AreEqual(0, handler.CallCount, "The reason must replay only on click, not on Dispose.");
         }
 
         [Test]
@@ -81,7 +81,7 @@ namespace Bun3.Unity.UI.Tests
             Click(button);
 
             Assert.AreEqual("not enough gold", handler.Last.DisabledMessage,
-                "선언 순서가 우선순위다.");
+                "Declaration order is the priority.");
         }
 
         [Test]
@@ -100,7 +100,7 @@ namespace Bun3.Unity.UI.Tests
             Click(button);
 
             Assert.AreEqual(1, handler.CallCount,
-                "사유 없는 실패는 사유 슬롯을 점유하지 않는다.");
+                "A reasonless failure must not occupy the reason slot.");
             Assert.AreEqual("not enough gold", handler.Last.DisabledMessage);
         }
 
@@ -121,7 +121,7 @@ namespace Bun3.Unity.UI.Tests
             Assert.IsFalse(button.interactable);
             Assert.AreEqual(1, handler.CallCount);
             Assert.AreEqual("not enough gold", handler.Last.DisabledMessage,
-                "빈 문자열은 사유가 아니다. 사유 슬롯을 점유해 뒤 조건을 삼키면 안 된다.");
+                "An empty string is not a reason; it must not occupy the slot and swallow later conditions.");
         }
 
         [Test]
@@ -156,7 +156,7 @@ namespace Bun3.Unity.UI.Tests
             button.interactable = true;
             scope.Dispose();
 
-            Assert.IsTrue(button.interactable, "두 번째 Dispose는 아무 것도 하지 않아야 한다.");
+            Assert.IsTrue(button.interactable, "The second Dispose must do nothing.");
         }
 
         [Test]

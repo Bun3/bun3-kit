@@ -1,11 +1,11 @@
-// ItemInventory partial — 지급·소모·트랜잭션(원자 커밋) 담당.
+// ItemInventory partial — grant, consume, and transaction (atomic commit).
 using System;
 using System.Collections.Generic;
 using Bun3.Gameplay.Numerics;
 
 namespace Bun3.Server.Items
 {
-    // 지급·소모·트랜잭션 — 모든 변경 API가 단일 커밋 코어(CommitOps)를 지난다.
+    // Every mutating API goes through the single commit core (CommitOps).
     public sealed partial class ItemInventory<TState>
     {
         private static readonly BigNum MaxInstancesPerOperationQuantity = MaxInstancesPerOperation;
@@ -35,8 +35,9 @@ namespace Bun3.Server.Items
         }
 
         /// <summary>
-        /// 트랜잭션 빌더를 시작한다 — 정의 단위와 인스턴스 지정 연산을 섞은 원자 배치.
-        /// 동시 배치는 1개: 새 Begin은 이전 미커밋 배치를 버리고, 낡은 빌더 사용은 던진다.
+        /// Starts a transaction builder — an atomic batch mixing definition-level and
+        /// instance-targeted operations. Only one batch at a time: a new Begin discards the
+        /// previous uncommitted batch, and using a stale builder throws.
         /// </summary>
         public InventoryTransaction<TState> BeginTransaction()
         {
@@ -49,7 +50,7 @@ namespace Bun3.Server.Items
         {
             if (token != _txToken)
             {
-                throw new InvalidOperationException("낡은 트랜잭션 빌더입니다 — BeginTransaction 이후의 빌더만 유효합니다.");
+                throw new InvalidOperationException("Stale transaction builder — only the builder from the latest BeginTransaction is valid.");
             }
 
             _txOps.Add(op);
@@ -59,18 +60,18 @@ namespace Bun3.Server.Items
         {
             if (token != _txToken)
             {
-                throw new InvalidOperationException("낡은 트랜잭션 빌더입니다 — BeginTransaction 이후의 빌더만 유효합니다.");
+                throw new InvalidOperationException("Stale transaction builder — only the builder from the latest BeginTransaction is valid.");
             }
 
-            _txToken++;   // 커밋 후 빌더 재사용 차단
+            _txToken++;   // Invalidate the builder after commit.
             var error = CommitOps(_txOps, out failedIndex, created);
             _txOps.Clear();
             return error;
         }
 
-        /// <summary>수량을 지급한다. amount는 양수여야 한다. 비스택형은 amount개(정수·상한
-        /// <see cref="MaxInstancesPerOperation"/>) 인스턴스가 생성되며 <paramref name="created"/>에
-        /// 담긴다(스택 싱글턴 신규 생성 포함).</summary>
+        /// <summary>Grants an amount. amount must be positive. For unstackables, amount instances
+        /// (integer, capped at <see cref="MaxInstancesPerOperation"/>) are created and collected
+        /// into <paramref name="created"/> (including a newly created stack singleton).</summary>
         public InventoryError TryAdd(ItemId item, BigNum amount, List<ItemInstance<TState>>? created = null)
         {
             _applyOps.Clear();
@@ -79,11 +80,12 @@ namespace Bun3.Server.Items
         }
 
         /// <summary>
-        /// 가능한 만큼만 지급한다(클램프) — 상한 도달은 실패가 아니라 부분 지급이라는
-        /// 레거시 의미론(idlez 초과분 버림·growninja 우편 폴백). <paramref name="granted"/>가
-        /// 실제 지급량(0 포함 — 0이면 변경·통지 없음)이며, 잔여분 처리(우편 등)는 게임 몫.
-        /// 오류는 UnknownItem·InvalidAmount(0 이하·비스택형 비정수)뿐이다.
-        /// 스택형 BigNum 손실 의미론상 보고 지급량과 잔량 변화가 다를 수 있다(거대 스택에 미소량 흡수).
+        /// Grants as much as possible (clamped) — hitting the cap is a partial grant, not a failure.
+        /// <paramref name="granted"/> is the actual granted amount (0 included — 0 means no change
+        /// and no notification); handling the remainder (mail, etc.) is the game's job.
+        /// The only errors are UnknownItem and InvalidAmount (non-positive, or non-integer for
+        /// unstackables). Under lossy stackable BigNum semantics, the reported grant may differ
+        /// from the balance change (a tiny amount absorbed into a huge stack).
         /// </summary>
         public InventoryError TryAddUpTo(
             ItemId item,
@@ -122,7 +124,7 @@ namespace Bun3.Server.Items
                 var room = (BigNum)maxCount - GetQuantity(item);
                 if (room.Sign <= 0)
                 {
-                    return InventoryError.None;   // 가득 — 0 지급 성공
+                    return InventoryError.None;   // Full — zero-grant success.
                 }
 
                 if (clamp.CompareTo(room) > 0)
@@ -142,8 +144,9 @@ namespace Bun3.Server.Items
             return error;
         }
 
-        /// <summary>수량을 소모한다. amount는 양수여야 한다. 비스택형은 잠금 아닌 인스턴스
-        /// amount개가 제거된다(순서 미보장 — 특정 인스턴스는 <see cref="TryRemoveByInstance"/>).</summary>
+        /// <summary>Consumes an amount. amount must be positive. For unstackables, amount unlocked
+        /// instances are removed (order unspecified — for a specific instance use
+        /// <see cref="TryRemoveByInstance"/>).</summary>
         public InventoryError TryRemove(ItemId item, BigNum amount)
         {
             _applyOps.Clear();
@@ -151,7 +154,8 @@ namespace Bun3.Server.Items
             return CommitOps(_applyOps, out _, null);
         }
 
-        /// <summary>정의의 가용(잠금 제외) 수량 — 소모 가능량 표시·우선순위 소모 계획용.</summary>
+        /// <summary>Available (unlocked) amount for a definition — for consumable-amount display and
+        /// priority-consumption planning.</summary>
         public BigNum GetRemovableQuantity(ItemId item)
         {
             if (_stackSingletons.TryGetValue(item, out var singletonId))
@@ -172,7 +176,8 @@ namespace Bun3.Server.Items
             return count;
         }
 
-        /// <summary>여러 정의의 총 보유 수량 합 — 풀 분리(리젠/보상, 무상/유상) 표시용.</summary>
+        /// <summary>Sum of total held amounts across definitions — for split-pool display
+        /// (regen/reward, free/paid).</summary>
         public BigNum GetQuantityAcross(ReadOnlySpan<ItemId> items)
         {
             var total = BigNum.Zero;
@@ -185,13 +190,14 @@ namespace Bun3.Server.Items
         }
 
         /// <summary>
-        /// 여러 정의에서 우선순위 순서로 나눠 소모한다 — 전부-아니면-전무. 풀 분리 패턴의
-        /// 소모 경로(보상 티켓 먼저·무상 재화 먼저 등 — 순서는 호출측이 정한다).
-        /// 가용(잠금 제외) 합이 부족하면 <see cref="InventoryError.Insufficient"/>에 무변경.
-        /// 비스택형 소스는 정수 amount에서만 정확히 동작한다.
+        /// Consumes across multiple definitions in priority order — all-or-nothing. The consume
+        /// path of the split-pool pattern (reward tickets first, free currency first, etc. — the
+        /// caller defines the order). If the available (unlocked) sum is insufficient, returns
+        /// <see cref="InventoryError.Insufficient"/> with no change.
+        /// Unstackable sources work exactly only for integer amounts.
         /// </summary>
-        /// <param name="sources">소모 우선순위 순서의 정의들(중복 없이).</param>
-        /// <param name="amount">총 소모량(양수).</param>
+        /// <param name="sources">Definitions in consumption priority order (no duplicates).</param>
+        /// <param name="amount">Total amount to consume (positive).</param>
         public InventoryError TryRemoveAcross(ReadOnlySpan<ItemId> sources, BigNum amount)
         {
             if (amount.Sign <= 0)
@@ -227,8 +233,9 @@ namespace Bun3.Server.Items
             return CommitOps(_applyOps, out _, null);
         }
 
-        /// <summary>특정 인스턴스에서 수량을 소모한다. 잠금 인스턴스는 <see cref="InventoryError.Locked"/>.
-        /// 비스택형은 수량이 1이므로 amount 1로 인스턴스 자체가 제거된다.</summary>
+        /// <summary>Consumes an amount from a specific instance. Locked instances return
+        /// <see cref="InventoryError.Locked"/>. Unstackables have amount 1, so amount 1 removes
+        /// the instance itself.</summary>
         public InventoryError TryRemoveByInstance(long instanceId, BigNum amount)
         {
             _applyOps.Clear();
@@ -237,9 +244,10 @@ namespace Bun3.Server.Items
         }
 
         /// <summary>
-        /// 복수 델타를 전부-아니면-전무로 적용한다. 스택형·비스택형 혼합 가능 — 판정은
-        /// 내부에서 1회. 순차 판정(같은 정의의 앞선 델타 누적 반영)이며 실패 시 완전
-        /// 무변경, <paramref name="failedIndex"/>가 원인 델타를 가리킨다.
+        /// Applies multiple deltas all-or-nothing. Stackable and unstackable may be mixed — the
+        /// distinction is resolved once internally. Validation is sequential (earlier deltas for
+        /// the same definition accumulate); on failure the inventory is fully unchanged and
+        /// <paramref name="failedIndex"/> points at the offending delta.
         /// </summary>
         public InventoryError TryApply(
             ReadOnlySpan<ItemDelta> deltas,
@@ -259,10 +267,11 @@ namespace Bun3.Server.Items
         }
 
         /// <summary>
-        /// 커밋 코어 — 검증 패스(수량 시뮬레이션)에서 전 연산이 통과해야만 적용 패스로
-        /// 넘어간다. 배치 내 인스턴스 지정 소모가 가리키는 비스택형 인스턴스는 정의 단위
-        /// 소모의 후보 풀에서 배치 전체에 걸쳐 제외된다(순서 무관). id 발급자·상태 팩토리는
-        /// 검증 통과 후에만 호출되고, 성공 시 onChanged는 배치당 1회다.
+        /// Commit core — every operation must pass the validation pass (amount simulation) before
+        /// the apply pass runs. Unstackable instances targeted by instance-level consumes are
+        /// excluded from the definition-level candidate pool for the whole batch (order-independent).
+        /// The id issuer and state factory are called only after validation passes; on success
+        /// onChanged fires once per batch.
         /// </summary>
         private InventoryError CommitOps(List<TxOp> ops, out int failedIndex, List<ItemInstance<TState>>? created)
         {
@@ -272,7 +281,8 @@ namespace Bun3.Server.Items
                 return InventoryError.None;
             }
 
-            // 지정 대상 수집 — 비스택형 지정 인스턴스는 정의 단위 소모 풀에서 전역 제외.
+            // Collect targeted instances — unstackable targets are globally excluded from
+            // the definition-level consume pool.
             _txUnstackableTargets.Clear();
             for (var i = 0; i < ops.Count; i++)
             {
@@ -288,7 +298,8 @@ namespace Bun3.Server.Items
                 }
             }
 
-            // 검증 패스 — 정의별 (총량, 가용 풀) 시뮬레이션 + 인스턴스 지정 소모량 확정.
+            // Validation pass — simulate (total, available pool) per definition and resolve
+            // instance-targeted consume amounts.
             _txConsumedTargets.Clear();
             _txResolved.Clear();
             _txNetIds.Clear();
@@ -305,7 +316,7 @@ namespace Bun3.Server.Items
                 }
             }
 
-            // 적용 패스 — 실패 불가능 상태에서 순서대로 반영.
+            // Apply pass — applied in order, in a state where failure is impossible.
             _appliedCount = 0;
             for (var i = 0; i < ops.Count; i++)
             {
@@ -350,7 +361,7 @@ namespace Bun3.Server.Items
                     }
                     else if (_catalog.GetRegenPeriodTicks(op.Item) > 0 && op.Amount.Exponent < 0)
                     {
-                        return InventoryError.InvalidAmount;   // 리젠 정의는 정수 수량만 — 정산 산술의 전제
+                        return InventoryError.InvalidAmount;   // Regen definitions allow integer amounts only — settlement arithmetic depends on it.
                     }
 
                     var net = NetIndexOf(op.Item);
@@ -368,7 +379,7 @@ namespace Bun3.Server.Items
                         }
 
                         _txNetTotal[net] = total;
-                        _txNetPool[net] += op.Amount;   // 신규 지급분은 잠금 없음 — 가용
+                        _txNetPool[net] += op.Amount;   // Newly granted amounts carry no locks — available.
                         return InventoryError.None;
                     }
 
@@ -419,18 +430,18 @@ namespace Bun3.Server.Items
                         {
                             if (_txConsumedTargets[i] == op.InstanceId)
                             {
-                                return InventoryError.Insufficient;   // 같은 인스턴스 중복 지정
+                                return InventoryError.Insufficient;   // Same instance targeted twice.
                             }
                         }
 
                         _txConsumedTargets.Add(op.InstanceId);
                         var netUnstackable = NetIndexOf(target.Item);
-                        _txNetTotal[netUnstackable] -= BigNum.One;   // 풀은 이미 전역 제외됨
+                        _txNetTotal[netUnstackable] -= BigNum.One;   // Pool already excluded globally.
                         resolved = BigNum.One;
                         return InventoryError.None;
                     }
 
-                    // 스택 싱글턴 지정 — 정의 단위 소모와 같은 풀로 정산한다.
+                    // Targeted stack singleton — settles against the same pool as definition-level consumes.
                     var netSingleton = NetIndexOf(target.Item);
                     var amount = op.Kind == TxOpKind.RemoveInstanceAll ? _txNetPool[netSingleton] : op.Amount;
                     if (amount.Sign <= 0 || _txNetPool[netSingleton].CompareTo(amount) < 0)
@@ -480,7 +491,7 @@ namespace Bun3.Server.Items
             }
         }
 
-        /// <summary>적용 버퍼의 변경들을 행동 로그에 첨부한다 — 저빈도 감사 경로라 박싱 허용.</summary>
+        /// <summary>Attaches the applied-buffer changes to the action log — low-frequency audit path, boxing allowed.</summary>
         private void LogAppliedChanges()
         {
             if (_log == null)
@@ -506,7 +517,7 @@ namespace Bun3.Server.Items
                 System.Array.Resize(ref _applied, _applied.Length == 0 ? 8 : _applied.Length * 2);
             }
 
-            // 잔량은 적용 직후 조회 — 원장(ledger)의 "변경 후 잔량" 컬럼이 된다.
+            // Balance is read right after applying — becomes the ledger's post-change balance column.
             _applied[_appliedCount++] = new InventoryChange(item, delta, GetQuantity(item));
         }
 
@@ -514,7 +525,7 @@ namespace Bun3.Server.Items
         {
             if (_catalog.IsUnstackable(item))
             {
-                TryToInstanceCount(amount, out var count);   // 검증 통과분 — 실패 불가
+                TryToInstanceCount(amount, out var count);   // Passed validation — cannot fail.
                 for (var i = 0; i < count; i++)
                 {
                     var instance = CreateInstance(item, BigNum.One);
@@ -556,8 +567,8 @@ namespace Bun3.Server.Items
                 return;
             }
 
-            // 비스택형 — 잠금·배치 지정 대상이 아닌 인스턴스를 count개 수집 후 제거.
-            TryToInstanceCount(amount, out var count);   // 검증 통과분 — 실패 불가
+            // Unstackable — collect count instances that are neither locked nor batch-targeted, then remove.
+            TryToInstanceCount(amount, out var count);   // Passed validation — cannot fail.
             _removeScratch.Clear();
             foreach (var entry in _instances)
             {
@@ -582,8 +593,8 @@ namespace Bun3.Server.Items
             _removeScratch.Clear();
         }
 
-        /// <summary>정의별 시뮬레이션 엔트리를 찾거나 만든다 — (총량, 가용 풀) 시작값은
-        /// 현재 보유량과 잠금·지정 대상 제외 가용량.</summary>
+        /// <summary>Finds or creates the per-definition simulation entry — (total, available pool)
+        /// starts from the current holdings and availability excluding locked and targeted instances.</summary>
         private int NetIndexOf(ItemId item)
         {
             for (var i = 0; i < _txNetIds.Count; i++)
@@ -664,7 +675,7 @@ namespace Bun3.Server.Items
 
         private static void MarkChangedNoNotify(ItemInstance<TState> instance) => instance.Changed = true;
 
-        /// <summary>BigNum 덧셈 — 지수 한계 초과는 false(전부-아니면-전무 판정용).</summary>
+        /// <summary>BigNum addition — exceeding the exponent limit yields false (for all-or-nothing validation).</summary>
         private static bool TryAddQuantity(BigNum a, BigNum b, out BigNum result)
         {
             try
@@ -679,7 +690,8 @@ namespace Bun3.Server.Items
             }
         }
 
-        /// <summary>비스택형 수량 변환 — 양수·정수·<see cref="MaxInstancesPerOperation"/> 이하만 허용.</summary>
+        /// <summary>Unstackable amount conversion — only positive integers up to
+        /// <see cref="MaxInstancesPerOperation"/> are allowed.</summary>
         private static bool TryToInstanceCount(BigNum amount, out int count)
         {
             count = 0;

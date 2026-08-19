@@ -49,7 +49,7 @@ public class ReplyTests
     [Test]
     public void Generated_game_protocol_matches_root_conventions()
     {
-        // Grpc.Tools 파이프라인 스모크: 루트 3형의 oneof "body"와 규약 필드가 생성됐는지
+        // Grpc.Tools pipeline smoke: the three root types got their oneof "body" and contract fields generated
         Assert.That(Request.Descriptor.Oneofs, Has.Some.Matches<OneofDescriptor>(o => o.Name == "body"));
         Assert.That(Request.Descriptor.FindFieldByName("request_id"), Is.Not.Null);
         Assert.That(Response.Descriptor.FindFieldByName("status"), Is.Not.Null);

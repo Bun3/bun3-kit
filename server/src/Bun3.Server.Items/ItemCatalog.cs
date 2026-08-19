@@ -4,14 +4,15 @@ using System.Collections.Generic;
 namespace Bun3.Server.Items
 {
     /// <summary>
-    /// 아이템 정의 카탈로그의 비제네릭 코어 — 기동 시 1회 빌드되는 불변 인터닝 표.
-    /// idlez류의 "ResourceItem 표"에 해당하는 포지션으로, 문자열 id ↔ <see cref="ItemId"/>
-    /// 변환과 프레임워크 메타데이터(maxCount, 외부 숫자 id)만 안다.
-    /// 정식 키는 문자열 id다 — 저장 데이터에는 항상 문자열 id를 쓰고, <see cref="ItemId"/>
-    /// (등록 순서 의존 인덱스)는 절대 저장하지 않는다. DB·Steam(itemdefid) 등 숫자 키
-    /// 체계와의 연동은 선택적 외부 id 역색인(<see cref="TryGetByExternalId"/>)으로 한다.
-    /// 게임 정의 스키마는 <see cref="ItemCatalog{TDefinition}"/>이 보관한다.
-    /// 컨테이너는 이 코어만 참조한다(수량 로직은 정의 무관).
+    /// Non-generic core of the item definition catalog — an immutable interned table built
+    /// once at startup. Knows only the string id ↔ <see cref="ItemId"/> mapping and framework
+    /// metadata (maxCount, external numeric id).
+    /// The canonical key is the string id — persisted data always stores string ids;
+    /// <see cref="ItemId"/> (a registration-order-dependent index) must never be persisted.
+    /// Integration with numeric key systems (DB, Steam itemdefid) uses the optional
+    /// external-id reverse index (<see cref="TryGetByExternalId"/>).
+    /// Game definition schemas live in <see cref="ItemCatalog{TDefinition}"/>.
+    /// Containers reference only this core (amount logic is definition-agnostic).
     /// </summary>
     public class ItemCatalog
     {
@@ -49,10 +50,10 @@ namespace Bun3.Server.Items
             _externalLookup = externalLookup;
         }
 
-        /// <summary>등록된 정의 수.</summary>
+        /// <summary>Number of registered definitions.</summary>
         public int Count => _ids.Length;
 
-        /// <summary>문자열 id로 조회한다. 없으면 false, <paramref name="item"/>은 None.</summary>
+        /// <summary>Looks up by string id. Returns false if absent; <paramref name="item"/> is None.</summary>
         public bool TryGet(string id, out ItemId item)
         {
             if (id != null && _lookup.TryGetValue(id, out var index))
@@ -65,96 +66,97 @@ namespace Bun3.Server.Items
             return false;
         }
 
-        /// <summary>문자열 id로 조회한다. 없으면 <see cref="ItemCatalogException"/>.</summary>
+        /// <summary>Looks up by string id. Throws <see cref="ItemCatalogException"/> if absent.</summary>
         public ItemId GetRequired(string id)
         {
             if (!TryGet(id, out var item))
             {
-                throw new ItemCatalogException($"카탈로그에 없는 아이템 id: '{id}'");
+                throw new ItemCatalogException($"Item id not in catalog: '{id}'");
             }
 
             return item;
         }
 
-        /// <summary>이 카탈로그의 유효한 식별자인지 여부(None·범위 밖은 false).</summary>
+        /// <summary>Whether the identifier is valid for this catalog (None or out of range is false).</summary>
         public bool Contains(ItemId item) => (uint)item.Index < (uint)_ids.Length;
 
-        /// <summary>인터닝된 문자열 id를 반환한다 — 무할당. 무효 식별자면 던진다.</summary>
+        /// <summary>Returns the interned string id — allocation-free. Throws on an invalid identifier.</summary>
         public string GetIdString(ItemId item)
         {
             if (!Contains(item))
             {
-                throw new ArgumentOutOfRangeException(nameof(item), "이 카탈로그의 식별자가 아닙니다.");
+                throw new ArgumentOutOfRangeException(nameof(item), "Not an identifier of this catalog.");
             }
 
             return _ids[item.Index];
         }
 
-        /// <summary>정의당 최대 보유량 하드 상한. 무제한이면 <see cref="long.MaxValue"/>.
-        /// 리젠 목표선은 <see cref="GetMaxRegen"/>. 무효 식별자면 던진다.</summary>
+        /// <summary>Hard cap on holdings per definition. <see cref="long.MaxValue"/> means unlimited.
+        /// The regen target is <see cref="GetMaxRegen"/>. Throws on an invalid identifier.</summary>
         public long GetMaxCount(ItemId item)
         {
             if (!Contains(item))
             {
-                throw new ArgumentOutOfRangeException(nameof(item), "이 카탈로그의 식별자가 아닙니다.");
+                throw new ArgumentOutOfRangeException(nameof(item), "Not an identifier of this catalog.");
             }
 
             return _maxCounts[item.Index];
         }
 
-        /// <summary>비스택형(인스턴스형) 정의인지 여부 — 스택/인스턴스 판정의 단일 원천.
-        /// 무효 식별자면 던진다.</summary>
+        /// <summary>Whether the definition is unstackable (instance-based) — single source of truth
+        /// for the stack/instance distinction. Throws on an invalid identifier.</summary>
         public bool IsUnstackable(ItemId item)
         {
             if (!Contains(item))
             {
-                throw new ArgumentOutOfRangeException(nameof(item), "이 카탈로그의 식별자가 아닙니다.");
+                throw new ArgumentOutOfRangeException(nameof(item), "Not an identifier of this catalog.");
             }
 
             return _unstackables[item.Index];
         }
 
-        /// <summary>리젠 주기(ticks). 0 = 리젠 없음. 무효 식별자면 던진다.</summary>
+        /// <summary>Regen period (ticks). 0 = no regen. Throws on an invalid identifier.</summary>
         public long GetRegenPeriodTicks(ItemId item)
         {
             if (!Contains(item))
             {
-                throw new ArgumentOutOfRangeException(nameof(item), "이 카탈로그의 식별자가 아닙니다.");
+                throw new ArgumentOutOfRangeException(nameof(item), "Not an identifier of this catalog.");
             }
 
             return _regenPeriods[item.Index];
         }
 
-        /// <summary>리젠 목표선 — 리젠은 총량이 이 값 미만일 때만 채운다. 0 = 리젠 없음.
-        /// 항상 <see cref="GetMaxCount"/> 이하. 무효 식별자면 던진다.</summary>
+        /// <summary>Regen target — regen only fills while the total is below this value. 0 = no regen.
+        /// Always at most <see cref="GetMaxCount"/>. Throws on an invalid identifier.</summary>
         public long GetMaxRegen(ItemId item)
         {
             if (!Contains(item))
             {
-                throw new ArgumentOutOfRangeException(nameof(item), "이 카탈로그의 식별자가 아닙니다.");
+                throw new ArgumentOutOfRangeException(nameof(item), "Not an identifier of this catalog.");
             }
 
             return _maxRegens[item.Index];
         }
 
-        /// <summary>리젠 메타가 등록된 정의 목록 — <see cref="ItemInventory{TState}.SettleRegen"/>의
-        /// 순회 대상이자 게임의 리젠 기준 시각 저장 대상.</summary>
+        /// <summary>Definitions with regen metadata — iterated by
+        /// <see cref="ItemInventory{TState}.SettleRegen"/> and the set whose regen anchor
+        /// timestamps the game persists.</summary>
         public ReadOnlySpan<ItemId> RegenItems => _regenItems;
 
-        /// <summary>외부 숫자 id(DB 컬럼·Steam itemdefid 등)를 반환한다.
-        /// 미등록이면 false. 무효 식별자면 던진다.</summary>
+        /// <summary>Returns the external numeric id (DB column, Steam itemdefid, etc.).
+        /// False if not registered. Throws on an invalid identifier.</summary>
         public bool TryGetExternalId(ItemId item, out long externalId)
         {
             if (!Contains(item))
             {
-                throw new ArgumentOutOfRangeException(nameof(item), "이 카탈로그의 식별자가 아닙니다.");
+                throw new ArgumentOutOfRangeException(nameof(item), "Not an identifier of this catalog.");
             }
 
             externalId = _externalIds[item.Index];
             return externalId != NoExternalId;
         }
 
-        /// <summary>외부 숫자 id로 역조회한다. 미등록 id면 false, <paramref name="item"/>은 None.</summary>
+        /// <summary>Reverse lookup by external numeric id. Unregistered ids return false; <paramref name="item"/> is None.</summary>
         public bool TryGetByExternalId(long externalId, out ItemId item)
         {
             if (_externalLookup.TryGetValue(externalId, out var index))

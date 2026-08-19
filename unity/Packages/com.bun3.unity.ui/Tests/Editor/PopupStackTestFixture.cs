@@ -8,8 +8,8 @@ using UnityEngine;
 namespace Bun3.Unity.UI.Editor.Tests
 {
     /// <summary>
-    /// EditMode 팝업 스택 테스트 공통 기반. 전이는 수동 완료
-    /// <see cref="UniTaskCompletionSource"/>로 제어해 플레이어 루프 펌핑 없이 동기 검증한다.
+    /// Common base for EditMode popup stack tests. Transitions are driven by manually completed
+    /// <see cref="UniTaskCompletionSource"/>s, so assertions run synchronously without pumping the player loop.
     /// </summary>
     public abstract class PopupStackTestFixture
     {
@@ -74,16 +74,16 @@ namespace Bun3.Unity.UI.Editor.Tests
         protected List<TestPopup> Created;
         protected List<Popup> Released;
 
-        /// <summary>true면 팩토리가 만드는 팝업에 수동 완료 열림 소스를 단다.</summary>
+        /// <summary>When true, factory-created popups get a manually completed open source.</summary>
         protected bool PendingOpen;
 
-        /// <summary>true면 팩토리가 만드는 팝업에 수동 완료 닫힘 소스를 단다.</summary>
+        /// <summary>When true, factory-created popups get a manually completed close source.</summary>
         protected bool PendingClose;
 
-        /// <summary>true면 팩토리가 만드는 팝업에 딤 자식 오브젝트를 달아 준다.</summary>
+        /// <summary>When true, factory-created popups get a dim child object.</summary>
         protected bool WithDim;
 
-        /// <summary>true면 딤 클릭 닫기(<see cref="Popup.CloseOnDimClick"/>)도 켠다.</summary>
+        /// <summary>When true, also enables dim-click close (<see cref="Popup.CloseOnDimClick"/>).</summary>
         protected bool WithDimClick;
 
         [SetUp]

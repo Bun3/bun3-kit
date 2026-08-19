@@ -6,14 +6,14 @@ using Google.Protobuf.Reflection;
 
 namespace Bun3.Server.Rpc
 {
-    /// <summary>oneof "body"의 케이스 하나. 접근자 델리게이트는 구축 시 1회 캐시된다.</summary>
+    /// <summary>One case of the oneof "body". Accessor delegates are cached once at build time.</summary>
     internal sealed class OneofCase
     {
         public int FieldNumber { get; }
         public string Name { get; }
         public Type PayloadType { get; }
 
-        /// <summary>envelope에서 payload를 꺼낸다. 이 케이스가 활성(GetActiveCase 결과)일 때만 non-null.</summary>
+        /// <summary>Extracts the payload from the envelope. Non-null only when this case is active (GetActiveCase result).</summary>
         public Func<IMessage, IMessage?> Get { get; }
 
         public Action<IMessage, IMessage> Set { get; }
@@ -24,13 +24,13 @@ namespace Bun3.Server.Rpc
             Name = field.Name;
             PayloadType = field.MessageType.ClrType;
             var accessor = field.Accessor;
-            // IL2CPP에선 이 accessor 델리게이트가 인터프리트될 수 있음 — 생성 프로퍼티 직결 델리게이트 빌드는 v2 (스펙 §5)
+            // On IL2CPP these accessor delegates may run interpreted.
             Get = message => (IMessage?)accessor.GetValue(message);
             Set = (message, payload) => accessor.SetValue(message, payload);
         }
     }
 
-    /// <summary>루트 메시지의 oneof "body"를 기동 1회 열거해 만든 케이스 맵.</summary>
+    /// <summary>Case map built by enumerating the root message's oneof "body" once at startup.</summary>
     internal sealed class OneofMap
     {
         private readonly OneofDescriptor _oneof;
@@ -53,17 +53,17 @@ namespace Bun3.Server.Rpc
 
         public IReadOnlyCollection<OneofCase> Cases => _byNumber.Values;
 
-        /// <summary>같은 payload 타입을 공유하는 케이스 그룹(타입 기반 디스패치가 불가능한 모양).</summary>
+        /// <summary>Groups of cases sharing the same payload type (shapes where type-based dispatch is impossible).</summary>
         public IEnumerable<IGrouping<Type, OneofCase>> DuplicatePayloadTypeGroups() =>
             _byNumber.Values.GroupBy(c => c.PayloadType).Where(g => g.Count() > 1);
 
-        /// <summary>oneof "body"가 없거나 메시지 아닌 케이스가 있으면 errors에 추가하고 null.</summary>
+        /// <summary>Returns null and appends to errors when oneof "body" is missing or a case is not a message type.</summary>
         public static OneofMap? TryBuild(MessageDescriptor message, string rootLabel, List<string> errors)
         {
             var oneof = message.Oneofs.FirstOrDefault(o => o.Name == "body");
             if (oneof == null)
             {
-                errors.Add($"{rootLabel}({message.Name}): oneof \"body\" 없음");
+                errors.Add($"{rootLabel}({message.Name}): oneof \"body\" is missing");
                 return null;
             }
 
@@ -71,7 +71,7 @@ namespace Bun3.Server.Rpc
             {
                 if (field.FieldType != FieldType.Message)
                 {
-                    errors.Add($"{rootLabel}({message.Name}): body 케이스 {field.Name}은 message 타입이어야 함");
+                    errors.Add($"{rootLabel}({message.Name}): body case {field.Name} must be a message type");
                     return null;
                 }
             }
@@ -85,7 +85,7 @@ namespace Bun3.Server.Rpc
         public OneofCase? ByPayloadType(Type payloadType) =>
             _byType.GetValueOrDefault(payloadType);
 
-        /// <summary>envelope에 실제 설정된 케이스. 비어 있으면 null.</summary>
+        /// <summary>The case actually set on the envelope; null when empty.</summary>
         public OneofCase? GetActiveCase(IMessage envelope)
         {
             var field = _oneof.Accessor.GetCaseFieldDescriptor(envelope);

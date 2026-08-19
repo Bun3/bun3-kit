@@ -41,12 +41,12 @@ public sealed class EffectRemovalTests
         pipeline.Tick();
 
         var dispel = kit.TagCatalog.CreateContainer();
-        dispel.Add(kit.Tag("effect.magic"));                    // 계층 매칭 — curse 포함
+        dispel.Add(kit.Tag("effect.magic"));                    // hierarchical match — includes curse
         Assert.That(pipeline.RemoveByTags(kit.Defender.Id, dispel), Is.EqualTo(1));
         Assert.That(kit.Defender.ActiveEffectCount, Is.Zero);
 
-        pipeline.Tick();                                        // 체인 처리
-        Assert.That(kit.Defender.Attributes.GetBase(EffectTestKit.Hp), Is.EqualTo((BigNum)60)); // backlash만
+        pipeline.Tick();                                        // process chains
+        Assert.That(kit.Defender.Attributes.GetBase(EffectTestKit.Hp), Is.EqualTo((BigNum)60)); // backlash only
     }
 
     [Test]
@@ -94,7 +94,7 @@ public sealed class EffectRemovalTests
         pipeline.Tick();
 
         var query = kit.TagCatalog.CreateContainer();
-        query.Add(kit.Tag("effect.frost"));                     // curse와 무관한 계열 — 매칭 없음
+        query.Add(kit.Tag("effect.frost"));                     // unrelated family — no match
         Assert.That(pipeline.RemoveByTags(kit.Defender.Id, query), Is.Zero);
         Assert.That(kit.Defender.ActiveEffectCount, Is.EqualTo(1));
     }

@@ -67,7 +67,7 @@ public sealed class EffectVocabularyTests
         pipeline.EnqueueApply(kit.SpecId("selfstack"), kit.Attacker.Id, kit.Defender.Id);
         pipeline.Tick();
 
-        // 같은 스펙은 제거 대상에서 제외되고 병합되므로 인스턴스는 하나로 유지된다.
+        // The same spec is excluded from removal and merged, so one instance remains.
         Assert.That(kit.Defender.ActiveEffectCount, Is.EqualTo(1));
     }
 
@@ -155,7 +155,7 @@ public sealed class EffectVocabularyTests
         {
             AttributeId = EffectTestKit.Attack, Op = AttributeModifierOp.Add,
             Magnitude = new MagnitudeDef { Formula = "x*10" },
-            ScaleWithStack = false,   // 스택×배율(기본)과 레벨 재평가가 겹치지 않게 분리 — 레벨 재평가만 관측
+            ScaleWithStack = false,   // keep stack scaling (default) out of the way — observe level re-evaluation only
         });
         return spec;
     }
@@ -170,15 +170,15 @@ public sealed class EffectVocabularyTests
 
         pipeline.EnqueueApply(kit.SpecId("stacking"), kit.Attacker.Id, kit.Defender.Id, level: 1);
         pipeline.Tick();
-        Assert.That(kit.Defender.Attributes.GetCurrent(EffectTestKit.Attack), Is.EqualTo((BigNum)10)); // 1중첩
+        Assert.That(kit.Defender.Attributes.GetCurrent(EffectTestKit.Attack), Is.EqualTo((BigNum)10)); // 1 stack
 
         pipeline.EnqueueApply(kit.SpecId("stacking"), kit.Attacker.Id, kit.Defender.Id, level: 1);
         pipeline.Tick();
-        Assert.That(kit.Defender.Attributes.GetCurrent(EffectTestKit.Attack), Is.EqualTo((BigNum)20)); // 2중첩 재평가
+        Assert.That(kit.Defender.Attributes.GetCurrent(EffectTestKit.Attack), Is.EqualTo((BigNum)20)); // re-evaluated at 2 stacks
 
         pipeline.EnqueueApply(kit.SpecId("stacking"), kit.Attacker.Id, kit.Defender.Id, level: 1);
         pipeline.Tick();
-        Assert.That(kit.Defender.Attributes.GetCurrent(EffectTestKit.Attack), Is.EqualTo((BigNum)30)); // 3중첩 재평가
+        Assert.That(kit.Defender.Attributes.GetCurrent(EffectTestKit.Attack), Is.EqualTo((BigNum)30)); // re-evaluated at 3 stacks
         Assert.That(kit.Defender.ActiveEffectCount, Is.EqualTo(1));
     }
 
@@ -211,19 +211,19 @@ public sealed class EffectVocabularyTests
 
         pipeline.EnqueueApply(kit.SpecId("dot"), kit.Attacker.Id, kit.Defender.Id);
         pipeline.Tick();
-        for (var i = 0; i < 5; i++) pipeline.Tick();   // 5틱 경과 — 남은 5
+        for (var i = 0; i < 5; i++) pipeline.Tick();   // 5 ticks elapsed — 5 remain
 
         var instance = kit.Defender.ActiveEffects[0];
         Assert.That(instance.RemainingTicks, Is.EqualTo(5));
 
-        // 재적용은 병합(①)에서 min(5+10, 10*1.3=13)=13으로 연장되지만, 같은 틱의 ②AdvanceTime이
-        // 곧바로 1을 깎으므로 관측 가능한 값은 12다 — 상한이 없었다면 min(5+10)=15가 14로 보였을 것.
+        // Reapply extends in merge (①) to min(5+10, 10*1.3=13)=13, but ② AdvanceTime in the same
+        // tick immediately subtracts 1, so the observed value is 12 — without the cap, min(5+10)=15 would show as 14.
         pipeline.EnqueueApply(kit.SpecId("dot"), kit.Attacker.Id, kit.Defender.Id);
         pipeline.Tick();
         instance = kit.Defender.ActiveEffects[0];
         Assert.That(instance.RemainingTicks, Is.EqualTo(12));
 
-        // 즉시 재재적용: 병합 min(12+10, 13)=13, 같은 틱 감소로 12 — 상한에 눌려 더 늘지 않는다(판데믹 유지).
+        // Immediate reapply again: merge min(12+10, 13)=13, minus the same-tick decrement = 12 — pinned by the cap (pandemic behavior).
         pipeline.EnqueueApply(kit.SpecId("dot"), kit.Attacker.Id, kit.Defender.Id);
         pipeline.Tick();
         instance = kit.Defender.ActiveEffects[0];
@@ -269,7 +269,7 @@ public sealed class EffectVocabularyTests
         Assert.Throws<InvalidOperationException>(() => EffectTestKit.BuildCatalog(builder));
     }
 
-    // ---- 라이더: CurveKeys Level > MaxLevel ----
+    // ---- Rider: CurveKeys Level > MaxLevel ----
 
     [Test]
     public void CurveKeys_last_key_exceeding_max_level_fails_build()

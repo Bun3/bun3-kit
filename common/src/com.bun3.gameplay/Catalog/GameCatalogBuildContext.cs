@@ -5,21 +5,21 @@ using Bun3.Gameplay.Tags;
 
 namespace Bun3.Gameplay.Tags.Catalog
 {
-    /// <summary>host가 카탈로그 컴파일과 게시에 제공하는 하나의 검증된 입력입니다.</summary>
+    /// <summary>Single validated input the host provides for catalog compilation and publishing.</summary>
     public sealed class GameCatalogBuildContext
     {
         private readonly IReadOnlyList<TagSourceDocument> _sources;
 
-        /// <summary>빌드할 게임 카탈로그의 식별 정보입니다.</summary>
+        /// <summary>Identity of the game catalog to build.</summary>
         public TagCatalogIdentity Identity { get; }
 
-        /// <summary>개발 또는 게시 빌드 방식입니다.</summary>
+        /// <summary>Development or publish build mode.</summary>
         public CatalogBuildMode Mode { get; }
 
-        /// <summary>제품 전체에서 resolve한 태그 Source 목록입니다.</summary>
+        /// <summary>Tag sources resolved across the whole product.</summary>
         public IReadOnlyList<TagSourceDocument> Sources => _sources;
 
-        /// <summary>카탈로그 식별 정보, 빌드 방식과 Source를 검증하고 방어적으로 복사합니다.</summary>
+        /// <summary>Validates and defensively copies the catalog identity, build mode, and sources.</summary>
         public GameCatalogBuildContext(
             TagCatalogIdentity identity,
             CatalogBuildMode mode,
@@ -35,7 +35,7 @@ namespace Bun3.Gameplay.Tags.Catalog
             if ((mode == CatalogBuildMode.Development && !isDevelopmentVersion)
                 || (mode == CatalogBuildMode.Published && isDevelopmentVersion))
             {
-                throw new ArgumentException("빌드 방식과 Catalog Version이 일치하지 않습니다.", nameof(identity));
+                throw new ArgumentException("Build mode and catalog version do not match.", nameof(identity));
             }
 
             if (sources is null) throw new ArgumentNullException(nameof(sources));

@@ -8,7 +8,7 @@ namespace Bun3.Gameplay.Tests;
 [TestFixture]
 public class Int128MathTests
 {
-    // BigInteger를 오라클로 사용 — 프레임워크 결과와 무한 정밀 계산을 비교한다.
+    // BigInteger as the oracle: compares results against arbitrary-precision math.
     private static readonly ulong[] Samples =
     {
         0UL, 1UL, 9UL, 10UL, 999_999_999UL, 1_000_000_000UL,
@@ -45,8 +45,8 @@ public class Int128MathTests
             var dividend = ((BigInteger)a << 64) | b;
             Int128Math.DivRem(a, b, d, out var qHi, out var qLo, out var rem);
             var quotient = ((BigInteger)qHi << 64) | qLo;
-            Assert.That(quotient, Is.EqualTo(dividend / d), $"({a}:{b}) / {d} 몫");
-            Assert.That((BigInteger)rem, Is.EqualTo(dividend % d), $"({a}:{b}) / {d} 나머지");
+            Assert.That(quotient, Is.EqualTo(dividend / d), $"({a}:{b}) / {d} quotient");
+            Assert.That((BigInteger)rem, Is.EqualTo(dividend % d), $"({a}:{b}) / {d} remainder");
         }
     }
 

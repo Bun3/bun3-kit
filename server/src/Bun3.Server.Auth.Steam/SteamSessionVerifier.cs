@@ -6,13 +6,13 @@ using System.Threading.Tasks;
 
 namespace Bun3.Server.Auth.Steam
 {
-    /// <summary>클라 호스트(리슨 서버)용 Steam 검증기 — BeginAuthSession 네이티브 흐름의
-    /// 상관관계(correlation)만 소유하고, 네이티브 호출은 게임이 델리게이트로 꽂는다.
-    /// credential = "steamId64:ticketHex" (클라가 자기 SteamID를 주장 + 티켓).
+    /// <summary>Steam verifier for client hosts (listen servers) — owns only the correlation of the
+    /// BeginAuthSession native flow; the game plugs in the native calls as delegates.
+    /// credential = "steamId64:ticketHex" (the client claims its SteamID + ticket).
     ///
-    /// 게임 글루 계약: Steamworks의 ValidateAuthTicketResponse 콜백에서
-    /// <see cref="HandleValidateResult"/>를 호출하고, 플레이어 퇴장 시
-    /// <see cref="EndSession"/>을 호출한다. 실패·타임아웃 정리는 검증기가 스스로 한다.</summary>
+    /// Game glue contract: call <see cref="HandleValidateResult"/> from Steamworks'
+    /// ValidateAuthTicketResponse callback, and call <see cref="EndSession"/> when the player
+    /// leaves. Failure/timeout cleanup is handled by the verifier itself.</summary>
     public sealed class SteamSessionVerifier : IIdentityVerifier
     {
         private readonly Func<byte[], ulong, int> _beginSession;
@@ -23,12 +23,12 @@ namespace Bun3.Server.Auth.Steam
         /// <inheritdoc />
         public string Provider => "steam";
 
-        /// <summary>접속 승인 "이후" 도착한 무효화 통지(게임 중 밴, 티켓 취소) —
-        /// (SteamID64, EAuthSessionResponse). 게임이 구독해서 해당 플레이어를 킥한다.
-        /// 타임아웃으로 이미 실패한 검증의 늦은 콜백에도 발화될 수 있다 — steamId 킥은 그 경우 무해한 no-op이다.</summary>
+        /// <summary>Invalidation notice arriving after admission (mid-game ban, ticket cancel) —
+        /// (SteamID64, EAuthSessionResponse). The game subscribes and kicks that player.
+        /// May also fire for a late callback of a verification already failed by timeout — kicking that steamId is then a harmless no-op.</summary>
         public event Action<ulong, int>? SessionInvalidated;
 
-        /// <summary>검증기를 생성한다. 델리게이트 누락은 즉시 거부(부팅 시 즉사).</summary>
+        /// <summary>Creates the verifier. Missing delegates are rejected immediately (dies at boot).</summary>
         public SteamSessionVerifier(SteamSessionOptions options)
         {
             if (options is null) throw new ArgumentNullException(nameof(options));
@@ -63,7 +63,7 @@ namespace Bun3.Server.Auth.Steam
             if (beginResult != 0)
             {
                 if (!_pending.TryRemove(steamId, out _))
-                    return await tcs.Task.ConfigureAwait(false);   // 콜백이 경합에서 이김
+                    return await tcs.Task.ConfigureAwait(false);   // the callback won the race
                 _endSession(steamId);
                 return SteamAuthResult.Fail(AuthFailure.Rejected, "BeginAuthSession failed", beginResult, steamId: steamId);
             }
@@ -73,19 +73,19 @@ namespace Bun3.Server.Auth.Steam
             if (completed == tcs.Task)
                 return await tcs.Task.ConfigureAwait(false);
 
-            // 타임아웃 또는 외부 취소 — 콜백과의 경합은 pending 제거로 판정
+            // Timeout or external cancellation — the race with the callback is decided by the pending removal.
             if (!_pending.TryRemove(steamId, out _))
-                return await tcs.Task.ConfigureAwait(false);   // 콜백이 경합에서 이김
+                return await tcs.Task.ConfigureAwait(false);   // the callback won the race
 
             _endSession(steamId);
             if (ct.IsCancellationRequested)
-                await delay.ConfigureAwait(false);   // OperationCanceledException 전파 (인프라 취소)
+                await delay.ConfigureAwait(false);   // propagates OperationCanceledException (infrastructure cancellation)
             return SteamAuthResult.Fail(AuthFailure.Timeout, "auth callback not received", 0, steamId: steamId);
         }
 
-        /// <summary>게임 글루가 Steamworks의 ValidateAuthTicketResponse 콜백에서 호출한다.
-        /// 검증 대기 중이면 판정을 완성하고, 아니면(접속 승인 후 무효화) SessionInvalidated를 발화한다.
-        /// 어느 스레드에서 호출해도 안전하며, Steam 콜백 스레드를 붙잡지 않는다.</summary>
+        /// <summary>Called by game glue from Steamworks' ValidateAuthTicketResponse callback.
+        /// Completes the verdict if a verification is pending; otherwise (post-admission invalidation) fires SessionInvalidated.
+        /// Safe from any thread and never blocks the Steam callback thread.</summary>
         public void HandleValidateResult(ulong steamId, int authSessionResponse)
         {
             if (_pending.TryRemove(steamId, out var tcs))
@@ -97,7 +97,7 @@ namespace Bun3.Server.Auth.Steam
                 }
                 else
                 {
-                    _endSession(steamId);   // 실패 정리 규약
+                    _endSession(steamId);   // failure cleanup contract
                     result = SteamAuthResult.Fail(MapFailure(authSessionResponse), "auth session rejected", authSessionResponse, steamId: steamId);
                 }
                 tcs.TrySetResult(result);
@@ -108,7 +108,7 @@ namespace Bun3.Server.Auth.Steam
                 SessionInvalidated?.Invoke(steamId, authSessionResponse);
         }
 
-        /// <summary>인증 세션을 닫는다 — 성공 검증 후 플레이어 퇴장 시(OnRetiredAsync 등) 게임이 호출한다.</summary>
+        /// <summary>Closes the auth session — the game calls this when a successfully verified player leaves (OnRetiredAsync etc.).</summary>
         public void EndSession(ulong steamId) => _endSession(steamId);
 
         private static AuthFailure MapFailure(int authSessionResponse) =>

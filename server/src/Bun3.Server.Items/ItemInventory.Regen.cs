@@ -1,20 +1,22 @@
-// ItemInventory partial — 리젠 정산(SettleRegen)·기준시각 관리 담당.
+// ItemInventory partial — regen settlement (SettleRegen) and basis management.
 using System.Collections.Generic;
 
 namespace Bun3.Server.Items
 {
-    // 리젠 자동 정산 — 카탈로그에 regenPeriodTicks가 등록된 정의를 일괄 처리한다.
-    // 기준 시각은 인스턴스가 아니라 정의별 맵에 둔다 — 수량 0으로 인스턴스가 사라져도
-    // 리젠이 계속되는 idlez 티켓 의미론(0개에서 다시 차오름).
+    // Automatic regen settlement — processes every definition registered with regenPeriodTicks.
+    // The basis timestamp lives in a per-definition map, not on instances — regen continues even
+    // after the instance disappears at amount 0 (refills from zero).
     public sealed partial class ItemInventory<TState>
     {
         /// <summary>
-        /// 리젠 메타가 있는 모든 정의를 현재 시각으로 lazy 정산한다 — 충전분은 한 배치로
-        /// 원자 지급되며(onChanged·onApplied 각 1회) 충전된 정의 수를 반환한다.
-        /// 게임은 접속·틱·소모 직전 등 접근 지점에서 호출하면 된다(타이머 불필요).
-        /// 소모 전에 정산하는 것이 계약이다 — 가득 상태의 기준 재설정이 적립 악용을 막는다.
+        /// Lazily settles all regen definitions to the current time — refills are granted
+        /// atomically as one batch (onChanged and onApplied once each) and the number of refilled
+        /// definitions is returned. Games call this at access points (login, tick, right before
+        /// consuming) — no timer needed.
+        /// Settling before consuming is the contract — resetting the basis while full prevents
+        /// accrual exploits.
         /// </summary>
-        /// <param name="nowTicksUtc">현재 시각(UTC ticks) — 게임 주입.</param>
+        /// <param name="nowTicksUtc">Current time (UTC ticks) — game-injected.</param>
         public int SettleRegen(long nowTicksUtc)
         {
             var regenItems = _catalog.RegenItems;
@@ -34,8 +36,9 @@ namespace Bun3.Server.Items
                 var quantity = GetQuantity(item);
                 if (quantity.CompareTo(maxRegen) >= 0)
                 {
-                    // 목표선 이상(maxCount까지의 초과 보유 포함) — 리젠 정지, 적립 제거.
-                    // long 변환 없이 판정(목표선 초과 수량은 long 범위를 넘을 수 있다).
+                    // At or above the target (including holdings past it up to maxCount) —
+                    // regen stops, accrual cleared. Compared without a long conversion
+                    // (amounts past the target can exceed the long range).
                     _regenBasis[item] = nowTicksUtc;
                     continue;
                 }
@@ -45,14 +48,15 @@ namespace Bun3.Server.Items
                     current, maxRegen, _catalog.GetRegenPeriodTicks(item), nowTicksUtc, ref basis);
                 if (granted > 0)
                 {
-                    // 지급 성공 후에만 기준을 전진시킨다 — 실패 시 다음 정산에서 재시도.
+                    // The basis only advances after a successful grant — on failure the next
+                    // settlement retries.
                     _applyOps.Add(new TxOp(TxOpKind.Add, item, 0, granted));
                     _regenScratchItems.Add(item);
                     _regenScratchBasis.Add(basis);
                 }
                 else
                 {
-                    _regenBasis[item] = basis;   // 초기화·가득 재설정도 기록
+                    _regenBasis[item] = basis;   // Also records initialization and full-state resets.
                 }
             }
 
@@ -63,7 +67,7 @@ namespace Bun3.Server.Items
 
             if (CommitOps(_applyOps, out _, null) != InventoryError.None)
             {
-                return 0;   // 도달 불가 방어 — 기준 미전진으로 유실 없음
+                return 0;   // Unreachable guard — basis not advanced, so nothing is lost.
             }
 
             for (var i = 0; i < _regenScratchItems.Count; i++)
@@ -74,27 +78,28 @@ namespace Bun3.Server.Items
             return _regenScratchItems.Count;
         }
 
-        /// <summary>정의의 리젠 기준 시각(마지막 충전 완성 시각). 미기록이면 0.
-        /// 저장은 <see cref="ItemCatalog.RegenItems"/> 순회로 정의별 기준을 함께 영속화한다.</summary>
+        /// <summary>Regen basis timestamp for a definition (time of the last completed refill).
+        /// 0 if not recorded. Persist by iterating <see cref="ItemCatalog.RegenItems"/> and saving
+        /// each definition's basis.</summary>
         public long GetRegenBasis(ItemId item)
         {
             _regenBasis.TryGetValue(item, out var basis);
             return basis;
         }
 
-        /// <summary>저장 로드용 — 리젠 기준 시각을 복원한다(추적·통지 없음).</summary>
+        /// <summary>For save loading — restores the regen basis (no tracking, no notification).</summary>
         public void LoadRegenBasis(ItemId item, long lastRegenTicksUtc)
         {
             if (!_catalog.Contains(item))
             {
-                throw new System.ArgumentOutOfRangeException(nameof(item), "이 카탈로그의 식별자가 아닙니다.");
+                throw new System.ArgumentOutOfRangeException(nameof(item), "Not an identifier of this catalog.");
             }
 
             _regenBasis[item] = lastRegenTicksUtc;
         }
 
-        /// <summary>정수 수량을 long으로 변환한다 — 리젠 정의는 정수 수량이 강제되고
-        /// maxCount(long) 이하이므로 정확 변환이 보장된다.</summary>
+        /// <summary>Converts an integer amount to long — regen definitions force integer amounts
+        /// at or below maxCount (long), so exact conversion is guaranteed.</summary>
         private static long ToInt64Exact(Bun3.Gameplay.Numerics.BigNum value)
         {
             var result = value.Mantissa;

@@ -37,7 +37,7 @@ public class TcpConnectorTests
 
             var connection = await connector.ConnectAsync(clientHandler).AsTask().WaitAsync(Timeout);
 
-            Assert.That(clientHandler.Connected.Task.IsCompletedSuccessfully, Is.True); // 반환 전에 이미 호출됨
+            Assert.That(clientHandler.Connected.Task.IsCompletedSuccessfully, Is.True); // already invoked before return
             Assert.That(connection.IsOpen, Is.True);
             connection.Close();
         }
@@ -110,7 +110,7 @@ public class TcpConnectorTests
     [Test]
     public void Connect_to_dead_port_throws_SocketException()
     {
-        // 청취자 없는 포트: OS가 즉시 거부한다
+        // port with no listener: OS refuses immediately
         var deadPortListener = new TcpListener(IPAddress.Loopback, 0);
         deadPortListener.Start();
         var deadPort = ((IPEndPoint)deadPortListener.LocalEndpoint).Port;
@@ -136,7 +136,7 @@ public class TcpConnectorTests
             Assert.ThrowsAsync<InvalidOperationException>(async () =>
                 await connector.ConnectAsync(new ThrowingHandler()).AsTask().WaitAsync(Timeout));
 
-            // 소켓이 정리되었음을 서버 측 종료 통지로 증명한다
+            // prove the socket was cleaned up via the server-side close notification
             await serverHandler.Connected.Task.WaitAsync(Timeout);
             var serverError = await serverHandler.Closed.Task.WaitAsync(Timeout);
             Assert.That(serverError, Is.Null);

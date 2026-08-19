@@ -10,11 +10,11 @@ using UnityEngine;
 
 namespace Bun3.Gameplay.Unity.Tests
 {
-    /// <summary>Unity authoring reference와 Runtime Catalog resolve 계약을 검증합니다.</summary>
+    /// <summary>Verifies the Unity authoring reference and runtime catalog resolve contract.</summary>
     [TestFixture]
     public sealed class GameplayTagRefTests
     {
-        /// <summary>새 reference가 유효한 경로를 canonical 소문자로 저장하는지 검증합니다.</summary>
+        /// <summary>Verifies a new reference stores a valid path as canonical lowercase.</summary>
         [Test]
         public void Constructor_stores_a_canonical_lowercase_path()
         {
@@ -24,7 +24,7 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(reference.IsEmpty, Is.False);
         }
 
-        /// <summary>빈 reference가 None으로 정상 resolve되는지 검증합니다.</summary>
+        /// <summary>Verifies an empty reference resolves cleanly to None.</summary>
         [Test]
         public void Empty_reference_resolves_to_none()
         {
@@ -38,7 +38,7 @@ namespace Bun3.Gameplay.Unity.Tests
                 Is.EqualTo(GameplayTag.None));
         }
 
-        /// <summary>빈 문자열로 만든 reference가 None과 같은 값으로 동작하는지 검증합니다.</summary>
+        /// <summary>Verifies a reference built from an empty string behaves as the same value as None.</summary>
         [Test]
         public void Empty_string_constructor_creates_none()
         {
@@ -53,7 +53,7 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(reference.ResolveRequired(catalog), Is.EqualTo(GameplayTag.None));
         }
 
-        /// <summary>등록 경로와 미등록 경로가 현재 Catalog에서 정확히 구분되는지 검증합니다.</summary>
+        /// <summary>Verifies registered and unregistered paths are distinguished exactly against the current catalog.</summary>
         [Test]
         public void Resolve_uses_the_supplied_catalog()
         {
@@ -68,7 +68,7 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.Throws<KeyNotFoundException>(() => missing.ResolveRequired(catalog));
         }
 
-        /// <summary>새 reference가 잘못된 태그 문법을 받아들이지 않는지 검증합니다.</summary>
+        /// <summary>Verifies a new reference does not accept invalid tag syntax.</summary>
         [Test]
         public void Constructor_rejects_invalid_tag_syntax()
         {
@@ -76,7 +76,7 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.Throws<ArgumentException>(() => new GameplayTagRef("bad..tag"));
         }
 
-        /// <summary>기존 자산의 잘못된 raw 문자열을 변경하지 않고 resolve만 실패하는지 검증합니다.</summary>
+        /// <summary>Verifies an existing asset's malformed raw string is left unchanged and only resolve fails.</summary>
         [Test]
         public void Deserialized_invalid_raw_path_is_preserved_and_try_resolve_returns_false()
         {
@@ -102,7 +102,7 @@ namespace Bun3.Gameplay.Unity.Tests
             }
         }
 
-        /// <summary>reference equality가 저장된 canonical 경로의 ordinal 값으로 결정되는지 검증합니다.</summary>
+        /// <summary>Verifies reference equality is decided by the ordinal value of the stored canonical path.</summary>
         [Test]
         public void Equality_uses_the_stored_canonical_path()
         {

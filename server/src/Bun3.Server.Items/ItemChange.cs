@@ -1,21 +1,22 @@
 namespace Bun3.Server.Items
 {
-    /// <summary>마지막 드레인 이후 인스턴스에 일어난 변경의 종류.</summary>
+    /// <summary>Kind of change an instance underwent since the last drain.</summary>
     public enum ItemChangeKind
     {
-        /// <summary>새로 생성됨 — DB INSERT 대상.</summary>
+        /// <summary>Newly created — DB INSERT target.</summary>
         Created,
 
-        /// <summary>수량·플래그·상태가 변경됨 — DB UPDATE 대상.</summary>
+        /// <summary>Quantity, flags, or state changed — DB UPDATE target.</summary>
         Updated,
 
-        /// <summary>제거됨 — DB DELETE 대상. <see cref="ItemChange{TState}.Instance"/>는 null.</summary>
+        /// <summary>Removed — DB DELETE target. <see cref="ItemChange{TState}.Instance"/> is null.</summary>
         Removed,
     }
 
-    /// <summary><see cref="ItemInventory{TState}.DrainChanges"/>가 내놓는 변경 1건.
-    /// 생성 후 드레인 전에 제거된 인스턴스는 상쇄되어 나오지 않는다(DB 왕복 불필요).</summary>
-    /// <typeparam name="TState">게임이 정의하는 인스턴스 상태 타입.</typeparam>
+    /// <summary>One change emitted by <see cref="ItemInventory{TState}.DrainChanges"/>.
+    /// Instances created and removed before the drain cancel out and are not emitted
+    /// (no DB round trip needed).</summary>
+    /// <typeparam name="TState">Game-defined instance state type.</typeparam>
     public readonly struct ItemChange<TState>
     {
         internal ItemChange(ItemChangeKind kind, long instanceId, ItemInstance<TState>? instance)
@@ -25,13 +26,13 @@ namespace Bun3.Server.Items
             Instance = instance;
         }
 
-        /// <summary>변경 종류.</summary>
+        /// <summary>Change kind.</summary>
         public ItemChangeKind Kind { get; }
 
-        /// <summary>대상 인스턴스 id.</summary>
+        /// <summary>Target instance id.</summary>
         public long InstanceId { get; }
 
-        /// <summary>대상 인스턴스 — <see cref="ItemChangeKind.Removed"/>면 null.</summary>
+        /// <summary>Target instance — null for <see cref="ItemChangeKind.Removed"/>.</summary>
         public ItemInstance<TState>? Instance { get; }
     }
 }

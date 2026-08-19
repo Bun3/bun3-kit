@@ -1,21 +1,23 @@
-// ItemInventory partial — 인벤토리 간 이동 담당.
+// ItemInventory partial — inventory-to-inventory transfer.
 using System;
 using System.Collections.Generic;
 using Bun3.Gameplay.Numerics;
 
 namespace Bun3.Server.Items
 {
-    // 인벤토리 간 이동 — 같은 플레이어의 컨테이너 간(가방↔창고, 캐릭터별) 원자 이동.
-    // 유저간 거래가 아니다: 두 인벤토리는 같은 세션 액터(단일 스레드)에서 조작되는 것이
-    // 계약이며, 다른 플레이어와의 교환은 에스크로/우편 워크플로 몫(별도 모듈 후보).
+    // Transfer between containers of the same player (bag↔warehouse, per-character), atomic.
+    // Not user-to-user trading: the contract is that both inventories are operated on the same
+    // session actor (single thread); exchanges with other players belong to an escrow/mail
+    // workflow (candidate for a separate module).
     public sealed partial class ItemInventory<TState>
     {
         /// <summary>
-        /// 정의 단위 이동 — 스택형은 수량이 대상 싱글턴에 병합되고(인스턴스 id는 수량
-        /// 의미론상 보존하지 않음), 비스택형은 잠금 아닌 인스턴스 amount개가 id·상태·
-        /// 플래그·만료를 보존한 채 통째로 옮겨진다. 실패 시 양쪽 모두 무변경.
-        /// 대상은 같은 카탈로그여야 하며(다르면 구성 오류로 던짐) 대상 maxCount를 검사한다.
-        /// 성공 시 양쪽에 onChanged·onApplied(출발 −, 도착 +)가 각 1회.
+        /// Definition-level transfer — stackable amounts merge into the target singleton (the
+        /// instance id is not preserved under amount semantics); for unstackables, amount unlocked
+        /// instances move whole, preserving id, state, flags, and expiry. On failure both sides are
+        /// unchanged. The target must share the catalog (a mismatch is a configuration error and
+        /// throws) and the target's maxCount is checked.
+        /// On success, onChanged and onApplied (source −, target +) fire once on each side.
         /// </summary>
         public InventoryError TryTransfer(ItemInventory<TState> target, ItemId item, BigNum amount)
         {
@@ -69,7 +71,7 @@ namespace Bun3.Server.Items
                     {
                         if (target._instances.ContainsKey(_removeScratch[i].InstanceId))
                         {
-                            error = InventoryError.DuplicateInstance;   // 발급자 교차 구성 오류 방어
+                            error = InventoryError.DuplicateInstance;   // Guard against crossed id-issuer configuration.
                             break;
                         }
                     }
@@ -110,8 +112,8 @@ namespace Bun3.Server.Items
         }
 
         /// <summary>
-        /// 인스턴스 전량 이동 — 비스택형은 인스턴스가 id·상태를 보존한 채 옮겨지고,
-        /// 스택 싱글턴은 잔량 전부가 정의 단위로 이동한다. 잠금 인스턴스는
+        /// Full-instance transfer — unstackable instances move preserving id and state; a stack
+        /// singleton moves its full amount at definition level. Locked instances return
         /// <see cref="InventoryError.Locked"/>.
         /// </summary>
         public InventoryError TryTransferByInstance(ItemInventory<TState> target, long instanceId)
@@ -174,12 +176,12 @@ namespace Bun3.Server.Items
 
             if (ReferenceEquals(target, this))
             {
-                throw new ArgumentException("자기 자신으로는 이동할 수 없습니다.", nameof(target));
+                throw new ArgumentException("Cannot transfer to self.", nameof(target));
             }
 
             if (!ReferenceEquals(target._catalog, _catalog))
             {
-                throw new ArgumentException("이동은 같은 카탈로그의 인벤토리 사이에서만 가능합니다.", nameof(target));
+                throw new ArgumentException("Transfer is only allowed between inventories of the same catalog.", nameof(target));
             }
 
             return InventoryError.None;
@@ -202,8 +204,9 @@ namespace Bun3.Server.Items
             return InventoryError.None;
         }
 
-        /// <summary>인스턴스를 id·상태·플래그·만료 보존한 채 대상으로 옮긴다 — 출발은
-        /// Removed, 도착은 Created로 추적된다(게임 DB에선 소유 컬럼 UPDATE로 매핑 가능).</summary>
+        /// <summary>Moves an instance to the target preserving id, state, flags, and expiry — the
+        /// source tracks Removed and the target tracks Created (a game DB may map this to an
+        /// owner-column UPDATE).</summary>
         private void MoveInstance(ItemInventory<TState> target, ItemInstance<TState> instance)
         {
             _instances.Remove(instance.InstanceId);

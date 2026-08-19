@@ -10,7 +10,7 @@
     <Authors>Bun3</Authors>
     <RepositoryUrl>https://github.com/Bun3/bun3-kit</RepositoryUrl>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <Description>소켓 없는 인프로세스(루프백) 전송 — 클라호스트 자기접속과 서버 E2E 테스트용</Description>
+    <Description>Socketless in-process (loopback) transport — client-host self-connection and server E2E tests</Description>
   </PropertyGroup>
 
   <ItemGroup>

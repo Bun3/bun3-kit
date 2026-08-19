@@ -1,24 +1,24 @@
 namespace Bun3.Server.Auth
 {
-    /// <summary>검증 실패 사유 — 제공자와 무관한 공통 어휘. 게임은 이 값을 자기 proto 에러코드로 매핑한다.</summary>
+    /// <summary>Verification failure reason — a provider-agnostic common vocabulary. Games map these to their own proto error codes.</summary>
     public enum AuthFailure
     {
-        /// <summary>실패 아님(성공).</summary>
+        /// <summary>No failure (success).</summary>
         None = 0,
 
-        /// <summary>자격증명 형식 불량 — 빈 device-id, hex 파싱 실패, 규약 위반.</summary>
+        /// <summary>Malformed credential — empty device-id, hex parse failure, convention violation.</summary>
         InvalidCredential = 1,
 
-        /// <summary>제공자가 거절 — 위조/만료 티켓, 무효 토큰.</summary>
+        /// <summary>Rejected by the provider — forged/expired ticket, invalid token.</summary>
         Rejected = 2,
 
-        /// <summary>제공자 밴 — VAC/퍼블리셔 밴(거절 옵션이 켜진 경우).</summary>
+        /// <summary>Provider ban — VAC/publisher ban (when the rejection option is enabled).</summary>
         Banned = 3,
 
-        /// <summary>예약 — 주장한 신원과 검증 결과 불일치(현 구현 미발생, 미래 제공자용).</summary>
+        /// <summary>Reserved — claimed identity differs from the verified one (never produced by current implementations; for future providers).</summary>
         IdentityMismatch = 4,
 
-        /// <summary>검증 응답 시간 초과(네이티브 콜백 미도착 등).</summary>
+        /// <summary>Verification response timed out (e.g. native callback never arrived).</summary>
         Timeout = 5,
     }
 }

@@ -6,7 +6,7 @@ using Microsoft.Extensions.Logging;
 
 namespace Bun3.Server.Transport.InProcess
 {
-    /// <summary>같은 InProcessTransport의 리스너로 붙는 인프로세스 커넥터.</summary>
+    /// <summary>In-process connector that attaches to the listener of the same InProcessTransport.</summary>
     internal sealed class InProcessConnector : IConnector
     {
         private readonly InProcessListener _listener;
@@ -41,7 +41,8 @@ namespace Bun3.Server.Transport.InProcess
             client.Link(server);
             server.Link(client);
 
-            // 서버 측 수락 — Tcp 리스너와 동일: 계약상 OnConnected 반환 후에만 수신 펌프를 시작한다.
+            // Server-side accept — same as the TCP listener: per contract, the receive pump starts
+            // only after OnConnected returns.
             try
             {
                 serverHandler.OnConnected(server);
@@ -49,9 +50,10 @@ namespace Bun3.Server.Transport.InProcess
             }
             catch (Exception ex)
             {
-                // OnConnected가 던지면 핸들러가 이 연결을 등록하지 못한 것 — 서버 OnClosed 없이
-                // 서버 끝점만 닫는다. 클라는 정상 연결 직후 OnClosed(null)를 관측한다(원격 거부의
-                // TCP 동작과 동일).
+                // If OnConnected throws, the handler never registered this connection — close only
+                // the server endpoint, without a server OnClosed. The client observes
+                // OnClosed(null) right after a normal connect (matches TCP behavior on a remote
+                // rejection).
                 _logger.LogError(ex, "InProcess server OnConnected failed; closing server endpoint.");
                 server.Close();
             }
@@ -63,8 +65,8 @@ namespace Bun3.Server.Transport.InProcess
             }
             catch
             {
-                // TcpConnector와 동일: 클라 OnClosed 없이 페어를 닫고(서버는 OnClosed(null) 수신)
-                // 원본 예외를 호출자에게 전파한다.
+                // Same as TcpConnector: close the pair without a client OnClosed (the server
+                // receives OnClosed(null)) and propagate the original exception to the caller.
                 client.Close();
                 throw;
             }

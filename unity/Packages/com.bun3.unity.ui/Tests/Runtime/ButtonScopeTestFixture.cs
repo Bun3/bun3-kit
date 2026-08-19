@@ -8,7 +8,7 @@ using UnityEngine.UI;
 namespace Bun3.Unity.UI.Tests
 {
     /// <summary>
-    /// 테스트용 버튼 생성/정리와 클릭 디스패치를 제공한다.
+    /// Provides test-button creation/cleanup and click dispatch.
     /// </summary>
     public abstract class ButtonScopeTestFixture
     {
@@ -22,8 +22,8 @@ namespace Bun3.Unity.UI.Tests
         }
 
         /// <summary>
-        /// <see cref="NewButton"/> 밖에서 직접 만든 GameObject(부모 CanvasGroup, Canvas,
-        /// EventSystem 등)를 테스트 종료 시 함께 정리하도록 등록한다.
+        /// Registers a GameObject created outside <see cref="NewButton"/> (parent CanvasGroup,
+        /// Canvas, EventSystem, etc.) for cleanup at test end.
         /// </summary>
         protected void Track(GameObject go)
         {
@@ -31,9 +31,9 @@ namespace Bun3.Unity.UI.Tests
         }
 
         /// <summary>
-        /// EventSystem의 실제 디스패치 경로를 그대로 탄다.
-        /// 버튼 GameObject의 모든 IPointerClickHandler 구현체에 전달되므로,
-        /// Button과 Receiver가 같은 이벤트를 어떻게 처리하는지 함께 검증할 수 있다.
+        /// Uses the EventSystem's real dispatch path. The event reaches every
+        /// IPointerClickHandler on the button GameObject, so Button and Receiver handling of the
+        /// same event can be verified together.
         /// </summary>
         protected static void Click(
             Button button,
@@ -54,7 +54,7 @@ namespace Bun3.Unity.UI.Tests
 
             _spawned.Clear();
 
-            // 정적 상태가 테스트 간에 새지 않게 한다. null 대입은 NullHandler로 복구된다.
+            // Prevents static state from leaking between tests; assigning null restores the NullHandler.
             ButtonInteractableScope.DefaultHandler = null;
         }
     }

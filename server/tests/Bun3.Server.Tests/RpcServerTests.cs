@@ -106,7 +106,7 @@ public class RpcServerTests
         Assert.That(errorResponse.Status, Is.EqualTo(2));
         Assert.That(conn.IsOpen, Is.True);
 
-        // 세션이 살아 있어 후속 요청이 정상 처리된다
+        // session stays alive; subsequent requests are handled normally
         conn.ReceivePacket(Wrap(Channels.Request, new Request { RequestId = 10, GetServerTime = new GetServerTimeRequest() }));
         var (_, next) = await NextSentAsync(conn, Response.Parser);
         Assert.That(next.Status, Is.EqualTo(0));
@@ -201,7 +201,7 @@ public class RpcServerTests
     [Test]
     public void Incomplete_config_fails_server_construction()
     {
-        var config = new RpcConfig<TestSession>();  // 아무 핸들러 없음
+        var config = new RpcConfig<TestSession>();  // no handlers
         Assert.Throws<RpcValidationException>(() =>
             new RpcServer<TestSession, Request, Response, Update>(
                 new FakeTransport(), conn => new TestSession(conn), config));
@@ -242,7 +242,7 @@ public class RpcServerTests
 
         await session.Closed.Task.WaitAsync(Timeout);
         Assert.That(conn.IsOpen, Is.False);
-        Assert.That(conn.SentPackets.IsEmpty, Is.True);   // 응답 없이 종료
+        Assert.That(conn.SentPackets.IsEmpty, Is.True);   // closed without a response
         await server.StopAsync();
     }
 
@@ -256,7 +256,7 @@ public class RpcServerTests
         var conn = transport.Connect(1);
         var session = (TestSession)server.Sessions.Single();
 
-        await session.Closed.Task.WaitAsync(Timeout);   // 패킷 없이 방치 → 킥
+        await session.Closed.Task.WaitAsync(Timeout);   // left without packets -> kicked
         Assert.That(conn.IsOpen, Is.False);
         await server.StopAsync();
     }
@@ -286,10 +286,10 @@ public class RpcServerTests
             (s, req) => new ValueTask<Reply<GetServerTimeResponse>>(new GetServerTimeResponse()));
         config.OnRequest<BuyItemRequest, BuyItemResponse>(
             (s, req) => new ValueTask<Reply<BuyItemResponse>>(new BuyItemResponse()));
-        // 세션을 팩토리 클로저로 캡처한다: OnSessionOpenedAsync가 동기적으로 던지므로
-        // FakeTransport의 동기 콜백 체인상 Connect()가 반환하기 전에 이미 킥·제거가 끝나
-        // server.Sessions.Single()은 빈 컬렉션을 볼 수 있다(SessionActorTests의
-        // Kick_during_OnConnected_still_disconnects_cleanly와 동일한 패턴).
+        // Capture the session via the factory closure: OnSessionOpenedAsync throws synchronously,
+        // so on FakeTransport's synchronous callback chain the kick/removal completes before
+        // Connect() returns, and server.Sessions.Single() may see an empty collection
+        // (same pattern as SessionActorTests.Kick_during_OnConnected_still_disconnects_cleanly).
         OpenThrowsSession? session = null;
         var server = new RpcServer<OpenThrowsSession, Request, Response, Update>(
             transport, conn => session = new OpenThrowsSession(conn), config);

@@ -4,7 +4,7 @@ using System.Runtime.InteropServices;
 
 namespace Bun3.Gameplay.Tags
 {
-    /// <summary>동결된 태그 카탈로그 안의 2바이트 태그 인덱스입니다.</summary>
+    /// <summary>A 2-byte tag index inside a frozen tag catalog.</summary>
     [StructLayout(LayoutKind.Sequential, Pack = 1)]
     public readonly struct GameplayTag : IEquatable<GameplayTag>
     {
@@ -12,33 +12,33 @@ namespace Bun3.Gameplay.Tags
 
         internal GameplayTag(ushort index) => _index = index;
 
-        /// <summary>태그가 없음을 나타내는 기본값입니다.</summary>
+        /// <summary>Default value representing the absence of a tag.</summary>
         public static readonly GameplayTag None = default;
 
-        /// <summary>현재 카탈로그에서 사용하는 런타임 인덱스를 가져옵니다.</summary>
+        /// <summary>Gets the runtime index used by the current catalog.</summary>
         public ushort Index => _index;
 
-        /// <summary><see cref="None"/>이 아닌지 나타냅니다.</summary>
+        /// <summary>Indicates whether this is not <see cref="None"/>.</summary>
         public bool IsValid => _index != 0;
 
-        /// <summary>다른 태그와 런타임 인덱스가 같은지 비교합니다.</summary>
-        /// <param name="other">비교할 태그입니다.</param>
-        /// <returns>런타임 인덱스가 같으면 true입니다.</returns>
+        /// <summary>Compares runtime indices with another tag.</summary>
+        /// <param name="other">Tag to compare with.</param>
+        /// <returns>True if the runtime indices are equal.</returns>
         public bool Equals(GameplayTag other) => _index == other._index;
 
-        /// <summary>지정한 객체가 같은 런타임 인덱스의 태그인지 비교합니다.</summary>
-        /// <param name="obj">비교할 객체입니다.</param>
-        /// <returns>같은 태그이면 true입니다.</returns>
+        /// <summary>Checks whether the given object is a tag with the same runtime index.</summary>
+        /// <param name="obj">Object to compare with.</param>
+        /// <returns>True if it is the same tag.</returns>
         public override bool Equals(object? obj) => obj is GameplayTag other && Equals(other);
 
-        /// <summary>런타임 인덱스를 기반으로 해시 코드를 만듭니다.</summary>
-        /// <returns>태그의 런타임 인덱스입니다.</returns>
+        /// <summary>Builds a hash code from the runtime index.</summary>
+        /// <returns>The tag's runtime index.</returns>
         public override int GetHashCode() => _index;
 
-        /// <summary>두 태그의 런타임 인덱스가 같은지 비교합니다.</summary>
+        /// <summary>Checks whether two tags have the same runtime index.</summary>
         public static bool operator ==(GameplayTag left, GameplayTag right) => left.Equals(right);
 
-        /// <summary>두 태그의 런타임 인덱스가 다른지 비교합니다.</summary>
+        /// <summary>Checks whether two tags have different runtime indices.</summary>
         public static bool operator !=(GameplayTag left, GameplayTag right) => !left.Equals(right);
     }
 }

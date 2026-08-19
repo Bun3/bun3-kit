@@ -10,10 +10,10 @@ public class RecipeTests
     private sealed class ItemState;
 
     private ItemCatalog<string> _catalog = null!;
-    private ItemId _gold;      // 스택형
-    private ItemId _ore;       // 스택형
-    private ItemId _potion;    // 스택형, maxCount 10
-    private ItemId _sword;     // 비스택형
+    private ItemId _gold;      // stackable
+    private ItemId _ore;       // stackable
+    private ItemId _potion;    // stackable, maxCount 10
+    private ItemId _sword;     // unstackable
     private long _nextId;
     private ItemInventory<ItemState> _inventory = null!;
 
@@ -21,10 +21,10 @@ public class RecipeTests
     public void SetUp()
     {
         _catalog = new ItemCatalogBuilder<string>()
-            .Register("gold", "골드")
-            .Register("ore", "광석")
-            .Register("potion", "물약", maxCount: 10)
-            .Register("sword", "검", unstackable: true)
+            .Register("gold", "Gold")
+            .Register("ore", "Ore")
+            .Register("potion", "Potion", maxCount: 10)
+            .Register("sword", "Sword", unstackable: true)
             .Build();
         _gold = _catalog.GetRequired("gold");
         _ore = _catalog.GetRequired("ore");
@@ -55,17 +55,17 @@ public class RecipeTests
     [Test]
     public void Craft_failure_points_at_entry_and_leaves_inventory_untouched()
     {
-        _inventory.TryAdd(_gold, 100);   // 광석 없음
+        _inventory.TryAdd(_gold, 100);   // no ore
         var recipe = new Recipe(
             new[] { new RecipeEntry(_gold, 30), new RecipeEntry(_ore, 3) },
             new[] { new RecipeEntry(_sword, 1) });
 
         Assert.That(_inventory.TryCraft(recipe, out var failedIndex), Is.EqualTo(InventoryError.Insufficient));
-        Assert.That(failedIndex, Is.EqualTo(1), "재료 순번");
+        Assert.That(failedIndex, Is.EqualTo(1), "ingredient index");
         Assert.That(_inventory.GetQuantity(_gold), Is.EqualTo((BigNum)100));
         Assert.That(_inventory.InstanceCount, Is.EqualTo(1));
 
-        // 결과 상한 초과도 무변경 — failedIndex는 재료 이후 결과 순번
+        // Result cap overflow also leaves no changes — failedIndex is the result index after ingredients
         _inventory.TryAdd(_ore, 3);
         _inventory.TryAdd(_potion, 9);
         var potionRecipe = new Recipe(
@@ -93,7 +93,7 @@ public class RecipeTests
     [Test]
     public void Craft_supports_same_item_as_ingredient_and_result()
     {
-        // 검 3자루 → 검 1자루 합성 — 재료 소모가 결과 지급보다 먼저 정산된다
+        // 3 swords → 1 sword fusion — ingredients settle before results are granted
         _inventory.TryAdd(_sword, 3);
         var recipe = new Recipe(
             new[] { new RecipeEntry(_sword, 3) },

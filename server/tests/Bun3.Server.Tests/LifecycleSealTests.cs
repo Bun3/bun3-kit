@@ -25,7 +25,7 @@ public class LifecycleSealTests
             if (MarkDirtyDuringNextSave)
             {
                 MarkDirtyDuringNextSave = false;
-                MarkDirty();   // 저장 "중" 도착한 변경 — 버전 카운터가 없으면 클리어에 지워진다
+                MarkDirty();   // change arriving mid-save — without a version counter, the clear would erase it
             }
             return default;
         }
@@ -100,7 +100,7 @@ public class LifecycleSealTests
                 }
                 await Task.Delay(10);
             }
-            throw new TimeoutException("세션 미생성");
+            throw new TimeoutException("session was not created");
         }
 
         public async ValueTask DisposeAsync()
@@ -118,13 +118,14 @@ public class LifecycleSealTests
         await using var h = await Harness.StartAsync();
         var (client, session) = await h.ConnectAsync();
 
-        // 핸들러 밖(두 병렬 Task)에서 같은 세션에 동시 SignIn — CAS 가드가 정확히 하나만 통과시킨다
+        // concurrent SignIn on the same session from outside handlers (two parallel Tasks) —
+        // the CAS guard lets exactly one through
         var first = Task.Run(() => session.SignInAsync("guest:race").AsTask());
         var second = Task.Run(() => session.SignInAsync("guest:race").AsTask());
 
         var results = await Task.WhenAll(WrapAsync(first), WrapAsync(second));
-        Assert.That(results.Count(r => r == null), Is.EqualTo(1), "정확히 하나 성공");
-        Assert.That(results.Count(r => r is InvalidOperationException), Is.EqualTo(1), "다른 하나는 InvalidOperationException");
+        Assert.That(results.Count(r => r == null), Is.EqualTo(1), "exactly one succeeds");
+        Assert.That(results.Count(r => r is InvalidOperationException), Is.EqualTo(1), "the other gets InvalidOperationException");
         client.Close();
 
         static async Task<Exception?> WrapAsync(Task task)
@@ -142,11 +143,11 @@ public class LifecycleSealTests
 
         await h.Registry.RetireAllAsync();
 
-        // 은퇴 후 로그인 시도 — 핸들러의 SignInAsync가 던져서 status 2로 표면화
+        // login attempt after retirement — the handler's SignInAsync throws, surfacing as status 2
         var reply = await client.RequestAsync<LoginResponse>(new LoginRequest { DeviceId = "late" })
             .AsTask().WaitAsync(Timeout);
         Assert.That(reply.Status, Is.EqualTo(RpcStatus.HandlerException));
-        Assert.That(h.Registry.TryGet("guest:late"), Is.Null, "은퇴한 레지스트리에 새 entry가 생기면 안 된다");
+        Assert.That(h.Registry.TryGet("guest:late"), Is.Null, "a retired registry must not grow a new entry");
         client.Close();
     }
 
@@ -173,9 +174,9 @@ public class LifecycleSealTests
             await Task.Delay(20);
         }
 
-        // 1차 저장 "중" 들어온 MarkDirty가 살아남아 2차 저장이 일어났다 (버전 카운터 증명)
+        // the MarkDirty that arrived during the first save survived and triggered a second save (proves the version counter)
         Assert.That(player.SaveCalls, Is.GreaterThanOrEqualTo(2));
-        Assert.That(player.IsDirty, Is.False, "2차 저장 후 클린");
+        Assert.That(player.IsDirty, Is.False, "clean after the second save");
         client.Close();
     }
 
@@ -193,12 +194,12 @@ public class LifecycleSealTests
         var player = h.Registry.TryGet("guest:sweep")!;
 
         h.Registry.Dispose();
-        h.Registry.Dispose();   // 멱등
+        h.Registry.Dispose();   // idempotent
 
-        client.Close();          // detach — 유예 진입
-        await Task.Delay(500);   // 유예(100ms)의 5배 대기
+        client.Close();          // detach — enters grace
+        await Task.Delay(500);   // wait 5x the grace period (100ms)
 
-        // Dispose는 은퇴가 아니다 — 스윕이 멈췄으므로 유예가 만료돼도 은퇴가 일어나지 않는다
+        // Dispose is not retirement — the sweep stopped, so grace expiry causes no retirement
         Assert.That(player.RetireCalls, Is.Zero);
         Assert.That(h.Registry.TryGet("guest:sweep"), Is.Not.Null);
     }
@@ -214,18 +215,18 @@ public class LifecycleSealTests
         });
         var (client, _) = await h.ConnectAsync();
 
-        // 로그인 발사 — 로더가 gate에서 블록되어 SignInAsync가 accountKey의 스트라이프를 쥔 채 멈춘다
+        // fire the login — the loader blocks on the gate, so SignInAsync stalls holding the accountKey stripe
         var loginTask = client.RequestAsync<LoginResponse>(new LoginRequest { DeviceId = "slow" }).AsTask();
-        await Task.Delay(100);   // 로더가 확실히 블록 중임을 보장
+        await Task.Delay(100);   // make sure the loader is blocked
 
-        // RetireAll 시점엔 entry가 아직 없어 스냅샷에 안 잡힌다 — 스트라이프 경합 없이 완료된다
+        // at RetireAll time there is no entry yet, so the snapshot misses it — completes without stripe contention
         await h.Registry.RetireAllAsync();
 
-        gate.TrySetResult(true);   // 로더 해제 — 삽입 직전 재확인이 _retired를 보고 막아야 한다
+        gate.TrySetResult(true);   // release the loader — the pre-insert recheck must see _retired and block it
         var reply = await loginTask.WaitAsync(Timeout);
 
         Assert.That(reply.Status, Is.EqualTo(RpcStatus.HandlerException));
-        Assert.That(h.Registry.TryGet("guest:slow"), Is.Null, "은퇴 중 느리게 로드된 신규 entry가 고아로 남으면 안 된다");
+        Assert.That(h.Registry.TryGet("guest:slow"), Is.Null, "a slow-loaded new entry must not be orphaned during retirement");
         client.Close();
     }
 }

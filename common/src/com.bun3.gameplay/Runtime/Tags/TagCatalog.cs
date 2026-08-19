@@ -5,9 +5,9 @@ using System.Collections.Generic;
 namespace Bun3.Gameplay.Tags
 {
     /// <summary>
-    /// 검증된 입력에서 한 번 만들어진 뒤 변경되지 않는 게임플레이 태그 카탈로그입니다.
+    /// Immutable gameplay tag catalog built once from validated input.
     /// </summary>
-    /// <remarks>partial 구성: 이 파일(질의·조회) / Build(빌드) / Fingerprint(지문 계산).</remarks>
+    /// <remarks>Partial layout: this file (queries and lookup) / Build (construction) / Fingerprint (fingerprint computation).</remarks>
     public sealed partial class TagCatalog
     {
         private readonly Dictionary<string, ushort> _byCanonicalName;
@@ -41,8 +41,7 @@ namespace Bun3.Gameplay.Tags
         }
 
         /// <summary>
-        /// canonical 태그 이름과 redirect 정의에서 카탈로그를 조립한다 — 저작 어셈블리의 JSON
-        /// 로더와 런타임 성능 픽스처가 쓰는 형식 무관 진입점이다.
+        /// Assembles a catalog from canonical tag names and redirect definitions — the format-agnostic entry point.
         /// </summary>
         internal static TagCatalog Create(List<string> canonicalTagNames, List<RedirectDefinition> definitions)
         {
@@ -80,7 +79,7 @@ namespace Bun3.Gameplay.Tags
             if (compiledRedirects is null) throw new ArgumentNullException(nameof(compiledRedirects));
             if (canonicalNames.Length != parents.Length || canonicalNames.Length != subtreeEnds.Length)
             {
-                throw new ArgumentException("컴파일된 태그 배열의 길이가 서로 다릅니다.", nameof(canonicalNames));
+                throw new ArgumentException("Compiled tag arrays must have equal lengths.", nameof(canonicalNames));
             }
 
             var names = (string[])canonicalNames.Clone();
@@ -137,7 +136,7 @@ namespace Bun3.Gameplay.Tags
                 if (byCanonicalName.ContainsKey(definition.From))
                 {
                     throw new TagCatalogException(
-                        "redirect source는 활성 태그와 겹칠 수 없습니다.",
+                        "Redirect source must not collide with an active tag.",
                         definition.FromJsonPath,
                         definition.FromLineNumber,
                         definition.FromLinePosition);
@@ -146,7 +145,7 @@ namespace Bun3.Gameplay.Tags
                 if (!byCanonicalName.TryGetValue(definition.To, out var target))
                 {
                     throw new TagCatalogException(
-                        "redirect target은 활성 태그여야 합니다.",
+                        "Redirect target must be an active tag.",
                         definition.ToJsonPath,
                         definition.ToLineNumber,
                         definition.ToLinePosition);
@@ -155,7 +154,7 @@ namespace Bun3.Gameplay.Tags
                 if (!redirects.TryAdd(definition.From, target))
                 {
                     throw new TagCatalogException(
-                        "대소문자를 제외하고 중복된 redirect source입니다.",
+                        "Duplicate redirect source (case-insensitive).",
                         definition.FromJsonPath,
                         definition.FromLineNumber,
                         definition.FromLinePosition);
@@ -180,45 +179,45 @@ namespace Bun3.Gameplay.Tags
             return canonicalNames;
         }
 
-        /// <summary>카탈로그에 있는 태그 수이며 None은 포함하지 않습니다.</summary>
+        /// <summary>Number of tags in the catalog, excluding None.</summary>
         public int Count { get; }
 
-        /// <summary>컴파일된 Catalog의 게임 제품 ID이며 레거시 JSON Catalog이면 빈 문자열입니다.</summary>
+        /// <summary>Game product ID of a compiled catalog; empty for a legacy JSON catalog.</summary>
         public string CatalogId => _catalogId;
 
-        /// <summary>컴파일된 Catalog의 Version이며 레거시 JSON Catalog이면 빈 문자열입니다.</summary>
+        /// <summary>Version of a compiled catalog; empty for a legacy JSON catalog.</summary>
         public string CatalogVersion => _catalogVersion;
 
-        /// <summary>이 카탈로그에 연결된 빈 컨테이너를 만듭니다.</summary>
-        /// <param name="expectedExactKinds">예상하는 명시적 태그 종류 수이며 0부터 64까지 허용합니다.</param>
-        /// <returns>비어 있는 태그 컨테이너입니다.</returns>
-        /// <exception cref="ArgumentOutOfRangeException"><paramref name="expectedExactKinds"/>가 0부터 64 범위를 벗어난 경우입니다.</exception>
+        /// <summary>Creates an empty container bound to this catalog.</summary>
+        /// <param name="expectedExactKinds">Expected number of exact tag kinds; 0 to 64.</param>
+        /// <returns>An empty tag container.</returns>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="expectedExactKinds"/> is outside the 0 to 64 range.</exception>
         public TagContainer CreateContainer(int expectedExactKinds = 0) => new TagContainer(this, expectedExactKinds);
 
-        /// <summary>이 카탈로그에 연결된 빈 누적 수 컨테이너를 만듭니다.</summary>
-        /// <param name="expectedExactKinds">예상하는 명시적 태그 종류 수이며 0부터 64까지 허용합니다.</param>
-        /// <returns>비어 있는 태그 수 컨테이너입니다.</returns>
-        /// <exception cref="ArgumentOutOfRangeException"><paramref name="expectedExactKinds"/>가 0부터 64 범위를 벗어난 경우입니다.</exception>
+        /// <summary>Creates an empty count container bound to this catalog.</summary>
+        /// <param name="expectedExactKinds">Expected number of exact tag kinds; 0 to 64.</param>
+        /// <returns>An empty tag count container.</returns>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="expectedExactKinds"/> is outside the 0 to 64 range.</exception>
         public TagCountContainer CreateCountContainer(int expectedExactKinds = 0) => new TagCountContainer(this, expectedExactKinds);
 
-        /// <summary>카탈로그의 canonical SHA-256 fingerprint를 가져옵니다.</summary>
+        /// <summary>Gets the canonical SHA-256 fingerprint of the catalog.</summary>
         public ReadOnlySpan<byte> Fingerprint => _fingerprint;
 
-        /// <summary>입력 fingerprint가 이 카탈로그의 fingerprint와 같은지 검사합니다.</summary>
-        /// <param name="other">비교할 fingerprint bytes입니다.</param>
-        /// <returns>두 fingerprint가 같으면 true입니다.</returns>
+        /// <summary>Checks whether the given fingerprint equals this catalog's fingerprint.</summary>
+        /// <param name="other">Fingerprint bytes to compare.</param>
+        /// <returns>True if the fingerprints are equal.</returns>
         public bool MatchesFingerprint(ReadOnlySpan<byte> other) => other.SequenceEqual(_fingerprint);
 
-        /// <summary>경로에 해당하는 등록 태그를 찾습니다.</summary>
-        /// <param name="path">ASCII 영숫자 세그먼트 경로입니다.</param>
-        /// <param name="tag">찾은 태그 또는 None입니다.</param>
-        /// <returns>문법상 유효한 경로가 등록되어 있으면 true입니다.</returns>
-        /// <exception cref="ArgumentException"><paramref name="path"/> 문법이 올바르지 않은 경우입니다.</exception>
+        /// <summary>Finds the registered tag for a path.</summary>
+        /// <param name="path">Path of ASCII alphanumeric segments.</param>
+        /// <param name="tag">The found tag, or None.</param>
+        /// <returns>True if the syntactically valid path is registered.</returns>
+        /// <exception cref="ArgumentException"><paramref name="path"/> syntax is invalid.</exception>
         public bool TryGet(string path, out GameplayTag tag)
         {
             if (!TagName.TryFold(path, out var canonical))
             {
-                throw new ArgumentException("태그 경로 문법이 올바르지 않습니다.", nameof(path));
+                throw new ArgumentException("Invalid tag path syntax.", nameof(path));
             }
 
             if (_byCanonicalName.TryGetValue(canonical, out var index))
@@ -237,11 +236,11 @@ namespace Bun3.Gameplay.Tags
             return false;
         }
 
-        /// <summary>경로에 해당하는 등록 태그를 찾거나 없으면 예외를 던집니다.</summary>
-        /// <param name="path">ASCII 영숫자 세그먼트 경로입니다.</param>
-        /// <returns>찾은 태그입니다.</returns>
-        /// <exception cref="ArgumentException"><paramref name="path"/> 문법이 올바르지 않은 경우입니다.</exception>
-        /// <exception cref="KeyNotFoundException">유효한 경로가 등록되어 있지 않은 경우입니다.</exception>
+        /// <summary>Finds the registered tag for a path, or throws.</summary>
+        /// <param name="path">Path of ASCII alphanumeric segments.</param>
+        /// <returns>The found tag.</returns>
+        /// <exception cref="ArgumentException"><paramref name="path"/> syntax is invalid.</exception>
+        /// <exception cref="KeyNotFoundException">The valid path is not registered.</exception>
         public GameplayTag GetRequired(string path)
         {
             if (TryGet(path, out var tag))
@@ -249,13 +248,13 @@ namespace Bun3.Gameplay.Tags
                 return tag;
             }
 
-            throw new KeyNotFoundException($"등록되지 않은 태그 경로입니다: {path}");
+            throw new KeyNotFoundException($"Unregistered tag path: {path}");
         }
 
-        /// <summary>카탈로그 범위 안의 wire index를 태그로 복원합니다.</summary>
-        /// <param name="index">복원할 wire index입니다.</param>
-        /// <param name="tag">복원한 태그 또는 None입니다.</param>
-        /// <returns>index가 카탈로그 범위 안이면 true입니다.</returns>
+        /// <summary>Restores a wire index within catalog range to a tag.</summary>
+        /// <param name="index">Wire index to restore.</param>
+        /// <param name="tag">The restored tag, or None.</param>
+        /// <returns>True if the index is within catalog range.</returns>
         public bool TryGetByIndex(ushort index, out GameplayTag tag)
         {
             if (index <= Count)
@@ -268,10 +267,10 @@ namespace Bun3.Gameplay.Tags
             return false;
         }
 
-        /// <summary>카탈로그 범위 안의 wire index를 태그로 복원합니다.</summary>
-        /// <param name="index">복원할 wire index입니다.</param>
-        /// <returns>복원한 태그입니다.</returns>
-        /// <exception cref="ArgumentOutOfRangeException">index가 카탈로그 범위를 벗어난 경우입니다.</exception>
+        /// <summary>Restores a wire index within catalog range to a tag.</summary>
+        /// <param name="index">Wire index to restore.</param>
+        /// <returns>The restored tag.</returns>
+        /// <exception cref="ArgumentOutOfRangeException">The index is outside catalog range.</exception>
         public GameplayTag GetRequiredByIndex(ushort index)
         {
             if (TryGetByIndex(index, out var tag))
@@ -282,22 +281,22 @@ namespace Bun3.Gameplay.Tags
             throw new ArgumentOutOfRangeException(nameof(index));
         }
 
-        /// <summary>태그의 canonical 소문자 이름을 가져옵니다.</summary>
-        /// <param name="tag">조회할 태그입니다.</param>
-        /// <returns>등록된 canonical 소문자 이름 또는 빈 문자열입니다.</returns>
+        /// <summary>Gets the canonical lowercase name of a tag.</summary>
+        /// <param name="tag">Tag to look up.</param>
+        /// <returns>The registered canonical lowercase name, or an empty string.</returns>
         public string GetDisplayName(GameplayTag tag) =>
             tag.IsValid && tag.Index <= Count ? _displayNames[tag.Index] : string.Empty;
 
-        /// <summary>태그의 직접 부모를 가져오며 루트 또는 잘못된 태그에는 None을 반환합니다.</summary>
-        /// <param name="tag">조회할 태그입니다.</param>
-        /// <returns>직접 부모 또는 None입니다.</returns>
+        /// <summary>Gets the direct parent of a tag; None for a root or invalid tag.</summary>
+        /// <param name="tag">Tag to look up.</param>
+        /// <returns>The direct parent, or None.</returns>
         public GameplayTag GetParent(GameplayTag tag) =>
             tag.IsValid && tag.Index <= Count ? new GameplayTag(_parents[tag.Index]) : GameplayTag.None;
 
-        /// <summary>ancestor가 tag 자신 또는 조상인지 검사합니다.</summary>
-        /// <param name="ancestor">후보 조상 태그입니다.</param>
-        /// <param name="tag">후손 후보 태그입니다.</param>
-        /// <returns>ancestor가 tag 자신 또는 조상이면 true입니다.</returns>
+        /// <summary>Checks whether ancestor is the tag itself or one of its ancestors.</summary>
+        /// <param name="ancestor">Candidate ancestor tag.</param>
+        /// <param name="tag">Candidate descendant tag.</param>
+        /// <returns>True if ancestor is the tag itself or one of its ancestors.</returns>
         public bool IsAncestorOrSelf(GameplayTag ancestor, GameplayTag tag)
         {
             if (!ancestor.IsValid || !tag.IsValid || ancestor.Index > Count || tag.Index > Count)
@@ -324,7 +323,7 @@ namespace Bun3.Gameplay.Tags
             return redirects;
         }
 
-        /// <summary>redirect 한 건의 canonical 이름 쌍과 원본 JSON 위치입니다.</summary>
+        /// <summary>One redirect's canonical name pair and its source JSON positions.</summary>
         internal readonly struct RedirectDefinition
         {
             internal RedirectDefinition(

@@ -67,7 +67,7 @@ public class PacketFormatTests
 
         Assert.That(first, Is.EqualTo(Encoding.UTF8.GetBytes("one")));
         Assert.That(second, Is.EqualTo(Encoding.UTF8.GetBytes("two")));
-        Assert.That(third, Is.Null); // 패킷 경계의 깨끗한 EOF
+        Assert.That(third, Is.Null); // clean EOF at a packet boundary
     }
 
     [Test]
@@ -112,14 +112,14 @@ public class PacketFormatTests
     [Test]
     public void Eof_mid_header_throws_EndOfStreamException()
     {
-        using var ms = new MemoryStream(new byte[] { 0x05, 0x00 }); // 헤더 2바이트만 도착
+        using var ms = new MemoryStream(new byte[] { 0x05, 0x00 }); // only 2 header bytes arrived
         Assert.ThrowsAsync<EndOfStreamException>(async () => await PacketFormat.ReadPacketAsync(ms, MaxPacketSize));
     }
 
     [Test]
     public void Eof_mid_body_throws_EndOfStreamException()
     {
-        using var ms = new MemoryStream(new byte[] { 0x0A, 0x00, 0x00, 0x00, 1, 2, 3 }); // 길이 10, 본문 3바이트만
+        using var ms = new MemoryStream(new byte[] { 0x0A, 0x00, 0x00, 0x00, 1, 2, 3 }); // length 10, only 3 body bytes
         Assert.ThrowsAsync<EndOfStreamException>(async () => await PacketFormat.ReadPacketAsync(ms, MaxPacketSize));
     }
 

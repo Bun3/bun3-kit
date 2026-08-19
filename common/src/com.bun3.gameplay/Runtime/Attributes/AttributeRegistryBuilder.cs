@@ -4,13 +4,13 @@ using System.Collections.Generic;
 
 namespace Bun3.Gameplay.Attributes
 {
-    /// <summary>속성 정의를 수집한 뒤 Build에서 일괄 검증·확정하는 빌더입니다. 등록 순서는 결과에 영향을 주지 않습니다.</summary>
+    /// <summary>Collects attribute definitions and validates them all at Build. Registration order does not affect the result.</summary>
     public sealed class AttributeRegistryBuilder
     {
         private readonly Dictionary<ushort, AttributeDefinition> _definitions = new Dictionary<ushort, AttributeDefinition>();
         private bool _built;
 
-        /// <summary>속성 정의를 등록합니다. 전방 참조를 허용하며 검증은 Build에서 일괄 수행합니다.</summary>
+        /// <summary>Registers an attribute definition. Forward references are allowed; validation happens at Build.</summary>
         public void Register(
             ushort attributeId,
             Operand? min = null,
@@ -18,14 +18,14 @@ namespace Bun3.Gameplay.Attributes
             MaxIncreasePolicy onMaxIncrease = MaxIncreasePolicy.Stay,
             MaxDecreasePolicy onMaxDecrease = MaxDecreasePolicy.Follow)
         {
-            if (_built) throw new InvalidOperationException("Build 후에는 등록할 수 없습니다.");
+            if (_built) throw new InvalidOperationException("Cannot register after Build.");
             if (_definitions.ContainsKey(attributeId))
-                throw new InvalidOperationException($"속성 {attributeId}이(가) 중복 등록되었습니다.");
+                throw new InvalidOperationException($"Attribute {attributeId} is registered more than once.");
 
             _definitions.Add(attributeId, new AttributeDefinition(min, max, onMaxIncrease, onMaxDecrease));
         }
 
-        /// <summary>참조·순환·정책 정합성을 검증하고 위상 순서·후손 목록을 계산해 불변 레지스트리를 만듭니다.</summary>
+        /// <summary>Validates references, cycles, and policy consistency, computes the topological order and dependent lists, and builds the immutable registry.</summary>
         public AttributeRegistry Build()
         {
             _built = true;
@@ -35,9 +35,9 @@ namespace Bun3.Gameplay.Attributes
                 ValidateBound(pair.Key, pair.Value.Min, dependencyLists);
                 ValidateBound(pair.Key, pair.Value.Max, dependencyLists);
                 if (pair.Value.OnMaxIncrease != MaxIncreasePolicy.Stay && !IsAttributeBound(pair.Value.Max))
-                    throw new InvalidOperationException($"속성 {pair.Key}: MaxIncreasePolicy가 기본값이 아니면 max가 속성 참조여야 합니다.");
+                    throw new InvalidOperationException($"Attribute {pair.Key}: a non-default MaxIncreasePolicy requires max to be an attribute reference.");
                 if (pair.Value.OnMaxDecrease != MaxDecreasePolicy.Follow && !IsAttributeBound(pair.Value.Max))
-                    throw new InvalidOperationException($"속성 {pair.Key}: MaxDecreasePolicy가 기본값이 아니면 max가 속성 참조여야 합니다.");
+                    throw new InvalidOperationException($"Attribute {pair.Key}: a non-default MaxDecreasePolicy requires max to be an attribute reference.");
             }
 
             var order = TopologicalOrder(dependencyLists);
@@ -59,15 +59,14 @@ namespace Bun3.Gameplay.Attributes
         {
             if (!bound.HasValue) return;
 
-            // 클램프 경계에서 SourceAttribute 피연산자 거부
             if (bound.Value.Kind == OperandKind.SourceAttribute)
-                throw new InvalidOperationException($"속성 {owner}의 클램프 경계는 SourceAttribute를 참조할 수 없습니다.");
+                throw new InvalidOperationException($"Clamp bounds of attribute {owner} cannot reference a SourceAttribute.");
 
             if (!IsAttributeBound(bound)) return;
 
             var referenced = bound!.Value.AttributeId;
             if (!_definitions.ContainsKey(referenced))
-                throw new InvalidOperationException($"속성 {owner}의 클램프가 미등록 속성 {referenced}을(를) 참조합니다.");
+                throw new InvalidOperationException($"Clamp of attribute {owner} references unregistered attribute {referenced}.");
 
             if (!dependencyLists.TryGetValue(referenced, out var list))
             {
@@ -78,7 +77,7 @@ namespace Bun3.Gameplay.Attributes
             if (!list.Contains(owner)) list.Add(owner);
         }
 
-        /// <summary>평가 순서는 레벨 단위 Kahn 알고리즘으로 계산하며, 같은 레벨 안에서 AttributeId 오름차순입니다.</summary>
+        /// <summary>Evaluation order via level-wise Kahn's algorithm; within a level, ascending AttributeId.</summary>
         private ushort[] TopologicalOrder(Dictionary<ushort, List<ushort>> dependents)
         {
             var inDegree = new Dictionary<ushort, int>();
@@ -89,7 +88,6 @@ namespace Bun3.Gameplay.Attributes
             var result = new List<ushort>();
             var currentLevel = new List<ushort>();
 
-            // 초기 레벨: in-degree가 0인 노드
             foreach (var pair in inDegree)
                 if (pair.Value == 0) currentLevel.Add(pair.Key);
 
@@ -114,7 +112,7 @@ namespace Bun3.Gameplay.Attributes
             }
 
             if (result.Count != _definitions.Count)
-                throw new InvalidOperationException("클램프 참조에 순환이 있습니다.");
+                throw new InvalidOperationException("Clamp references contain a cycle.");
             return result.ToArray();
         }
     }

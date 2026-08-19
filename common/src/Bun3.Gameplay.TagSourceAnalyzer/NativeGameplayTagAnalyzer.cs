@@ -11,7 +11,7 @@ using Microsoft.CodeAnalysis.Diagnostics;
 namespace Bun3.Gameplay.TagSourceAnalyzer
 {
     /// <summary>
-    /// 외부 상태를 읽지 않고 컴파일 시점 Native GameplayTag 선언을 검증합니다.
+    /// Validates Native GameplayTag declarations at compile time without reading external state.
     /// </summary>
     [DiagnosticAnalyzer(LanguageNames.CSharp)]
     public sealed class NativeGameplayTagAnalyzer : DiagnosticAnalyzer

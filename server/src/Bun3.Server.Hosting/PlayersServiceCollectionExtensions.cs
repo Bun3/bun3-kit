@@ -10,16 +10,16 @@ using Microsoft.Extensions.Options;
 
 namespace Bun3.Server.Hosting;
 
-/// <summary>Player 수명주기가 붙은 Rpc 서버를 Generic Host에 등록하는 확장.</summary>
+/// <summary>Extensions that register an Rpc server with Player lifecycle into the Generic Host.</summary>
 public static class PlayersServiceCollectionExtensions
 {
     /// <summary>
-    /// Players + Rpc 서버(TCP)를 등록한다. 시작 시 서버 수신 → 틱 루프 순으로 뜨고,
-    /// 정지 시 틱 루프 → 서버 drain → 전 Player 은퇴(RetireAllAsync — 저장 플러시)
-    /// 순으로 정리된다. TSession은 IConnection을 받는 public 생성자가 필요하며
-    /// 나머지 인자는 DI로 주입된다. ticking은 TickLoop 옵션(틱 간격 등)을, jobs는
-    /// TickLoop.Start 전에 게임 전역 잡을 등록할 콜백을 받는다(Player 틱 잡은 자동 등록됨).
-    /// 호스트당 1회만 호출.
+    /// Registers a Players + Rpc server (TCP). On start, the server begins accepting before the
+    /// tick loop starts; on stop, the order is tick loop → server drain → retire all players
+    /// (RetireAllAsync — save flush). TSession needs a public constructor taking IConnection;
+    /// remaining arguments are DI-injected. ticking takes TickLoop options (tick interval, etc.);
+    /// jobs takes a callback to register game-wide jobs before TickLoop.Start (the player tick
+    /// job is registered automatically). Call at most once per host.
     /// </summary>
     public static IServiceCollection AddPlayerServer<TSession, TPlayer, TRequest, TResponse, TUpdate>(
         this IServiceCollection services,
@@ -40,7 +40,7 @@ public static class PlayersServiceCollectionExtensions
 
         services.AddServerTransport(serverOptions);
 
-        // ServerOptions와 같은 옵션 파이프라인 — appsettings("Bun3:Players") 바인딩 후 람다 적용.
+        // Same options pipeline as ServerOptions — appsettings ("Bun3:Players") binding, then the lambda.
         var playersOptionsBuilder = services.AddOptions<PlayersOptions>()
             .BindConfiguration(PlayersOptions.SectionName);
         if (playersOptions != null)
@@ -63,7 +63,7 @@ public static class PlayersServiceCollectionExtensions
                     sp.GetRequiredService<IOptions<PlayersOptions>>().Value,
                     ServerServiceCollectionExtensions.ResolveLogger(sp))
                 .Register(loop);
-            jobs?.Invoke(loop);   // 게임 전역 잡 — Start 전 등록 규약 충족
+            jobs?.Invoke(loop);   // Game-wide jobs — satisfies the register-before-Start rule.
             return loop;
         });
 
@@ -98,8 +98,8 @@ public static class PlayersServiceCollectionExtensions
     }
 }
 
-/// <summary>서버·틱 루프 수명 + 정지 시 Player 전원 은퇴. 닫힌 제네릭이 서버마다 달라
-/// 중복 등록이 TryAddEnumerable에 조용히 떨어지지 않는다.</summary>
+/// <summary>Server + tick-loop lifetime, plus retiring all players on stop. The closed generic
+/// differs per server, so duplicate registrations do not silently collapse into TryAddEnumerable.</summary>
 internal sealed class PlayersLifetimeService<TSession, TPlayer, TRequest, TResponse, TUpdate> : IHostedService
     where TSession : PlayerSession<TPlayer>
     where TPlayer : Player
@@ -127,20 +127,21 @@ internal sealed class PlayersLifetimeService<TSession, TPlayer, TRequest, TRespo
     public async Task StartAsync(CancellationToken cancellationToken)
     {
         await _server.StartAsync(cancellationToken).ConfigureAwait(false);
-        _tickLoop.Start();   // 서버가 받은 뒤 틱 시작
+        _tickLoop.Start();   // Start ticking after the server is accepting.
     }
 
     public async Task StopAsync(CancellationToken cancellationToken)
     {
         try
         {
-            await _tickLoop.StopAsync(cancellationToken).ConfigureAwait(false);   // 틱 먼저 정지 — 정지 중 새 틱 작업 유입 차단
+            await _tickLoop.StopAsync(cancellationToken).ConfigureAwait(false);   // Stop ticking first — blocks new tick work during shutdown.
             await _server.StopAsync(_options.Value.DrainTimeout, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
-            // 최종 저장은 앞 단계가 취소/실패해도 반드시 시도한다 — 여기서 못 하면 접속자 진행분이 유실된다.
-            // 종료 기한(cancellationToken)이 이미 소진된 경우에도 저장은 마지막 기회이므로 토큰을 전달하지 않는다.
+            // The final save must be attempted even if earlier steps were canceled or failed —
+            // skipping it loses connected players' progress. Since this is the last chance to save
+            // even when the shutdown deadline (cancellationToken) is exhausted, no token is passed.
             await _registry.RetireAllAsync(CancellationToken.None).ConfigureAwait(false);
         }
     }

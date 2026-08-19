@@ -6,9 +6,9 @@ using UnityEngine.UI;
 namespace Bun3.Unity.UI.Samples
 {
     /// <summary>
-    /// <see cref="ButtonInteractableScope"/> 사용 예시.
-    /// 여러 조건을 모아 버튼의 interactable을 결정하고,
-    /// 비활성 버튼이 클릭되면 사유를 <see cref="IButtonDisabledHandler"/>로 재생한다.
+    /// <see cref="ButtonInteractableScope"/> usage example.
+    /// Combines multiple conditions to drive a button's interactable state, and replays the
+    /// reason via <see cref="IButtonDisabledHandler"/> when the disabled button is clicked.
     /// </summary>
     public class ButtonInteractableScopeSample : MonoBehaviour
     {
@@ -19,7 +19,7 @@ namespace Bun3.Unity.UI.Samples
         private const int Price = 100;
         private const int RequiredItems = 1;
 
-        // 매 프레임 델리게이트가 할당되지 않도록 한 번만 캐싱한다.
+        // Cached once so no delegate is allocated per frame.
         private Action _openShopHoursPopup;
 
         private void Awake()

@@ -9,13 +9,13 @@ using UnityEditor;
 
 namespace Bun3.Gameplay.Unity.Tests
 {
-    /// <summary>Play 진입 전 Catalog 준비와 세션 수명주기를 검증합니다.</summary>
+    /// <summary>Verifies catalog preparation before play mode and the session lifecycle.</summary>
     [TestFixture]
     public sealed class GameplayTagPlayModeGateTests
     {
         private string _temporaryDirectory = null!;
 
-        /// <summary>각 테스트의 임시 Catalog 경로와 Play 세션 상태를 초기화합니다.</summary>
+        /// <summary>Initializes each test's temp catalog path and play session state.</summary>
         [SetUp]
         public void SetUp()
         {
@@ -26,7 +26,7 @@ namespace Bun3.Gameplay.Unity.Tests
             GameplayTagPlaySessionCatalog.Clear();
         }
 
-        /// <summary>테스트가 생성한 Play 세션 상태와 임시 파일을 정리합니다.</summary>
+        /// <summary>Cleans up the play session state and temp files created by the test.</summary>
         [TearDown]
         public void TearDown()
         {
@@ -34,7 +34,7 @@ namespace Bun3.Gameplay.Unity.Tests
             if (Directory.Exists(_temporaryDirectory)) Directory.Delete(_temporaryDirectory, true);
         }
 
-        /// <summary>잘못된 길이의 fingerprint marker가 예외 없이 폐쇄적으로 정리되는지 검증합니다.</summary>
+        /// <summary>Verifies a wrong-length fingerprint marker is cleaned up fail-closed without throwing.</summary>
         [Test]
         public void Wrong_length_fingerprint_marker_fails_closed_and_is_forgotten()
         {
@@ -53,7 +53,7 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(GameplayTagPlaySessionCatalog.TryRestorePrepared(out _), Is.False);
         }
 
-        /// <summary>길이는 맞지만 준비한 Catalog와 다른 fingerprint marker를 거부하는지 검증합니다.</summary>
+        /// <summary>Verifies a correct-length fingerprint marker differing from the prepared catalog is rejected.</summary>
         [Test]
         public void Wrong_prepared_fingerprint_fails_closed_and_is_forgotten()
         {
@@ -74,7 +74,7 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(GameplayTagPlaySessionCatalog.TryRestorePrepared(out _), Is.False);
         }
 
-        /// <summary>비어 있거나 identity 규칙에 맞지 않는 Catalog ID marker를 폐쇄적으로 거부합니다.</summary>
+        /// <summary>Rejects, fail-closed, an empty or identity-rule-violating catalog ID marker.</summary>
         [TestCase(" ")]
         [TestCase("Invalid Catalog")]
         public void Invalid_catalog_id_marker_fails_closed_and_is_forgotten(string catalogId)
@@ -94,7 +94,7 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(GameplayTagPlaySessionCatalog.TryRestorePrepared(out _), Is.False);
         }
 
-        /// <summary>비어 있거나 완전한 기존 파일이 아닌 binary 경로 marker를 폐쇄적으로 거부합니다.</summary>
+        /// <summary>Rejects, fail-closed, a binary path marker that is empty or not a complete existing file.</summary>
         [TestCase(" ")]
         [TestCase("missing/GameplayTags.catalog")]
         public void Invalid_binary_path_marker_fails_closed_and_is_forgotten(string path)
@@ -113,7 +113,7 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(GameplayTagPlaySessionCatalog.TryRestorePrepared(out _), Is.False);
         }
 
-        /// <summary>존재하지 않는 완전한 binary 경로 marker를 폐쇄적으로 거부하고 정리합니다.</summary>
+        /// <summary>Rejects and cleans up, fail-closed, a complete binary path marker that does not exist.</summary>
         [Test]
         public void Missing_absolute_binary_path_marker_fails_closed_and_is_forgotten()
         {
@@ -132,7 +132,7 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(GameplayTagPlaySessionCatalog.TryRestorePrepared(out _), Is.False);
         }
 
-        /// <summary>잘못된 marker로 EnteredPlayMode 복원이 실패하면 전환 취소와 경고가 각각 한 번만 발생함을 검증합니다.</summary>
+        /// <summary>Verifies a failed EnteredPlayMode restore from a bad marker cancels the transition and warns exactly once each.</summary>
         [Test]
         public void Entered_play_mode_malformed_marker_cancels_once_and_warns_once()
         {
@@ -151,7 +151,7 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(GameplayTagPlaySessionCatalog.Current, Is.Null);
         }
 
-        /// <summary>provider context가 없으면 preview와 last-good binary를 고정하지 않고 Play 준비를 차단합니다.</summary>
+        /// <summary>Blocks play preparation without pinning the preview or last-good binary when there is no provider context.</summary>
         [Test]
         public void Missing_provider_context_blocks_prepare_and_never_freezes_preview_or_last_good_binary()
         {
@@ -178,7 +178,7 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(GameplayTagPlaySessionCatalog.Current, Is.Null);
         }
 
-        /// <summary>누락된 Game Source와 잘못된 해석 Source가 경로 진단으로 Play 준비를 차단함을 검증합니다.</summary>
+        /// <summary>Verifies a missing game source and an invalid resolved source block play preparation with path diagnostics.</summary>
         [Test]
         public void Missing_game_source_and_malformed_resolved_source_each_block_prepare_with_their_path_diagnostic()
         {
@@ -209,7 +209,7 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(GameplayTagPlaySessionCatalog.Current, Is.Null);
         }
 
-        /// <summary>성공한 준비가 binary round-trip instance를 Edit Mode 복귀 전까지 고정함을 검증합니다.</summary>
+        /// <summary>Verifies a successful preparation pins the binary round-trip instance until returning to edit mode.</summary>
         [Test]
         public void Successful_prepare_round_trips_binary_and_freezes_the_same_instance_until_edit_mode_returns()
         {
@@ -241,7 +241,7 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(GameplayTagPlaySessionCatalog.Current, Is.Null);
         }
 
-        /// <summary>ExitingEditMode 준비 실패가 Play 전환과 경고를 각각 한 번만 발생시키는지 검증합니다.</summary>
+        /// <summary>Verifies an ExitingEditMode preparation failure triggers the play transition cancel and warning exactly once each.</summary>
         [Test]
         public void Exiting_edit_mode_failure_cancels_the_transition_and_shows_exactly_one_diagnostic_popup()
         {
@@ -275,7 +275,7 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(GameplayTagPlaySessionCatalog.Current, Is.Null);
         }
 
-        /// <summary>Play gate 등록과 Edit Mode 정리가 멱등임을 검증합니다.</summary>
+        /// <summary>Verifies play gate registration and edit mode cleanup are idempotent.</summary>
         [Test]
         public void Initialization_and_cleanup_are_idempotent()
         {
@@ -297,7 +297,7 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(GameplayTagPlaySessionCatalog.Current, Is.Null);
         }
 
-        /// <summary>domain reload 후 준비된 binary를 딱 한 번 복원하고 hot reload하지 않음을 검증합니다.</summary>
+        /// <summary>Verifies the prepared binary is restored exactly once after a domain reload and never hot reloaded.</summary>
         [Test]
         public void Domain_reload_restores_only_the_exact_prepared_binary_once_and_never_hot_reloads_it()
         {
@@ -324,7 +324,7 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(GameplayTagPlaySessionCatalog.Current, Is.Null);
         }
 
-        /// <summary>활성 Play 세션 Catalog가 두 번째 준비로 교체되지 않음을 검증합니다.</summary>
+        /// <summary>Verifies the active play session catalog is not replaced by a second preparation.</summary>
         [Test]
         public void Active_play_session_catalog_cannot_be_replaced_by_a_second_prepare()
         {

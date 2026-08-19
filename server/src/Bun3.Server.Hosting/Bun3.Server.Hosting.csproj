@@ -10,7 +10,7 @@
     <Authors>Bun3</Authors>
     <RepositoryUrl>https://github.com/Bun3/bun3-kit</RepositoryUrl>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <Description>.NET Generic Host 통합 — AddServer&lt;TSession&gt; 확장</Description>
+    <Description>.NET Generic Host integration — AddServer&lt;TSession&gt; extensions</Description>
   </PropertyGroup>
 
   <ItemGroup>

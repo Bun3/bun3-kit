@@ -9,7 +9,7 @@ using Microsoft.Extensions.Logging;
 
 namespace Bun3.Server.Rpc
 {
-    /// <summary>RpcSession이 패킷 처리를 위임하는 비제네릭 창구.</summary>
+    /// <summary>Non-generic surface that RpcSession delegates packet processing to.</summary>
     internal interface IRpcRuntime
     {
         TimeSpan? IdleKickTimeout { get; }
@@ -18,7 +18,7 @@ namespace Bun3.Server.Rpc
         ValueTask SendUpdateAsync(Session session, IMessage update);
     }
 
-    /// <summary>채널 분기·요청 디스패치·응답 조립 — 서버 측 메시징의 두뇌. 상태는 전부 기동 시 구축.</summary>
+    /// <summary>Channel branching, request dispatch, and response assembly — the server-side messaging core. All state is built at startup.</summary>
     internal sealed class RpcRuntime<TSession, TRequest, TResponse, TUpdate> : IRpcRuntime
         where TSession : RpcSession
         where TRequest : class, IMessage<TRequest>, new()
@@ -34,11 +34,11 @@ namespace Bun3.Server.Rpc
             RpcServerOptions options,
             ILogger logger)
         {
-            schema.Validate(config);   // 기동 fail-fast — 위반 전체 목록과 함께 throw
+            schema.Validate(config);   // startup fail-fast — throws with the full list of violations
             _schema = schema;
-            // 스냅샷 복사 — config는 기동 후에도 살아있는 호출자 소유 객체이므로,
-            // 원본 Dictionary를 그대로 들고 있으면 이후 config.OnRequest(...) 호출이
-            // 세션 스레드가 동시에 읽는 딕셔너리를 변경해 미정의 동작을 유발하고 Validate도 우회한다.
+            // Snapshot copy — config is a caller-owned object that stays alive after startup;
+            // holding the original Dictionary would let later config.OnRequest(...) calls mutate
+            // a dictionary read concurrently by session threads (undefined behavior, bypasses Validate).
             _registrations = new Dictionary<Type, RpcConfig<TSession>.Registration>(config.Registrations);
             IdleKickTimeout = options.IdleKickTimeout;
             Logger = logger;
@@ -52,7 +52,7 @@ namespace Bun3.Server.Rpc
         {
             if (packet.Length < 1)
             {
-                Violation(session, "빈 패킷");
+                Violation(session, "Empty packet");
                 return;
             }
 
@@ -67,7 +67,7 @@ namespace Bun3.Server.Rpc
                     await HandleRequestAsync(session, body).ConfigureAwait(false);
                     break;
                 default:
-                    Violation(session, $"허용되지 않은 채널 0x{channel:X2}");
+                    Violation(session, $"Disallowed channel 0x{channel:X2}");
                     break;
             }
         }
@@ -75,7 +75,7 @@ namespace Bun3.Server.Rpc
         public ValueTask SendUpdateAsync(Session session, IMessage update)
         {
             var updateCase = _schema.UpdateMap.ByPayloadType(update.GetType())
-                ?? throw new ArgumentException($"Update oneof에 없는 타입: {update.GetType().Name}", nameof(update));
+                ?? throw new ArgumentException($"Type not in Update oneof: {update.GetType().Name}", nameof(update));
             var envelope = new TUpdate();
             updateCase.Set(envelope, update);
             return SendAsync(session, Channels.Update, envelope);
@@ -86,18 +86,19 @@ namespace Bun3.Server.Rpc
             Control control;
             try
             {
-                control = Control.Parser.ParseFrom(new ReadOnlySequence<byte>(body));   // 무복사 파싱
+                control = Control.Parser.ParseFrom(new ReadOnlySequence<byte>(body));   // zero-copy parse
             }
             catch (InvalidProtocolBufferException ex)
             {
-                Violation(session, $"Control 파싱 실패: {ex.Message}");
+                Violation(session, $"Control parse failure: {ex.Message}");
                 return;
             }
 
             if (control.BodyCase != Control.BodyOneofCase.Ping)
             {
-                // 서버는 엄격(미지 Control = 위반), 클라는 관대(경고 무시) — 서버가 새 Control을 먼저 배포하는 롤링 업그레이드를 위한 의도적 비대칭
-                Violation(session, $"클라이언트가 보낼 수 없는 Control: {control.BodyCase}");
+                // Server is strict (unknown Control = violation), client is lenient (warn and ignore) —
+                // deliberate asymmetry so rolling upgrades can ship new Control messages server-first.
+                Violation(session, $"Control not allowed from client: {control.BodyCase}");
                 return;
             }
 
@@ -110,11 +111,11 @@ namespace Bun3.Server.Rpc
             TRequest envelope;
             try
             {
-                envelope = _schema.RequestParser.ParseFrom(new ReadOnlySequence<byte>(body));   // 무복사 파싱
+                envelope = _schema.RequestParser.ParseFrom(new ReadOnlySequence<byte>(body));   // zero-copy parse
             }
             catch (InvalidProtocolBufferException ex)
             {
-                Violation(session, $"Request 파싱 실패: {ex.Message}");
+                Violation(session, $"Request parse failure: {ex.Message}");
                 return;
             }
 
@@ -122,7 +123,7 @@ namespace Bun3.Server.Rpc
             var requestCase = _schema.RequestMap.GetActiveCase(envelope);
             if (requestCase == null)
             {
-                Violation(session, "body 없는 Request");
+                Violation(session, "Request without body");
                 return;
             }
 
@@ -140,7 +141,7 @@ namespace Bun3.Server.Rpc
             IMessage? responsePayload = null;
             if (!_registrations.TryGetValue(requestCase.PayloadType, out var registration))
             {
-                status = RpcStatus.UnregisteredHandler;   // 기동 검증상 불가 — 방어
+                status = RpcStatus.UnregisteredHandler;   // impossible after startup validation — defensive
             }
             else
             {
@@ -184,7 +185,7 @@ namespace Bun3.Server.Rpc
 
         private void Violation(RpcSession session, string reason)
         {
-            Logger.LogWarning("Session {SessionId}: 프로토콜 위반 — {Reason}; kicking.", session.Id, reason);
+            Logger.LogWarning("Session {SessionId}: protocol violation — {Reason}; kicking.", session.Id, reason);
             session.Kick(DisconnectCode.ProtocolViolation);
         }
     }

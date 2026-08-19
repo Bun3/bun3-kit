@@ -5,7 +5,7 @@ using Bun3.Gameplay.Tags;
 
 namespace Bun3.Gameplay.Tags.Catalog
 {
-    /// <summary>여러 태그 Source를 하나의 결정적인 런타임 Catalog와 provenance로 병합합니다.</summary>
+    /// <summary>Merges multiple tag sources into one deterministic runtime catalog with provenance.</summary>
     public static class TagCatalogCompiler
     {
         private const string DuplicateSourceCode = "B3TAG1001";
@@ -15,11 +15,11 @@ namespace Bun3.Gameplay.Tags.Catalog
         private const string RedirectCycleCode = "B3TAG2003";
         private const string MissingRedirectTargetCode = "B3TAG2004";
 
-        /// <summary>Source 목록을 canonical runtime Catalog, provenance와 안정적인 진단으로 컴파일합니다.</summary>
-        /// <param name="sources">제품 전체에서 resolve한 태그 Source 목록입니다.</param>
-        /// <param name="identity">결과 Catalog의 제품 ID와 명시적인 Version입니다.</param>
-        /// <returns>성공 결과 또는 작성 오류 진단입니다.</returns>
-        /// <exception cref="ArgumentNullException">입력 목록, 목록 항목 또는 식별 정보가 null인 경우입니다.</exception>
+        /// <summary>Compiles the source list into a canonical runtime catalog, provenance, and stable diagnostics.</summary>
+        /// <param name="sources">Tag sources resolved across the whole product.</param>
+        /// <param name="identity">Product ID and explicit version of the resulting catalog.</param>
+        /// <returns>Successful result or authoring error diagnostics.</returns>
+        /// <exception cref="ArgumentNullException">The input list, a list item, or the identity is null.</exception>
         public static TagCatalogCompilation Compile(
             IReadOnlyList<TagSourceDocument> sources,
             TagCatalogIdentity identity)
@@ -183,10 +183,11 @@ namespace Bun3.Gameplay.Tags.Catalog
             }
         }
 
-        // ordinal 정렬이 곧 DFS 사전 순회다 — 태그 세그먼트 허용 문자(0-9=0x30, a-z=0x61)가
-        // 전부 구분자 '.'(0x2E)보다 크므로 "x"의 자손("x.…")은 항상 "x" 바로 뒤, 형제("xa")보다
-        // 앞에 온다. 이 전제가 서브트리를 연속 구간 [index, subtreeEnd]로 만들고 IsAncestorOrSelf를
-        // 두 번의 비교로 끝낸다. 허용 문자에 '.'보다 작은 것이 생기면 계층 질의가 조용히 깨진다.
+        // Ordinal sort order is exactly DFS preorder: every allowed segment character
+        // (0-9=0x30, a-z=0x61) is greater than the separator '.' (0x2E), so descendants of "x"
+        // ("x.…") come right after "x" and before siblings ("xa"). That makes each subtree a
+        // contiguous range [index, subtreeEnd] and lets IsAncestorOrSelf finish in two
+        // comparisons. Allowing any character below '.' silently breaks hierarchy queries.
         private static string[] BuildCanonicalNames(HashSet<string> activeNames)
         {
             var sorted = new string[activeNames.Count];

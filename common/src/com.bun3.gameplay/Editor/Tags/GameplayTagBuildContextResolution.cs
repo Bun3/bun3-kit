@@ -17,7 +17,7 @@ namespace Bun3.Gameplay.Editor.Tags
         internal string? LocalSourcePath { get; }
     }
 
-    /// <summary>Unity Editor의 Game Catalog build context 발견 결과입니다.</summary>
+    /// <summary>Result of discovering the game catalog build context in the Unity editor.</summary>
     public sealed class GameplayTagBuildContextResolution
     {
         private readonly IReadOnlyList<string> _diagnostics;
@@ -81,16 +81,16 @@ namespace Bun3.Gameplay.Editor.Tags
             RequiresCatalogConfiguration = requiresCatalogConfiguration;
         }
 
-        /// <summary>완전하게 resolve된 경우 제품 전체 개발 build context입니다.</summary>
+        /// <summary>Product-wide development build context when fully resolved.</summary>
         public GameCatalogBuildContext? Context { get; }
 
-        /// <summary>발견, 설정 또는 Source 읽기 실패의 안정적인 진단입니다.</summary>
+        /// <summary>Stable diagnostics for discovery, configuration, or source read failures.</summary>
         public IReadOnlyList<string> Diagnostics => _diagnostics;
 
         internal IReadOnlyList<GameplayTagWorkspaceDiagnostic> DiagnosticEntries =>
             _diagnosticEntries;
 
-        /// <summary>제품 전체 Source를 포함한 context를 사용할 수 있는지 나타냅니다.</summary>
+        /// <summary>Whether a context with product-wide sources is available.</summary>
         public bool HasCompleteContext => Context is not null && _diagnostics.Count == 0;
 
         internal bool PermitsGameOnlyValidation { get; }

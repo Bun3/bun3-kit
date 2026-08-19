@@ -55,7 +55,7 @@ public class SteamWebApiVerifierTests
 
         var steam = (SteamAuthResult)result;
         Assert.That(steam.SteamId, Is.EqualTo(76561198000000001UL));
-        Assert.That(steam.OwnerSteamId, Is.EqualTo(76561198000000002UL));   // 패밀리 공유
+        Assert.That(steam.OwnerSteamId, Is.EqualTo(76561198000000002UL));   // family sharing
         Assert.That(steam.VacBanned, Is.False);
         Assert.That(steam.PublisherBanned, Is.False);
     }
@@ -108,7 +108,7 @@ public class SteamWebApiVerifierTests
 
         var result = (SteamAuthResult)await verifier.VerifyAsync("a1b2");
         Assert.That(result.Succeeded, Is.True);
-        Assert.That(result.VacBanned, Is.True);    // 입장 판단용 플래그는 유지
+        Assert.That(result.VacBanned, Is.True);    // flag kept for the admission decision
     }
 
     [Test]
@@ -130,19 +130,19 @@ public class SteamWebApiVerifierTests
 
         var result = (SteamAuthResult)await verifier.VerifyAsync("a1b2");
         Assert.That(result.Succeeded, Is.True);
-        Assert.That(result.PublisherBanned, Is.True);    // 입장 판단용 플래그는 유지
+        Assert.That(result.PublisherBanned, Is.True);    // flag kept for the admission decision
     }
 
     [TestCase("")]
     [TestCase("   ")]
-    [TestCase("xyz!")]     // hex 아님
+    [TestCase("xyz!")]     // not hex
     public async Task Invalid_ticket_format_fails_without_http_call(string credential)
     {
         var (verifier, handler) = Create();
         var result = await verifier.VerifyAsync(credential);
 
         Assert.That(result.Failure, Is.EqualTo(AuthFailure.InvalidCredential));
-        Assert.That(handler.LastRequest, Is.Null);   // HTTP 미호출
+        Assert.That(handler.LastRequest, Is.Null);   // no HTTP call made
     }
 
     [Test]

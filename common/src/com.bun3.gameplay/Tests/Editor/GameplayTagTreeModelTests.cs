@@ -8,11 +8,11 @@ using NUnit.Framework;
 
 namespace Bun3.Gameplay.Unity.Tests
 {
-    /// <summary>Source 단위 태그 트리 projection의 행 구성과 검색 동작을 검증합니다.</summary>
+    /// <summary>Verifies the per-source tag tree projection's row composition and search behavior.</summary>
     [TestFixture]
     public sealed class GameplayTagTreeModelTests
     {
-        /// <summary>Source root와 Source별 중복 태그가 결정적인 전위 순서로 표시되는지 검증합니다.</summary>
+        /// <summary>Verifies source roots and per-source duplicate tags display in deterministic preorder.</summary>
         [Test]
         public void Source_roots_and_duplicate_tags_use_deterministic_preorder_and_unique_editor_ids()
         {
@@ -38,7 +38,7 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(model.Rows[2].Id, Is.Not.EqualTo(model.Rows[5].Id));
         }
 
-        /// <summary>Source root와 implicit/explicit 행이 Source 소유권과 권한을 보존하는지 검증합니다.</summary>
+        /// <summary>Verifies source roots and implicit/explicit rows preserve source ownership and permissions.</summary>
         [Test]
         public void Rows_preserve_source_comment_explicit_and_readonly_metadata()
         {
@@ -71,7 +71,7 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(gameLeaf.IsReadOnly, Is.False);
         }
 
-        /// <summary>검색이 canonical 전체 경로만 검색하고 Source root와 조상 문맥을 유지하는지 검증합니다.</summary>
+        /// <summary>Verifies search matches only canonical full paths and keeps source root and ancestor context.</summary>
         [Test]
         public void Search_keeps_the_matching_source_root_and_ancestors_and_marks_only_direct_matches()
         {
@@ -96,7 +96,7 @@ namespace Bun3.Gameplay.Unity.Tests
                 Is.EqualTo(new[] { false, false, false, true }));
         }
 
-        /// <summary>태그가 없는 Source도 작성 단위인 root 행으로 남는지 검증합니다.</summary>
+        /// <summary>Verifies a source without tags still remains as an authoring-unit root row.</summary>
         [Test]
         public void Empty_sources_still_render_non_tag_source_roots()
         {

@@ -5,22 +5,22 @@ using Bun3.Gameplay.Tags;
 namespace Bun3.Gameplay.Tags.Catalog
 {
     /// <summary>
-    /// 하나의 Source가 선언한 태그와 설명입니다.
+    /// Tag and comment declared by a single source.
     /// </summary>
     public sealed class TagSourceTag
     {
-        /// <summary>소문자로 정규화된 태그 이름입니다.</summary>
+        /// <summary>Lowercase-normalized tag name.</summary>
         public string Name { get; }
 
-        /// <summary>Source가 제공한 태그 설명입니다.</summary>
+        /// <summary>Tag comment the source provided.</summary>
         public string Comment { get; }
 
-        /// <summary>태그 Source 행을 만듭니다.</summary>
+        /// <summary>Creates a tag source row.</summary>
         public TagSourceTag(string name, string comment)
         {
             if (!TagName.TryFold(name, out var canonical))
             {
-                throw new ArgumentException("태그 이름 형식이 올바르지 않습니다.", nameof(name));
+                throw new ArgumentException("Invalid tag name format.", nameof(name));
             }
 
             Name = canonical;

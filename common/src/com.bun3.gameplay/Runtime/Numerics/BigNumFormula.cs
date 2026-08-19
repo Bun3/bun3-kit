@@ -2,24 +2,25 @@
 namespace Bun3.Gameplay.Numerics
 {
     /// <summary>
-    /// 결정론 BigNum 수식 평가기입니다. 변수 <c>x</c> 하나, 사칙연산(<c>+ - * /</c>), 단항 <c>-</c>,
-    /// 괄호, 정수 거듭제곱 <c>^</c>(지수는 0..64 정수 리터럴만 허용 — <c>x^2</c>는 되지만 <c>2^x</c>·
-    /// <c>x^x</c>·비정수 지수는 거부)을 지원합니다. 우선순위는 <c>^</c> &gt; 단항 <c>-</c> &gt;
-    /// <c>* /</c> &gt; <c>+ -</c>. 저작·기동(카탈로그 Build) 전용이라 할당을 아끼지 않는
-    /// 재귀 하강 파서로 구현합니다 — 틱 핫패스에서는 미리 컴파일된 레벨 배열만 읽습니다.
-    /// float/double은 전혀 쓰지 않고 전부 BigNum 정수 산술입니다.
+    /// Deterministic BigNum formula evaluator. Supports a single variable <c>x</c>, the four
+    /// arithmetic operators (<c>+ - * /</c>), unary <c>-</c>, parentheses, and integer power
+    /// <c>^</c> (exponent must be an integer literal 0..64 — <c>x^2</c> is allowed; <c>2^x</c>,
+    /// <c>x^x</c>, and non-integer exponents are rejected). Precedence: <c>^</c> &gt; unary
+    /// <c>-</c> &gt; <c>* /</c> &gt; <c>+ -</c>. Authoring/startup (catalog build) only, so it is
+    /// an allocation-tolerant recursive-descent parser — tick hot paths read only precompiled
+    /// level arrays. No float/double anywhere; all BigNum integer arithmetic.
     /// </summary>
     public static class BigNumFormula
     {
-        /// <summary>수식 문법만 검사합니다(0 나눗셈 여부는 검사하지 않습니다 — 그건 평가 시점의 일입니다).</summary>
-        /// <param name="formula">검사할 수식 문자열입니다.</param>
-        /// <param name="error">실패 시 오류 메시지이고, 성공 시 <see langword="null"/>입니다.</param>
-        /// <returns>문법이 유효하면 <see langword="true"/>입니다.</returns>
+        /// <summary>Checks formula grammar only (division by zero is not checked — that is an evaluation-time concern).</summary>
+        /// <param name="formula">Formula text to check.</param>
+        /// <param name="error">Error message on failure; <see langword="null"/> on success.</param>
+        /// <returns><see langword="true"/> when the grammar is valid.</returns>
         public static bool TryValidate(string formula, out string? error)
         {
             if (string.IsNullOrEmpty(formula) || !new Parser(formula).TryParse(evaluate: false, BigNum.Zero, out _))
             {
-                error = $"유효하지 않은 수식입니다: {formula}";
+                error = $"Invalid formula: {formula}";
                 return false;
             }
 
@@ -27,11 +28,11 @@ namespace Bun3.Gameplay.Numerics
             return true;
         }
 
-        /// <summary>수식을 <paramref name="x"/> 값으로 평가합니다. 0 나눗셈·파스 실패는 모두 false입니다.</summary>
-        /// <param name="formula">평가할 수식 문자열입니다.</param>
-        /// <param name="x">변수 <c>x</c>에 대입할 값입니다.</param>
-        /// <param name="result">성공 시 평가 결과이고, 실패 시 <see cref="BigNum.Zero"/>입니다.</param>
-        /// <returns>평가에 성공했으면 <see langword="true"/>입니다.</returns>
+        /// <summary>Evaluates the formula with the given <paramref name="x"/>. Division by zero and parse failures both return false.</summary>
+        /// <param name="formula">Formula text to evaluate.</param>
+        /// <param name="x">Value substituted for the variable <c>x</c>.</param>
+        /// <param name="result">Evaluation result on success; <see cref="BigNum.Zero"/> on failure.</param>
+        /// <returns><see langword="true"/> when evaluation succeeds.</returns>
         public static bool TryEvaluate(string formula, BigNum x, out BigNum result)
         {
             if (string.IsNullOrEmpty(formula))
@@ -43,8 +44,9 @@ namespace Bun3.Gameplay.Numerics
             return new Parser(formula).TryParse(evaluate: true, x, out result);
         }
 
-        // 재귀 하강 파서. evaluate=false면 문법만 훑고(0 나눗셈은 검사하지 않음) 실제 산술은 하지 않는다.
-        // 문법: add := mul (('+'|'-') mul)* / mul := unary (('*'|'/') unary)* /
+        // Recursive-descent parser. With evaluate=false it only checks grammar (no division-by-zero
+        // check) and performs no arithmetic.
+        // Grammar: add := mul (('+'|'-') mul)* / mul := unary (('*'|'/') unary)* /
         // unary := '-' unary | pow / pow := primary ('^' digits)? / primary := '(' add ')' | 'x' | literal
         private struct Parser
         {
@@ -104,7 +106,7 @@ namespace Bun3.Gameplay.Numerics
                         }
                         else
                         {
-                            if (rhs.IsZero) return false;   // 0 나눗셈 — 평가 실패(문법 오류 아님)
+                            if (rhs.IsZero) return false;   // division by zero — evaluation failure (not a grammar error)
                             value /= rhs;
                         }
                     }
@@ -142,7 +144,7 @@ namespace Bun3.Gameplay.Numerics
                 SkipWhitespace();
                 var digitsStart = _pos;
                 while (_pos < _text.Length && IsAsciiDigit(_text[_pos])) _pos++;
-                if (_pos == digitsStart) return false;   // 지수는 정수 리터럴 필수(변수·소수·부호 불가)
+                if (_pos == digitsStart) return false;   // exponent must be an integer literal (no variables, fractions, signs)
 
                 if (!int.TryParse(_text.Substring(digitsStart, _pos - digitsStart), out var exponent)
                     || exponent < 0 || exponent > 64)
@@ -186,7 +188,7 @@ namespace Bun3.Gameplay.Numerics
                 return TryParseLiteral(evaluate, out value);
             }
 
-            // BigNum.TryParse와 같은 리터럴 문법(부호 제외 — 단항 -가 별도 처리): \d+(\.\d+)?([eE][+-]?\d+)?
+            // Same literal grammar as BigNum.TryParse minus the sign (unary - handled separately): \d+(\.\d+)?([eE][+-]?\d+)?
             private bool TryParseLiteral(bool evaluate, out BigNum value)
             {
                 value = BigNum.Zero;

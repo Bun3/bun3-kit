@@ -10,7 +10,7 @@
     <Authors>Bun3</Authors>
     <RepositoryUrl>https://github.com/Bun3/bun3-kit</RepositoryUrl>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <Description>서버 업적 프레임워크 — 정의 카탈로그(id 인터닝), 진행도 추적, 달성/클레임 상태, dirty 연계</Description>
+    <Description>Server achievement framework — definition catalog (id interning), progress tracking, completion/claim states, dirty integration</Description>
   </PropertyGroup>
 
 </Project>

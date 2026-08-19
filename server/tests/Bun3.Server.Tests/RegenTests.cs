@@ -11,15 +11,15 @@ public class RegenTests
     {
         long refresh = 10;
 
-        // t=35: 25 경과 / 주기 10 → 2개, 기준은 소비한 주기만큼만 전진(30)
+        // t=35: 25 elapsed / period 10 -> 2 units, basis advances only by consumed periods (30)
         Assert.That(Regen.SettlePeriodic(0, 100, 10, 35, ref refresh), Is.EqualTo(2));
         Assert.That(refresh, Is.EqualTo(30));
 
-        // t=44: 14 경과 → 1개, 기준 40 — 연속 호출 합산이 (44-10)/10 = 3과 일치(드리프트 없음)
+        // t=44: 14 elapsed -> 1 unit, basis 40 — cumulative calls match (44-10)/10 = 3 (no drift)
         Assert.That(Regen.SettlePeriodic(2, 100, 10, 44, ref refresh), Is.EqualTo(1));
         Assert.That(refresh, Is.EqualTo(40));
 
-        // t=49: 주기 미만 — 0개, 기준 유지
+        // t=49: below one period -> 0 units, basis kept
         Assert.That(Regen.SettlePeriodic(3, 100, 10, 49, ref refresh), Is.EqualTo(0));
         Assert.That(refresh, Is.EqualTo(40));
     }
@@ -28,22 +28,22 @@ public class RegenTests
     public void Clamps_at_max_and_resets_bank_when_full()
     {
         long refresh = 0;
-        Regen.SettlePeriodic(0, 5, 10, 100, ref refresh);   // 초기화
+        Regen.SettlePeriodic(0, 5, 10, 100, ref refresh);   // initialize basis
 
-        // 1000 경과 → 90개분이지만 상한 5 — 가득 도달 시 기준을 현재로(적립 제거)
+        // 1000 elapsed -> worth 90 units but cap is 5 — on reaching full, basis resets to now (no banking)
         Assert.That(Regen.SettlePeriodic(0, 5, 10, 1100, ref refresh), Is.EqualTo(5));
         Assert.That(refresh, Is.EqualTo(1100));
 
-        // 이미 가득 — 0개, 기준 현재로 재설정(가득 상태 적립 방지)
+        // already full -> 0 units, basis resets to now (no banking while full)
         Assert.That(Regen.SettlePeriodic(5, 5, 10, 1250, ref refresh), Is.EqualTo(0));
         Assert.That(refresh, Is.EqualTo(1250));
 
-        // 소모 후 재개 — 충전으로 다시 가득에 도달하면 기준을 현재로 재설정
+        // resume after spending — reaching full again via regen resets basis to now
         Assert.That(Regen.SettlePeriodic(4, 5, 10, 1265, ref refresh), Is.EqualTo(1));
-        Assert.That(refresh, Is.EqualTo(1265), "가득 도달 재설정");
+        Assert.That(refresh, Is.EqualTo(1265), "basis reset on reaching full");
     }
 
-    // ---- 인벤토리 자동 정산 ----
+    // ---- Inventory auto-settlement ----
 
     private sealed class ItemState;
 
@@ -51,9 +51,9 @@ public class RegenTests
     public void SettleRegen_charges_all_regen_definitions_from_catalog_meta()
     {
         var catalog = new ItemCatalogBuilder<string>()
-            .Register("ticket", "티켓", regenPeriodTicks: 10, maxRegen: 5)
-            .Register("energy", "에너지", regenPeriodTicks: 100, maxRegen: 100)
-            .Register("gold", "골드")
+            .Register("ticket", "Ticket", regenPeriodTicks: 10, maxRegen: 5)
+            .Register("energy", "Energy", regenPeriodTicks: 100, maxRegen: 100)
+            .Register("gold", "Gold")
             .Build();
         var ticket = catalog.GetRequired("ticket");
         var energy = catalog.GetRequired("energy");
@@ -62,54 +62,54 @@ public class RegenTests
         var inventory = new ItemInventory<ItemState>(
             catalog, () => ++nextId, _ => new ItemState(), onApplied: _ => applied++);
 
-        Assert.That(inventory.SettleRegen(1000), Is.EqualTo(0), "미초기화 — 기준만 초기화");
-        Assert.That(inventory.SettleRegen(1035), Is.EqualTo(1), "티켓 3개(주기 10), 에너지는 주기 미달");
+        Assert.That(inventory.SettleRegen(1000), Is.EqualTo(0), "uninitialized — only sets basis");
+        Assert.That(inventory.SettleRegen(1035), Is.EqualTo(1), "3 tickets (period 10), energy below one period");
         Assert.That(inventory.GetQuantity(ticket), Is.EqualTo((Bun3.Gameplay.Numerics.BigNum)3));
-        Assert.That(applied, Is.EqualTo(1), "충전 배치는 원자 커밋 1회");
+        Assert.That(applied, Is.EqualTo(1), "regen batch commits atomically once");
 
-        // 인스턴스 0개(전량 소모) 후에도 리젠 계속 — 기준 시각이 정의별 맵에 있으므로
+        // regen continues even with 0 instances (all spent) — basis lives in a per-definition map
         inventory.TryRemove(ticket, 3);
         Assert.That(inventory.InstanceCount, Is.EqualTo(0));
-        Assert.That(inventory.SettleRegen(1100), Is.EqualTo(2), "티켓 재충전 + 에너지 1개");
-        Assert.That(inventory.GetQuantity(ticket), Is.EqualTo((Bun3.Gameplay.Numerics.BigNum)5), "1030 기준 70경과 → 7개, 상한 5 클램프");
+        Assert.That(inventory.SettleRegen(1100), Is.EqualTo(2), "ticket recharge + 1 energy");
+        Assert.That(inventory.GetQuantity(ticket), Is.EqualTo((Bun3.Gameplay.Numerics.BigNum)5), "70 elapsed since 1030 -> 7 units, clamped to cap 5");
         Assert.That(inventory.GetQuantity(energy), Is.EqualTo(Bun3.Gameplay.Numerics.BigNum.One));
     }
 
     [Test]
     public void Regen_target_and_hard_cap_are_separate_knobs()
     {
-        // 단일 정의로 growninja의 count/param3 분리를 대체 — 보상 지급은 목표선(5)을 넘어
-        // maxCount(기본 무제한)까지 쌓이고, 리젠은 총량이 목표선 아래일 때만 찬다.
+        // Reward grants stack past the regen target (5) up to maxCount (default unlimited);
+        // regen fills only while the total is below the target.
         var catalog = new ItemCatalogBuilder<string>()
-            .Register("ticket", "던전 티켓", regenPeriodTicks: 10, maxRegen: 5)
-            .Register("strict", "엄격 티켓", maxCount: 5, regenPeriodTicks: 10, maxRegen: 5)
+            .Register("ticket", "Dungeon Ticket", regenPeriodTicks: 10, maxRegen: 5)
+            .Register("strict", "Strict Ticket", maxCount: 5, regenPeriodTicks: 10, maxRegen: 5)
             .Build();
         var ticket = catalog.GetRequired("ticket");
         var strict = catalog.GetRequired("strict");
-        Assert.That(catalog.GetMaxCount(ticket), Is.EqualTo(long.MaxValue), "기본 maxCount는 무제한");
+        Assert.That(catalog.GetMaxCount(ticket), Is.EqualTo(long.MaxValue), "default maxCount is unlimited");
         Assert.That(catalog.GetMaxRegen(ticket), Is.EqualTo(5));
         long nextId = 0;
         var inventory = new ItemInventory<ItemState>(catalog, () => ++nextId, _ => new ItemState());
 
-        inventory.SettleRegen(100);                 // 기준 초기화
-        inventory.SettleRegen(160);                 // 리젠 5 (목표선 도달)
-        Assert.That(inventory.TryAdd(ticket, 7), Is.EqualTo(InventoryError.None), "보상은 목표선 초과 적립");
+        inventory.SettleRegen(100);                 // initialize basis
+        inventory.SettleRegen(160);                 // regen 5 (reaches target)
+        Assert.That(inventory.TryAdd(ticket, 7), Is.EqualTo(InventoryError.None), "rewards stack past target");
         Assert.That(inventory.GetQuantity(ticket), Is.EqualTo((Bun3.Gameplay.Numerics.BigNum)12));
 
-        Assert.That(inventory.SettleRegen(500), Is.EqualTo(0), "목표선 이상 — 리젠 정지·적립 제거");
+        Assert.That(inventory.SettleRegen(500), Is.EqualTo(0), "at/above target — regen stops, no banking");
 
-        inventory.TryRemove(ticket, 9);             // 총량 3 < 목표선 — 리젠 재개
-        Assert.That(inventory.SettleRegen(530), Is.EqualTo(1), "500 기준 30경과 → 2장");
+        inventory.TryRemove(ticket, 9);             // total 3 < target — regen resumes
+        Assert.That(inventory.SettleRegen(530), Is.EqualTo(1), "30 elapsed since 500 -> 2 tickets");
         Assert.That(inventory.GetQuantity(ticket), Is.EqualTo((Bun3.Gameplay.Numerics.BigNum)5));
 
-        // 클램프 지급은 maxCount 기준 — 무제한이면 전량
+        // clamped grants use maxCount — unlimited means full amount
         Assert.That(inventory.TryAddUpTo(ticket, 100, out var granted), Is.EqualTo(InventoryError.None));
         Assert.That(granted, Is.EqualTo((Bun3.Gameplay.Numerics.BigNum)100));
 
-        // 엄격 정의(maxCount == maxRegen)는 목표선 초과 지급이 하드캡에 걸린다
+        // strict definition (maxCount == maxRegen) hits the hard cap on grants past the target
         Assert.That(inventory.TryAdd(strict, 6), Is.EqualTo(InventoryError.ExceedsMaxCount));
 
-        // 목표선 초과 보유 로드도 maxCount 안이면 정상
+        // loading a quantity above the target is fine as long as it is within maxCount
         var reloaded = new ItemInventory<ItemState>(catalog, () => ++nextId, _ => new ItemState());
         Assert.That(reloaded.TryLoadInstance(1, ticket, 12, 0, new ItemState()), Is.EqualTo(InventoryError.None));
     }
@@ -118,21 +118,21 @@ public class RegenTests
     public void SettleRegen_basis_persists_via_load_roundtrip()
     {
         var catalog = new ItemCatalogBuilder<string>()
-            .Register("ticket", "티켓", regenPeriodTicks: 10, maxRegen: 5)
+            .Register("ticket", "Ticket", regenPeriodTicks: 10, maxRegen: 5)
             .Build();
         var ticket = catalog.GetRequired("ticket");
         long nextId = 0;
         var inventory = new ItemInventory<ItemState>(catalog, () => ++nextId, _ => new ItemState());
 
         inventory.SettleRegen(1000);
-        inventory.SettleRegen(1025);   // 2개, 기준 1020
+        inventory.SettleRegen(1025);   // 2 units, basis 1020
         Assert.That(inventory.GetRegenBasis(ticket), Is.EqualTo(1020));
 
-        // 저장→로드 재현: 새 인벤토리에 기준 복원 후 이어서 정산
+        // save->load replay: restore basis into a fresh inventory and keep settling
         var reloaded = new ItemInventory<ItemState>(catalog, () => ++nextId, _ => new ItemState());
         reloaded.TryLoadInstance(99, ticket, 2, 0, new ItemState());
         reloaded.LoadRegenBasis(ticket, 1020);
-        Assert.That(reloaded.SettleRegen(1044), Is.EqualTo(1), "24경과 → 2개");
+        Assert.That(reloaded.SettleRegen(1044), Is.EqualTo(1), "24 elapsed -> 2 units");
         Assert.That(reloaded.GetQuantity(ticket), Is.EqualTo((Bun3.Gameplay.Numerics.BigNum)4));
     }
 
@@ -141,26 +141,26 @@ public class RegenTests
     {
         Assert.That(() => new ItemCatalogBuilder<string>()
                 .Register("x", "x", maxCount: 5, unstackable: true, regenPeriodTicks: 10, maxRegen: 5),
-            Throws.TypeOf<ItemCatalogException>(), "비스택형 리젠 미지원");
+            Throws.TypeOf<ItemCatalogException>(), "unstackable regen unsupported");
         Assert.That(() => new ItemCatalogBuilder<string>()
                 .Register("x", "x", regenPeriodTicks: 10),
-            Throws.TypeOf<ItemCatalogException>(), "리젠 정의는 maxRegen 필수");
+            Throws.TypeOf<ItemCatalogException>(), "regen definition requires maxRegen");
         Assert.That(() => new ItemCatalogBuilder<string>()
                 .Register("x", "x", maxRegen: 5),
-            Throws.TypeOf<ItemCatalogException>(), "maxRegen은 리젠 주기 없이 무의미");
+            Throws.TypeOf<ItemCatalogException>(), "maxRegen is meaningless without a regen period");
         Assert.That(() => new ItemCatalogBuilder<string>()
                 .Register("x", "x", maxCount: 3, regenPeriodTicks: 10, maxRegen: 5),
-            Throws.TypeOf<ItemCatalogException>(), "maxRegen > maxCount 금지");
+            Throws.TypeOf<ItemCatalogException>(), "maxRegen > maxCount forbidden");
 
         var catalog = new ItemCatalogBuilder<string>()
-            .Register("ticket", "티켓", regenPeriodTicks: 10, maxRegen: 5)
+            .Register("ticket", "Ticket", regenPeriodTicks: 10, maxRegen: 5)
             .Build();
         var ticket = catalog.GetRequired("ticket");
         long nextId = 0;
         var inventory = new ItemInventory<ItemState>(catalog, () => ++nextId, _ => new ItemState());
 
         Assert.That(inventory.TryAdd(ticket, (Bun3.Gameplay.Numerics.BigNum)0.5),
-            Is.EqualTo(InventoryError.InvalidAmount), "리젠 정의는 정수만");
+            Is.EqualTo(InventoryError.InvalidAmount), "regen definitions are integer-only");
         Assert.That(inventory.TryLoadInstance(1, ticket, (Bun3.Gameplay.Numerics.BigNum)1.5, 0, new ItemState()),
             Is.EqualTo(InventoryError.InvalidAmount));
     }
@@ -169,11 +169,11 @@ public class RegenTests
     public void Guards_uninitialized_and_backwards_clock()
     {
         long refresh = 0;
-        Assert.That(Regen.SettlePeriodic(0, 100, 10, 500, ref refresh), Is.EqualTo(0), "미초기화는 가득 지급 대신 초기화");
+        Assert.That(Regen.SettlePeriodic(0, 100, 10, 500, ref refresh), Is.EqualTo(0), "uninitialized initializes basis instead of granting full");
         Assert.That(refresh, Is.EqualTo(500));
 
         refresh = 900;
-        Assert.That(Regen.SettlePeriodic(0, 100, 10, 800, ref refresh), Is.EqualTo(0), "시계 역행 보호");
+        Assert.That(Regen.SettlePeriodic(0, 100, 10, 800, ref refresh), Is.EqualTo(0), "backwards clock guard");
         Assert.That(refresh, Is.EqualTo(800));
 
         Assert.That(() => Regen.SettlePeriodic(0, 100, 0, 800, ref refresh),

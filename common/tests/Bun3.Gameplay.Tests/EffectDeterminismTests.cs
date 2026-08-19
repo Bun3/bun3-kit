@@ -25,13 +25,13 @@ public sealed class EffectDeterminismTests
         var world = EffectScenario.BuildWorld(20260818);
         EffectScenario.RunTicks(world, 100);
 
-        // 스냅샷 시점 큐는 비어 있어야 한다는 설계 전제 — 만감/폭탄 체인의 OnCompleteNormal은
-        // 다음 틱에서 드레인되므로, 경계에 걸렸다면 여분 틱으로 마저 드레인해 전제를 맞춘다.
+        // Design premise: the apply queue must be empty at snapshot time — OnCompleteNormal chains
+        // drain on the next tick, so drain extra ticks if we landed on a boundary.
         while (world.Pipeline.PendingApplyCount > 0) world.Pipeline.Tick();
         Assert.That(world.Pipeline.PendingApplyCount, Is.Zero);
 
-        // XorShiftRng는 클래스라 대입은 참조 공유 — Clone()으로 이 시점 상태를 독립적으로 떼어내야
-        // 아래 world.DriverRng = driverRngAtSnapshot 복원이 실제로 되감기 역할을 한다.
+        // XorShiftRng is a class, so assignment shares the reference — Clone() detaches this point's
+        // state so restoring world.DriverRng below actually rewinds it.
         var driverRngAtSnapshot = world.DriverRng.Clone();
         var nextInstanceId = world.Pipeline.NextInstanceId;
         var currentTick = world.Pipeline.CurrentTick;
@@ -42,8 +42,9 @@ public sealed class EffectDeterminismTests
         EffectScenario.RunTicks(world, 100);
         var hashA = EffectScenario.HashState(world.Targets);
 
-        // 복원: 대상은 스냅샷으로 되돌리고, 파이프라인은 같은 카탈로그·리졸버의 새 인스턴스로
-        // 카운터만 되돌린다 — 대기 큐는 스냅샷 범위 밖이므로 새 인스턴스로 자연히 비운다.
+        // Restore: targets roll back to snapshots; the pipeline becomes a fresh instance over the
+        // same catalog/resolver with only counters rewound — the pending queue is outside snapshot
+        // scope, so a fresh instance clears it naturally.
         for (var i = 0; i < world.Targets.Length; i++)
             world.Targets[i].RestoreSnapshot(snapshots[i], world.Catalog);
 
@@ -125,7 +126,7 @@ public sealed class EffectDeterminismTests
         var kit = EffectTestKit.Create();
         var hastedTag = kit.Tag("state.hasted");
 
-        // 조건 미충족(Mp<50 거짓)이면 곧바로 토글 오프되는 Ongoing 스펙 — 태그를 부여하되 비활성화된다.
+        // Ongoing spec that toggles off immediately when its condition (Mp<50) is false — grants the tag but disabled.
         var ongoingHaste = EffectTestKit.MinimalInfinite("ongoingHaste");
         ongoingHaste.OngoingConditions.Add(new ConditionDef
         {
@@ -136,7 +137,7 @@ public sealed class EffectDeterminismTests
         ongoingHaste.GrantedTags.Add("state.hasted");
         kit.AddSpec(ongoingHaste);
 
-        // 조건 없이 같은 태그를 부여하는 별도 활성 효과 — Defender에서 "다른 활성 인스턴스"로 쓴다.
+        // Separate unconditional effect granting the same tag — the "other active instance" on Defender.
         var permaHaste = EffectTestKit.MinimalInfinite("permaHaste");
         permaHaste.GrantedTags.Add("state.hasted");
         kit.AddSpec(permaHaste);
@@ -145,18 +146,18 @@ public sealed class EffectDeterminismTests
         kit.Attacker.Attributes.SetBase(EffectTestKit.Mp, 100);
         kit.Defender.Attributes.SetBase(EffectTestKit.Mp, 100);
 
-        // Attacker: ongoingHaste 단독 — 토글 오프되어 태그가 하나도 없어야 하는 경우.
+        // Attacker: ongoingHaste alone — toggled off, so no tag should remain.
         pipeline.EnqueueApply(kit.SpecId("ongoingHaste"), kit.Attacker.Id, kit.Attacker.Id);
         pipeline.Tick();
-        Assert.That(kit.Attacker.ActiveEffects[0].Enabled, Is.False);   // 사전 확인: 토글 오프됨
+        Assert.That(kit.Attacker.ActiveEffects[0].Enabled, Is.False);   // precondition: toggled off
         Assert.That(kit.Attacker.Tags.Has(hastedTag), Is.False);
 
-        // Defender: ongoingHaste(비활성) + permaHaste(활성) 둘 다 같은 태그를 부여.
+        // Defender: ongoingHaste (disabled) + permaHaste (active) both grant the same tag.
         pipeline.EnqueueApply(kit.SpecId("ongoingHaste"), kit.Attacker.Id, kit.Defender.Id);
         pipeline.Tick();
         pipeline.EnqueueApply(kit.SpecId("permaHaste"), kit.Attacker.Id, kit.Defender.Id);
         pipeline.Tick();
-        Assert.That(kit.Defender.Tags.Count(hastedTag), Is.EqualTo(1));   // 사전 확인: permaHaste만 기여
+        Assert.That(kit.Defender.Tags.Count(hastedTag), Is.EqualTo(1));   // precondition: only permaHaste contributes
 
         var attackerSnapshot = kit.Attacker.CreateSnapshot();
         var defenderSnapshot = kit.Defender.CreateSnapshot();
@@ -164,11 +165,11 @@ public sealed class EffectDeterminismTests
         kit.Attacker.RestoreSnapshot(attackerSnapshot, kit.Catalog);
         kit.Defender.RestoreSnapshot(defenderSnapshot, kit.Catalog);
 
-        // 복원 직후: 비활성 인스턴스는 태그를 부여하지 않고(1), 활성 인스턴스의 카운트는 보존된다(2).
+        // Right after restore: disabled instances grant no tags (1); active instance counts are preserved (2).
         Assert.That(kit.Attacker.Tags.Has(hastedTag), Is.False);
         Assert.That(kit.Defender.Tags.Count(hastedTag), Is.EqualTo(1));
 
-        pipeline.Tick();   // 1틱 후에도 유지되는지 확인
+        pipeline.Tick();   // still holds one tick later
 
         Assert.That(kit.Attacker.Tags.Has(hastedTag), Is.False);
         Assert.That(kit.Defender.Tags.Count(hastedTag), Is.EqualTo(1));
@@ -208,8 +209,8 @@ public sealed class EffectDeterminismTests
         pipeline.EnqueueApply(kit.SpecId("buff"), kit.Attacker.Id, kit.Defender.Id);
         pipeline.EnqueueApply(kit.SpecId("poison"), kit.Attacker.Id, kit.Defender.Id);
 
-        // 워밍업 — Hp가 0으로 완전히 바닥나 더 이상 Current가 바뀌지 않는 정착 상태까지 튁을 태운다.
-        // 그 과정에서 이벤트/변경 버퍼가 필요한 최대 용량까지 미리 자라난다.
+        // Warm-up — tick until Hp bottoms out at 0 and Current no longer changes,
+        // growing event/change buffers to their peak capacity along the way.
         for (var i = 0; i < 60; i++)
         {
             pipeline.Tick();
@@ -229,6 +230,6 @@ public sealed class EffectDeterminismTests
         }
 
         var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
-        Assert.That(allocated, Is.Zero, "정착 상태 Tick() 루프에서 힙 할당 발생");
+        Assert.That(allocated, Is.Zero, "settled Tick() loop allocated on the heap");
     }
 }

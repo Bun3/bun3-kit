@@ -75,7 +75,7 @@ public class TcpTransportTests
             using var first = await ConnectAsync(listener);
             await handler.ConnectedSignal.WaitAsync(Timeout);
 
-            // 상한 초과 — 수락 즉시 닫힌다(핸들러 OnConnected 없이 원격 종료 관측: EOF 또는 리셋)
+            // over the limit — closed right after accept (remote close observed without handler OnConnected: EOF or reset)
             using var second = await ConnectAsync(listener);
             int got;
             try
@@ -88,7 +88,7 @@ public class TcpTransportTests
             }
             Assert.That(got, Is.Zero);
 
-            // 자리가 나면 다시 수락된다
+            // accepted again once a slot frees up
             first.Close();
             await handler.Closed.Task.WaitAsync(Timeout);
             using var third = await ConnectAsync(listener);
@@ -174,8 +174,8 @@ public class TcpTransportTests
             var client = await ConnectAsync(listener);
             await handler.Connected.Task.WaitAsync(Timeout);
 
-            // TcpClient.Close는 GetStream 미호출 시 Shutdown(FIN)을 먼저 보내 EOF가 되므로,
-            // 소켓을 직접 linger 0으로 닫아 RST를 강제한다.
+            // TcpClient.Close sends Shutdown(FIN) first when GetStream was never called, yielding EOF,
+            // so close the socket directly with linger 0 to force an RST.
             client.Client.LingerState = new LingerOption(true, 0);
             client.Client.Close();
 
@@ -200,10 +200,10 @@ public class TcpTransportTests
             var canceled = new CancellationToken(canceled: true);
             Assert.CatchAsync<OperationCanceledException>(
                 async () => await connection.SendAsync(new byte[] { 1 }, canceled));
-            Assert.That(connection.IsOpen, Is.True); // 취소는 연결을 닫지 않는다
+            Assert.That(connection.IsOpen, Is.True); // cancellation does not close the connection
 
             var payload = Encoding.UTF8.GetBytes("still alive");
-            await connection.SendAsync(payload); // 이후 송신은 정상 동작
+            await connection.SendAsync(payload); // subsequent sends still work
             var received = await PacketFormat.ReadPacketAsync(client.GetStream(), 1024 * 1024)
                 .AsTask().WaitAsync(Timeout);
             Assert.That(received, Is.EqualTo(payload));

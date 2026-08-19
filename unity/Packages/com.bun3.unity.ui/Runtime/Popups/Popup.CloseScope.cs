@@ -1,23 +1,24 @@
-// Popup partial — 닫기 잠금(PopupCloseScope) 담당.
+// Popup partial — close locking (PopupCloseScope).
 using Cysharp.Threading.Tasks;
 
 namespace Bun3.Unity.UI.Popups
 {
-    // 닫기 잠금: ref-count + 세대 토큰. 잠금 중 닫기 요청은 예약되고 마지막 해제 시 실행된다.
+    // Close locking: ref-count + generation token. Close requests during a lock are
+    // deferred and executed on the last release.
     public abstract partial class Popup
     {
         private int _closeScopeCount;
         private int _closeScopeVersion;
 
         /// <summary>
-        /// 닫기 잠금이 하나라도 걸려 있는지. 잠금 중에는 <see cref="Close"/>/back에 의한 닫기가
-        /// 거부되는 게 아니라 <b>예약</b>되며, 마지막 잠금이 풀릴 때 자동으로 실행된다.
+        /// Whether any close lock is held. While locked, closes via <see cref="Close"/>/back
+        /// are not refused but <b>deferred</b>, running automatically when the last lock releases.
         /// </summary>
         public bool IsCloseBlocked => _closeScopeCount > 0;
 
         /// <summary>
-        /// 닫기 잠금을 건다(ref-count, 중첩 가능). 초기 데이터 로딩, 서버 응답 대기,
-        /// 시퀀스 연출 등 "이 동안은 닫히면 안 되는" 구간을 <c>using</c>으로 감싼다.
+        /// Acquires a close lock (ref-counted, nestable). Wrap "must not close during this"
+        /// sections — initial data loads, server-response waits, sequence animations — in <c>using</c>.
         /// </summary>
         /// <example><code>
         /// using (BlockClose())
@@ -26,7 +27,7 @@ namespace Bun3.Unity.UI.Popups
         public PopupCloseScope BlockClose()
             => new(this, AcquireCloseScope());
 
-        /// <summary>태스크가 끝날 때까지 닫기 잠금을 유지한다. 예외가 나도 잠금은 해제된다.</summary>
+        /// <summary>Holds a close lock until the task finishes. The lock is released even on exception.</summary>
         public async UniTask BlockCloseWhile(UniTask task)
         {
             var version = AcquireCloseScope();
@@ -41,8 +42,8 @@ namespace Bun3.Unity.UI.Popups
         }
 
         /// <summary>
-        /// 태스크가 끝날 때까지 닫기 잠금을 유지하고 결과를 돌려준다.
-        /// 서버 요청-응답 패턴(<c>var res = await BlockCloseWhile(SendPacket(...))</c>)용.
+        /// Holds a close lock until the task finishes and returns its result.
+        /// For request-response patterns (<c>var res = await BlockCloseWhile(SendPacket(...))</c>).
         /// </summary>
         public async UniTask<T> BlockCloseWhile<T>(UniTask<T> task)
         {
@@ -58,12 +59,13 @@ namespace Bun3.Unity.UI.Popups
         }
 
         /// <summary>
-        /// 닫기 잠금 상태가 바뀔 때(0→1 잠김, 1→0 풀림) 호출된다.
-        /// 게임이 raycast 차단, 로딩 스피너 등 표현을 연결하는 지점. 기본은 아무것도 안 한다.
+        /// Called when the close-blocked state flips (0→1 locked, 1→0 released).
+        /// Hook point for game presentation such as raycast blocking or a loading spinner.
+        /// Default does nothing.
         /// </summary>
         protected virtual void OnCloseBlockedChanged(bool blocked) { }
 
-        /// <returns>해제 시 대조할 세대 토큰 — Detach마다 증가해 이전 세션 스코프를 무효화한다.</returns>
+        /// <returns>Generation token to match on release — incremented per Detach to invalidate previous-session scopes.</returns>
         internal int AcquireCloseScope()
         {
             _closeScopeCount++;
@@ -75,7 +77,7 @@ namespace Bun3.Unity.UI.Popups
 
         internal void ReleaseCloseScope(int version)
         {
-            // 이전 세션(Detach 이전)에 잡힌 가드의 늦은 해제가 새 세션 카운트를 훼손하지 않게.
+            // A late release from a guard acquired before Detach must not corrupt the new session's count.
             if (version != _closeScopeVersion || _closeScopeCount == 0)
                 return;
 

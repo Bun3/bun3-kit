@@ -16,7 +16,7 @@ public sealed class EffectCatalogBuilderTests
         public BigNum Calculate(in MagnitudeContext ctx) => 7;
     }
 
-    // 규칙 1: 이름 중복 금지·비어 있을 수 없음.
+    // Rule 1: names must be non-empty and unique.
 
     [Test]
     public void Build_rejects_empty_name()
@@ -36,7 +36,7 @@ public sealed class EffectCatalogBuilderTests
         Assert.That(ex!.Message, Does.Contain("dup"));
     }
 
-    // 규칙 2: Instant는 Duration 전용 필드가 비어 있어야 한다.
+    // Rule 2: Instant specs must leave Duration-only fields empty.
 
     [Test]
     public void Build_rejects_instant_with_duration_only_fields()
@@ -49,7 +49,7 @@ public sealed class EffectCatalogBuilderTests
         Assert.That(ex!.Message, Does.Contain("bad"));
     }
 
-    // 규칙 3: Duration/Infinite의 DurationTicks 제약.
+    // Rule 3: DurationTicks constraints for Duration/Infinite.
 
     [Test]
     public void Build_rejects_duration_type_with_nonpositive_ticks()
@@ -71,7 +71,7 @@ public sealed class EffectCatalogBuilderTests
         Assert.That(ex!.Message, Does.Contain("i"));
     }
 
-    // 규칙 4: Executions는 Instant이거나 PeriodTicks > 0일 때만.
+    // Rule 4: Executions only on Instant or when PeriodTicks > 0.
 
     [Test]
     public void Build_rejects_executions_on_duration_without_period()
@@ -84,7 +84,7 @@ public sealed class EffectCatalogBuilderTests
         Assert.That(ex!.Message, Does.Contain("d"));
     }
 
-    // 규칙 5: 스택 없음(MaxStack == 0)인데 스택 전용 정책 사용.
+    // Rule 5: stack-only policies without stacking (MaxStack == 0).
 
     [Test]
     public void Build_rejects_add_stack_reapply_without_max_stack()
@@ -109,7 +109,7 @@ public sealed class EffectCatalogBuilderTests
         Assert.That(ex!.Message, Does.Contain("s2"));
     }
 
-    // 규칙: Instant/주기 실행 스펙의 수정자는 Add만 허용한다.
+    // Rule: modifiers on Instant/periodic specs allow Add only.
 
     [Test]
     public void Build_rejects_instant_modifier_with_multiply_op()
@@ -159,7 +159,7 @@ public sealed class EffectCatalogBuilderTests
         Assert.DoesNotThrow(() => EffectTestKit.BuildCatalog(builder));
     }
 
-    // 규칙 6: 태그·CalcTag·SelectorTag는 카탈로그·SeamRegistry에서 해석되어야 한다.
+    // Rule 6: tags, CalcTags, and SelectorTags must resolve in the catalog/SeamRegistry.
 
     [Test]
     public void Build_rejects_unresolved_granted_tag()
@@ -175,7 +175,7 @@ public sealed class EffectCatalogBuilderTests
     [Test]
     public void Build_rejects_unresolved_magnitude_calc_tag()
     {
-        // "calc.magnitude.x"는 공유 카탈로그엔 있지만 EffectTestKit.BuildCatalog의 SeamRegistry는 비어 있다.
+        // "calc.magnitude.x" exists in the shared catalog, but EffectTestKit.BuildCatalog's SeamRegistry is empty.
         var spec = EffectTestKit.MinimalInstant("i");
         spec.Modifiers.Add(new ModifierDef
         {
@@ -194,7 +194,7 @@ public sealed class EffectCatalogBuilderTests
     {
         var a = EffectTestKit.MinimalInstant("a");
         var edge = EffectTestKit.Edge(ChainTrigger.OnCompleteNormal, "a");
-        edge.SelectorTag = "selector.team";   // 카탈로그엔 있지만 SeamRegistry엔 미등록
+        edge.SelectorTag = "selector.team";   // in the catalog but not registered in the SeamRegistry
         a.Chains.Add(edge);
         var builder = new EffectCatalogBuilder();
         builder.Add(a);
@@ -202,7 +202,7 @@ public sealed class EffectCatalogBuilderTests
         Assert.That(ex!.Message, Does.Contain("a"));
     }
 
-    // 규칙 7: Operand의 속성 참조는 등록되어 있어야 하고, OngoingConditions는 SourceAttribute를 가질 수 없다.
+    // Rule 7: Operand attribute references must be registered; OngoingConditions cannot use SourceAttribute.
 
     [Test]
     public void Build_rejects_operand_referencing_unregistered_attribute()
@@ -236,7 +236,7 @@ public sealed class EffectCatalogBuilderTests
         Assert.That(ex!.Message, Does.Contain("d"));
     }
 
-    // 규칙 8: 체인·Overflow의 EffectName은 카탈로그 안에서 해석되어야 한다.
+    // Rule 8: chain/overflow EffectNames must resolve within the catalog.
 
     [Test]
     public void Build_rejects_unresolved_chain_effect_name()
@@ -249,7 +249,7 @@ public sealed class EffectCatalogBuilderTests
         Assert.That(ex!.Message, Does.Contain("a"));
     }
 
-    // 규칙 9: MagnitudeDef는 CalcTag XOR Base. PerLevel은 Base가 있을 때만.
+    // Rule 9: MagnitudeDef takes CalcTag XOR Base; PerLevel only with Base.
 
     [Test]
     public void Build_rejects_magnitude_with_both_calctag_and_base()
@@ -299,7 +299,7 @@ public sealed class EffectCatalogBuilderTests
         Assert.That(ex!.Message, Does.Contain("i"));
     }
 
-    // 규칙 10: 체인 순환은 예외가 아니라 경고다.
+    // Rule 10: chain cycles are warnings, not errors.
 
     [Test]
     public void Application_only_cycle_is_a_high_warning_not_an_error()
@@ -329,7 +329,7 @@ public sealed class EffectCatalogBuilderTests
         Assert.That(catalog.BuildWarnings, Has.Some.Contains("low"));
     }
 
-    // 그 외: 이름 조회, happy path 컴파일 결과 확인.
+    // Misc: name lookup and happy-path compile results.
 
     [Test]
     public void GetRequiredId_and_TryGetId_resolve_registered_names()

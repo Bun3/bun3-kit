@@ -7,16 +7,16 @@ using Microsoft.Extensions.Options;
 
 namespace Bun3.Server.GameplayTags
 {
-    /// <summary>GameplayTag Catalog를 Native .NET Generic Host에 등록하는 확장 메서드 모음입니다.</summary>
+    /// <summary>Extension methods registering the GameplayTag catalog on the native .NET Generic Host.</summary>
     public static class GameplayTagServiceCollectionExtensions
     {
         /// <summary>
-        /// GameplayTag Catalog를 한 번 읽는 singleton과 후속 gameplay hosted service보다 먼저 시작되는 경계를 등록합니다.
+        /// Registers a singleton that reads the GameplayTag catalog once, plus a boundary that starts before subsequent gameplay hosted services.
         /// </summary>
-        /// <param name="services">등록 대상 서비스 모음입니다.</param>
-        /// <param name="configure">구성 섹션 바인딩 뒤에 적용할 선택적 옵션 설정입니다.</param>
-        /// <returns>연속 등록을 위한 입력 서비스 모음입니다.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="services"/>가 null인 경우입니다.</exception>
+        /// <param name="services">Service collection to register into.</param>
+        /// <param name="configure">Optional option setup applied after configuration-section binding.</param>
+        /// <returns>The input service collection for chaining.</returns>
+        /// <exception cref="ArgumentNullException">When <paramref name="services"/> is null.</exception>
         public static IServiceCollection AddGameplayTagCatalog(
             this IServiceCollection services,
             Action<GameplayTagCatalogOptions>? configure = null)
@@ -27,26 +27,26 @@ namespace Bun3.Server.GameplayTags
                 .BindConfiguration(GameplayTagCatalogOptions.SectionName)
                 .Validate(
                     options => Enum.IsDefined(options.Mode),
-                    "GameplayTag Catalog Mode가 정의된 값이어야 합니다.")
+                    "GameplayTag catalog Mode must be a defined value.")
                 .Validate(
                     options => !string.IsNullOrWhiteSpace(options.CatalogId),
-                    "GameplayTag Catalog ID가 필요합니다.")
+                    "GameplayTag catalog ID is required.")
                 .Validate(
                     options => options.Mode != GameplayTagCatalogMode.Packaged
                         || !string.IsNullOrWhiteSpace(options.CatalogVersion),
-                    "Packaged GameplayTag Catalog Version이 필요합니다.")
+                    "Packaged GameplayTag catalog version is required.")
                 .Validate(
                     options => options.Mode != GameplayTagCatalogMode.Packaged
                         || !TagCatalogVersions.IsDevelopment(options.CatalogVersion),
-                    "Packaged GameplayTag Catalog Version은 예약된 개발 Version일 수 없습니다.")
+                    "Packaged GameplayTag catalog version must not be the reserved development version.")
                 .Validate(
                     options => options.Mode != GameplayTagCatalogMode.Packaged
                         || GameplayTagCatalogOptions.IsFingerprintHex(options.ExpectedFingerprint),
-                    "Packaged GameplayTag Catalog fingerprint는 정확히 64자리 hex여야 합니다.")
+                    "Packaged GameplayTag catalog fingerprint must be exactly 64 hex digits.")
                 .Validate(
                     options => options.Mode != GameplayTagCatalogMode.Packaged
                         || !string.IsNullOrWhiteSpace(options.PackagedPath),
-                    "Packaged GameplayTag Catalog 경로가 필요합니다.")
+                    "Packaged GameplayTag catalog path is required.")
                 .ValidateOnStart();
             if (configure != null)
             {

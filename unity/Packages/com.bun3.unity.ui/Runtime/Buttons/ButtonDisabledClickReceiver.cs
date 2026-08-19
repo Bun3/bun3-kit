@@ -6,22 +6,22 @@ using UnityEngine.UI;
 namespace Bun3.Unity.UI.Buttons
 {
     /// <summary>
-    /// <see cref="ButtonInteractableScope"/>가 결정한 비활성 사유를 보관하고,
-    /// 비활성 버튼이 클릭되면 재생한다.
+    /// Holds the disabled reason decided by <see cref="ButtonInteractableScope"/> and replays it
+    /// when the disabled button is clicked.
     /// </summary>
     /// <remarks>
-    /// <see cref="Selectable.interactable"/>이 false여도 레이캐스트는 막히지 않는다.
-    /// <see cref="Button.OnPointerClick"/>만 no-op이 될 뿐, EventSystem은 같은
-    /// GameObject의 다른 <see cref="IPointerClickHandler"/> 구현체에 이벤트를 전달한다.
+    /// <see cref="Selectable.interactable"/> being false does not block raycasts — only
+    /// <see cref="Button.OnPointerClick"/> becomes a no-op, and the EventSystem still delivers
+    /// events to other <see cref="IPointerClickHandler"/> implementations on the same GameObject.
     ///
-    /// 스코프가 필요할 때 자동으로 붙인다. 직접 추가하거나 조작할 필요는 없다.
+    /// Auto-attached by the scope when needed. Never add or manipulate it manually.
     ///
-    /// 재생 조건은 "이 스코프가 비활성화했는가"가 아니라 <b>"버튼이 지금 상호작용
-    /// 불가능한가"</b>다. 따라서 스코프가 아닌 다른 원인(직접 대입한
-    /// <see cref="Selectable.interactable"/>, 상위 <see cref="CanvasGroup"/> 차단 등)으로
-    /// 비활성화된 상태에서 클릭해도 마지막으로 보관된 사유가 재생된다. 이는 의도된 동작이며,
-    /// <b>한 버튼의 <see cref="Selectable.interactable"/>을 한 곳에서 매 프레임 결정한다</b>는
-    /// 전제 아래에서만 안전하다. 이 전제가 깨지면 사유가 실제 원인과 어긋날 수 있다.
+    /// The replay condition is <b>"is the button non-interactable right now"</b>, not "did this
+    /// scope disable it". So a click while disabled for another cause (directly assigned
+    /// <see cref="Selectable.interactable"/>, a blocking parent <see cref="CanvasGroup"/>, etc.)
+    /// still replays the last stored reason. This is intentional, and safe only under the premise
+    /// that <b>one place decides the button's <see cref="Selectable.interactable"/> every
+    /// frame</b>; break it and the reason can diverge from the actual cause.
     /// </remarks>
     [AddComponentMenu("")]
     [DisallowMultipleComponent]

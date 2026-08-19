@@ -6,17 +6,16 @@ using UnityEngine;
 namespace Bun3.Unity.Core.Editor.UnifiedToggle
 {
     /// <summary>
-    /// SubclassSelector가 fall-through할 때 잡혀, 옵션 본체의 자식들을 직접 그린다.
-    /// 자식 중 _options(per-preset 값 리스트)는 add/remove/drag 모두 비활성화된
-    /// ReorderableList로 대체하여 사이즈가 코드(SetOptionValues)로만 바뀌도록 강제한다.
+    /// Catches SubclassSelector fall-through and draws the option's children directly.
+    /// The _options child (per-preset value list) is drawn as a ReorderableList with
+    /// add/remove/drag disabled, so its size can only change via SetOptionValues.
     /// </summary>
     [CustomPropertyDrawer(typeof(UnifiedOptionBase), useForChildren: true)]
     public sealed class UnifiedOptionDrawer : PropertyDrawer
     {
-        // 캐시하지 않는다. ReorderableList 내부의 SerializedProperty가 다음 프레임에
-        // stale 되어 ReorderableList.count → minArraySize에서 InvalidOperationException을
-        // 던지기 때문. SerializeReference 경로의 SerializedProperty는 수명이 매우 짧아서
-        // 매 호출마다 새로 만든다.
+        // Never cache: the list's internal SerializedProperty goes stale next frame and
+        // ReorderableList.count → minArraySize throws InvalidOperationException.
+        // SerializeReference-path SerializedProperties are short-lived, so build fresh each call.
         private static ReorderableList CreateList(SerializedProperty arrayProp)
         {
             var list = new ReorderableList(
@@ -29,9 +28,9 @@ namespace Bun3.Unity.Core.Editor.UnifiedToggle
             list.drawHeaderCallback = rect =>
                 EditorGUI.LabelField(rect, "Options");
 
-            // 배열 요소(elem) 자체가 아닌 elem.option만 그린다.
-            //   - 배열 요소 컨텍스트 메뉴(Duplicate/Delete) 미표시
-            //   - foldout 화살표가 ReorderableList 좌측 테두리를 침범하지 않음
+            // Draw only elem.option, not the array element itself:
+            //   - hides the element context menu (Duplicate/Delete)
+            //   - keeps the foldout arrow off the ReorderableList's left border
             list.drawElementCallback = (rect, index, _, _) =>
             {
                 var sp = list.serializedProperty;
@@ -72,9 +71,9 @@ namespace Bun3.Unity.Core.Editor.UnifiedToggle
             var iter = property.Copy();
             var end = property.GetEndProperty();
 
-            // SerializeReference 타입 변경 직후 첫 프레임엔 children 트리가 비어 보일 수 있다.
-            // 0을 리턴하면 외부 리스트가 0 높이를 캐시해 "접었다 펴기" 전까지 보이지 않으므로
-            // single line 높이를 반환해 다음 프레임 정상 측정될 때까지 자리를 확보한다.
+            // Right after a SerializeReference type change the children tree can appear empty
+            // for one frame. Returning 0 would let the outer list cache zero height (invisible
+            // until re-folded), so return single-line height until the next frame measures correctly.
             if (!iter.NextVisible(true)) return EditorGUIUtility.singleLineHeight;
 
             while (!SerializedProperty.EqualContents(iter, end))

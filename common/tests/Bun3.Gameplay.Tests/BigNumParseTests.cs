@@ -22,10 +22,9 @@ public sealed class BigNumParseTests
     [Test]
     public void Excess_digits_beyond_long_safe_range_shift_into_exponent_and_truncate()
     {
-        // 22자리 9 — long.MaxValue(9223372036854775807) 안전 범위는 9가 18자리까지만 담기고
-        // (19번째 9부터는 mantissa*10+9가 long.MaxValue를 넘는다), 나머지 4자리는 지수로 밀려
-        // 0 방향 절사된다. BigNum.Mantissa는 long이라 19자리 전부가 항상 담기지는 않는다 —
-        // MantissaMaxDigits(19)는 상한일 뿐 실제 정확 한계는 long.MaxValue다(BigNum.cs 주석 참고).
+        // 22 nines: only 18 fit within long.MaxValue (the 19th would push mantissa*10+9 past it),
+        // so the remaining 4 digits shift into the exponent, truncating toward zero.
+        // MantissaMaxDigits(19) is an upper bound; the exact limit is long.MaxValue.
         Assert.That(BigNum.TryParse("9999999999999999999999", out var value), Is.True);
         Assert.That(value, Is.EqualTo(BigNum.FromParts(999999999999999999, 4)));
     }
@@ -33,7 +32,7 @@ public sealed class BigNumParseTests
     [Test]
     public void Excess_digits_within_long_safe_range_shift_into_exponent()
     {
-        // 23자리, 선두 숫자가 작아 앞 19자리가 long 범위에 안전하게 담기는 경우.
+        // 23 digits with small leading digits, so the first 19 fit safely in long range.
         Assert.That(BigNum.TryParse("12345678901234567890123", out var value), Is.True);
         Assert.That(value, Is.EqualTo(BigNum.FromParts(1234567890123456789, 4)));
     }

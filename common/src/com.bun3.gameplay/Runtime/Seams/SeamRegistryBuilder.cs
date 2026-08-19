@@ -5,7 +5,7 @@ using Bun3.Gameplay.Tags;
 
 namespace Bun3.Gameplay.Seams
 {
-    /// <summary>시섬(Seam) 계약을 등록하고 검증하는 빌더입니다.</summary>
+    /// <summary>Builder that registers and validates seam contracts.</summary>
     public sealed class SeamRegistryBuilder
     {
         private readonly Dictionary<ushort, IMagnitudeCalc> _magnitudeCalcs = new();
@@ -13,55 +13,55 @@ namespace Bun3.Gameplay.Seams
         private readonly Dictionary<ushort, ITargetSelector> _targetSelectors = new();
         private bool _built;
 
-        /// <summary>크기 계산 계약을 등록합니다.</summary>
-        /// <param name="tag">등록할 태그입니다.</param>
-        /// <param name="calc">계산 구현입니다.</param>
-        /// <exception cref="ArgumentNullException">계산이 null일 때 발생합니다.</exception>
-        /// <exception cref="InvalidOperationException">Build 후 호출했거나, 같은 태그가 이미 등록되었을 때 발생합니다.</exception>
+        /// <summary>Registers a magnitude calculation contract.</summary>
+        /// <param name="tag">Tag to register under.</param>
+        /// <param name="calc">Calculation implementation.</param>
+        /// <exception cref="ArgumentNullException">Thrown when calc is null.</exception>
+        /// <exception cref="InvalidOperationException">Thrown when called after Build, or the tag is already registered.</exception>
         public void RegisterMagnitudeCalc(GameplayTag tag, IMagnitudeCalc calc)
         {
-            if (_built) throw new InvalidOperationException("Build 후에는 등록할 수 없습니다.");
+            if (_built) throw new InvalidOperationException("Cannot register after Build.");
             if (calc == null)
                 throw new ArgumentNullException(nameof(calc));
             if (_magnitudeCalcs.ContainsKey(tag.Index))
-                throw new InvalidOperationException($"태그 {tag.Index}는 이미 등록되었습니다.");
+                throw new InvalidOperationException($"Tag {tag.Index} is already registered.");
             _magnitudeCalcs[tag.Index] = calc;
         }
 
-        /// <summary>효과 실행 계약을 등록합니다.</summary>
-        /// <param name="tag">등록할 태그입니다.</param>
-        /// <param name="exec">실행 구현입니다.</param>
-        /// <exception cref="ArgumentNullException">실행이 null일 때 발생합니다.</exception>
-        /// <exception cref="InvalidOperationException">Build 후 호출했거나, 같은 태그가 이미 등록되었을 때 발생합니다.</exception>
+        /// <summary>Registers an effect execution contract.</summary>
+        /// <param name="tag">Tag to register under.</param>
+        /// <param name="exec">Execution implementation.</param>
+        /// <exception cref="ArgumentNullException">Thrown when exec is null.</exception>
+        /// <exception cref="InvalidOperationException">Thrown when called after Build, or the tag is already registered.</exception>
         public void RegisterExecutionCalc(GameplayTag tag, IExecutionCalc exec)
         {
-            if (_built) throw new InvalidOperationException("Build 후에는 등록할 수 없습니다.");
+            if (_built) throw new InvalidOperationException("Cannot register after Build.");
             if (exec == null)
                 throw new ArgumentNullException(nameof(exec));
             if (_executionCalcs.ContainsKey(tag.Index))
-                throw new InvalidOperationException($"태그 {tag.Index}는 이미 등록되었습니다.");
+                throw new InvalidOperationException($"Tag {tag.Index} is already registered.");
             _executionCalcs[tag.Index] = exec;
         }
 
-        /// <summary>대상 선택 계약을 등록합니다.</summary>
-        /// <param name="tag">등록할 태그입니다.</param>
-        /// <param name="selector">선택 구현입니다.</param>
-        /// <exception cref="ArgumentNullException">선택이 null일 때 발생합니다.</exception>
-        /// <exception cref="InvalidOperationException">Build 후 호출했거나, 같은 태그가 이미 등록되었을 때 발생합니다.</exception>
+        /// <summary>Registers a target selector contract.</summary>
+        /// <param name="tag">Tag to register under.</param>
+        /// <param name="selector">Selector implementation.</param>
+        /// <exception cref="ArgumentNullException">Thrown when selector is null.</exception>
+        /// <exception cref="InvalidOperationException">Thrown when called after Build, or the tag is already registered.</exception>
         public void RegisterTargetSelector(GameplayTag tag, ITargetSelector selector)
         {
-            if (_built) throw new InvalidOperationException("Build 후에는 등록할 수 없습니다.");
+            if (_built) throw new InvalidOperationException("Cannot register after Build.");
             if (selector == null)
                 throw new ArgumentNullException(nameof(selector));
             if (_targetSelectors.ContainsKey(tag.Index))
-                throw new InvalidOperationException($"태그 {tag.Index}는 이미 등록되었습니다.");
+                throw new InvalidOperationException($"Tag {tag.Index} is already registered.");
             _targetSelectors[tag.Index] = selector;
         }
 
-        /// <summary>등록된 계약들을 바탕으로 시섬 레지스트리를 구축합니다.</summary>
-        /// <param name="catalog">태그 카탈로그입니다.</param>
-        /// <returns>구축된 레지스트리입니다.</returns>
-        /// <exception cref="InvalidOperationException">태그가 예약된 루트 하위가 아니거나, 루트 태그 자체이거나, 루트 태그가 카탈로그에 없을 때 발생합니다.</exception>
+        /// <summary>Builds the seam registry from the registered contracts.</summary>
+        /// <param name="catalog">Tag catalog.</param>
+        /// <returns>Built registry.</returns>
+        /// <exception cref="InvalidOperationException">Thrown when a tag is not under its reserved root, is the root tag itself, or the root tag is missing from the catalog.</exception>
         public SeamRegistry Build(TagCatalog catalog)
         {
             _built = true;
@@ -73,53 +73,49 @@ namespace Bun3.Gameplay.Seams
             GameplayTag execRootTag = GameplayTag.None;
             GameplayTag selectorRootTag = GameplayTag.None;
 
-            // 루트 태그를 카탈로그에서 찾기
             if (_magnitudeCalcs.Count > 0)
             {
                 if (!catalog.TryGet(magnitudeRoot, out magRootTag))
-                    throw new InvalidOperationException($"예약 루트 태그가 카탈로그에 없습니다: {magnitudeRoot}");
+                    throw new InvalidOperationException($"Reserved root tag missing from catalog: {magnitudeRoot}");
             }
 
             if (_executionCalcs.Count > 0)
             {
                 if (!catalog.TryGet(executionRoot, out execRootTag))
-                    throw new InvalidOperationException($"예약 루트 태그가 카탈로그에 없습니다: {executionRoot}");
+                    throw new InvalidOperationException($"Reserved root tag missing from catalog: {executionRoot}");
             }
 
             if (_targetSelectors.Count > 0)
             {
                 if (!catalog.TryGet(selectorRoot, out selectorRootTag))
-                    throw new InvalidOperationException($"예약 루트 태그가 카탈로그에 없습니다: {selectorRoot}");
+                    throw new InvalidOperationException($"Reserved root tag missing from catalog: {selectorRoot}");
             }
 
-            // 크기 계산 검증
             foreach (var kvp in _magnitudeCalcs)
             {
                 var tag = new GameplayTag(kvp.Key);
                 if (tag == magRootTag)
-                    throw new InvalidOperationException($"루트 태그 자체는 등록할 수 없습니다: {magnitudeRoot}");
+                    throw new InvalidOperationException($"The root tag itself cannot be registered: {magnitudeRoot}");
                 if (!catalog.IsAncestorOrSelf(magRootTag, tag))
-                    throw new InvalidOperationException($"태그 {tag.Index}는 {magnitudeRoot} 루트 하위가 아닙니다.");
+                    throw new InvalidOperationException($"Tag {tag.Index} is not under root {magnitudeRoot}.");
             }
 
-            // 효과 실행 검증
             foreach (var kvp in _executionCalcs)
             {
                 var tag = new GameplayTag(kvp.Key);
                 if (tag == execRootTag)
-                    throw new InvalidOperationException($"루트 태그 자체는 등록할 수 없습니다: {executionRoot}");
+                    throw new InvalidOperationException($"The root tag itself cannot be registered: {executionRoot}");
                 if (!catalog.IsAncestorOrSelf(execRootTag, tag))
-                    throw new InvalidOperationException($"태그 {tag.Index}는 {executionRoot} 루트 하위가 아닙니다.");
+                    throw new InvalidOperationException($"Tag {tag.Index} is not under root {executionRoot}.");
             }
 
-            // 대상 선택 검증
             foreach (var kvp in _targetSelectors)
             {
                 var tag = new GameplayTag(kvp.Key);
                 if (tag == selectorRootTag)
-                    throw new InvalidOperationException($"루트 태그 자체는 등록할 수 없습니다: {selectorRoot}");
+                    throw new InvalidOperationException($"The root tag itself cannot be registered: {selectorRoot}");
                 if (!catalog.IsAncestorOrSelf(selectorRootTag, tag))
-                    throw new InvalidOperationException($"태그 {tag.Index}는 {selectorRoot} 루트 하위가 아닙니다.");
+                    throw new InvalidOperationException($"Tag {tag.Index} is not under root {selectorRoot}.");
             }
 
             return new SeamRegistry(

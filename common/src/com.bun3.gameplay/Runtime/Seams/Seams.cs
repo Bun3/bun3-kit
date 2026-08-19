@@ -6,34 +6,34 @@ using Bun3.Gameplay.Tags;
 
 namespace Bun3.Gameplay.Seams
 {
-    /// <summary>크기(피해, 회복 등)를 계산하는 계약입니다.</summary>
+    /// <summary>Contract for computing a magnitude (damage, heal, etc.).</summary>
     public interface IMagnitudeCalc
     {
-        /// <summary>주어진 컨텍스트에서 크기를 계산합니다.</summary>
-        /// <param name="ctx">계산에 사용할 컨텍스트입니다.</param>
-        /// <returns>계산된 크기 값입니다.</returns>
+        /// <summary>Computes the magnitude for the given context.</summary>
+        /// <param name="ctx">Context to compute with.</param>
+        /// <returns>Computed magnitude.</returns>
         BigNum Calculate(in MagnitudeContext ctx);
     }
 
-    /// <summary>효과 실행을 수행하는 계약입니다.</summary>
+    /// <summary>Contract for performing an effect execution.</summary>
     public interface IExecutionCalc
     {
-        /// <summary>주어진 컨텍스트에서 효과를 실행합니다.</summary>
-        /// <param name="ctx">실행에 사용할 컨텍스트입니다.</param>
+        /// <summary>Executes the effect for the given context.</summary>
+        /// <param name="ctx">Context to execute with.</param>
         void Execute(ref ExecutionContext ctx);
     }
 
-    /// <summary>대상을 선택하는 계약입니다.</summary>
+    /// <summary>Contract for selecting targets.</summary>
     public interface ITargetSelector
     {
-        /// <summary>주어진 컨텍스트에서 대상을 선택합니다.</summary>
-        /// <param name="ctx">선택에 사용할 컨텍스트입니다.</param>
-        /// <param name="results">선택된 대상 식별자들을 저장할 배열입니다.</param>
-        /// <returns>선택된 대상의 개수입니다.</returns>
+        /// <summary>Selects targets for the given context.</summary>
+        /// <param name="ctx">Context to select with.</param>
+        /// <param name="results">Span receiving the selected target ids.</param>
+        /// <returns>Number of selected targets.</returns>
         int Select(in SelectorContext ctx, System.Span<TargetId> results);
     }
 
-    /// <summary>크기 계산에 필요한 컨텍스트입니다. 소스가 미해석이면 <see cref="SourceAttr"/>는 항상 0입니다.</summary>
+    /// <summary>Context for magnitude calculation. When the source is unresolved, <see cref="SourceAttr"/> is always 0.</summary>
     public readonly ref struct MagnitudeContext
     {
         private readonly EffectTarget _target;
@@ -50,38 +50,38 @@ namespace Bun3.Gameplay.Seams
             WorldTick = worldTick;
         }
 
-        /// <summary>시전자가 해석되었는지 나타냅니다.</summary>
+        /// <summary>Whether the source is resolved.</summary>
         public bool HasSource { get; }
 
-        /// <summary>효과 레벨입니다.</summary>
+        /// <summary>Effect level.</summary>
         public int Level { get; }
 
-        /// <summary>효과 스택 수입니다.</summary>
+        /// <summary>Effect stack count.</summary>
         public int Stack { get; }
 
-        /// <summary>계산 시점의 월드 틱입니다.</summary>
+        /// <summary>World tick at calculation time.</summary>
         public long WorldTick { get; }
 
-        /// <summary>시전자 속성의 Current 값을 가져옵니다. 시전자가 미해석이면 0입니다.</summary>
-        /// <param name="attributeId">조회할 속성 id입니다.</param>
+        /// <summary>Gets the Current of a source attribute. Returns 0 when the source is unresolved.</summary>
+        /// <param name="attributeId">Attribute id to query.</param>
         public BigNum SourceAttr(ushort attributeId) =>
             HasSource ? _source!.Attributes.GetCurrent(attributeId) : BigNum.Zero;
 
-        /// <summary>대상 속성의 Current 값을 가져옵니다.</summary>
-        /// <param name="attributeId">조회할 속성 id입니다.</param>
+        /// <summary>Gets the Current of a target attribute.</summary>
+        /// <param name="attributeId">Attribute id to query.</param>
         public BigNum TargetAttr(ushort attributeId) => _target.Attributes.GetCurrent(attributeId);
 
-        /// <summary>대상이 주어진 태그를 보유하고 있는지(자신 또는 자손 계층 포함) 확인합니다.</summary>
-        /// <param name="tag">조회할 태그입니다.</param>
+        /// <summary>Returns whether the target has the tag (self or any descendant in the hierarchy).</summary>
+        /// <param name="tag">Tag to query.</param>
         public bool TargetHasTag(GameplayTag tag) => _target.Tags.Has(tag);
 
-        /// <summary>시전자가 주어진 태그를 보유하고 있는지(자신 또는 자손 계층 포함) 확인합니다.
-        /// 시전자가 미해석이면 항상 false입니다.</summary>
-        /// <param name="tag">조회할 태그입니다.</param>
+        /// <summary>Returns whether the source has the tag (self or any descendant in the hierarchy).
+        /// Always false when the source is unresolved.</summary>
+        /// <param name="tag">Tag to query.</param>
         public bool SourceHasTag(GameplayTag tag) => HasSource && _source!.Tags.Has(tag);
     }
 
-    /// <summary>효과 실행에 필요한 컨텍스트입니다. 소스가 미해석이면 <see cref="SourceAttr"/>는 항상 0입니다.</summary>
+    /// <summary>Context for effect execution. When the source is unresolved, <see cref="SourceAttr"/> is always 0.</summary>
     public ref struct ExecutionContext
     {
         private readonly EffectPipeline _pipeline;
@@ -109,54 +109,54 @@ namespace Bun3.Gameplay.Seams
             Rng = rng;
         }
 
-        /// <summary>시전자가 해석되었는지 나타냅니다.</summary>
+        /// <summary>Whether the source is resolved.</summary>
         public bool HasSource { get; }
 
-        /// <summary>효과 레벨입니다.</summary>
+        /// <summary>Effect level.</summary>
         public int Level { get; }
 
-        /// <summary>효과 스택 수입니다.</summary>
+        /// <summary>Effect stack count.</summary>
         public int Stack { get; }
 
-        /// <summary>계산 시점의 월드 틱입니다.</summary>
+        /// <summary>World tick at calculation time.</summary>
         public long WorldTick { get; }
 
-        /// <summary>이 실행에서 쓸 수 있는 난수 생성기입니다.</summary>
+        /// <summary>Random number generator usable in this execution.</summary>
         public IRng Rng { get; }
 
-        /// <summary>시전자 속성의 Current 값을 가져옵니다. 시전자가 미해석이면 0입니다.</summary>
-        /// <param name="attributeId">조회할 속성 id입니다.</param>
+        /// <summary>Gets the Current of a source attribute. Returns 0 when the source is unresolved.</summary>
+        /// <param name="attributeId">Attribute id to query.</param>
         public BigNum SourceAttr(ushort attributeId) =>
             HasSource ? _source!.Attributes.GetCurrent(attributeId) : BigNum.Zero;
 
-        /// <summary>대상 속성의 Current 값을 가져옵니다.</summary>
-        /// <param name="attributeId">조회할 속성 id입니다.</param>
+        /// <summary>Gets the Current of a target attribute.</summary>
+        /// <param name="attributeId">Attribute id to query.</param>
         public BigNum TargetAttr(ushort attributeId) => _target.Attributes.GetCurrent(attributeId);
 
-        /// <summary>미리 평가된 입력 피연산자 값을 가져옵니다.</summary>
-        /// <param name="index">입력 목록 안의 인덱스입니다.</param>
+        /// <summary>Gets a pre-evaluated input operand value.</summary>
+        /// <param name="index">Index into the input list.</param>
         public BigNum Input(int index) => _inputs[index];
 
-        /// <summary>대상이 주어진 태그를 보유하고 있는지(자신 또는 자손 계층 포함) 확인합니다.</summary>
-        /// <param name="tag">조회할 태그입니다.</param>
+        /// <summary>Returns whether the target has the tag (self or any descendant in the hierarchy).</summary>
+        /// <param name="tag">Tag to query.</param>
         public bool TargetHasTag(GameplayTag tag) => _target.Tags.Has(tag);
 
-        /// <summary>시전자가 주어진 태그를 보유하고 있는지(자신 또는 자손 계층 포함) 확인합니다.
-        /// 시전자가 미해석이면 항상 false입니다.</summary>
-        /// <param name="tag">조회할 태그입니다.</param>
+        /// <summary>Returns whether the source has the tag (self or any descendant in the hierarchy).
+        /// Always false when the source is unresolved.</summary>
+        /// <param name="tag">Tag to query.</param>
         public bool SourceHasTag(GameplayTag tag) => HasSource && _source!.Tags.Has(tag);
 
-        /// <summary>대상 속성의 Base를 직접 씁니다. 항상 클램프·전파·이벤트 규칙을 통과합니다.</summary>
-        /// <param name="attributeId">쓸 속성 id입니다.</param>
-        /// <param name="value">쓸 값입니다.</param>
+        /// <summary>Writes a target attribute's Base directly. Always passes through clamp, propagation, and event rules.</summary>
+        /// <param name="attributeId">Attribute id to write.</param>
+        /// <param name="value">Value to write.</param>
         public void WriteTarget(ushort attributeId, BigNum value) => _target.Attributes.SetBase(attributeId, value);
 
-        /// <summary>같은 시전자·대상·레벨로 다른 효과를 적용 큐에 적재합니다. 직접 재진입 적용은 금지됩니다.</summary>
-        /// <param name="specId">적용할 효과 스펙 id입니다.</param>
+        /// <summary>Enqueues another effect with the same source, target, and level. Direct re-entrant application is forbidden.</summary>
+        /// <param name="specId">Effect spec id to apply.</param>
         public void ApplyToTarget(int specId) => _pipeline.EnqueueApply(specId, _sourceId, _targetId, Level);
     }
 
-    /// <summary>대상 선택에 필요한 컨텍스트입니다.</summary>
+    /// <summary>Context for target selection.</summary>
     public readonly ref struct SelectorContext
     {
         private readonly ReadOnlySpan<BigNum> _params;
@@ -168,17 +168,17 @@ namespace Bun3.Gameplay.Seams
             Rng = rng;
         }
 
-        /// <summary>선택을 촉발한 시전자입니다.</summary>
+        /// <summary>Source that triggered the selection.</summary>
         public TargetId Source { get; }
 
-        /// <summary>이 선택에서 쓸 수 있는 난수 생성기입니다.</summary>
+        /// <summary>Random number generator usable in this selection.</summary>
         public IRng Rng { get; }
 
-        /// <summary>선택에 전달된 매개변수 수입니다.</summary>
+        /// <summary>Number of parameters passed to the selection.</summary>
         public int ParamCount => _params.Length;
 
-        /// <summary>선택에 전달된 매개변수 값을 가져옵니다.</summary>
-        /// <param name="index">매개변수 목록 안의 인덱스입니다.</param>
+        /// <summary>Gets a parameter value passed to the selection.</summary>
+        /// <param name="index">Index into the parameter list.</param>
         public BigNum Param(int index) => _params[index];
     }
 }

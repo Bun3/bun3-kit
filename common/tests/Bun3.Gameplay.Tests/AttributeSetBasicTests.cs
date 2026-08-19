@@ -25,7 +25,7 @@ public sealed class AttributeSetBasicTests
     private static AttributeSet CreateSet()
     {
         var registry = BuildRegistry();
-        Span<ushort> ids = stackalloc ushort[] { Attack, Hp, MaxHp };   // 순서 무관 — 내부 canonical
+        Span<ushort> ids = stackalloc ushort[] { Attack, Hp, MaxHp };   // any order — canonicalized internally
         return new AttributeSet(registry, ids);
     }
 
@@ -36,13 +36,13 @@ public sealed class AttributeSetBasicTests
         set.SetBase(MaxHp, 1000);
         set.SetBase(Hp, 800);
 
-        set.AddBase(Hp, 500);                       // 과다 힐
+        set.AddBase(Hp, 500);                       // overheal
         Assert.That(set.GetBase(Hp), Is.EqualTo((BigNum)1000));
 
-        set.AddBase(Hp, -1300);                     // 치명 데미지
+        set.AddBase(Hp, -1300);                     // lethal damage
         Assert.That(set.GetBase(Hp), Is.EqualTo(BigNum.Zero));
 
-        set.SetBase(Attack, -50);                   // 클램프 없는 속성은 자유
+        set.SetBase(Attack, -50);                   // unclamped attributes are unrestricted
         Assert.That(set.GetCurrent(Attack), Is.EqualTo((BigNum)(-50)));
     }
 
@@ -54,7 +54,7 @@ public sealed class AttributeSetBasicTests
         set.ClearChanges();
 
         set.SetBase(Hp, 800);
-        set.SetBase(Hp, 800);                       // 동일 값 — 미방출
+        set.SetBase(Hp, 800);                       // same value — no event
         Assert.That(set.PendingChanges.Length, Is.EqualTo(1));
         Assert.That(set.PendingChanges[0].AttributeId, Is.EqualTo(Hp));
         Assert.That(set.PendingChanges[0].OldCurrent, Is.EqualTo(BigNum.Zero));
@@ -77,13 +77,13 @@ public sealed class AttributeSetBasicTests
     [Test]
     public void Clamp_bound_reference_must_be_declared()
     {
-        // 레지스트리: Hp(max→MaxHp), MaxHp(클램프 없음)
+        // registry: Hp(max→MaxHp), MaxHp(no clamp)
         var builder = new AttributeRegistryBuilder();
         builder.Register(MaxHp);
         builder.Register(Hp, min: Operand.Constant(0), max: Operand.Attribute(MaxHp));
         var registry = builder.Build();
 
-        // AttributeSet이 MaxHp를 포함하지 않으면 생성 실패
+        // creation fails when the set omits MaxHp
         var ids = new ushort[] { Hp };
         Assert.Throws<ArgumentException>(() => new AttributeSet(registry, ids));
     }

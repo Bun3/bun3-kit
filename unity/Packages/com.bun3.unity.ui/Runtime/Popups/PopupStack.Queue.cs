@@ -1,10 +1,11 @@
-// PopupStack partial — 순차 대기열 담당.
+// PopupStack partial — sequential queue.
 using System.Collections.Generic;
 using Cysharp.Threading.Tasks;
 
 namespace Bun3.Unity.UI.Popups
 {
-    // 순차 대기열 경로: 스택이 완전히 비면 하나씩 표시. (채널형은 PopupQueue 참고)
+    // Sequential queue path: shows one item at a time once the stack is fully empty.
+    // (For the channel-style variant, see PopupQueue.)
     public sealed partial class PopupStack
     {
         private readonly struct QueuedPopup
@@ -23,12 +24,13 @@ namespace Bun3.Unity.UI.Popups
 
         private readonly Queue<QueuedPopup> _queue = new();
 
-        /// <summary>순차 대기열에서 표시를 기다리는 항목 수.</summary>
+        /// <summary>Number of items waiting in the sequential queue.</summary>
         public int QueuedCount => _queue.Count;
 
         /// <summary>
-        /// 순차 대기열에 넣는다. 스택이 완전히 비면(로딩 중 포함 없음) 머리부터 하나씩 표시되고,
-        /// 닫히면 다음이 표시된다. 보상 연출처럼 겹치지 않고 차례로 보여야 하는 팝업용.
+        /// Adds to the sequential queue. When the stack is fully empty (including loads), items
+        /// show one at a time from the head; the next shows when the current closes. For popups
+        /// that must appear in sequence without overlapping, such as reward presentations.
         /// </summary>
         public void Enqueue(PopupKey key, int layer = 0)
         {
@@ -36,14 +38,14 @@ namespace Bun3.Unity.UI.Popups
             EnqueueCore(key, layer, null);
         }
 
-        /// <summary>초기 데이터를 실어 순차 대기열에 넣는다. (저빈도 경로 — 데이터 보관 할당 허용)</summary>
+        /// <summary>Adds to the sequential queue with initial data. (Low-frequency path — carrier allocation OK.)</summary>
         public void EnqueueWithArg<TArg>(PopupKey key, TArg arg, int layer = 0)
         {
             ThrowIfDisposed();
             EnqueueCore(key, layer, new QueuedPopupArg<TArg>(arg));
         }
 
-        /// <summary><see cref="PopupQueue"/> 전용 진입점 — 중복 정책을 거치지 않고 바로 연다.</summary>
+        /// <summary>Entry point for <see cref="PopupQueue"/> only — opens directly, bypassing duplicate policy.</summary>
         internal UniTask<Popup> OpenQueuedAsync(PopupKey key, int layer, IQueuedPopupArg arg)
             => arg == null
                 ? OpenAsync(key, layer, (byte)0, ArgMode.None)

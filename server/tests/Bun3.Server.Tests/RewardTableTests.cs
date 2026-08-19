@@ -9,7 +9,7 @@ public class RewardTableTests
 {
     private sealed class ItemState;
 
-    /// <summary>정해진 값들을 순서대로 돌려주는 결정론 RNG.</summary>
+    /// <summary>Deterministic RNG that returns scripted values in order.</summary>
     private sealed class ScriptedRng(params long[] values) : IRandomSource
     {
         private int _cursor;
@@ -17,9 +17,9 @@ public class RewardTableTests
 
         public long Next(long maxExclusive)
         {
-            Assert.That(_cursor, Is.LessThan(values.Length), "예상보다 많은 난수 소모");
+            Assert.That(_cursor, Is.LessThan(values.Length), "more random draws than scripted");
             var value = values[_cursor++];
-            Assert.That(value, Is.InRange(0, maxExclusive - 1), "시나리오 값이 범위 밖");
+            Assert.That(value, Is.InRange(0, maxExclusive - 1), "scripted value out of range");
             return value;
         }
     }
@@ -33,9 +33,9 @@ public class RewardTableTests
     public void SetUp()
     {
         _catalog = new ItemCatalogBuilder<string>()
-            .Register("gold", "골드")
-            .Register("gem", "보석")
-            .Register("sword", "검", unstackable: true)
+            .Register("gold", "Gold")
+            .Register("gem", "Gem")
+            .Register("sword", "Sword", unstackable: true)
             .Build();
         _gold = _catalog.GetRequired("gold");
         _gem = _catalog.GetRequired("gem");
@@ -48,8 +48,8 @@ public class RewardTableTests
         var table = new RewardTable(new[]
         {
             new RewardGroup(10000, grantAll: true,
-                new RewardEntry(_gold, 1, 100, 200),     // 롤 1회
-                new RewardEntry(_gem, 1, 3, 3)),         // 고정 — 롤 없음
+                new RewardEntry(_gold, 1, 100, 200),     // one roll
+                new RewardEntry(_gem, 1, 3, 3)),         // fixed — no roll
         });
         var rng = new ScriptedRng(50);                    // 100 + 50 = 150
         var buffer = new List<ItemDelta>();
@@ -60,7 +60,7 @@ public class RewardTableTests
         Assert.That(buffer[0].Item, Is.EqualTo(_gold));
         Assert.That(buffer[0].Amount, Is.EqualTo((BigNum)150));
         Assert.That(buffer[1].Amount, Is.EqualTo((BigNum)3));
-        Assert.That(rng.Calls, Is.EqualTo(1), "확정 그룹·고정 수량은 난수를 안 쓴다");
+        Assert.That(rng.Calls, Is.EqualTo(1), "guaranteed group and fixed amounts draw no randomness");
     }
 
     [Test]
@@ -74,19 +74,19 @@ public class RewardTableTests
         });
         var buffer = new List<ItemDelta>();
 
-        // 발동 실패 (2500 <= 2500 아님: roll 2500 >= 2500)
+        // No trigger (roll 2500 >= 2500)
         table.Sample(new ScriptedRng(2500), buffer);
         Assert.That(buffer, Is.Empty);
 
-        // 발동(roll 0) + 가중 롤 0 → 첫 항목(검)
+        // Trigger (roll 0) + weight roll 0 → first entry (sword)
         table.Sample(new ScriptedRng(0, 0), buffer);
         Assert.That(buffer[^1].Item, Is.EqualTo(_sword));
 
-        // 발동(roll 2499) + 가중 롤 9 → 둘째 항목(보석, 가중 1~9 구간)
+        // Trigger (roll 2499) + weight roll 9 → second entry (gem, weight range 1-9)
         table.Sample(new ScriptedRng(2499, 9), buffer);
         Assert.That(buffer[^1].Item, Is.EqualTo(_gem));
 
-        // 만분율 0 그룹은 난수 소모 없이 스킵
+        // Permyriad-0 group is skipped without drawing randomness
         var zero = new RewardTable(new[] { new RewardGroup(0, true, new RewardEntry(_gold, 1, 1, 1)) });
         var zeroRng = new ScriptedRng();
         zero.Sample(zeroRng, buffer);
@@ -101,7 +101,7 @@ public class RewardTableTests
         Assert.That(() => new RewardEntry(_gold, 1, 5, 4), Throws.TypeOf<ArgumentOutOfRangeException>());
         Assert.That(() => new RewardGroup(10001, true), Throws.TypeOf<ArgumentOutOfRangeException>());
         Assert.That(() => new RewardGroup(100, grantAll: false, new RewardEntry(_gold, 0, 1, 1)),
-            Throws.ArgumentException, "가중 추첨은 가중치 합 양수 필수");
+            Throws.ArgumentException, "weighted draw requires positive total weight");
     }
 
     [Test]

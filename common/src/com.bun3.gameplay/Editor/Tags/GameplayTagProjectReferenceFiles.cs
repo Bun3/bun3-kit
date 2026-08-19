@@ -9,7 +9,7 @@ using PackageInfo = UnityEditor.PackageManager.PackageInfo;
 
 namespace Bun3.Gameplay.Editor.Tags
 {
-    /// <summary>프로젝트 텍스트 파일 열거 결과와 접근하지 못한 디렉터리 진단입니다.</summary>
+    /// <summary>Project text file enumeration result with diagnostics for inaccessible directories.</summary>
     internal readonly struct GameplayTagReferenceFileSet
     {
         internal GameplayTagReferenceFileSet(
@@ -20,10 +20,10 @@ namespace Bun3.Gameplay.Editor.Tags
             Errors = errors ?? throw new ArgumentNullException(nameof(errors));
         }
 
-        /// <summary>훑는 데 성공한 프로젝트 소유 텍스트 파일입니다.</summary>
+        /// <summary>Project-owned text files that were scanned successfully.</summary>
         internal IReadOnlyList<GameplayTagReferenceFile> Files { get; }
 
-        /// <summary>권한·잠금 때문에 훑지 못해 증거가 빠진 디렉터리 진단입니다.</summary>
+        /// <summary>Diagnostics for directories missing from the evidence due to permissions or locks.</summary>
         internal IReadOnlyList<string> Errors { get; }
     }
 
@@ -48,7 +48,7 @@ namespace Bun3.Gameplay.Editor.Tags
                 ? StringComparer.OrdinalIgnoreCase
                 : StringComparer.Ordinal;
 
-        /// <summary>현재 Unity 프로젝트가 소유한 텍스트 파일과 열거 실패 진단을 모읍니다.</summary>
+        /// <summary>Collects text files owned by the current Unity project plus enumeration failure diagnostics.</summary>
         internal static GameplayTagReferenceFileSet Enumerate()
         {
             var assets = Path.GetFullPath(Application.dataPath);
@@ -66,12 +66,12 @@ namespace Bun3.Gameplay.Editor.Tags
             return EnumerateOwnedTextFiles(projectRoot, localPackagePaths);
         }
 
-        /// <summary>프로젝트 소유 텍스트 파일을 훑고 접근하지 못한 디렉터리를 진단으로 남깁니다.</summary>
-        /// <param name="projectRoot">Assets와 ProjectSettings를 담은 프로젝트 루트입니다.</param>
-        /// <param name="localPackagePaths">추가로 훑을 embedded/local 패키지 경로입니다.</param>
-        /// <param name="getFiles">디렉터리 파일 열거 seam. 기본값은 <see cref="Directory.GetFiles(string)"/>다.</param>
-        /// <param name="getDirectories">하위 디렉터리 열거 seam. 기본값은 <see cref="Directory.GetDirectories(string)"/>다.</param>
-        /// <returns>훑은 파일과 빠진 디렉터리 진단입니다.</returns>
+        /// <summary>Scans project-owned text files and records inaccessible directories as diagnostics.</summary>
+        /// <param name="projectRoot">Project root containing Assets and ProjectSettings.</param>
+        /// <param name="localPackagePaths">Additional embedded/local package paths to scan.</param>
+        /// <param name="getFiles">Directory file enumeration seam; defaults to <see cref="Directory.GetFiles(string)"/>.</param>
+        /// <param name="getDirectories">Subdirectory enumeration seam; defaults to <see cref="Directory.GetDirectories(string)"/>.</param>
+        /// <returns>Scanned files and diagnostics for missing directories.</returns>
         internal static GameplayTagReferenceFileSet EnumerateOwnedTextFiles(
             string projectRoot,
             IReadOnlyList<string> localPackagePaths,
@@ -131,8 +131,8 @@ namespace Bun3.Gameplay.Editor.Tags
                 }
                 catch (Exception exception) when (IsInaccessible(exception))
                 {
-                    // 권한이 없거나 스캔 도중 사라진 디렉터리는 그 디렉터리만 건너뛰되
-                    // 증거가 빠졌음을 남겨 호출자가 정리 판정을 내리지 못하게 한다.
+                    // Skip only the directory that lacks permission or vanished mid-scan,
+                    // but record the missing evidence so callers cannot conclude cleanup is safe.
                     errors.Add(Describe(current, projectRoot, exception));
                     found = Array.Empty<string>();
                 }
@@ -172,7 +172,7 @@ namespace Bun3.Gameplay.Editor.Tags
                         continue;
                     }
 
-                    // symlink/junction을 따라가면 같은 트리를 무한히 다시 훑을 수 있다.
+                    // Following symlinks/junctions could rescan the same tree forever.
                     if ((attributes & FileAttributes.ReparsePoint) != 0) continue;
                     pending.Push(child);
                 }
@@ -182,7 +182,7 @@ namespace Bun3.Gameplay.Editor.Tags
         private static string Describe(string directory, string projectRoot, Exception exception) =>
             ToDisplayPath(Path.GetFullPath(directory), projectRoot) + ": " + exception.Message;
 
-        // DirectoryNotFoundException·PathTooLongException은 IOException 파생이라 함께 걸린다.
+        // DirectoryNotFoundException and PathTooLongException derive from IOException, so this catches them too.
         private static bool IsInaccessible(Exception exception) =>
             exception is UnauthorizedAccessException ||
             exception is IOException ||

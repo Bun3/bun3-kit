@@ -4,17 +4,17 @@ using System.Collections.Generic;
 namespace Bun3.Server.Achievements
 {
     /// <summary>
-    /// 업적 정의 카탈로그 — 기동 시 게임 로더가 만든 정의 목록을 받아 일괄 검증 후
-    /// 동결한다(불변). 문자열 id와 태그는 여기서 조밀한 int 인덱스로 인터닝되며,
-    /// 이후 런타임 식별자는 인덱스다 — 게임은 기동 시 <see cref="GetIndex"/>·
-    /// <see cref="GetTagIndex"/>로 인덱스를 캐시하고 핫패스에서는 인덱스만 쓴다.
-    /// 검증 실패는 예외 = 기동 실패.
+    /// Achievement definition catalog — takes the definition list built by the game loader at
+    /// startup, validates it in bulk, and freezes it (immutable). String ids and tags are interned
+    /// here into dense int indices; the runtime identifier is the index — the game caches indices
+    /// at startup via <see cref="GetIndex"/>/<see cref="GetTagIndex"/> and uses only indices on
+    /// hot paths. Validation failure throws = startup failure.
     /// </summary>
-    /// <typeparam name="TDef">게임의 업적 정의 타입 — 훅과 조회가 캐스팅 없이 이 타입을 받는다.</typeparam>
+    /// <typeparam name="TDef">Game achievement definition type — hooks and lookups receive this type without casting.</typeparam>
     public sealed class AchievementCatalog<TDef> where TDef : AchievementDefinition
     {
-        /// <summary>카탈로그가 받는 정의 수 상한 — 실수로 만든 거대 입력(생성기 폭주 등)을
-        /// 기동 시점에 걸러내기 위한 안전판.</summary>
+        /// <summary>Cap on the number of definitions the catalog accepts — a safety net that
+        /// rejects accidentally huge inputs (runaway generators, etc.) at startup.</summary>
         public const int MaxDefinitions = 65_536;
 
         private readonly TDef[] _definitions;
@@ -22,22 +22,23 @@ namespace Bun3.Server.Achievements
         private readonly Dictionary<string, int> _tagIndexByName;
         private readonly int[][] _indicesByTag;
 
-        /// <summary>정의 수.</summary>
+        /// <summary>Number of definitions.</summary>
         public int Count => _definitions.Length;
 
-        /// <summary>인터닝된 태그 수.</summary>
+        /// <summary>Number of interned tags.</summary>
         public int TagCount => _indicesByTag.Length;
 
-        /// <summary>정의 목록을 검증하고 동결한다. 프레임워크 검증(빈/중복 id, Target ≤ 0,
-        /// 상한 초과, 가용성 범위, 빈/중복 태그) 후 정의별로 <paramref name="validator"/>를
-        /// 호출한다 — 도메인 불변식(보상 테이블 존재 등)은 게임이 여기서 던진다.</summary>
-        /// <exception cref="ArgumentException">정의 목록이 불변식을 위반할 때.</exception>
+        /// <summary>Validates the definition list and freezes it. After framework validation
+        /// (empty/duplicate ids, Target ≤ 0, cap exceeded, availability range, empty/duplicate
+        /// tags), <paramref name="validator"/> is called per definition — domain invariants
+        /// (reward table exists, etc.) are enforced by the game throwing here.</summary>
+        /// <exception cref="ArgumentException">When the definition list violates an invariant.</exception>
         public AchievementCatalog(IReadOnlyList<TDef> definitions, Action<TDef>? validator = null)
         {
             if (definitions == null) throw new ArgumentNullException(nameof(definitions));
             if (definitions.Count > MaxDefinitions)
             {
-                throw new ArgumentException($"업적 정의 수가 상한을 초과했습니다 ({definitions.Count} > {MaxDefinitions}).", nameof(definitions));
+                throw new ArgumentException($"Achievement definition count exceeds the cap ({definitions.Count} > {MaxDefinitions}).", nameof(definitions));
             }
 
             _definitions = new TDef[definitions.Count];
@@ -50,23 +51,23 @@ namespace Bun3.Server.Achievements
                 var def = definitions[i];
                 if (def == null)
                 {
-                    throw new ArgumentException($"업적 정의 [{i}]가 null입니다.", nameof(definitions));
+                    throw new ArgumentException($"Achievement definition [{i}] is null.", nameof(definitions));
                 }
                 if (string.IsNullOrEmpty(def.Id))
                 {
-                    throw new ArgumentException($"업적 정의 [{i}]의 Id가 비어 있습니다.", nameof(definitions));
+                    throw new ArgumentException($"Achievement definition [{i}] has an empty Id.", nameof(definitions));
                 }
                 if (def.Target <= 0)
                 {
-                    throw new ArgumentException($"업적 '{def.Id}'의 Target이 양수가 아닙니다 ({def.Target}).", nameof(definitions));
+                    throw new ArgumentException($"Achievement '{def.Id}' has a non-positive Target ({def.Target}).", nameof(definitions));
                 }
                 if ((uint)def.InitialAvailability > (uint)AchievementStatus.Active)
                 {
-                    throw new ArgumentException($"업적 '{def.Id}'의 InitialAvailability는 Locked/Ready/Active만 가능합니다 ({def.InitialAvailability}).", nameof(definitions));
+                    throw new ArgumentException($"Achievement '{def.Id}' InitialAvailability must be Locked/Ready/Active ({def.InitialAvailability}).", nameof(definitions));
                 }
                 if (_indexById.ContainsKey(def.Id))
                 {
-                    throw new ArgumentException($"업적 Id '{def.Id}'가 중복입니다.", nameof(definitions));
+                    throw new ArgumentException($"Duplicate achievement Id '{def.Id}'.", nameof(definitions));
                 }
 
                 _indexById.Add(def.Id, i);
@@ -76,7 +77,7 @@ namespace Bun3.Server.Achievements
                     var tag = def.Tags[t];
                     if (string.IsNullOrEmpty(tag))
                     {
-                        throw new ArgumentException($"업적 '{def.Id}'의 태그 [{t}]가 비어 있습니다.", nameof(definitions));
+                        throw new ArgumentException($"Achievement '{def.Id}' tag [{t}] is empty.", nameof(definitions));
                     }
                     if (!_tagIndexByName.TryGetValue(tag, out var tagIndex))
                     {
@@ -88,7 +89,7 @@ namespace Bun3.Server.Achievements
                     var members = indicesByTag[tagIndex];
                     if (members.Count > 0 && members[members.Count - 1] == i)
                     {
-                        throw new ArgumentException($"업적 '{def.Id}'에 태그 '{tag}'가 중복으로 붙어 있습니다.", nameof(definitions));
+                        throw new ArgumentException($"Achievement '{def.Id}' has duplicate tag '{tag}'.", nameof(definitions));
                     }
                     members.Add(i);
                 }
@@ -104,42 +105,42 @@ namespace Bun3.Server.Achievements
             }
         }
 
-        /// <summary>인덱스로 정의를 조회한다.</summary>
+        /// <summary>Returns the definition by index.</summary>
         public TDef GetDefinition(int index) => _definitions[index];
 
-        /// <summary>id로 인덱스를 조회한다 — 기동 시 1회 호출해 캐시할 것. 없으면 예외.</summary>
-        /// <exception cref="KeyNotFoundException">id가 카탈로그에 없을 때.</exception>
+        /// <summary>Returns the index for an id — call once at startup and cache. Throws if absent.</summary>
+        /// <exception cref="KeyNotFoundException">When the id is not in the catalog.</exception>
         public int GetIndex(string id)
         {
             if (!_indexById.TryGetValue(id, out var index))
             {
-                throw new KeyNotFoundException($"업적 Id '{id}'가 카탈로그에 없습니다.");
+                throw new KeyNotFoundException($"Achievement Id '{id}' is not in the catalog.");
             }
 
             return index;
         }
 
-        /// <summary>id로 인덱스를 조회한다. 없으면 false.</summary>
+        /// <summary>Returns the index for an id. False if absent.</summary>
         public bool TryGetIndex(string id, out int index) => _indexById.TryGetValue(id, out index);
 
-        /// <summary>태그명으로 태그 인덱스를 조회한다 — 기동 시 1회 호출해 캐시할 것.
-        /// 오타는 여기서 기동 실패로 표면화된다.</summary>
-        /// <exception cref="KeyNotFoundException">태그가 카탈로그에 없을 때.</exception>
+        /// <summary>Returns the tag index for a tag name — call once at startup and cache.
+        /// Typos surface here as startup failures.</summary>
+        /// <exception cref="KeyNotFoundException">When the tag is not in the catalog.</exception>
         public int GetTagIndex(string tag)
         {
             if (!_tagIndexByName.TryGetValue(tag, out var index))
             {
-                throw new KeyNotFoundException($"업적 태그 '{tag}'가 카탈로그에 없습니다.");
+                throw new KeyNotFoundException($"Achievement tag '{tag}' is not in the catalog.");
             }
 
             return index;
         }
 
-        /// <summary>태그명으로 태그 인덱스를 조회한다. 없으면 false.</summary>
+        /// <summary>Returns the tag index for a tag name. False if absent.</summary>
         public bool TryGetTagIndex(string tag, out int index) => _tagIndexByName.TryGetValue(tag, out index);
 
-        /// <summary>태그가 붙은 업적 인덱스 목록(동결, 정의 순). 라우팅 외에 리셋 스윕·선발
-        /// 같은 그룹 순회에도 쓴다 — 무할당.</summary>
+        /// <summary>Achievement indices carrying the tag (frozen, in definition order). Beyond
+        /// routing, also used for group sweeps such as reset sweeps and selection — allocation-free.</summary>
         public ReadOnlySpan<int> GetIndicesByTag(int tagIndex) => _indicesByTag[tagIndex];
     }
 }

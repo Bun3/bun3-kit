@@ -1,4 +1,4 @@
-// Util partial — UnityEvent/이벤트 헬퍼 담당.
+// Util partial — UnityEvent helpers.
 using UnityEngine;
 using UnityEngine.Events;
 

@@ -3,14 +3,15 @@ using Bun3.Gameplay.Numerics;
 namespace Bun3.Server.Items
 {
     /// <summary>
-    /// 인벤토리가 보유하는 아이템 인스턴스. 비스택형 정의는 인스턴스당 수량 1,
-    /// 스택형 정의(재화 포함)는 정의당 싱글턴 인스턴스에 수량이 병합된다.
-    /// 수량은 <see cref="BigNum"/> — long은 암시 변환되며, BigNum 덧셈은 유효 자릿수
-    /// 밖 항을 흡수하는 손실 연산이다(방치형 수량 의미론, 전량 소모는 정확히 Zero).
-    /// <see cref="State"/>는 게임 소유의 불투명 상태(레벨·경험치·옵션 등) —
-    /// 변경 후 <see cref="MarkChanged"/>를 호출해야 저장/전송 추적에 잡힌다.
+    /// An item instance held by an inventory. Unstackable definitions hold amount 1 per
+    /// instance; stackable definitions (including currencies) merge amounts into a singleton
+    /// instance per definition. Amounts are <see cref="BigNum"/> — long converts implicitly,
+    /// and BigNum addition is lossy, absorbing terms outside the significant digits
+    /// (idle-game amount semantics; full consumption is exactly Zero).
+    /// <see cref="State"/> is game-owned opaque state (level, exp, options, etc.) —
+    /// call <see cref="MarkChanged"/> after mutating it so save/sync tracking sees the change.
     /// </summary>
-    /// <typeparam name="TState">게임이 정의하는 인스턴스 상태 타입.</typeparam>
+    /// <typeparam name="TState">Game-defined instance state type.</typeparam>
     public sealed class ItemInstance<TState>
     {
         private uint _flags;
@@ -38,18 +39,18 @@ namespace Bun3.Server.Items
         internal bool IsNew;
         internal bool Changed;
 
-        /// <summary>인스턴스 고유 id — 발급 시섬 또는 로드된 외부 권위 id(DB·Steam).</summary>
+        /// <summary>Unique instance id — from the issuer seam or a loaded external authoritative id (DB, Steam).</summary>
         public long InstanceId { get; }
 
-        /// <summary>정의 식별자 (불변).</summary>
+        /// <summary>Definition identifier (immutable).</summary>
         public ItemId Item { get; }
 
-        /// <summary>보유 수량. 비스택형은 항상 1. 프레임워크만 변경한다.</summary>
+        /// <summary>Held amount. Always 1 for unstackables. Mutated only by the framework.</summary>
         public BigNum Quantity { get; internal set; }
 
-        /// <summary>상태 비트 플래그 — 의미는 게임/플랫폼 몫(예: 사용 중, 잠금, 거래 불가).
-        /// 인벤토리의 removeBlockingFlags 마스크에 걸리면 소모가 차단된다.
-        /// setter가 변경 추적에 자동 반영한다.</summary>
+        /// <summary>State bit flags — semantics belong to the game/platform (e.g. in use, locked,
+        /// untradable). Instances matching the inventory's removeBlockingFlags mask cannot be
+        /// consumed. The setter feeds change tracking automatically.</summary>
         public uint Flags
         {
             get => _flags;
@@ -63,10 +64,11 @@ namespace Bun3.Server.Items
             }
         }
 
-        /// <summary>만료 시각(UTC ticks). 0 = 무기한. 연장 규칙(누적/갱신/최대)은 게임이
-        /// 이 값을 갱신하는 방식으로 정한다. 프레임워크는 시계를 모르므로 만료 판정·처리는
-        /// <see cref="ItemInventory{TState}.CollectExpired"/>에 게임이 현재 시각을 주입해
-        /// 수행한다(만료 ≠ 자동 삭제 — idlez 의미론). setter가 변경 추적에 자동 반영한다.</summary>
+        /// <summary>Expiry time (UTC ticks). 0 = no expiry. Extension rules (accumulate/renew/cap)
+        /// are defined by how the game updates this value. The framework has no clock, so expiry
+        /// detection and handling happen via <see cref="ItemInventory{TState}.CollectExpired"/> with
+        /// game-injected current time (expiry does not auto-delete). The setter feeds change
+        /// tracking automatically.</summary>
         public long ExpiresAtTicksUtc
         {
             get => _expiresAtTicksUtc;
@@ -80,11 +82,11 @@ namespace Bun3.Server.Items
             }
         }
 
-        /// <summary>게임 소유 상태 — 프레임워크는 해석하지 않는다.</summary>
+        /// <summary>Game-owned state — the framework does not interpret it.</summary>
         public TState State { get; }
 
-        /// <summary><see cref="State"/> 변경 후 호출 — 변경 추적(Updated)과
-        /// 인벤토리 onChanged(저장 주기)에 반영된다. 인벤토리에서 제거된 뒤에는 무시된다.</summary>
+        /// <summary>Call after mutating <see cref="State"/> — feeds change tracking (Updated) and
+        /// the inventory's onChanged (save cadence). Ignored after removal from the inventory.</summary>
         public void MarkChanged()
         {
             Changed = true;

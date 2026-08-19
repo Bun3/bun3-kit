@@ -5,30 +5,31 @@ using System.Globalization;
 namespace Bun3.Gameplay.Numerics
 {
     /// <summary>
-    /// 결정론적 십진 대수: 값 = Mantissa × 10^Exponent. 정수 연산만 사용하므로 플랫폼
-    /// 무관하게 비트 동일 결과를 낸다. 유효 18~19자리 — long 범위(±9.2×10^18)까지 정수
-    /// 정확, 그 너머는 근사(하위 자릿수 절사, 0 방향).
-    /// 정규 형식: Mantissa==0이면 Exponent==0, 그 외 Mantissa는 10의 배수가 아니다 —
-    /// 같은 값은 항상 같은 비트라 동등성·해시가 필드 비교로 끝난다.
+    /// Deterministic decimal number: value = Mantissa × 10^Exponent. Integer-only arithmetic
+    /// yields bit-identical results on every platform. 18-19 significant digits — exact for
+    /// integers within long range (±9.2×10^18); beyond that, approximate (low digits truncated
+    /// toward zero).
+    /// Canonical form: Mantissa==0 implies Exponent==0; otherwise Mantissa is not a multiple
+    /// of 10 — equal values always share identical bits, so equality/hash are field comparisons.
     /// </summary>
     public readonly partial struct BigNum : IEquatable<BigNum>, IComparable<BigNum>
     {
-        /// <summary>지수 한계. 초과는 <see cref="BigNumOverflowException"/>, 미만(언더플로)은 0으로 수렴.</summary>
+        /// <summary>Exponent limit. Exceeding it throws <see cref="BigNumOverflowException"/>; below the negative limit underflows to zero.</summary>
         public const int MaxExponent = 100_000_000;
 
-        // 가수(long)가 담는 최대 십진 유효 자릿수. 정수 정확 한계(±9.2×10^18)의 근원.
+        // Max decimal significant digits a long mantissa holds — source of the integer-exact limit (±9.2×10^18).
         private const int MantissaMaxDigits = 19;
 
-        // 내부 스케일 자릿수(= 10^18) — 나눗셈 분자 확장 폭이자 덧셈 정렬 창.
+        // Internal scale digits (= 10^18) — division numerator widening and addition alignment window.
         private const int ScaleDigits = MantissaMaxDigits - 1;
 
-        // 128비트 값의 최대 십진 자릿수 — 자릿수 테이블 크기.
+        // Max decimal digits of a 128-bit value — digit-table size.
         private const int MaxDigits128 = 39;
 
-        // 10^0 .. 10^MantissaMaxDigits (10^19까지 ulong에 든다)
+        // 10^0 .. 10^MantissaMaxDigits (10^19 fits in ulong)
         private static readonly ulong[] Pow10 = BuildPow10();
 
-        // 10^i의 128비트 표현 (i = 0..38) — 128비트 값의 자릿수 계산용
+        // 128-bit representation of 10^i (i = 0..38) — for digit counting of 128-bit values
         private static readonly ulong[] Pow10Hi128 = new ulong[MaxDigits128];
         private static readonly ulong[] Pow10Lo128 = new ulong[MaxDigits128];
 
@@ -37,7 +38,7 @@ namespace Bun3.Gameplay.Numerics
             Pow10Lo128[0] = 1;
             for (var i = 1; i < MaxDigits128; i++)
             {
-                // (hi:lo) × 10 — lo 곱의 자리올림을 hi에 편입
+                // (hi:lo) × 10 — fold the low-word carry into hi
                 Int128Math.Mul64(Pow10Lo128[i - 1], 10, out var carry, out var lo);
                 Pow10Lo128[i] = lo;
                 Pow10Hi128[i] = Pow10Hi128[i - 1] * 10 + carry;
@@ -58,7 +59,7 @@ namespace Bun3.Gameplay.Numerics
 
         private static int CountDigits64(ulong value)
         {
-            // 이진 트리 4~5비교 — 선형 스캔(최대 19비교) 대비 핫패스 절감
+            // Branch tree, 4-5 comparisons — hot-path saving over a linear scan (up to 19)
             if (value < 10_000_000_000UL)   // < 10^10
             {
                 if (value < 100_000UL)
@@ -106,7 +107,7 @@ namespace Bun3.Gameplay.Numerics
                 return CountDigits64(lo);
             }
 
-            // hi != 0 ⇒ 값 ≥ 2^64 > 10^19 ⇒ 자릿수 ∈ [20, 39]. "값 < 10^d"인 최소 d를 이진 탐색.
+            // hi != 0 ⇒ value ≥ 2^64 > 10^19 ⇒ digits ∈ [20, 39]. Binary-search the smallest d with value < 10^d.
             var low = MantissaMaxDigits + 1;
             var high = MaxDigits128;
             while (low < high)
@@ -125,22 +126,22 @@ namespace Bun3.Gameplay.Numerics
             return low;
         }
 
-        /// <summary>가수. 정규 형식에서 10의 배수가 아니다(0 제외).</summary>
+        /// <summary>Mantissa. In canonical form, not a multiple of 10 (except zero).</summary>
         public readonly long Mantissa;
 
-        /// <summary>십진 지수.</summary>
+        /// <summary>Decimal exponent.</summary>
         public readonly int Exponent;
 
-        /// <summary>0.</summary>
+        /// <summary>Zero.</summary>
         public static readonly BigNum Zero = default;
 
-        /// <summary>1.</summary>
+        /// <summary>One.</summary>
         public static readonly BigNum One = new BigNum(1, 0);
 
-        /// <summary>표현 가능한 최소값. <c>-long.MaxValue × 10^MaxExponent</c>.</summary>
+        /// <summary>Smallest representable value: <c>-long.MaxValue × 10^MaxExponent</c>.</summary>
         public static readonly BigNum MinValue = new BigNum(-long.MaxValue, MaxExponent);
 
-        /// <summary>표현 가능한 최대값. <c>long.MaxValue × 10^MaxExponent</c>.</summary>
+        /// <summary>Largest representable value: <c>long.MaxValue × 10^MaxExponent</c>.</summary>
         public static readonly BigNum MaxValue = new BigNum(long.MaxValue, MaxExponent);
 
         private BigNum(long mantissa, int exponent)
@@ -149,38 +150,39 @@ namespace Bun3.Gameplay.Numerics
             Exponent = exponent;
         }
 
-        /// <summary>가수×10^지수로 값을 만든다. 정규화하며, 지수 한계 초과 시 던진다.</summary>
+        /// <summary>Creates a value from mantissa × 10^exponent. Canonicalizes; throws when the exponent limit is exceeded.</summary>
         /// <exception cref="ArgumentOutOfRangeException">
-        /// <paramref name="mantissa"/>가 대칭 가수 범위 밖인 <see cref="long.MinValue"/>인 경우.
+        /// When <paramref name="mantissa"/> is <see cref="long.MinValue"/>, outside the symmetric mantissa range.
         /// </exception>
         public static BigNum FromParts(long mantissa, int exponent) =>
             Canonicalize(mantissa, exponent);
 
-        /// <summary>long 정수는 정확하게 변환된다.</summary>
+        /// <summary>long integers convert exactly.</summary>
         /// <exception cref="ArgumentOutOfRangeException">
-        /// <paramref name="value"/>가 대칭 가수 범위 밖인 <see cref="long.MinValue"/>인 경우.
+        /// When <paramref name="value"/> is <see cref="long.MinValue"/>, outside the symmetric mantissa range.
         /// </exception>
         public static implicit operator BigNum(long value) => Canonicalize(value, 0);
 
-        /// <summary>int 정수는 정확하게 변환된다.</summary>
+        /// <summary>int integers convert exactly.</summary>
         public static implicit operator BigNum(int value) => Canonicalize(value, 0);
 
-        // double 변환 정규화 구간 [1e15, 1e16) — 유효 16자리 확보
+        // double conversion normalization window [1e15, 1e16) — secures 16 significant digits
         private const double DoubleNormalizeLow = 1e15;
         private const double DoubleNormalizeHigh = 1e16;
 
         private const float FloatNormalizeLow = 1e6f;
         private const float FloatNormalizeHigh = 1e7f;
 
-        /// <summary>double을 절사 변환한다(유효 약 16자리) — **명시적**: 손실 변환이며,
-        /// 런타임 부동소수 값을 심에 무심코 흘리는 실수를 캐스트가 막는다(결정론 경계).
-        /// 데이터 로드 등 경계에서 1회 변환하는 용도. NaN/무한대는 던진다.
-        /// 변환 자체는 IEEE 기본 연산(×10/÷10)만 사용해 같은 입력 비트면 어디서나 같은 결과다.</summary>
+        /// <summary>Truncating conversion from double (~16 significant digits) — **explicit**: lossy,
+        /// and the cast stops runtime floating-point values from leaking into the sim (determinism
+        /// boundary). Intended for one-time conversion at boundaries such as data loading.
+        /// NaN/Infinity throw. The conversion uses only basic IEEE ops (×10/÷10), so identical
+        /// input bits give identical results everywhere.</summary>
         public static explicit operator BigNum(double value)
         {
             if (double.IsNaN(value) || double.IsInfinity(value))
             {
-                throw new ArgumentException("NaN/무한대는 BigNum으로 변환할 수 없다.", nameof(value));
+                throw new ArgumentException("NaN/Infinity cannot be converted to BigNum.", nameof(value));
             }
 
             if (value == 0d)
@@ -204,11 +206,11 @@ namespace Bun3.Gameplay.Numerics
                 exponent--;
             }
 
-            var mantissa = (long)abs;   // 절사 (0 방향)
+            var mantissa = (long)abs;   // truncate toward zero
             return Canonicalize(negative ? -mantissa : mantissa, exponent);
         }
 
-        /// <summary>float을 절사 변환한다(유효 약 7자리) — 명시적. 규칙은 double과 동일.</summary>
+        /// <summary>Truncating conversion from float (~7 significant digits) — explicit. Same rules as double.</summary>
         public static explicit operator BigNum(float value)
         {
             if (float.IsNaN(value) || float.IsInfinity(value))
@@ -241,10 +243,10 @@ namespace Bun3.Gameplay.Numerics
             return Canonicalize(negative ? -mantissa : mantissa, exponent);
         }
 
-        /// <summary>값이 0인지 여부.</summary>
+        /// <summary>Whether the value is zero.</summary>
         public bool IsZero => Mantissa == 0;
 
-        /// <summary>부호: -1, 0, +1.</summary>
+        /// <summary>Sign: -1, 0, +1.</summary>
         public int Sign => Math.Sign(Mantissa);
 
         private static BigNum Canonicalize(long mantissa, long exponent)
@@ -256,15 +258,15 @@ namespace Bun3.Gameplay.Numerics
 
             if (mantissa == long.MinValue)
             {
-                // 절댓값 부정이 불가능한 유일한 값 — 대칭 가수 범위 밖이므로 즉시 거부
+                // The only value whose absolute negation overflows — outside the symmetric mantissa range
                 throw new ArgumentOutOfRangeException(
                     nameof(mantissa), mantissa,
-                    "BigNum 가수는 -long.MaxValue 이상이어야 합니다.");
+                    "BigNum mantissa must be at least -long.MaxValue.");
             }
 
             if (mantissa % 10 == 0)
             {
-                // 트레일링 0 제거 — 8→4→2→1 사다리로 나눗셈 횟수 절감 (결과는 순서 무관 동일)
+                // Strip trailing zeros — 8→4→2→1 ladder cuts division count (result is order-independent)
                 while (mantissa % 100_000_000 == 0)
                 {
                     mantissa /= 100_000_000;
@@ -297,15 +299,15 @@ namespace Bun3.Gameplay.Numerics
 
             if (exponent < -MaxExponent)
             {
-                return default;   // 언더플로 — 극소값은 0으로 수렴(정보 손실이 자연스러운 방향)
+                return default;   // underflow — tiny magnitudes converge to zero
             }
 
             return new BigNum(mantissa, (int)exponent);
         }
 
         /// <summary>
-        /// 덧셈. 보존 범위 밖의 같은 부호 항은 무시하고, 반대 부호 항은 borrow를 반영한 뒤
-        /// 0 방향으로 절사한다.
+        /// Addition. Same-sign terms outside the preserved window are ignored; opposite-sign
+        /// terms apply a borrow, then truncate toward zero.
         /// </summary>
         public static BigNum operator +(BigNum a, BigNum b)
         {
@@ -395,17 +397,17 @@ namespace Bun3.Gameplay.Numerics
             return Canonicalize(signedMantissa, retainedExponent);
         }
 
-        /// <summary>뺄셈.</summary>
+        /// <summary>Subtraction.</summary>
         public static BigNum operator -(BigNum a, BigNum b) => a + (-b);
 
-        /// <summary>부호 반전.</summary>
+        /// <summary>Negation.</summary>
         public static BigNum operator -(BigNum value) =>
             value.IsZero ? value : new BigNum(-value.Mantissa, value.Exponent);
 
-        // = Pow10[ScaleDigits] — const 문맥에서 배열 참조가 불가해 리터럴로 유지
+        // = Pow10[ScaleDigits] — array reference not allowed in a const context
         private const ulong TenPow18 = 1_000_000_000_000_000_000UL;
 
-        /// <summary>곱셈. 결과는 유효 18~19자리로 절사(0 방향)된다.</summary>
+        /// <summary>Multiplication. Result truncated (toward zero) to 18-19 significant digits.</summary>
         public static BigNum operator *(BigNum a, BigNum b)
         {
             if (a.IsZero || b.IsZero)
@@ -423,7 +425,7 @@ namespace Bun3.Gameplay.Numerics
             return Canonicalize(negative ? -mantissa : mantissa, exponent);
         }
 
-        /// <summary>나눗셈. 결과는 유효 17~19자리로 절사(0 방향)된다. 0으로 나누면 던진다.</summary>
+        /// <summary>Division. Result truncated (toward zero) to 17-19 significant digits. Throws on division by zero.</summary>
         public static BigNum operator /(BigNum a, BigNum b)
         {
             if (b.IsZero)
@@ -441,9 +443,10 @@ namespace Bun3.Gameplay.Numerics
             var ub = (ulong)Math.Abs(b.Mantissa);
             var exponent = (long)a.Exponent - b.Exponent - ScaleDigits;
 
-            // 두 가수를 [10^18, 10^19) 구간으로 정규화 — 고정폭 스케일링은 소가수/대가수
-            // 조합에서 유효 자릿수가 붕괴하고, 분모 가수가 분자×10^18보다 크면 0으로 무너진다.
-            // 자릿수 기반 일괄 스케일: ×10^k 1회 (루프 반복과 결과 동일).
+            // Normalize both mantissas into [10^18, 10^19) — fixed-width scaling collapses
+            // significant digits for small/large mantissa mixes, and the quotient collapses to
+            // zero when the divisor mantissa exceeds numerator × 10^18.
+            // Digit-count-based bulk scale: one ×10^k (identical result to a loop).
             var scaleA = MantissaMaxDigits - CountDigits64(ua);
             ua *= Pow10[scaleA];
             exponent -= scaleA;
@@ -458,26 +461,26 @@ namespace Bun3.Gameplay.Numerics
             return Canonicalize(negative ? -mantissa : mantissa, exponent);
         }
 
-        // 128비트 값을 long 범위(≤ long.MaxValue)까지 10^k 절사로 줄인다. exponent에 k를 더한다.
-        // 자릿수를 세서 "필요한 만큼만" 한 번에 절사한다 — 10^k 일괄 나눗셈은 /10 k회의
-        // 합성과 절사 결과가 비트 동일하다(정수 나눗셈의 합성 법칙). 필요 이상 깎으면
-        // 유효 자릿수가 파괴되므로(과거 10^18 고정 점프 버그) k는 자릿수 기반으로만 계산한다.
+        // Reduces a 128-bit value into long range (≤ long.MaxValue) by 10^k truncation, adding k
+        // to exponent. A single 10^k division is bit-identical to k successive /10 truncations
+        // (integer-division composition). k comes only from the digit count — cutting more than
+        // needed destroys significant digits.
         private static long ReduceToLong(ulong hi, ulong lo, ref long exponent)
         {
             if (hi == 0 && lo <= long.MaxValue)
             {
-                return (long)lo;   // 축소 불필요 — 일반 게임플레이 대역의 fast path
+                return (long)lo;   // no reduction needed — fast path for the common gameplay band
             }
 
             var digits = CountDigits128(hi, lo);
             if (digits > MantissaMaxDigits)
             {
-                var k = Math.Min(digits - MantissaMaxDigits, MantissaMaxDigits);   // Pow10 테이블 상한(10^19) 방어
+                var k = Math.Min(digits - MantissaMaxDigits, MantissaMaxDigits);   // Pow10 table cap (10^19)
                 Int128Math.DivRem(hi, lo, Pow10[k], out hi, out lo, out _);
                 exponent += k;
             }
 
-            // 19자리 몫은 long.MaxValue(9.22e18)를 넘을 수 있다 — 최대 1~2회 보정
+            // A 19-digit quotient can exceed long.MaxValue (9.22e18) — at most 1-2 corrections
             while (hi != 0 || lo > long.MaxValue)
             {
                 Int128Math.DivRem(hi, lo, 10, out hi, out lo, out _);
@@ -537,7 +540,7 @@ namespace Bun3.Gameplay.Numerics
             }
         }
 
-        /// <summary>값을 직접 비교하여 전체 순서를 반환한다.</summary>
+        /// <summary>Compares values, returning a total order.</summary>
         public int CompareTo(BigNum other)
         {
             var signComparison = Sign.CompareTo(other.Sign);
@@ -565,7 +568,7 @@ namespace Bun3.Gameplay.Numerics
             return Sign > 0 ? alignedComparison : -alignedComparison;
         }
 
-        /// <summary>정규 형식 필드 비교 — 같은 값은 항상 같은 비트다.</summary>
+        /// <summary>Canonical-form field comparison — equal values always share identical bits.</summary>
         public bool Equals(BigNum other) => Mantissa == other.Mantissa && Exponent == other.Exponent;
 
         /// <inheritdoc />
@@ -584,25 +587,25 @@ namespace Bun3.Gameplay.Numerics
             }
         }
 
-        /// <summary>동등 비교.</summary>
+        /// <summary>Equality.</summary>
         public static bool operator ==(BigNum a, BigNum b) => a.Equals(b);
 
-        /// <summary>비동등 비교.</summary>
+        /// <summary>Inequality.</summary>
         public static bool operator !=(BigNum a, BigNum b) => !a.Equals(b);
 
-        /// <summary>미만.</summary>
+        /// <summary>Less than.</summary>
         public static bool operator <(BigNum a, BigNum b) => a.CompareTo(b) < 0;
 
-        /// <summary>이하.</summary>
+        /// <summary>Less than or equal.</summary>
         public static bool operator <=(BigNum a, BigNum b) => a.CompareTo(b) <= 0;
 
-        /// <summary>초과.</summary>
+        /// <summary>Greater than.</summary>
         public static bool operator >(BigNum a, BigNum b) => a.CompareTo(b) > 0;
 
-        /// <summary>이상.</summary>
+        /// <summary>Greater than or equal.</summary>
         public static bool operator >=(BigNum a, BigNum b) => a.CompareTo(b) >= 0;
 
-        /// <summary>디버그 표기. 핫패스 사용 금지 — 표시용은 <see cref="TryFormat"/>이다.</summary>
+        /// <summary>Debug representation. Not for hot paths — use <see cref="TryFormat"/> for display.</summary>
         public override string ToString() =>
             Exponent == 0
                 ? Mantissa.ToString(CultureInfo.InvariantCulture)

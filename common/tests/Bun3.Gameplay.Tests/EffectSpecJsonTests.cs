@@ -14,7 +14,7 @@ namespace Bun3.Gameplay.Tests;
 [TestFixture]
 public sealed class EffectSpecJsonTests
 {
-    // EffectTestKit의 속성 id 상수와 맞춘 이름 사전.
+    // Name map aligned with EffectTestKit's attribute id constants.
     private static readonly Dictionary<string, ushort> AttributeNames = new Dictionary<string, ushort>
     {
         ["Hp"] = EffectTestKit.Hp,
@@ -67,7 +67,7 @@ public sealed class EffectSpecJsonTests
         Assert.That(chill.Stack.OnOverflow, Is.EqualTo(StackOverflow.ApplyEffect));
         Assert.That(chill.Stack.OverflowEffectName, Is.EqualTo("frozen"));
         Assert.That(chill.Stack.ClearStacksOnOverflow, Is.True);
-        // JSON에 없던 필드는 모델 기본값을 유지해야 한다.
+        // Fields absent from JSON must keep the model defaults.
         Assert.That(chill.Stack.AddStackCount, Is.EqualTo(1));
         Assert.That(chill.Stack.RefreshDurationOnReapply, Is.True);
         Assert.That(chill.Stack.OnExpiration, Is.EqualTo(StackExpiration.ClearAll));
@@ -165,7 +165,7 @@ public sealed class EffectSpecJsonTests
         Assert.That(ex.Message, Does.Contain("NoSuchAttribute"));
     }
 
-    // ---- 두 경로 동등성: chill/frozen/poison을 코드로 구축한 카탈로그 vs JSON에서 로드한 카탈로그 ----
+    // ---- Two-path equivalence: chill/frozen/poison catalog built in code vs loaded from JSON ----
 
     private const string TrioJson = """
     { "schemaVersion": 1, "specs": [
@@ -233,7 +233,7 @@ public sealed class EffectSpecJsonTests
         kit.Defender.Attributes.SetBase(EffectTestKit.Attack, 100);
 
         var pipeline = kit.BuildPipeline();
-        for (var i = 0; i < 4; i++)   // 4번째 재적용에서 스택 초과 -> frozen
+        for (var i = 0; i < 4; i++)   // 4th reapply overflows the stack -> frozen
         {
             pipeline.EnqueueApply(kit.SpecId("chill"), kit.Attacker.Id, kit.Defender.Id);
             pipeline.Tick();
@@ -264,7 +264,7 @@ public sealed class EffectSpecJsonTests
         Assert.That(jsonKit.Defender.ActiveEffectCount, Is.EqualTo(codeKit.Defender.ActiveEffectCount));
     }
 
-    // ---- 레벨 테이블 저작 표기(②③④) 왕복·오류 ----
+    // ---- Level-table authoring notations (②③④): round trips and errors ----
 
     [Test]
     public void PerLevelValues_form_round_trips()
@@ -338,7 +338,7 @@ public sealed class EffectSpecJsonTests
         Assert.Throws<TagCatalogException>(() => Load(json));
     }
 
-    // 코드로 구축한 formula 스펙과 JSON에서 로드한 동일 스펙이 같은 결과를 낸다(§15.1 표기 ③ 동등성).
+    // A formula spec built in code and the same spec loaded from JSON yield the same result (§15.1 notation ③ equivalence).
     [Test]
     public void Code_built_and_json_loaded_formula_spec_produce_identical_outcome()
     {
@@ -378,7 +378,7 @@ public sealed class EffectSpecJsonTests
         Assert.That(jsonKit.Defender.Attributes.GetCurrent(EffectTestKit.Attack), Is.EqualTo((BigNum)16)); // 4*4
     }
 
-    // ---- T2·T3 신규 필드 왕복 ----
+    // ---- T2/T3 new-field round trip ----
 
     [Test]
     public void T2_T3_new_fields_round_trip()
@@ -435,7 +435,7 @@ public sealed class EffectSpecJsonTests
         Assert.That(spec.Stack.ExtendCapMultiplier, Is.EqualTo(BigNum.FromParts(13, -1)));
     }
 
-    // ---- 두 경로 동등성: DR 스펙(G6) ----
+    // ---- Two-path equivalence: DR spec (G6) ----
 
     private const string DrJson = """
     { "schemaVersion": 1, "specs": [ {

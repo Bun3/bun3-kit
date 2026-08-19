@@ -5,7 +5,7 @@ using Bun3.Gameplay.Tags;
 
 namespace Bun3.Gameplay.Tags.Catalog
 {
-    /// <summary>태그 Source 병합의 런타임 결과, provenance와 진단을 묶습니다.</summary>
+    /// <summary>Bundles the runtime result, provenance, and diagnostics of a tag source merge.</summary>
     public sealed class TagCatalogCompilation
     {
         private readonly IReadOnlyList<TagCatalogDiagnostic> _diagnostics;
@@ -22,16 +22,16 @@ namespace Bun3.Gameplay.Tags.Catalog
             Succeeded = catalog is not null && provenance is not null;
         }
 
-        /// <summary>오류 없이 런타임 Catalog와 provenance가 생성되었는지 나타냅니다.</summary>
+        /// <summary>Whether the runtime catalog and provenance were produced without errors.</summary>
         public bool Succeeded { get; }
 
-        /// <summary>성공한 경우 생성된 불변 런타임 Catalog입니다.</summary>
+        /// <summary>Immutable runtime catalog when successful.</summary>
         public TagCatalog? Catalog { get; }
 
-        /// <summary>성공한 경우 생성된 불변 Source provenance 색인입니다.</summary>
+        /// <summary>Immutable source provenance index when successful.</summary>
         public TagCatalogProvenance? Provenance { get; }
 
-        /// <summary>Source와 canonical 경로 순으로 정렬된 컴파일 진단입니다.</summary>
+        /// <summary>Compilation diagnostics ordered by source and canonical path.</summary>
         public IReadOnlyList<TagCatalogDiagnostic> Diagnostics => _diagnostics;
     }
 }

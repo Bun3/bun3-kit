@@ -24,7 +24,7 @@ namespace Bun3.Gameplay.Editor.Tags
         string DisplaySegment { get; }
     }
 
-    /// <summary>Source와 merged projection이 공유하는 트리 계층, scroll 및 행 geometry입니다.</summary>
+    /// <summary>Tree hierarchy, scroll, and row geometry shared by source and merged projections.</summary>
     internal abstract class GameplayTagProjectionTreeView<TRow> : TreeView
         where TRow : struct, IGameplayTagProjectionRow
     {
@@ -93,7 +93,7 @@ namespace Bun3.Gameplay.Editor.Tags
             }
         }
 
-        /// <summary>foldout과 계층 들여쓰기를 제외한 트리 행 레이블 영역을 계산합니다.</summary>
+        /// <summary>Computes the tree row label area excluding the foldout and hierarchy indent.</summary>
         internal Rect CalculateLabelRect(TreeViewItem item, Rect rowRect)
         {
             if (item is null) throw new ArgumentNullException(nameof(item));

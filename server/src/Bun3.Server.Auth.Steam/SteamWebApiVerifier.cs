@@ -8,9 +8,9 @@ using System.Threading.Tasks;
 
 namespace Bun3.Server.Auth.Steam
 {
-    /// <summary>전용 서버용 Steam 검증기 — Valve Web API(ISteamUserAuth/AuthenticateUserTicket)에
-    /// HTTPS 1회로 티켓을 검증한다. credential = 클라 티켓의 hex 문자열
-    /// (GetAuthSessionTicket/GetAuthTicketForWebApi 산출물).</summary>
+    /// <summary>Steam verifier for dedicated servers — verifies the ticket with a single HTTPS call to the
+    /// Valve Web API (ISteamUserAuth/AuthenticateUserTicket). credential = the client ticket's hex string
+    /// (output of GetAuthSessionTicket/GetAuthTicketForWebApi).</summary>
     public sealed class SteamWebApiVerifier : IIdentityVerifier
     {
         private const string Endpoint = "https://partner.steam-api.com/ISteamUserAuth/AuthenticateUserTicket/v1/";
@@ -25,7 +25,7 @@ namespace Bun3.Server.Auth.Steam
         /// <inheritdoc />
         public string Provider => "steam";
 
-        /// <summary>검증기를 생성한다. AppId 0 또는 빈 WebApiKey는 즉시 거부(부팅 시 즉사).</summary>
+        /// <summary>Creates the verifier. AppId 0 or an empty WebApiKey is rejected immediately (dies at boot).</summary>
         public SteamWebApiVerifier(HttpClient http, SteamWebApiOptions options)
         {
             _http = http ?? throw new ArgumentNullException(nameof(http));

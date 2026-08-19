@@ -3,7 +3,7 @@ using System.IO;
 
 namespace Bun3.Server.Tests.Helpers;
 
-/// <summary>한 번의 Read가 최대 chunkSize 바이트만 반환하는 읽기 전용 스트림. TCP 분할 도착 시뮬레이션.</summary>
+/// <summary>Read-only stream where a single Read returns at most chunkSize bytes. Simulates fragmented TCP arrival.</summary>
 public sealed class ChunkedReadStream : Stream
 {
     private readonly byte[] _data;

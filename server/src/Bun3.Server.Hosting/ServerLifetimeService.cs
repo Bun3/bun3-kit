@@ -4,9 +4,9 @@ using Microsoft.Extensions.Options;
 
 namespace Bun3.Server.Hosting;
 
-/// <summary>ServerBase 계열 서버를 호스트 수명에 연결한다. TServer로 닫힌 타입이 갈리므로
-/// 서버 등록이 여러 개여도 TryAddEnumerable에 조용히 떨어지지 않는다
-/// (중복 등록 자체는 AddServerTransport가 등록 시점에 차단한다).</summary>
+/// <summary>Ties a ServerBase-family server to the host lifetime. The closed type varies per
+/// TServer, so multiple server registrations do not silently collapse into TryAddEnumerable
+/// (duplicate registration itself is blocked at registration time by AddServerTransport).</summary>
 internal sealed class ServerLifetimeService<TServer, TSession> : IHostedService
     where TServer : ServerBase<TSession>
     where TSession : Session

@@ -55,15 +55,15 @@ public class BigNumFormatTests
     [Test]
     public void Fraction_truncates_to_two_digits_and_strips_zeros()
     {
-        Assert.That(Format((BigNum)1_234), Is.EqualTo("1.23K"));     // 1.234 → 1.23 절사
-        Assert.That(Format((BigNum)1_204), Is.EqualTo("1.2K"));      // 트레일링 0 제거
-        Assert.That(Format((BigNum)1_004), Is.EqualTo("1K"));        // .00 제거
+        Assert.That(Format((BigNum)1_234), Is.EqualTo("1.23K"));     // 1.234 truncated to 1.23
+        Assert.That(Format((BigNum)1_204), Is.EqualTo("1.2K"));      // trailing zero stripped
+        Assert.That(Format((BigNum)1_004), Is.EqualTo("1K"));        // .00 stripped
     }
 
     [Test]
     public void Default_overflow_keeps_top_unit_and_grows_integer()
     {
-        // 기본 스타일(TopUnit): 상한 단위 유지, 정수부 성장 (idlez limit 시맨틱)
+        // Default style (TopUnit): keep the top unit and grow the integer part
         Assert.That(Format(BigNum.FromParts(123, 43)),
             Is.EqualTo("1230000000000000000000000000Qi"));   // 1.23e45, Qi = 10^18
         Assert.That(Format(BigNum.FromParts(3, 20)), Is.EqualTo("300Qi"));
@@ -82,17 +82,16 @@ public class BigNumFormatTests
     [Test]
     public void Custom_unit_override_is_respected()
     {
-        // 스펙 §6: 단위 글자는 설정으로 오버라이드
         var custom = new BigNumFormat(3, new[] { "", "k", "m" });
         Assert.That(Format((BigNum)1_500, custom), Is.EqualTo("1.5k"));
         Assert.That(Format((BigNum)2_000_000, custom), Is.EqualTo("2m"));
-        Assert.That(Format(BigNum.FromParts(3, 9), custom), Is.EqualTo("3000m"));   // 상한 초과 → 기본 TopUnit
+        Assert.That(Format(BigNum.FromParts(3, 9), custom), Is.EqualTo("3000m"));   // above top unit, defaults to TopUnit
     }
 
     [Test]
     public void MaxUnits_caps_unitization_with_top_unit_growth()
     {
-        // idlez ToUnitString(limit) 시맨틱: 상한 단위 유지 + 정수부 성장 + 3자리 구분자
+        // Keep top unit, grow integer part, 3-digit group separator
         var fmt = new BigNumFormat(3, new[] { "", "K", "M" }, maxUnits: 2,
             integerGroupSeparator: ',', overflowStyle: BigNumOverflowStyle.TopUnit);
         Assert.That(Format((BigNum)1_500, fmt), Is.EqualTo("1.5K"));
@@ -104,7 +103,7 @@ public class BigNumFormatTests
     [Test]
     public void MaxUnits_lower_than_table_respects_cap()
     {
-        // 테이블에 M이 있어도 maxUnits=1이면 K까지만 유닛화 ("몇 번까지" 제어)
+        // Even with M in the table, maxUnits=1 unitizes only up to K
         var fmt = new BigNumFormat(3, new[] { "", "K", "M", "B" }, maxUnits: 1,
             integerGroupSeparator: ',', overflowStyle: BigNumOverflowStyle.TopUnit);
         Assert.That(Format((BigNum)2_000_000, fmt), Is.EqualTo("2,000K"));
@@ -113,7 +112,7 @@ public class BigNumFormatTests
     [Test]
     public void MaxFractionDigits_caps_fraction()
     {
-        // idlez decimalPlace 대응: 소수 자릿수 상한 (트레일링 0은 항상 제거)
+        // Fraction digit cap (trailing zeros always stripped)
         var fmt = new BigNumFormat(3, new[] { "", "K", "M" }, maxFractionDigits: 1);
         Assert.That(Format((BigNum)2_000_000, fmt), Is.EqualTo("2M"));
         Assert.That(Format((BigNum)1_234, fmt), Is.EqualTo("1.2K"));
@@ -125,14 +124,14 @@ public class BigNumFormatTests
     }
 
     [Test]
-    public void Fixed_fraction_idlez_style_pads_zeros()
+    public void Fixed_fraction_mode_pads_zeros()
     {
-        // idlez decimalPlace 스타일: 고정 소수 자릿수, 트레일링 0 유지 (표시 폭 안정)
+        // Fixed fraction digits, trailing zeros kept (stable display width)
         var fmt = new BigNumFormat(3, new[] { "", "K", "M" },
             maxFractionDigits: 1, trimFractionZeros: false);
         Assert.That(Format((BigNum)2_000_000, fmt), Is.EqualTo("2.0M"));
         Assert.That(Format((BigNum)1_234, fmt), Is.EqualTo("1.2K"));
-        Assert.That(Format((BigNum)999, fmt), Is.EqualTo("999"));   // plain 정수엔 소수 없음
+        Assert.That(Format((BigNum)999, fmt), Is.EqualTo("999"));   // plain integers get no fraction
         Assert.That(Format(BigNum.FromParts(125, -2), fmt), Is.EqualTo("1.2"));
     }
 
@@ -173,13 +172,13 @@ public class BigNumFormatTests
     [Test]
     public void ToDisplayString_matches_TryFormat()
     {
-        // 저빈도 경로용 편의 메서드 — TryFormat과 같은 결과의 문자열
+        // Convenience for low-frequency paths; same output as TryFormat
         Assert.That(((BigNum)3_450_000_000L).ToDisplayString(), Is.EqualTo("3.45B"));
         Assert.That(((BigNum)15_000).ToDisplayString(BigNumFormat.Korean), Is.EqualTo("1.5만"));
 
-        // 128자 초과(TopUnit 대형 정수부)도 성장 경로로 처리
+        // Over 128 chars (large TopUnit integer part) still uses the growth path
         var big = BigNum.FromParts(1, 200).ToDisplayString();
-        Assert.That(big.Length, Is.EqualTo(183 + 2));   // 정수부 183자리 + "Qi"
+        Assert.That(big.Length, Is.EqualTo(183 + 2));   // 183 integer digits + "Qi"
         Assert.That(big.EndsWith("Qi"), Is.True);
     }
 
@@ -228,8 +227,8 @@ public class BigNumFormatTests
     [Test]
     public void Plain_fraction_truncates_to_two_digits()
     {
-        Assert.That(Format(BigNum.FromParts(523, -4)), Is.EqualTo("0.05"));    // 0.0523 절사
-        Assert.That(Format(BigNum.FromParts(10001, -4)), Is.EqualTo("1"));     // 1.0001 → .00 제거
+        Assert.That(Format(BigNum.FromParts(523, -4)), Is.EqualTo("0.05"));    // 0.0523 truncated
+        Assert.That(Format(BigNum.FromParts(10001, -4)), Is.EqualTo("1"));     // 1.0001, .00 stripped
     }
 
     [Test]

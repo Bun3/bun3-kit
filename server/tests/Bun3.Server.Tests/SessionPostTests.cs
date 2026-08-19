@@ -13,7 +13,7 @@ public class SessionPostTests
 {
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(5);
 
-    /// <summary>스레드 안전한 수집 로거 — 감시 경고/작업 예외 로그 검증용.</summary>
+    /// <summary>Thread-safe collecting logger — for verifying watchdog warnings and work exception logs.</summary>
     private sealed class CollectingLogger : ILogger
     {
         public readonly ConcurrentQueue<(LogLevel Level, string Message)> Entries = new();
@@ -40,8 +40,8 @@ public class SessionPostTests
         {
             var h = new Harness();
             var config = new RpcConfig<PostSession>();
-            // PlayersRequest oneof의 나머지 케이스도 스키마 검증(RpcSchema.Validate)을 통과하려면
-            // 핸들러 등록이 필요하다 — 이 테스트들은 get_gold만 사용하므로 스텁으로 채운다.
+            // Schema validation (RpcSchema.Validate) requires handlers for every PlayersRequest
+            // oneof case — these tests only use get_gold, so the rest are stubs.
             config.OnRequest<LoginRequest, LoginResponse>((s, req) =>
                 new ValueTask<Reply<LoginResponse>>(new LoginResponse()));
             config.OnRequest<AddGoldRequest, AddGoldResponse>((s, req) =>
@@ -79,7 +79,7 @@ public class SessionPostTests
                 }
                 await Task.Delay(10);
             }
-            throw new TimeoutException("세션 미생성");
+            throw new TimeoutException("session was not created");
         }
 
         public async ValueTask DisposeAsync() => await Server.StopAsync();
@@ -104,7 +104,7 @@ public class SessionPostTests
         Assert.That(reply.IsOk, Is.True);
         await workDone.Task.WaitAsync(Timeout);
 
-        // Post가 요청보다 먼저 큐에 들어갔으므로 실행도 먼저다 (같은 큐, 순차)
+        // Post entered the queue before the request, so it runs first (same queue, sequential)
         Assert.That(h.Order.ToArray(), Is.EqualTo(new[] { "work", "handler" }));
         client.Close();
     }
@@ -122,7 +122,7 @@ public class SessionPostTests
         {
             await Task.Delay(10);
         }
-        await Task.Delay(100);   // NotifyClosed 전파 여유
+        await Task.Delay(100);   // slack for NotifyClosed propagation
 
         Assert.That(session.Post(() => default), Is.False);
     }
@@ -134,10 +134,10 @@ public class SessionPostTests
         var client = await h.ConnectAsync();
         var session = await h.GetSessionAsync();
 
-        // 소비 루프를 막는 작업 하나 + 큐를 상한까지 채운다
+        // one work item that blocks the consume loop + fill the queue to its cap
         var block = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         Assert.That(session.Post(async () => await block.Task), Is.True);
-        await Task.Delay(100);   // blocker가 dequeue되어 실행(대기) 상태로 들어갈 시간
+        await Task.Delay(100);   // time for the blocker to be dequeued into a running (waiting) state
 
         var accepted = 0;
         var sawFalse = false;
@@ -149,7 +149,7 @@ public class SessionPostTests
 
         Assert.That(sawFalse, Is.True);
         Assert.That(accepted, Is.LessThanOrEqualTo(4));
-        block.TrySetResult(true);   // 정리
+        block.TrySetResult(true);   // cleanup
         client.Close();
     }
 
@@ -162,11 +162,11 @@ public class SessionPostTests
 
         Assert.That(session.Post(() => throw new InvalidOperationException("posted-boom")), Is.True);
 
-        // 예외 이후에도 같은 세션에서 요청이 정상 처리된다 — 세션 생존 증명
+        // requests on the same session still succeed after the exception — proves the session survives
         var reply = await client.RequestAsync<GetGoldResponse>(new GetGoldRequest()).AsTask().WaitAsync(Timeout);
         Assert.That(reply.IsOk, Is.True);
         Assert.That(h.Logger.Entries.Any(e => e.Level == LogLevel.Error && e.Message.Contains("posted work")),
-            Is.True, "작업 예외 로그가 남아야 한다");
+            Is.True, "the work exception must be logged");
         client.Close();
     }
 
@@ -184,9 +184,9 @@ public class SessionPostTests
             done.TrySetResult(true);
         });
 
-        await done.Task.WaitAsync(Timeout);   // 감시는 로그만 — 작업은 끝까지 실행된다
+        await done.Task.WaitAsync(Timeout);   // watchdog only logs — the work still runs to completion
         Assert.That(h.Logger.Entries.Any(e => e.Level == LogLevel.Warning && e.Message.Contains("blocked")),
-            Is.True, "감시 경고 로그가 남아야 한다");
+            Is.True, "the watchdog warning must be logged");
         client.Close();
     }
 
@@ -200,7 +200,7 @@ public class SessionPostTests
         var done = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         session.Post(() => { done.TrySetResult(true); return default; });
         await done.Task.WaitAsync(Timeout);
-        await Task.Delay(300);   // 잘못된 지연 경고가 있다면 이 사이 떠야 한다
+        await Task.Delay(300);   // a spurious delayed warning would surface within this window
 
         Assert.That(h.Logger.Entries.Any(e => e.Level == LogLevel.Warning && e.Message.Contains("blocked")), Is.False);
         client.Close();

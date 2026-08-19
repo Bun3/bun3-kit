@@ -15,13 +15,13 @@ using UnityEngine;
 
 namespace Bun3.Gameplay.Unity.Tests
 {
-    /// <summary>게임플레이 태그 카탈로그 편집기 창의 동작을 검증합니다.</summary>
+    /// <summary>Verifies the gameplay tag catalog editor window behavior.</summary>
     [TestFixture]
     internal sealed class GameplayTagCatalogWindowTests
     {
         private string _temporaryDirectory = null!;
 
-        /// <summary>테스트마다 격리된 임시 카탈로그 디렉터리를 준비합니다.</summary>
+        /// <summary>Prepares an isolated temp catalog directory per test.</summary>
         [SetUp]
         public void SetUp()
         {
@@ -32,7 +32,7 @@ namespace Bun3.Gameplay.Unity.Tests
             ImportConflictProvider.ExternalSourceMetadataPathsValue = Array.Empty<string>();
         }
 
-        /// <summary>테스트가 만든 임시 카탈로그 디렉터리를 정리합니다.</summary>
+        /// <summary>Cleans up the temp catalog directory created by the test.</summary>
         [TearDown]
         public void TearDown()
         {
@@ -43,7 +43,7 @@ namespace Bun3.Gameplay.Unity.Tests
             }
         }
 
-        /// <summary>카탈로그를 로드하지 않아도 편집기 창이 열리는지 검증합니다.</summary>
+        /// <summary>Verifies the editor window opens even without a loaded catalog.</summary>
         [Test]
         public void Window_opens_without_loading_a_catalog()
         {
@@ -58,7 +58,7 @@ namespace Bun3.Gameplay.Unity.Tests
             }
         }
 
-        /// <summary>Catalog 설정 후 dirty Game Source와 선택을 보존한 채 Workspace를 다시 여는지 검증합니다.</summary>
+        /// <summary>Verifies configuring the catalog reopens the workspace while preserving the dirty game source and selection.</summary>
         [Test]
         public void Configure_catalog_preserves_dirty_session_and_selection_while_refreshing_workspace()
         {
@@ -80,7 +80,7 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(controller.Session!.Serialize(), Does.Contain("state.dead"));
         }
 
-        /// <summary>Catalog 설정 저장 실패가 Workspace와 dirty session 및 선택을 모두 되돌리는지 검증합니다.</summary>
+        /// <summary>Verifies a catalog settings save failure rolls back the workspace, dirty session, and selection.</summary>
         [Test]
         public void Configure_catalog_failure_restores_workspace_session_dirty_and_selection()
         {
@@ -108,7 +108,7 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(controller.SelectedPath, Is.EqualTo("state.dead"));
         }
 
-        /// <summary>설정이 없을 때만 창이 인라인 Catalog 설정 box를 요구하는지 검증합니다.</summary>
+        /// <summary>Verifies the window requires the inline catalog setup box only when unconfigured.</summary>
         [Test]
         public void Configure_box_policy_turns_off_after_catalog_settings_are_saved()
         {
@@ -136,7 +136,7 @@ namespace Bun3.Gameplay.Unity.Tests
             }
         }
 
-        /// <summary>무효 Catalog ID가 경고를 한 번만 표시하고 controller 상태를 보존하는지 검증합니다.</summary>
+        /// <summary>Verifies an invalid catalog ID shows the warning once and preserves controller state.</summary>
         [Test]
         public void Invalid_catalog_id_reports_one_configure_warning_without_changing_controller_state()
         {
@@ -177,7 +177,7 @@ namespace Bun3.Gameplay.Unity.Tests
             }
         }
 
-        /// <summary>인라인 버튼이 정확한 Gameplay Tags Project Settings 경로를 여는지 검증합니다.</summary>
+        /// <summary>Verifies the inline button opens the exact Gameplay Tags project settings path.</summary>
         [Test]
         public void Open_project_settings_uses_the_gameplay_tags_settings_path()
         {
@@ -188,7 +188,7 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(openedPath, Is.EqualTo("Project/Gameplay Tags"));
         }
 
-        /// <summary>트리 행의 주석이 레이블 도구 설명으로 노출되는지 검증합니다.</summary>
+        /// <summary>Verifies a tree row comment is exposed as the label tooltip.</summary>
         [Test]
         public void Tree_row_label_exposes_the_comment_as_a_tooltip()
         {
@@ -199,7 +199,7 @@ namespace Bun3.Gameplay.Unity.Tests
                 sourceId: "game",
                 displayName: "",
                 path: "State.Dead",
-                comment: "전투 불능",
+                comment: "Knocked out",
                 isSourceRoot: false,
                 isExplicit: true,
                 isReadOnly: false,
@@ -208,10 +208,10 @@ namespace Bun3.Gameplay.Unity.Tests
             var content = GameplayTagTreeView.CreateLabelContent(row);
 
             Assert.That(content.text, Is.EqualTo("Dead"));
-            Assert.That(content.tooltip, Is.EqualTo("전투 불능"));
+            Assert.That(content.tooltip, Is.EqualTo("Knocked out"));
         }
 
-        /// <summary>읽기 전용 Source root는 상태를 보이되 canonical tag 레이블은 오염시키지 않는지 검증합니다.</summary>
+        /// <summary>Verifies a read-only source root shows its state without polluting canonical tag labels.</summary>
         [Test]
         public void Readonly_source_root_label_is_visible_without_polluting_tag_segments()
         {
@@ -251,7 +251,7 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(tagContent.tooltip, Is.EqualTo("framework jump"));
         }
 
-        /// <summary>트리 행 레이블이 foldout과 계층 들여쓰기 뒤에서 시작하는지 검증합니다.</summary>
+        /// <summary>Verifies tree row labels start after the foldout and hierarchy indent.</summary>
         [Test]
         public void Tree_row_label_starts_after_the_foldout_indent()
         {
@@ -267,7 +267,7 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(labelRect.xMax, Is.EqualTo(rowRect.xMax));
         }
 
-        /// <summary>redirect 행이 전체 경로를 잘림 없이 표시하고 도구 설명으로도 노출하는지 검증합니다.</summary>
+        /// <summary>Verifies a redirect row shows the full path untruncated and also exposes it as a tooltip.</summary>
         [Test]
         public void Redirect_row_shows_the_full_path_pair_as_text_and_tooltip()
         {
@@ -288,7 +288,7 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(content.image, Is.Not.Null);
         }
 
-        /// <summary>선택한 후보만 제거하고 창이 dirty가 되는지 검증합니다.</summary>
+        /// <summary>Verifies only selected candidates are removed and the window becomes dirty.</summary>
         [Test]
         public void Bulk_cleanup_removes_only_selected_sources_and_marks_the_window_dirty()
         {
@@ -319,7 +319,7 @@ namespace Bun3.Gameplay.Unity.Tests
             }
         }
 
-        /// <summary>불완전한 검색이 정리 selector를 열지 않는지 검증합니다.</summary>
+        /// <summary>Verifies an incomplete search does not open the cleanup selector.</summary>
         [Test]
         public void Incomplete_bulk_scan_never_opens_the_cleanup_selector()
         {
@@ -344,7 +344,7 @@ namespace Bun3.Gameplay.Unity.Tests
             }
         }
 
-        /// <summary>후보를 하나도 고르지 않으면 세션을 dirty로 만들지 않는지 검증합니다.</summary>
+        /// <summary>Verifies selecting no candidates leaves the session clean.</summary>
         [Test]
         public void Bulk_cleanup_without_a_selection_leaves_the_session_clean()
         {
@@ -372,7 +372,7 @@ namespace Bun3.Gameplay.Unity.Tests
             }
         }
 
-        /// <summary>검색 확장이 임시이고 일반 확장 상태와 스크롤 위치가 복원되는지 검증합니다.</summary>
+        /// <summary>Verifies search expansion is temporary and normal expansion state and scroll position are restored.</summary>
         [Test]
         public void Search_expansion_is_temporary_and_normal_expansion_and_scroll_are_restored()
         {
@@ -399,7 +399,7 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(state.scrollPos, Is.EqualTo(new UnityEngine.Vector2(23f, 47f)));
         }
 
-        /// <summary>선택 동기화가 접힌 조상만 펼쳐 선택 행을 드러내는지 검증합니다.</summary>
+        /// <summary>Verifies selection sync expands only collapsed ancestors to reveal the selected row.</summary>
         [Test]
         public void Synchronize_selection_expands_the_collapsed_ancestors_of_the_selected_tag()
         {
@@ -423,7 +423,7 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(tree.IsExpanded(abilityId), Is.False);
         }
 
-        /// <summary>Source 권한과 explicit 여부가 context action 집합을 정확히 제한하는지 검증합니다.</summary>
+        /// <summary>Verifies source permissions and explicitness precisely restrict the context action set.</summary>
         [Test]
         public void Context_actions_follow_source_permissions_and_explicit_ownership()
         {
@@ -451,7 +451,7 @@ namespace Bun3.Gameplay.Unity.Tests
                 Is.EqualTo(GameplayTagTreeAction.None));
         }
 
-        /// <summary>잘못된 Workspace에서 쓰기 동작만 비활성화되는지 검증합니다.</summary>
+        /// <summary>Verifies only write actions are disabled in an invalid workspace.</summary>
         [Test]
         public void Invalid_workspace_removes_mutations_from_writable_rows_but_keeps_copy_and_reference_actions()
         {
@@ -475,7 +475,7 @@ namespace Bun3.Gameplay.Unity.Tests
                 Is.EqualTo(GameplayTagTreeAction.Copy | GameplayTagTreeAction.FindReferences));
         }
 
-        /// <summary>각 진단이 자신의 알려진 로컬 Source만 열고 provider 오류에서는 열기를 제공하지 않음을 검증합니다.</summary>
+        /// <summary>Verifies each diagnostic opens only its known local source and offers no open action for provider errors.</summary>
         [Test]
         public void Diagnostics_panel_opens_each_exact_known_local_source_and_suppresses_provider_errors()
         {
@@ -531,7 +531,7 @@ namespace Bun3.Gameplay.Unity.Tests
             AssertClipboardEquals("B3TAG3001: provider missing");
         }
 
-        /// <summary>같은 canonical 경로가 여러 Source에 있어도 선택 key가 정확한 행을 복원하는지 검증합니다.</summary>
+        /// <summary>Verifies the selection key restores the exact row even when the same canonical path exists in multiple sources.</summary>
         [Test]
         public void Selection_synchronization_uses_source_id_and_canonical_path()
         {
@@ -547,7 +547,7 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(tree.GetSelection(), Is.EqualTo(new[] { 4 }));
         }
 
-        /// <summary>태그 편집기가 새 Gameplay 메뉴 경로를 사용하는지 검증합니다.</summary>
+        /// <summary>Verifies the tag editor uses the new Gameplay menu path.</summary>
         [Test]
         public void Tag_editor_uses_the_gameplay_menu_path()
         {
@@ -557,10 +557,10 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(menu.menuItem, Is.EqualTo("Gameplay/Tag Editor"));
         }
 
-        /// <summary>이름 변경 요청이 읽기 전용 부모와 편집 가능한 세그먼트를 분리하는지 검증합니다.</summary>
-        /// <param name="path">이름을 바꿀 전체 태그 경로입니다.</param>
-        /// <param name="expectedParent">예상하는 읽기 전용 부모 경로입니다.</param>
-        /// <param name="expectedSegment">예상하는 편집 가능한 마지막 세그먼트입니다.</param>
+        /// <summary>Verifies a rename request splits the read-only parent from the editable segment.</summary>
+        /// <param name="path">Full tag path to rename.</param>
+        /// <param name="expectedParent">Expected read-only parent path.</param>
+        /// <param name="expectedSegment">Expected editable last segment.</param>
         [TestCase("State", "", "state")]
         [TestCase("State.Movement.Run", "state.movement", "run")]
         public void Rename_dialog_request_separates_the_readonly_parent_and_editable_segment(
@@ -584,7 +584,7 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(warning, Does.Contain("remain active"));
         }
 
-        /// <summary>Add Sub-Tag가 입력만 채우고 Copy Tag가 전체 경로를 복사하는지 검증합니다.</summary>
+        /// <summary>Verifies Add Sub-Tag only fills the input and Copy Tag copies the full path.</summary>
         [Test]
         public void Add_sub_tag_only_prefills_the_add_form_and_copy_uses_the_full_path()
         {
@@ -612,10 +612,10 @@ namespace Bun3.Gameplay.Unity.Tests
             }
         }
 
-        /// <summary>승인된 comment 편집이 암시 부모를 명시 작성 행으로 승격하는지 검증합니다.</summary>
-        /// <param name="comment">적용할 comment 값입니다.</param>
+        /// <summary>Verifies an approved comment edit promotes an implied parent to an explicit authoring row.</summary>
+        /// <param name="comment">Comment value to apply.</param>
         [TestCase("")]
-        [TestCase("상태 루트")]
+        [TestCase("State root")]
         public void Accepted_comment_edit_promotes_an_implicit_parent(string comment)
         {
             var path = Path.Combine(_temporaryDirectory, "GameplayTags.json");
@@ -637,7 +637,7 @@ namespace Bun3.Gameplay.Unity.Tests
             }
         }
 
-        /// <summary>거부된 편집 결과가 세션을 전혀 바꾸지 않는지 검증합니다.</summary>
+        /// <summary>Verifies a rejected edit result leaves the session untouched.</summary>
         [Test]
         public void Cancelled_edit_results_leave_the_session_untouched()
         {
@@ -660,7 +660,7 @@ namespace Bun3.Gameplay.Unity.Tests
             }
         }
 
-        /// <summary>승인된 이름 변경이 마지막 세그먼트만 바꾸고 선택을 새 경로로 옮기는지 검증합니다.</summary>
+        /// <summary>Verifies an approved rename changes only the last segment and moves selection to the new path.</summary>
         [Test]
         public void Accepted_rename_changes_only_the_last_segment()
         {
@@ -682,7 +682,7 @@ namespace Bun3.Gameplay.Unity.Tests
             }
         }
 
-        /// <summary>트리 context action event가 창에 정확히 한 번만 연결되는지 검증합니다.</summary>
+        /// <summary>Verifies the tree context action event is wired to the window exactly once.</summary>
         [Test]
         public void Tree_context_actions_are_wired_to_the_window_exactly_once()
         {
@@ -718,11 +718,11 @@ namespace Bun3.Gameplay.Unity.Tests
             }
         }
 
-        /// <summary>leaf와 subtree 삭제가 서로 다른 확인 대화 상자를 한 번만 열고 취소를 전파하는지 검증합니다.</summary>
-        /// <param name="hasDescendants">자식 태그 존재 여부입니다.</param>
-        /// <param name="expectedTitle">예상하는 대화 상자 제목입니다.</param>
-        /// <param name="expectedMessage">예상하는 대화 상자 메시지입니다.</param>
-        /// <param name="expectedConfirm">예상하는 확인 버튼 문구입니다.</param>
+        /// <summary>Verifies leaf and subtree deletion open their distinct confirmation dialogs once and propagate cancellation.</summary>
+        /// <param name="hasDescendants">Whether child tags exist.</param>
+        /// <param name="expectedTitle">Expected dialog title.</param>
+        /// <param name="expectedMessage">Expected dialog message.</param>
+        /// <param name="expectedConfirm">Expected confirm button text.</param>
         [TestCase(false, "Delete Gameplay Tag", "Delete the selected gameplay tag?", "Delete Tag")]
         [TestCase(
             true,
@@ -753,7 +753,7 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(invocationCount, Is.EqualTo(1));
         }
 
-        /// <summary>정확한 canonical 태그 참조가 있으면 삭제하지 않고 결과 창으로 전환하는지 검증합니다.</summary>
+        /// <summary>Verifies an exact canonical tag reference switches to the results window instead of deleting.</summary>
         [Test]
         public void Referenced_exact_tag_blocks_delete_and_opens_reference_results()
         {
@@ -936,7 +936,7 @@ namespace Bun3.Gameplay.Unity.Tests
             }
         }
 
-        /// <summary>컨트롤러가 세션을 우회하지 않고 파일 및 작성 작업을 수행하는지 검증합니다.</summary>
+        /// <summary>Verifies the controller performs file and authoring work without bypassing the session.</summary>
         [Test]
         public void Controller_executes_file_and_authoring_workflow_without_bypassing_the_session()
         {
@@ -948,8 +948,8 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(controller.CanCreateGameSource, Is.True);
             controller.CreateGameSource();
             Assert.That(controller.CanCreateGameSource, Is.False);
-            controller.Add("State.Dead", "사망");
-            controller.SetComment("State.Dead", "전투 불능");
+            controller.Add("State.Dead", "Dead");
+            controller.SetComment("State.Dead", "Knocked out");
             controller.RenameSubtree("State.Dead", "Deceased");
             Assert.That(controller.IsDirty, Is.True);
             Assert.That(controller.SelectedPath, Is.EqualTo("state.deceased"));
@@ -1095,7 +1095,7 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(controller.IsDirty, Is.False);
         }
 
-        /// <summary>컨트롤러가 세그먼트 rename의 전체 반환 경로를 선택하고 dirty 상태가 되는지 검증합니다.</summary>
+        /// <summary>Verifies the controller selects the full path returned by a segment rename and becomes dirty.</summary>
         [Test]
         public void Controller_selects_the_full_path_returned_by_segment_rename()
         {
@@ -1133,7 +1133,7 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(controller.IsDirty, Is.False);
         }
 
-        /// <summary>컨트롤러가 redirect 제거 수에 따라 dirty 상태를 바꾸고 결과를 저장하는지 검증합니다.</summary>
+        /// <summary>Verifies the controller updates dirty state by removed redirect count and saves the result.</summary>
         [Test]
         public void Controller_removes_redirects_marks_dirty_and_persists_the_result()
         {
@@ -1156,7 +1156,7 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(File.ReadAllText(path), Does.Not.Contain("state.killed"));
         }
 
-        /// <summary>실패한 명령이 상태를 보존하고 검증 진단을 만드는지 검증합니다.</summary>
+        /// <summary>Verifies a failed command preserves state and produces validation diagnostics.</summary>
         [Test]
         public void Failed_command_preserves_state_and_produces_validation_diagnostics()
         {
@@ -1179,7 +1179,7 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(diagnostic, Does.Contain("The destination path is already active in the Game Source."));
         }
 
-        /// <summary>카탈로그 예외가 없는 일반 예외는 최상위 메시지를 표시하는지 검증합니다.</summary>
+        /// <summary>Verifies a plain exception without a catalog exception shows its top-level message.</summary>
         [Test]
         public void Validation_diagnostic_preserves_generic_top_level_error_message()
         {
@@ -1190,7 +1190,7 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(diagnostic, Is.EqualTo("GameplayTags.json\nGeneric editor failure."));
         }
 
-        /// <summary>명령이 세션을 변경한 뒤 실패해도 직렬화된 상태와 컨트롤러 상태를 복원하는지 검증합니다.</summary>
+        /// <summary>Verifies a command failing after mutating the session restores the serialized and controller state.</summary>
         [Test]
         public void TryExecute_restores_a_fresh_session_after_a_partially_applied_command()
         {
@@ -1243,7 +1243,7 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(File.ReadAllText(path), Does.Contain("state.dead"));
         }
 
-        /// <summary>포커스된 편집기의 저장 단축키가 JSON 저장과 로컬 Catalog build를 한 번씩 수행함을 검증합니다.</summary>
+        /// <summary>Verifies the focused editor's save shortcut performs one JSON save and one local catalog build.</summary>
         [Test]
         public void Focused_save_shortcut_is_consumed_and_saves_then_builds_without_invoking_a_general_save()
         {
@@ -1280,7 +1280,7 @@ namespace Bun3.Gameplay.Unity.Tests
             }
         }
 
-        /// <summary>저장 후 binary readback 실패가 실제 창 경고를 한 번 보이고 JSON과 기존 cache를 계약대로 유지함을 검증합니다.</summary>
+        /// <summary>Verifies a post-save binary readback failure shows one real window warning and keeps the JSON and existing cache per contract.</summary>
         [Test]
         public void Save_build_failure_keeps_the_written_source_clean_and_reports_one_warning()
         {
@@ -1335,7 +1335,7 @@ namespace Bun3.Gameplay.Unity.Tests
             }
         }
 
-        /// <summary>외부 Source가 무효해지면 live refresh가 build와 편집을 차단하고 미저장 Game 문자열은 유지함을 검증합니다.</summary>
+        /// <summary>Verifies live refresh blocks build and editing when an external source becomes invalid while keeping unsaved game text.</summary>
         [Test]
         public void Live_source_refresh_disables_build_and_mutation_but_keeps_the_loaded_game_text()
         {
@@ -1361,7 +1361,7 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(controller.Workspace.Diagnostics.Single(), Does.Contain("B3TAG3003"));
         }
 
-        /// <summary>동일한 진단 문자열이라도 외부 Source origin이 바뀌면 refresh와 열기 대상이 갱신되는지 검증합니다.</summary>
+        /// <summary>Verifies refresh and the open target update when the external source origin changes even with identical diagnostic strings.</summary>
         [Test]
         public void Live_source_refresh_replaces_equal_message_diagnostic_origin()
         {
@@ -1405,7 +1405,7 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(openedPath, Is.EqualTo(Path.GetFullPath(externalB)));
         }
 
-        /// <summary>검증 진단이 JSON 경로와 줄·위치를 포함하는지 검증합니다.</summary>
+        /// <summary>Verifies validation diagnostics include the JSON path plus line and position.</summary>
         [Test]
         public void Validation_diagnostic_includes_json_path_line_and_position()
         {
@@ -1423,7 +1423,7 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(diagnostic, Does.Contain(error.LinePosition.ToString()));
         }
 
-        /// <summary>작성 명령 뒤 트리가 컨트롤러가 선택한 새 경로를 선택하는지 검증합니다.</summary>
+        /// <summary>Verifies the tree selects the controller's newly chosen path after an authoring command.</summary>
         [Test]
         public void Reload_tree_selects_controller_path_after_add_and_rename()
         {
@@ -1454,7 +1454,7 @@ namespace Bun3.Gameplay.Unity.Tests
             }
         }
 
-        /// <summary>고정 Game Source reload 뒤 트리가 남아 있던 시각 선택을 비우는지 검증합니다.</summary>
+        /// <summary>Verifies the tree clears the lingering visual selection after the fixed game source reloads.</summary>
         [Test]
         public void Reload_tree_clears_stale_selection_after_fixed_source_reload()
         {
@@ -1481,13 +1481,13 @@ namespace Bun3.Gameplay.Unity.Tests
             }
         }
 
-        // 시스템 클립보드는 배치모드 Unity에 없어 항상 빈 문자열을 돌려준다. 복사 이전 단계는
-        // 모두 검증한 뒤 이 마지막 확인만 건너뛴다 — GUI 세션에서 돌리면 그대로 검증된다.
+        // Batch-mode Unity has no system clipboard and always returns an empty string; all steps
+        // before the copy are verified and only this final check is skipped (a GUI session verifies it).
         private static void AssertClipboardEquals(string expected)
         {
             if (Application.isBatchMode)
             {
-                Assert.Ignore("배치모드에는 시스템 클립보드가 없어 복사 결과를 검증할 수 없습니다.");
+                Assert.Ignore("Batch mode has no system clipboard, so the copy result cannot be verified.");
             }
 
             Assert.That(EditorGUIUtility.systemCopyBuffer, Is.EqualTo(expected));

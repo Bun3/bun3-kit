@@ -10,7 +10,7 @@
     <Authors>Bun3</Authors>
     <RepositoryUrl>https://github.com/Bun3/bun3-kit</RepositoryUrl>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <Description>제공자 검증기 계약(IIdentityVerifier/AuthResult) + GuestVerifier — Players 신원 모델의 1층</Description>
+    <Description>Provider verifier contracts (IIdentityVerifier/AuthResult) + GuestVerifier — first layer of the Players identity model</Description>
   </PropertyGroup>
 
 </Project>

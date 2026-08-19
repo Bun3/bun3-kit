@@ -2,21 +2,21 @@ using System;
 
 namespace Bun3.Server.Core
 {
-    /// <summary>로그 항목의 종류.</summary>
+    /// <summary>Kind of a log entry.</summary>
     public enum ActionLogEntryKind : byte
     {
-        /// <summary>스코프 시작 — <see cref="ActionLogEntry.Text"/>가 행동 이름·문맥.</summary>
+        /// <summary>Scope start — <see cref="ActionLogEntry.Text"/> holds the action name and context.</summary>
         ScopeStart,
 
-        /// <summary>시스템이 남긴 자유 노트(업적 클리어·추첨 결과·천장 카운터 등).</summary>
+        /// <summary>Free-form note left by a system (achievement cleared, draw result, pity counter, etc.).</summary>
         Note,
 
-        /// <summary>구조화 항목 — <see cref="ActionLogEntry.Data"/>에 시스템 정의 페이로드
-        /// (예: Items의 InventoryChange), <see cref="ActionLogEntry.Source"/>에 출처 라벨.</summary>
+        /// <summary>Structured entry — <see cref="ActionLogEntry.Data"/> holds a system-defined payload
+        /// (e.g. InventoryChange from Items), <see cref="ActionLogEntry.Source"/> a source label.</summary>
         Data,
     }
 
-    /// <summary>CS 감사 원장의 한 항목 — Depth로 들여쓰면 "행동 트레이스"가 된다.</summary>
+    /// <summary>One entry of the CS audit ledger — indenting by Depth yields an "action trace".</summary>
     public readonly struct ActionLogEntry
     {
         internal ActionLogEntry(ActionLogEntryKind kind, int depth, string? text, string? source, object? data)
@@ -28,29 +28,30 @@ namespace Bun3.Server.Core
             Data = data;
         }
 
-        /// <summary>항목 종류.</summary>
+        /// <summary>Entry kind.</summary>
         public ActionLogEntryKind Kind { get; }
 
-        /// <summary>중첩 깊이(루트 스코프 = 0).</summary>
+        /// <summary>Nesting depth (root scope = 0).</summary>
         public int Depth { get; }
 
-        /// <summary>스코프 이름 또는 노트 내용. Data 항목은 null.</summary>
+        /// <summary>Scope name or note content. Null for Data entries.</summary>
         public string? Text { get; }
 
-        /// <summary>구조화 항목의 출처 라벨(복수 인벤토리 구분 등). 미지정이면 null.</summary>
+        /// <summary>Source label of a structured entry (e.g. to distinguish multiple inventories). Null if unspecified.</summary>
         public string? Source { get; }
 
-        /// <summary>시스템 정의 페이로드 — 싱크가 타입 매칭으로 해석한다
-        /// (예: <c>entry.Data is InventoryChange c</c>). Data 항목에만 유효.</summary>
+        /// <summary>System-defined payload — sinks interpret it by type matching
+        /// (e.g. <c>entry.Data is InventoryChange c</c>). Valid only for Data entries.</summary>
         public object? Data { get; }
     }
 
-    /// <summary>원장 싱크 — 루트 스코프가 닫힐 때(스코프 밖 항목은 즉시) 완성된 묶음을
-    /// 받는다. span은 호출 동안만 유효 — 보관은 복사/직렬화로.</summary>
-    /// <param name="entries">완성된 로그 항목들(발생 순서, Depth 들여쓰기).</param>
+    /// <summary>Ledger sink — receives the completed batch when the root scope closes (entries
+    /// outside any scope are delivered immediately). The span is only valid during the call —
+    /// copy or serialize to retain.</summary>
+    /// <param name="entries">Completed log entries (in occurrence order, indented by Depth).</param>
     public delegate void ActionLogHandler(ReadOnlySpan<ActionLogEntry> entries);
 
-    /// <summary>로그 스코프 핸들 — using으로 닫는다. 여는 순서의 역순으로만 닫을 수 있다.</summary>
+    /// <summary>Log scope handle — close with using. Scopes must close in reverse order of opening.</summary>
     public readonly struct ActionLogScope : IDisposable
     {
         private readonly ActionLog? _log;
@@ -62,17 +63,19 @@ namespace Bun3.Server.Core
             _token = token;
         }
 
-        /// <summary>스코프를 닫는다 — 루트가 닫히면 원장 싱크로 묶음이 전달된다.</summary>
+        /// <summary>Closes the scope — when the root closes, the batch is delivered to the sink.</summary>
         public void Dispose() => _log?.EndScope(_token);
     }
 
     /// <summary>
-    /// 행동 로그(CS 감사 원장) — 세션/플레이어당 1개를 두는 범용 문맥. 핸들러가 루트
-    /// 스코프를 열면 그 아래에서 일어나는 모든 일 — 각 모듈의 구조화 항목(인벤토리 변경
-    /// 등 자동 첨부)과 자유 노트(업적 클리어 등) — 이 하나의 트리에 순서대로 남고,
-    /// 하위 로직은 "뭘로 시작됐는지" 몰라도 된다. 스코프는 자유 중첩, 루트가 닫힐 때
-    /// 완성 묶음이 싱크로 전달되며, 스코프 밖 항목은 즉시 전달돼 원장에 구멍이 없다.
-    /// 저빈도 감사 경로라 문자열·박싱 할당을 허용한다. 단일 세션 액터 안에서만 쓴다(락 없음).
+    /// Action log (CS audit ledger) — a general-purpose context, one per session/player. When a
+    /// handler opens a root scope, everything happening beneath it — structured entries from each
+    /// module (inventory changes attached automatically, etc.) and free-form notes (achievement
+    /// cleared, etc.) — lands in one ordered tree, and lower-level logic never needs to know what
+    /// initiated it. Scopes nest freely; the completed batch goes to the sink when the root
+    /// closes, and out-of-scope entries are delivered immediately so the ledger has no gaps.
+    /// Low-frequency audit path, so string/boxing allocations are acceptable. Use only inside a
+    /// single session actor (no locks).
     /// </summary>
     public sealed class ActionLog
     {
@@ -81,14 +84,14 @@ namespace Bun3.Server.Core
         private int _count;
         private int _depth;
 
-        /// <summary>원장 싱크로 로그를 만든다 — 게임은 싱크 어댑터 하나로
-        /// (플레이어·시각·행동 트리·페이로드)를 영속화하면 라이브 CS 추적이 완성된다.</summary>
+        /// <summary>Creates a log with the given ledger sink — a game persists (player, time,
+        /// action tree, payload) with one sink adapter and live CS tracing is complete.</summary>
         public ActionLog(ActionLogHandler sink)
         {
             _sink = sink ?? throw new ArgumentNullException(nameof(sink));
         }
 
-        /// <summary>스코프를 연다 — 이름에 행동과 문맥을 담는다(예: "BuyItem product=1021 x3").</summary>
+        /// <summary>Opens a scope — put the action and its context in the name (e.g. "BuyItem product=1021 x3").</summary>
         public ActionLogScope BeginScope(string name)
         {
             AppendEntry(ActionLogEntryKind.ScopeStart, name, null, null);
@@ -96,18 +99,18 @@ namespace Bun3.Server.Core
             return new ActionLogScope(this, _depth);
         }
 
-        /// <summary>현재 스코프에 자유 노트를 남긴다 — 어떤 시스템이든.
-        /// 스코프 밖이면 즉시 단건 묶음으로 전달된다.</summary>
+        /// <summary>Adds a free-form note to the current scope — from any system.
+        /// Outside a scope it is delivered immediately as a single-entry batch.</summary>
         public void Log(string note)
         {
             AppendEntry(ActionLogEntryKind.Note, note, null, null);
             FlushIfRoot();
         }
 
-        /// <summary>현재 스코프에 구조화 항목을 남긴다 — 모듈이 자기 타입을 그대로 싣고
-        /// 싱크가 타입 매칭으로 해석한다. 스코프 밖이면 즉시 전달된다.</summary>
-        /// <param name="data">시스템 정의 페이로드.</param>
-        /// <param name="source">출처 라벨(복수 컨테이너 구분 등).</param>
+        /// <summary>Adds a structured entry to the current scope — a module ships its own type
+        /// as-is and the sink interprets it by type matching. Delivered immediately outside a scope.</summary>
+        /// <param name="data">System-defined payload.</param>
+        /// <param name="source">Source label (e.g. to distinguish multiple containers).</param>
         public void Append(object data, string? source = null)
         {
             if (data == null)
@@ -123,7 +126,7 @@ namespace Bun3.Server.Core
         {
             if (token != _depth)
             {
-                throw new InvalidOperationException("로그 스코프는 여는 순서의 역순으로 닫아야 합니다.");
+                throw new InvalidOperationException("Log scopes must be closed in reverse order of opening.");
             }
 
             _depth--;

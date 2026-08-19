@@ -1,23 +1,23 @@
 namespace Bun3.Unity.UI.Popups
 {
     /// <summary>
-    /// 같은 키의 팝업이 이미 열려 있거나 로딩 중일 때 <see cref="PopupStack.Push"/>의 처리 방식.
+    /// How <see cref="PopupStack.Push"/> behaves when a popup with the same key is already open or loading.
     /// </summary>
     public enum PopupDuplicatePolicy
     {
-        /// <summary>요청을 무시한다.</summary>
+        /// <summary>Ignore the request.</summary>
         Ignore = 0,
 
-        /// <summary>순차 대기열 끝에 넣는다. 기존 팝업들이 모두 닫히면 표시된다.</summary>
+        /// <summary>Append to the sequential queue; shown once all existing popups close.</summary>
         Queue = 1,
 
-        /// <summary>열려 있는 기존 인스턴스를 닫고 새로 연다.</summary>
+        /// <summary>Close the existing open instance and open a new one.</summary>
         Replace = 2,
 
         /// <summary>
-        /// 열려 있는 기존 인스턴스를 재사용한다: 같은 레이어의 최상단으로 올리고,
-        /// 인자 push였다면 <see cref="IPopupArg{TArg}"/>로 인자를 재주입한다.
-        /// (레거시 GetOrShowPopup 대응. 로딩 중 인스턴스만 있으면 아무것도 하지 않는다.)
+        /// Reuse the existing open instance: raise it to the top of its layer, and re-deliver the
+        /// arg via <see cref="IPopupArg{TArg}"/> for arg pushes.
+        /// (Does nothing when only a loading instance exists.)
         /// </summary>
         Focus = 3,
     }

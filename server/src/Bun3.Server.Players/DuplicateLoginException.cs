@@ -2,16 +2,16 @@ using System;
 
 namespace Bun3.Server.Players
 {
-    /// <summary>RejectNew 정책에서 이미 접속 중인 계정으로 SignInAsync 시 던져진다.
-    /// 게임 로그인 핸들러가 잡아 게임 상태코드로 변환하는 것을 권장.</summary>
+    /// <summary>Thrown by SignInAsync under the RejectNew policy when the account is already connected.
+    /// Game login handlers are encouraged to catch it and convert it to a game status code.</summary>
     public sealed class DuplicateLoginException : Exception
     {
-        /// <summary>중복 로그인이 시도된 계정 키.</summary>
+        /// <summary>Account key of the attempted duplicate login.</summary>
         public string AccountKey { get; }
 
-        /// <summary>주어진 계정 키로 예외를 생성한다.</summary>
+        /// <summary>Creates the exception for the given account key.</summary>
         public DuplicateLoginException(string accountKey)
-            : base($"계정 {accountKey}은(는) 이미 접속 중이다 (RejectNew 정책).")
+            : base($"Account {accountKey} is already connected (RejectNew policy).")
         {
             AccountKey = accountKey;
         }

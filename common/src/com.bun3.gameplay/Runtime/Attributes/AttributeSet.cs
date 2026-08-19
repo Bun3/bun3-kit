@@ -5,8 +5,8 @@ using Bun3.Gameplay.Numerics;
 namespace Bun3.Gameplay.Attributes
 {
     /// <summary>
-    /// 아키타입이 선언한 속성들의 밀집 슬롯 집합입니다. Base 쓰기는 항상 클램프를 통과하고
-    /// Current 변경은 이벤트 버퍼에 적재됩니다.
+    /// Dense slot set for the attributes an archetype declares. Base writes always pass through
+    /// clamping; Current changes are appended to the event buffer.
     /// </summary>
     public sealed class AttributeSet
     {
@@ -32,8 +32,8 @@ namespace Bun3.Gameplay.Attributes
             public bool ScaleWithStack;
         }
 
-        /// <summary>스냅샷 저장용으로 한 소스가 부착한 수정자 행 하나를 옮겨 담은 값입니다.
-        /// Magnitude는 적용 시점에 평가된 값 그대로이며(재평가하지 않음) 복원 시 그대로 재부착됩니다.</summary>
+        /// <summary>One modifier row attached by a source, captured for snapshot storage.
+        /// Magnitude is the value evaluated at apply time (not re-evaluated) and is reattached as-is on restore.</summary>
         internal readonly struct ModifierSnapshotRow
         {
             internal ModifierSnapshotRow(
@@ -54,12 +54,12 @@ namespace Bun3.Gameplay.Attributes
         }
 
         private readonly AttributeRegistry _registry;
-        private readonly Slot[] _slots;                    // AttributeId 오름차순 canonical
-        private readonly int[] _slotByAttributeId;         // 희소 → 밀집 (등록 최대 id + 1 크기, -1 = 없음)
+        private readonly Slot[] _slots;                    // canonical: ascending AttributeId
+        private readonly int[] _slotByAttributeId;         // sparse → dense (size = max registered id + 1, -1 = absent)
         private AttributeChange[] _changes = new AttributeChange[8];
         private int _changeCount;
 
-        /// <summary>아키타입이 선언한 속성 id들로 밀집 슬롯을 만듭니다. 선언 순서는 무관합니다.</summary>
+        /// <summary>Builds dense slots from the attribute ids the archetype declares. Declaration order is irrelevant.</summary>
         public AttributeSet(AttributeRegistry registry, ReadOnlySpan<ushort> attributeIds)
         {
             _registry = registry ?? throw new ArgumentNullException(nameof(registry));
@@ -69,9 +69,9 @@ namespace Bun3.Gameplay.Attributes
             for (var i = 0; i < ids.Length; i++)
             {
                 if (!registry.Contains(ids[i]))
-                    throw new ArgumentException($"미등록 속성 {ids[i]}입니다.", nameof(attributeIds));
+                    throw new ArgumentException($"Attribute {ids[i]} is not registered.", nameof(attributeIds));
                 if (i > 0 && ids[i] == ids[i - 1])
-                    throw new ArgumentException($"속성 {ids[i]}이(가) 중복 선언되었습니다.", nameof(attributeIds));
+                    throw new ArgumentException($"Attribute {ids[i]} is declared more than once.", nameof(attributeIds));
                 if (ids[i] > maxId) maxId = ids[i];
             }
 
@@ -84,7 +84,6 @@ namespace Bun3.Gameplay.Attributes
                 _slotByAttributeId[ids[i]] = i;
             }
 
-            // 클램프 경계 검증 — Min/Max의 속성 참조는 반드시 선언되어야 함
             for (var i = 0; i < ids.Length; i++)
             {
                 var id = ids[i];
@@ -94,7 +93,7 @@ namespace Bun3.Gameplay.Attributes
                     var refId = definition.Min.Value.AttributeId;
                     if (!Has(refId))
                         throw new ArgumentException(
-                            $"속성 {id}의 클램프가 참조하는 {refId}이(가) 아키타입 선언에 없습니다.",
+                            $"Clamp of attribute {id} references {refId}, which is not in the archetype declaration.",
                             nameof(attributeIds));
                 }
 
@@ -103,40 +102,40 @@ namespace Bun3.Gameplay.Attributes
                     var refId = definition.Max.Value.AttributeId;
                     if (!Has(refId))
                         throw new ArgumentException(
-                            $"속성 {id}의 클램프가 참조하는 {refId}이(가) 아키타입 선언에 없습니다.",
+                            $"Clamp of attribute {id} references {refId}, which is not in the archetype declaration.",
                             nameof(attributeIds));
                 }
             }
         }
 
-        /// <summary>이 집합이 해당 속성을 선언했는지 확인합니다.</summary>
+        /// <summary>Returns whether this set declares the attribute.</summary>
         public bool Has(ushort attributeId) =>
             attributeId < _slotByAttributeId.Length && _slotByAttributeId[attributeId] >= 0;
 
         private int SlotIndex(ushort attributeId)
         {
             if (!Has(attributeId))
-                throw new ArgumentOutOfRangeException(nameof(attributeId), attributeId, "선언되지 않은 속성입니다.");
+                throw new ArgumentOutOfRangeException(nameof(attributeId), attributeId, "Attribute is not declared.");
             return _slotByAttributeId[attributeId];
         }
 
-        /// <summary>영구값 Base를 가져옵니다.</summary>
+        /// <summary>Gets the persistent Base value.</summary>
         public BigNum GetBase(ushort attributeId) => _slots[SlotIndex(attributeId)].Base;
 
-        /// <summary>선언된 속성 수입니다(생성자에 전달된 attributeIds 오름차순 슬롯 개수).</summary>
+        /// <summary>Number of declared attributes (slot count, ascending id order of the attributeIds passed to the constructor).</summary>
         internal int DeclaredCount => _slots.Length;
 
-        /// <summary>선언 순서(오름차순 id) 인덱스로 속성 id를 가져옵니다. 스냅샷 저장/복원 전용입니다.</summary>
+        /// <summary>Gets the attribute id at a declaration-order (ascending id) index. Snapshot save/restore only.</summary>
         internal ushort DeclaredAttributeIdAt(int index) => _slots[index].AttributeId;
 
-        /// <summary>선언 순서 인덱스로 Base를 가져옵니다. 스냅샷 저장 전용입니다.</summary>
+        /// <summary>Gets Base at a declaration-order index. Snapshot save only.</summary>
         internal BigNum DeclaredBaseAt(int index) => _slots[index].Base;
 
         /// <summary>
-        /// 스냅샷 복원 전용 — 클램프·이벤트·전파 없이 Base를 그대로 쓰고 dirty로 표시합니다.
-        /// 저장된 Base는 원래 <see cref="SetBase"/>로 이미 클램프를 통과한 값이므로 재클램프가
-        /// 불필요합니다. 호출자는 <see cref="DeclaredAttributeIdAt"/> 순서(생성자 전달 순서와 동일)로
-        /// 전체 슬롯을 복원한 뒤 반드시 <see cref="RebuildDirty"/>를 한 번 호출해 Current를 재구성해야 합니다.
+        /// Snapshot restore only — writes Base as-is (no clamp, events, or propagation) and marks the slot dirty.
+        /// The stored Base already passed clamping via <see cref="SetBase"/>, so re-clamping is unnecessary.
+        /// The caller must restore all slots in <see cref="DeclaredAttributeIdAt"/> order (same as constructor order),
+        /// then call <see cref="RebuildDirty"/> once to rebuild Current.
         /// </summary>
         internal void RestoreDeclaredBase(int index, BigNum rawBase)
         {
@@ -144,7 +143,7 @@ namespace Bun3.Gameplay.Attributes
             _slots[index].Dirty = true;
         }
 
-        /// <summary>스냅샷 저장 전용 — 이 소스가 부착한 수정자 행들을 슬롯 순회로 모아 담습니다.</summary>
+        /// <summary>Snapshot save only — collects the modifier rows attached by this source via a slot scan.</summary>
         internal void CollectModifiers(IAttributeModifierSource source, System.Collections.Generic.List<ModifierSnapshotRow> output)
         {
             for (var i = 0; i < _slots.Length; i++)
@@ -161,10 +160,10 @@ namespace Bun3.Gameplay.Attributes
             }
         }
 
-        /// <summary>집계·클램프가 반영된 Current를 가져옵니다.</summary>
+        /// <summary>Gets Current with aggregation and clamping applied.</summary>
         public BigNum GetCurrent(ushort attributeId) => _slots[SlotIndex(attributeId)].Current;
 
-        /// <summary>Base를 설정합니다. 항상 클램프를 통과하며 Current가 즉시 갱신됩니다.</summary>
+        /// <summary>Sets Base. Always passes through clamping; Current updates immediately.</summary>
         public void SetBase(ushort attributeId, BigNum value)
         {
             var index = SlotIndex(attributeId);
@@ -172,7 +171,7 @@ namespace Bun3.Gameplay.Attributes
             ReapplyFormula(index);
         }
 
-        /// <summary>Base에 델타를 더합니다. 항상 클램프를 통과합니다.</summary>
+        /// <summary>Adds a delta to Base. Always passes through clamping.</summary>
         public void AddBase(ushort attributeId, BigNum delta)
         {
             var index = SlotIndex(attributeId);
@@ -182,7 +181,7 @@ namespace Bun3.Gameplay.Attributes
         private BigNum ResolveBound(Operand bound)
         {
             if (bound.Kind == OperandKind.Constant) return bound.Value;
-            // 클램프 경계의 속성 참조는 생성자에서 검증됨 — 존재 보장
+            // attribute-referencing bounds are validated in the constructor — existence guaranteed
             return _slots[_slotByAttributeId[bound.AttributeId]].Current * bound.Value;
         }
 
@@ -204,7 +203,7 @@ namespace Bun3.Gameplay.Attributes
             return value;
         }
 
-        // 공식 재적용 — Σ 캐시 불변 경로 (O(1)). Task 4에서 집계, Task 5에서 전파가 이어진다.
+        // O(1) formula reapply via cached Σ aggregates.
         internal void ReapplyFormula(int slotIndex)
         {
             ref var slot = ref _slots[slotIndex];
@@ -220,15 +219,15 @@ namespace Bun3.Gameplay.Attributes
             PropagateToDependents(attributeId, old, clamped);
         }
 
-        // changedAttributeId의 Current 변화(old→new)를 클램프 경계로 참조하는 후손들에 즉시 전파합니다.
-        // 후손 정의별 OnMaxIncrease/OnMaxDecrease 정책에 따라 Base를 동반 이동시킨 뒤 재적용합니다.
-        // 의존 그래프는 레지스트리 빌드 시 검증된 DAG이므로 재귀 호출이 안전합니다.
+        // Propagates a Current change (old→new) to attributes that reference it as a clamp bound,
+        // moving Base per each dependent's OnMaxIncrease/OnMaxDecrease policy before reapplying.
+        // The dependency graph is a DAG validated at registry build, so recursion is safe.
         private void PropagateToDependents(ushort changedAttributeId, BigNum oldValue, BigNum newValue)
         {
             var dependents = _registry.GetClampDependents(changedAttributeId);
             for (var i = 0; i < dependents.Length; i++)
             {
-                if (!Has(dependents[i])) continue;   // 이 아키타입에 선언되지 않은 후손이면 건너뜀
+                if (!Has(dependents[i])) continue;
                 var index = _slotByAttributeId[dependents[i]];
                 var definition = _registry.GetDefinition(dependents[i]);
                 var maxOperand = definition.Max.GetValueOrDefault();
@@ -239,21 +238,21 @@ namespace Bun3.Gameplay.Attributes
                 if (referencesAsMax && newValue > oldValue
                     && definition.OnMaxIncrease == MaxIncreasePolicy.Follow)
                 {
-                    var delta = (newValue - oldValue) * maxOperand.Value;   // 계수 반영
+                    var delta = (newValue - oldValue) * maxOperand.Value;   // coefficient applied
                     _slots[index].Base = ClampToBounds(index, _slots[index].Base + delta);
                 }
 
                 if (referencesAsMax && newValue < oldValue
                     && definition.OnMaxDecrease == MaxDecreasePolicy.Follow)
                 {
-                    _slots[index].Base = ClampToBounds(index, _slots[index].Base);    // 경계로 잘라 기록
+                    _slots[index].Base = ClampToBounds(index, _slots[index].Base);    // truncate Base to the lowered bound
                 }
 
-                ReapplyFormula(index);   // Stay는 안전망만 — 재적용이 처리
+                ReapplyFormula(index);   // Stay: reapply alone is the safety net
             }
         }
 
-        /// <summary>수정자를 부착합니다. (source.Id, rowIndex) 오름차순 삽입 정렬로 canonical 순서를 유지합니다.</summary>
+        /// <summary>Attaches a modifier. Insertion-sorted ascending by (source.Id, rowIndex) to keep canonical order.</summary>
         internal void AttachModifier(
             IAttributeModifierSource source, int rowIndex, ushort attributeId,
             AttributeModifierOp op, BigNum magnitude, bool scaleWithStack)
@@ -266,7 +265,6 @@ namespace Bun3.Gameplay.Attributes
                 Source = source, RowIndex = rowIndex, Op = op,
                 Magnitude = magnitude, ScaleWithStack = scaleWithStack,
             };
-            // (Id, RowIndex) 오름차순 삽입 정렬 — 목록이 항상 canonical
             var position = slot.Modifiers.Count;
             while (position > 0)
             {
@@ -279,7 +277,7 @@ namespace Bun3.Gameplay.Attributes
             slot.Dirty = true;
         }
 
-        /// <summary>해당 소스가 부착한 모든 수정자를 제거합니다.</summary>
+        /// <summary>Removes all modifiers attached by the source.</summary>
         internal void DetachModifiers(IAttributeModifierSource source)
         {
             for (var i = 0; i < _slots.Length; i++)
@@ -297,10 +295,10 @@ namespace Bun3.Gameplay.Attributes
             }
         }
 
-        /// <summary>해당 속성 슬롯을 dirty로 표시합니다(예: Enabled 토글).</summary>
+        /// <summary>Marks the attribute slot dirty (e.g. on an Enabled toggle).</summary>
         internal void MarkDirty(ushort attributeId) => _slots[SlotIndex(attributeId)].Dirty = true;
 
-        /// <summary>dirty 슬롯을 canonical 순서로 전체 재집계합니다. 호출 순서는 클램프 위상(레지스트리 EvaluationOrder)을 따릅니다.</summary>
+        /// <summary>Rebuilds all dirty slots in canonical order, following the clamp topology (registry EvaluationOrder).</summary>
         internal void RebuildDirty()
         {
             var order = _registry.EvaluationOrder;
@@ -324,7 +322,7 @@ namespace Bun3.Gameplay.Attributes
             var modifiers = slot.Modifiers;
             if (modifiers is not null)
             {
-                for (var i = 0; i < modifiers.Count; i++)   // 목록이 canonical 정렬 유지
+                for (var i = 0; i < modifiers.Count; i++)   // list is kept in canonical order
                 {
                     var entry = modifiers[i];
                     if (!entry.Source.Enabled) continue;
@@ -337,7 +335,7 @@ namespace Bun3.Gameplay.Attributes
                         case AttributeModifierOp.Multiply:
                             slot.SumMulPct += magnitude;
                             break;
-                        default:   // Override — 목록이 Id 순이라 마지막 활성 항목이 최신
+                        default:   // Override — list is Id-ordered, so the last enabled entry wins
                             slot.HasOverride = true;
                             slot.OverrideValue = magnitude;
                             break;
@@ -355,10 +353,10 @@ namespace Bun3.Gameplay.Attributes
             _changes[_changeCount++] = new AttributeChange(attributeId, oldCurrent, newCurrent);
         }
 
-        /// <summary>아직 소비되지 않은 변경 이벤트입니다.</summary>
+        /// <summary>Change events not yet consumed.</summary>
         public ReadOnlySpan<AttributeChange> PendingChanges => _changes.AsSpan(0, _changeCount);
 
-        /// <summary>변경 이벤트 버퍼를 비웁니다.</summary>
+        /// <summary>Clears the change event buffer.</summary>
         public void ClearChanges() => _changeCount = 0;
     }
 }

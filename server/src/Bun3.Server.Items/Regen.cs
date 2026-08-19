@@ -3,9 +3,9 @@ using System;
 namespace Bun3.Server.Items
 {
     /// <summary>
-    /// 시간 경과 lazy 정산 공식 — 티켓류 아이템·스태미나의 "접근 시점에 몰아서 충전"
-    /// 패턴(idlez CalculateRegenValueFromPeriod·growninja RefreshRegenItem의 공통 코어).
-    /// 타이머 없이 게임이 현재 시각을 주입해 호출한다. 수량 반영은 게임 몫:
+    /// Time-elapsed lazy settlement formula — the "refill in bulk at access time" pattern for
+    /// ticket-like items and stamina. No timer: the game injects the current time when calling.
+    /// Applying the amount is the game's job:
     /// <code>
     /// var granted = Regen.SettlePeriodic(count, max, period, now, ref state.RegenRefreshTicks);
     /// if (granted &gt; 0) { inventory.TryAdd(ticketId, granted); instance.MarkChanged(); }
@@ -14,19 +14,19 @@ namespace Bun3.Server.Items
     public static class Regen
     {
         /// <summary>
-        /// 주기당 1개 정산. 소비한 주기만큼만 기준 시각을 전진시켜 나머지 경과를
-        /// 보존한다(연속 호출에도 드리프트 없음 — idlez의 옛 구현이 틀렸던 지점).
-        /// 초당 r개 연속 리젠은 period = 1초/r 로 환산해 쓴다.
+        /// Settles one unit per period. The basis timestamp advances only by the consumed periods,
+        /// preserving the remaining elapsed time (no drift across repeated calls).
+        /// For continuous regen of r per second, use period = 1 second / r.
         /// </summary>
-        /// <param name="currentCount">현재 보유 수량.</param>
-        /// <param name="maxCount">리젠 상한 — 이미 도달했으면 0을 주고 기준 시각을 현재로
-        /// 재설정한다(가득 상태에서 경과 시간 적립 방지).</param>
-        /// <param name="periodTicks">1개 충전에 걸리는 시간(ticks, 양수).</param>
-        /// <param name="nowTicksUtc">현재 시각(UTC ticks) — 게임 주입.</param>
-        /// <param name="lastRegenTicksUtc">기준 시각. 0(미초기화)이면 현재로 초기화하고
-        /// 0을 준다 — "최초 정산에서 가득 차는" 고전 버그 방지. 미래 값(시계 역행)도
-        /// 현재로 재설정하고 0을 준다.</param>
-        /// <returns>이번 정산에서 충전된 수량(0 이상).</returns>
+        /// <param name="currentCount">Current held count.</param>
+        /// <param name="maxCount">Regen cap — if already reached, returns 0 and resets the basis to
+        /// now (prevents accruing elapsed time while full).</param>
+        /// <param name="periodTicks">Time to refill one unit (ticks, positive).</param>
+        /// <param name="nowTicksUtc">Current time (UTC ticks) — game-injected.</param>
+        /// <param name="lastRegenTicksUtc">Basis timestamp. 0 (uninitialized) initializes to now and
+        /// returns 0 — prevents the classic "full on first settlement" bug. Future values (clock
+        /// going backwards) also reset to now and return 0.</param>
+        /// <returns>Amount refilled this settlement (0 or more).</returns>
         public static long SettlePeriodic(
             long currentCount,
             long maxCount,
@@ -36,7 +36,7 @@ namespace Bun3.Server.Items
         {
             if (periodTicks <= 0)
             {
-                throw new ArgumentOutOfRangeException(nameof(periodTicks), periodTicks, "주기는 양수여야 합니다.");
+                throw new ArgumentOutOfRangeException(nameof(periodTicks), periodTicks, "Period must be positive.");
             }
 
             if (lastRegenTicksUtc == 0 || lastRegenTicksUtc > nowTicksUtc)
@@ -60,7 +60,7 @@ namespace Bun3.Server.Items
 
             if (currentCount + granted >= maxCount)
             {
-                lastRegenTicksUtc = nowTicksUtc;   // 가득 도달 — 남은 적립 제거
+                lastRegenTicksUtc = nowTicksUtc;   // Cap reached — discard remaining accrual.
             }
             else
             {

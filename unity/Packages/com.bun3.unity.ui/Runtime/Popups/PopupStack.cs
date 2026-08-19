@@ -8,52 +8,52 @@ using UnityEngine;
 namespace Bun3.Unity.UI.Popups
 {
     /// <summary>
-    /// 도메인 무관 팝업/모달 스택. push/pop, 레이어 정렬, 중복 정책, 순차 대기열,
-    /// back 키 라우팅, 초기 데이터 전달을 담당한다. 팝업 인스턴스 생성/해제와 표현(부모 배치,
-    /// 딤, 사운드)은 <see cref="PopupFactory"/>/<see cref="PopupReleaser"/>/<see cref="Opened"/>
-    /// 훅으로 게임이 채운다.
+    /// Domain-agnostic popup/modal stack. Handles push/pop, layer sorting, duplicate policy,
+    /// sequential queue, back-key routing, and initial-data delivery. Instance creation/release
+    /// and presentation (parenting, dim, sound) are supplied by the game via
+    /// <see cref="PopupFactory"/>/<see cref="PopupReleaser"/>/<see cref="Opened"/> hooks.
     /// </summary>
     /// <remarks>
-    /// MonoBehaviour가 아니다 — 씬 구조를 강제하지 않고 게임이 생성해 보관한다.
-    /// push/pop/back 경로는 클로저·LINQ·문자열 할당이 없다. 필요하면
-    /// <see cref="PopupBackKeyRouter"/>를 붙여 back 키를 자동 라우팅한다.
+    /// Not a MonoBehaviour — imposes no scene structure; the game creates and holds it.
+    /// The push/pop/back paths allocate no closures, LINQ, or strings. Attach a
+    /// <see cref="PopupBackKeyRouter"/> for automatic back-key routing.
     /// <br/>
-    /// partial 구성: 이 파일(상태·수명·정렬) / Push(열기·중복 정책) / Close(닫기·back) /
-    /// Result(결과 대기) / Queue(순차 대기열).
-    /// </summary>
+    /// Partial layout: this file (state/lifetime/sorting) / Push (open, duplicate policy) /
+    /// Close (close, back) / Result (result await) / Queue (sequential queue).
+    /// </remarks>
     public sealed partial class PopupStack : IDisposable
     {
         private readonly PopupFactory _factory;
         private readonly PopupReleaser _releaser;
 
-        // 정렬 불변식: (Layer 오름차순, 삽입 순서). 끝 = 최상단.
+        // Sort invariant: (Layer ascending, insertion order). End = topmost.
         private readonly List<Popup> _stack = new();
         private readonly List<PopupKey> _loading = new();
 
         private CancellationTokenSource _lifetime = new();
         private bool _disposed;
 
-        /// <summary>팝업이 스택에 삽입된 직후(열림 연출 시작 전) 발화. z-order/딤 연출 연결 지점.</summary>
+        /// <summary>Fired right after a popup is inserted into the stack (before the open transition). Hook point for z-order/dim presentation.</summary>
         public event Action<Popup> Opened;
 
-        /// <summary>팝업이 스택에서 제거된 직후(해제 직전) 발화.</summary>
+        /// <summary>Fired right after a popup is removed from the stack (just before release).</summary>
         public event Action<Popup> Closed;
 
-        /// <summary><see cref="PopupDuplicatePolicy.Focus"/>로 기존 인스턴스가 최상단에 재사용될 때 발화.</summary>
+        /// <summary>Fired when <see cref="PopupDuplicatePolicy.Focus"/> reuses an existing instance at the top.</summary>
         public event Action<Popup> Focused;
 
         /// <summary>
-        /// 스택·로딩·순차 대기열이 전부 빈 순간 발화. 오토랜딩/튜토리얼처럼
-        /// "팝업이 하나도 없을 때만 시작"하는 흐름의 신호(레거시 UISequence 예약 대응).
+        /// Fired the moment the stack, loading set, and sequential queue are all empty.
+        /// Signal for flows that must start only when no popup exists (auto-landing, tutorials).
         /// </summary>
         public event Action Emptied;
 
         private UniTaskCompletionSource _emptySource;
 
-        /// <summary>열린 팝업·진행 중 로딩·순차 대기열이 전부 비었는지.</summary>
+        /// <summary>Whether open popups, in-flight loads, and the sequential queue are all empty.</summary>
         public bool IsEmpty => _stack.Count == 0 && _loading.Count == 0 && _queue.Count == 0;
 
-        /// <summary>전부 빌 때까지 대기한다. 이미 비어 있으면 즉시 완료.</summary>
+        /// <summary>Waits until everything is empty. Completes immediately if already empty.</summary>
         public UniTask WaitUntilEmptyAsync()
         {
             if (IsEmpty)
@@ -74,27 +74,27 @@ namespace Bun3.Unity.UI.Popups
             Emptied?.Invoke();
         }
 
-        /// <summary>열려 있거나 전이 중인 팝업 수.</summary>
+        /// <summary>Number of popups open or in transition.</summary>
         public int Count => _stack.Count;
 
         /// <summary>
-        /// 열린 팝업들의 읽기 전용 뷰. 순서 = 아래→위(끝이 최상단). 라이브 뷰이므로
-        /// 열거 중 Push/Close를 부르지 말 것 — 스냅샷이 필요하면 복사해서 쓴다.
+        /// Read-only view of open popups, ordered bottom to top (end = topmost). This is a live
+        /// view — do not call Push/Close while enumerating; copy if a snapshot is needed.
         /// </summary>
         public IReadOnlyList<Popup> Popups => _stack;
 
-        /// <summary>최상단 팝업. 비어 있으면 null.</summary>
+        /// <summary>Topmost popup, or null when empty.</summary>
         public Popup Top => _stack.Count > 0 ? _stack[_stack.Count - 1] : null;
 
-        /// <param name="factory">키 → 팝업 인스턴스. 로딩 방식은 게임 몫.</param>
-        /// <param name="releaser">닫힌 인스턴스 해제. 기본은 GameObject 파괴.</param>
+        /// <param name="factory">Key to popup instance. Loading strategy is the game's choice.</param>
+        /// <param name="releaser">Releases closed instances. Default destroys the GameObject.</param>
         public PopupStack(PopupFactory factory, PopupReleaser releaser = null)
         {
             _factory = factory ?? throw new ArgumentNullException(nameof(factory));
             _releaser = releaser ?? DestroyPopup;
         }
 
-        /// <summary>해당 키의 팝업이 열려 있는지(닫힘 연출 중 제외) 확인한다.</summary>
+        /// <summary>Whether a popup with the key is open (excluding ones in the closing transition).</summary>
         public bool IsOpen(PopupKey key)
         {
             for (int i = 0; i < _stack.Count; i++)
@@ -106,13 +106,14 @@ namespace Bun3.Unity.UI.Popups
             return false;
         }
 
-        /// <summary>타입 키로 열려 있는지 확인한다.</summary>
+        /// <summary>Whether a popup with the type key is open.</summary>
         public bool IsOpen<TPopup>(string popupName = null) where TPopup : Popup
             => IsOpen(PopupKey.Of<TPopup>(popupName));
 
         /// <summary>
-        /// 연출을 생략하고 전부 즉시 해제한다. 진행 중인 로딩/연출은 취소되고, 순차 대기열도
-        /// 비우며, 닫기 잠금도 무시한다. 씬 전환 등 강제 정리용.
+        /// Releases everything immediately, skipping transitions. In-flight loads/transitions are
+        /// canceled, the sequential queue is emptied, and close locks are ignored. For forced
+        /// cleanup such as scene changes.
         /// </summary>
         public void Clear()
         {
@@ -122,8 +123,8 @@ namespace Bun3.Unity.UI.Popups
             lifetime.Dispose();
 
             _queue.Clear();
-            // _loading은 비우지 않는다 — 진행 중 로드의 finally가 자기 항목을 제거한다.
-            // 토큰이 취소됐으므로 도착한 인스턴스는 스택에 들어오지 못하고 바로 해제된다.
+            // _loading is not cleared — each in-flight load's finally removes its own entry.
+            // The token is canceled, so arriving instances are released instead of entering the stack.
 
             if (_stack.Count == 0)
             {
@@ -131,7 +132,7 @@ namespace Bun3.Unity.UI.Popups
                 return;
             }
 
-            // 해제 콜백이 재-Push할 수 있어 스냅샷을 뜬다. (저빈도 경로 — 할당 허용)
+            // Release callbacks may re-Push, so snapshot first. (Low-frequency path — allocation OK.)
             var popups = _stack.ToArray();
             _stack.Clear();
 
@@ -146,7 +147,7 @@ namespace Bun3.Unity.UI.Popups
             NotifyIfEmpty();
         }
 
-        /// <summary><see cref="Clear"/> 후 스택을 더 쓸 수 없게 만든다.</summary>
+        /// <summary>Runs <see cref="Clear"/> and makes the stack unusable.</summary>
         public void Dispose()
         {
             if (_disposed)
@@ -158,9 +159,10 @@ namespace Bun3.Unity.UI.Popups
         }
 
         /// <summary>
-        /// 구조 변화(열림/닫힘/Focus) 후 전체 팝업에 순서를 통지하고 딤을 갱신한다.
-        /// 딤 규칙: <see cref="Popup.BackgroundDim"/>을 가진 팝업 중 최상단만 켠다 —
-        /// 딤 없는 팝업이 맨 위여도 그 아래 딤 보유 팝업의 딤이 유지된다.
+        /// Notifies all popups of their order after a structural change (open/close/Focus)
+        /// and refreshes dims. Dim rule: only the topmost popup with a
+        /// <see cref="Popup.BackgroundDim"/> is dimmed — a dimless popup on top keeps
+        /// the dim of the popup below it.
         /// </summary>
         private void NotifyStackOrderChanged()
         {
@@ -223,9 +225,9 @@ namespace Bun3.Unity.UI.Popups
             if (popup is IPopupArg<TArg> receiver)
                 receiver.OnPopupArg(arg);
             else
-                // 게임 코드 결선 오류 — 저빈도 경로라 문자열 할당 허용.
+                // Game wiring error — low-frequency path, string allocation OK.
                 Debug.LogError(
-                    $"팝업 {popup.GetType().Name}이(가) IPopupArg<{typeof(TArg).Name}>를 구현하지 않아 초기 데이터를 버린다.",
+                    $"Popup {popup.GetType().Name} does not implement IPopupArg<{typeof(TArg).Name}>; dropping the initial data.",
                     popup);
         }
 

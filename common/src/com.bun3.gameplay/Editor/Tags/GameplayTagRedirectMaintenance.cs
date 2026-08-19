@@ -40,19 +40,19 @@ namespace Bun3.Gameplay.Editor.Tags
 
     internal static class GameplayTagRedirectMaintenance
     {
-        /// <summary>에디터가 검사하지 못한 데이터 범위를 알리는 경고 문구입니다.</summary>
+        /// <summary>Warning text describing the data scope the editor could not inspect.</summary>
         internal const string ExternalDataScopeWarning =
             "Save data, server configuration, external files, and already deployed builds " +
             "were not scanned. Directories the editor could not read are skipped silently.";
 
-        /// <summary>프로젝트 참조가 없는 redirect를 제거하기 전에 보여 주는 경고 문구입니다.</summary>
+        /// <summary>Warning text shown before removing redirects without project references.</summary>
         internal const string NoProjectReferencesWarning =
             "No project references were found. " + ExternalDataScopeWarning;
 
         internal const string ShadowedRedirectWarning =
             "This redirect is shadowed. During lookup, the active tag takes priority over the redirect.";
 
-        /// <summary>Workspace redirect를 Source ID와 old path 순서의 작성 행으로 투영합니다.</summary>
+        /// <summary>Projects workspace redirects into authoring rows ordered by source ID and old path.</summary>
         internal static IReadOnlyList<GameplayTagRedirectRowModel> CreateRows(
             GameplayTagWorkspaceSnapshot snapshot)
         {
@@ -88,9 +88,9 @@ namespace Bun3.Gameplay.Editor.Tags
             return rows;
         }
 
-        /// <summary>완전한 검색 결과에서 프로젝트 참조가 없는 redirect old path만 순서대로 고릅니다.</summary>
-        /// <param name="redirects">현재 세션의 redirect 행입니다.</param>
-        /// <param name="result">완전하게 끝난 참조 검색 결과입니다.</param>
+        /// <summary>Picks, in order, only redirect old paths without project references from a complete search result.</summary>
+        /// <param name="redirects">Redirect rows of the current session.</param>
+        /// <param name="result">Reference search result that completed fully.</param>
         internal static IReadOnlyList<string> GetUnreferencedSources(
             IReadOnlyList<EditableRedirectRow> redirects,
             GameplayTagReferenceSearchResult result)
@@ -119,7 +119,7 @@ namespace Bun3.Gameplay.Editor.Tags
             return sources;
         }
 
-        /// <summary>완전한 검색 결과에서 편집 가능한 Source의 미참조 redirect old path만 고릅니다.</summary>
+        /// <summary>Picks only unreferenced redirect old paths of editable sources from a complete search result.</summary>
         internal static IReadOnlyList<string> GetUnreferencedSources(
             IReadOnlyList<GameplayTagRedirectRowModel> redirects,
             GameplayTagReferenceSearchResult result)
@@ -147,8 +147,8 @@ namespace Bun3.Gameplay.Editor.Tags
             return sources;
         }
 
-        /// <summary>참조가 있는 redirect 확인 dialog의 버튼 index를 명시적 결정으로 변환합니다.</summary>
-        /// <param name="result"><c>DisplayDialogComplex</c>가 반환한 버튼 index입니다.</param>
+        /// <summary>Converts the referenced-redirect confirmation dialog's button index into an explicit decision.</summary>
+        /// <param name="result">Button index returned by <c>DisplayDialogComplex</c>.</param>
         internal static ReferencedRedirectDecision MapReferencedDialogResult(int result) => result switch
         {
             0 => ReferencedRedirectDecision.OpenReferences,

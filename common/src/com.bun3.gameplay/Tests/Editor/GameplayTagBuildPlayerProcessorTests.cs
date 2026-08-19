@@ -10,13 +10,13 @@ using UnityEditor.Build;
 
 namespace Bun3.Gameplay.Unity.Tests
 {
-    /// <summary>Unity 게시 빌드가 고정된 외부 Catalog만 검증하고 포함하는지 확인합니다.</summary>
+    /// <summary>Verifies a Unity publish build validates and embeds only the pinned external catalog.</summary>
     [TestFixture]
     public sealed class GameplayTagBuildPlayerProcessorTests
     {
         private string _temporaryDirectory = null!;
 
-        /// <summary>각 테스트의 게시 artifact와 가짜 프로젝트를 격리합니다.</summary>
+        /// <summary>Isolates each test's publish artifact and fake project.</summary>
         [SetUp]
         public void SetUp()
         {
@@ -26,7 +26,7 @@ namespace Bun3.Gameplay.Unity.Tests
             Directory.CreateDirectory(_temporaryDirectory);
         }
 
-        /// <summary>테스트가 만든 게시 artifact와 가짜 프로젝트를 제거합니다.</summary>
+        /// <summary>Removes the publish artifact and fake project created by the test.</summary>
         [TearDown]
         public void TearDown()
         {
@@ -36,7 +36,7 @@ namespace Bun3.Gameplay.Unity.Tests
             }
         }
 
-        /// <summary>유효한 게시 artifact를 정해진 player 경로에 정확히 한 번 포함하는지 검증합니다.</summary>
+        /// <summary>Verifies a valid publish artifact is embedded exactly once at the fixed player path.</summary>
         [Test]
         public void Valid_pinned_catalog_is_binary_round_tripped_and_included_exactly_once()
         {
@@ -57,7 +57,7 @@ namespace Bun3.Gameplay.Unity.Tests
                 Is.EquivalentTo(new[] { context.ArtifactPath }));
         }
 
-        /// <summary>누락되거나 손상된 게시 artifact가 player build 시작 전에 실패하는지 검증합니다.</summary>
+        /// <summary>Verifies a missing or corrupted publish artifact fails before the player build starts.</summary>
         [TestCase(false)]
         [TestCase(true)]
         public void Missing_or_corrupt_catalog_fails_before_any_player_inclusion(bool corrupt)
@@ -88,7 +88,7 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(inclusionCount, Is.Zero);
         }
 
-        /// <summary>개발 전용 Version이 Published build context에 들어오는 즉시 거부되는지 검증합니다.</summary>
+        /// <summary>Verifies the development-only version is rejected as soon as it enters a published build context.</summary>
         [Test]
         public void Published_context_rejects_the_reserved_development_version()
         {
@@ -102,7 +102,7 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(exception!.ParamName, Is.EqualTo("catalogVersion"));
         }
 
-        /// <summary>게시 build metadata의 ID, Version 또는 fingerprint 불일치를 모두 거부하는지 검증합니다.</summary>
+        /// <summary>Verifies any ID, version, or fingerprint mismatch in publish build metadata is rejected.</summary>
         [TestCase("id")]
         [TestCase("version")]
         [TestCase("fingerprint")]
@@ -126,7 +126,7 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(inclusionCount, Is.Zero);
         }
 
-        /// <summary>게시 provider가 없거나 여러 개이면 artifact를 열기 전에 설정 오류로 실패하는지 검증합니다.</summary>
+        /// <summary>Verifies zero or multiple publish providers fail as a configuration error before opening the artifact.</summary>
         [Test]
         public void Published_provider_resolution_requires_exactly_one_concrete_provider()
         {
@@ -137,7 +137,7 @@ namespace Bun3.Gameplay.Unity.Tests
                     new[] { typeof(ValidProvider), typeof(SecondProvider) }));
         }
 
-        /// <summary>Project Settings만으로 Published build Provider 요구를 우회할 수 없는지 검증합니다.</summary>
+        /// <summary>Verifies project settings alone cannot bypass the published-build provider requirement.</summary>
         [Test]
         public void Project_settings_is_development_only_and_does_not_replace_a_published_provider()
         {
@@ -149,7 +149,7 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(error.Message, Does.Contain("development"));
         }
 
-        /// <summary>Published Provider와 Project Settings ID 불일치는 artifact를 열기 전에 실패하는지 검증합니다.</summary>
+        /// <summary>Verifies a published provider vs project settings ID mismatch fails before opening the artifact.</summary>
         [Test]
         public void Published_provider_catalog_id_must_match_project_settings_before_opening_the_artifact()
         {
@@ -161,7 +161,7 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(error.Message, Does.Not.Contain("must not be opened"));
         }
 
-        /// <summary>Published Provider ID가 canonical 형식이 아니면 artifact를 열기 전에 거부하는지 검증합니다.</summary>
+        /// <summary>Verifies a non-canonical published provider ID is rejected before opening the artifact.</summary>
         [Test]
         public void Published_noncanonical_provider_catalog_id_is_rejected_before_opening_the_artifact()
         {
@@ -173,7 +173,7 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(error.Message, Does.Not.Contain("must not be opened"));
         }
 
-        /// <summary>Published Provider와 Project Settings ID는 정규화 결과가 아니라 원문 ordinal 값으로 일치해야 하는지 검증합니다.</summary>
+        /// <summary>Verifies published provider and project settings IDs must match by raw ordinal value, not normalized form.</summary>
         [Test]
         public void Published_provider_requires_a_raw_ordinal_catalog_id_match_with_project_settings()
         {
@@ -185,7 +185,7 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(error.Message, Does.Not.Contain("must not be opened"));
         }
 
-        /// <summary>provider의 제품 ID와 게시 context의 ID가 다르면 중복 설정을 stale 상태로 거부하는지 검증합니다.</summary>
+        /// <summary>Verifies a provider product ID differing from the publish context ID rejects the duplicate configuration as stale.</summary>
         [Test]
         public void Provider_catalog_id_must_match_the_published_context_catalog_id()
         {
@@ -197,7 +197,7 @@ namespace Bun3.Gameplay.Unity.Tests
                     new[] { typeof(MismatchedProvider) }));
         }
 
-        /// <summary>preprocess 반복 호출이 이전 context를 cache하지 않고 새 고정값을 다시 검증하는지 확인합니다.</summary>
+        /// <summary>Verifies repeated preprocess calls re-validate fresh pinned values instead of caching the previous context.</summary>
         [Test]
         public void Repeated_preprocess_resolves_fresh_context_and_rejects_a_stale_second_pin()
         {
@@ -227,7 +227,7 @@ namespace Bun3.Gameplay.Unity.Tests
             }
         }
 
-        /// <summary>반복 build가 같은 artifact를 결정적으로 포함하고 작성용 JSON이나 프로젝트를 수정하지 않는지 검증합니다.</summary>
+        /// <summary>Verifies repeated builds embed the same artifact deterministically without modifying authoring JSON or the project.</summary>
         [Test]
         public void Repeat_build_is_deterministic_and_does_not_stage_or_compile_authoring_files()
         {

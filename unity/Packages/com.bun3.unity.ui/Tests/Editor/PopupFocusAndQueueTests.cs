@@ -19,9 +19,9 @@ namespace Bun3.Unity.UI.Editor.Tests
             var result = Stack.PushAsync("p1", duplicate: PopupDuplicatePolicy.Focus)
                 .GetAwaiter().GetResult();
 
-            Assert.AreSame(Created[0], result, "새로 만들지 않고 기존 인스턴스를 돌려줘야 한다.");
+            Assert.AreSame(Created[0], result, "Must return the existing instance, not create a new one.");
             Assert.AreEqual(2, Created.Count);
-            Assert.AreSame(Created[0], Stack.Top, "기존 인스턴스가 최상단으로 이동해야 한다.");
+            Assert.AreSame(Created[0], Stack.Top, "The existing instance must move to the top.");
             Assert.AreSame(Created[0], focused);
         }
 
@@ -34,7 +34,7 @@ namespace Bun3.Unity.UI.Editor.Tests
                 .GetAwaiter().GetResult();
 
             Assert.AreEqual(1, Created.Count);
-            Assert.AreEqual(20, Created[0].ReceivedArg, "인자가 기존 인스턴스에 재주입돼야 한다.");
+            Assert.AreEqual(20, Created[0].ReceivedArg, "The arg must be re-delivered to the existing instance.");
         }
 
         [Test]
@@ -45,7 +45,7 @@ namespace Bun3.Unity.UI.Editor.Tests
 
             Stack.PushAsync("p1", duplicate: PopupDuplicatePolicy.Focus).GetAwaiter().GetResult();
 
-            Assert.AreSame(Created[1], Stack.Top, "Focus는 자기 레이어 안에서만 최상단으로 간다.");
+            Assert.AreSame(Created[1], Stack.Top, "Focus raises only within its own layer.");
         }
 
         [Test]
@@ -66,13 +66,13 @@ namespace Bun3.Unity.UI.Editor.Tests
         [Test]
         public void PopupQueue_ShowsOnTopOfOtherPopups_OneAtATime()
         {
-            Stack.Push("p1"); // 우편함 격 — 계속 열려 있음
+            Stack.Push("p1"); // Like a mailbox — stays open.
             var queue = new PopupQueue(Stack);
 
             queue.Enqueue("p2");
             queue.Enqueue("p3");
 
-            // 스택 대기열과 달리, 다른 팝업이 열려 있어도 즉시 표시된다.
+            // Unlike the stack queue, it shows immediately even with another popup open.
             Assert.AreEqual(2, Stack.Count);
             Assert.AreSame(Created[1], Stack.Top);
             Assert.AreEqual(1, queue.Count);
@@ -80,36 +80,36 @@ namespace Bun3.Unity.UI.Editor.Tests
 
             Stack.Close(Created[1]);
 
-            Assert.AreSame(Created[2], Stack.Top, "이 큐의 팝업이 닫히면 다음이 표시돼야 한다.");
+            Assert.AreSame(Created[2], Stack.Top, "The next must show when this queue's popup closes.");
             Assert.AreEqual(0, queue.Count);
 
             Stack.Close(Created[2]);
 
-            Assert.AreEqual(1, Stack.Count, "밑에 깔려 있던 팝업은 그대로다.");
+            Assert.AreEqual(1, Stack.Count, "The popup underneath stays put.");
             Assert.IsNull(queue.Current);
         }
 
         [Test]
         public void PopupQueue_HigherPriorityShowsFirst_FifoWithinSame()
         {
-            Stack.Push("p1"); // 큐 표시를 막지 않는 배경 팝업
+            Stack.Push("p1"); // Background popup that does not block queue display.
             var queue = new PopupQueue(Stack);
             Stack.Close(Created[0]);
 
-            // 표시 중인 팝업이 없으니 첫 Enqueue가 즉시 열린다. 그 뒤에 쌓이는 항목들로 정렬 검증.
-            queue.Enqueue("p2", priority: 0);          // 즉시 표시
-            queue.Enqueue("p3", priority: 0);          // 일반
-            queue.Enqueue("p4", priority: 2);          // 승급 격
-            queue.Enqueue("p5", priority: 1);          // 특별 아이템 격
+            // Nothing is showing, so the first Enqueue opens immediately; the rest verify ordering.
+            queue.Enqueue("p2", priority: 0);          // Shows immediately.
+            queue.Enqueue("p3", priority: 0);          // Normal.
+            queue.Enqueue("p4", priority: 2);          // Like a promotion.
+            queue.Enqueue("p5", priority: 1);          // Like a special item.
 
             Stack.Close(Created[1]);
-            Assert.AreEqual("p4", Stack.Top.Key.Name, "우선순위 높은 항목이 먼저 표시돼야 한다.");
+            Assert.AreEqual("p4", Stack.Top.Key.Name, "Higher-priority entries must show first.");
 
             Stack.Pop();
             Assert.AreEqual("p5", Stack.Top.Key.Name);
 
             Stack.Pop();
-            Assert.AreEqual("p3", Stack.Top.Key.Name, "같은 우선순위는 삽입 순서를 지켜야 한다.");
+            Assert.AreEqual("p3", Stack.Top.Key.Name, "Equal priorities must keep insertion order.");
         }
 
         [Test]
@@ -134,10 +134,10 @@ namespace Bun3.Unity.UI.Editor.Tests
                 ReleasePopup);
             var queue = new PopupQueue(stack);
 
-            queue.Enqueue("p1"); // 로드가 던지는 키 — 기록하고 넘어가야 한다
+            queue.Enqueue("p1"); // Key whose load throws — must log and continue.
             queue.Enqueue("p2");
 
-            Assert.AreEqual(1, stack.Count, "실패한 항목이 대기열을 정지시키면 안 된다.");
+            Assert.AreEqual(1, stack.Count, "A failed entry must not stall the queue.");
             Assert.AreEqual("p2", stack.Top.Key.Name);
 
             stack.Dispose();
@@ -152,11 +152,11 @@ namespace Bun3.Unity.UI.Editor.Tests
 
             queue.Clear();
 
-            Assert.AreEqual(1, Stack.Count, "표시 중인 팝업은 유지돼야 한다.");
+            Assert.AreEqual(1, Stack.Count, "The showing popup must be kept.");
             Assert.AreEqual(0, queue.Count);
 
             Stack.Pop();
-            Assert.AreEqual(0, Stack.Count, "버린 항목이 표시되면 안 된다.");
+            Assert.AreEqual(0, Stack.Count, "Dropped entries must not show.");
         }
     }
 }

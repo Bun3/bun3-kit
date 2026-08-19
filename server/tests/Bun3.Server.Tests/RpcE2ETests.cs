@@ -134,7 +134,7 @@ public class RpcE2ETests
             {
                 Assert.That(replies[i].IsOk, Is.True);
                 Assert.That(replies[i].Value!.RemainingGold, Is.EqualTo(1000 + 10 + i),
-                    "응답이 자기 요청과 상관되어야 한다");
+                    "response must correlate with its own request");
             }
             client.Close();
         }
@@ -154,7 +154,7 @@ public class RpcE2ETests
             var client = await ConnectClientAsync(listener);
             client.Closed += _ => closed.TrySetResult(true);
 
-            // 세션 수립 확인 후 정지
+            // stop after confirming the session is established
             var warmup = await client.RequestAsync<GetServerTimeResponse>(new GetServerTimeRequest())
                 .AsTask().WaitAsync(Timeout);
             Assert.That(warmup.IsOk, Is.True);

@@ -16,7 +16,7 @@ public class AllocationSmokeTests
         var b = BigNum.FromParts(15, -1);
         Span<char> buffer = stackalloc char[64];
 
-        // 워밍업 (JIT/정적 초기화 할당 배제)
+        // Warm-up (exclude JIT/static-init allocations)
         var warm = a * b + a - b / 3;
         warm.TryFormat(buffer, out _, BigNumFormat.Korean);
 
@@ -28,7 +28,7 @@ public class AllocationSmokeTests
         }
 
         var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
-        Assert.That(allocated, Is.Zero, "BigNum 연산/포맷 경로에서 힙 할당 발생");
+        Assert.That(allocated, Is.Zero, "heap allocation in BigNum op/format path");
     }
 
     [Test]

@@ -136,9 +136,9 @@ namespace Bun3.Unity.Core.UnifiedToggle
         
         public IReadOnlyList<IUnifiedOption<TComponent>> Options => _options;
 
-        // 자식 토글이 보유한 직렬화된 컴포넌트 참조를 채우는 hook.
-        // GetComponent 호출은 자식이 자신이 보유한 필드명을 알고 있으므로 자식에서 수행.
-        // component => this 형태(예: UnifiedToggleGameObject)라면 override 불필요.
+        // Hook for derived toggles to fill their serialized component reference;
+        // the derived class owns the field, so it performs the GetComponent call.
+        // No override needed when Component => this (e.g. UnifiedToggleGameObject).
         protected virtual void EnsureComponent() { }
 
         protected virtual void Reset()

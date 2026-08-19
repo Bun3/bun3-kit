@@ -139,8 +139,8 @@ namespace Bun3.Unity.Core.Editor.UnifiedToggle
         }
 
         /// <summary>
-        /// 옵션 리스트의 구조적 변화(요소 추가/삭제/타입 변경)를 안정적으로 감지하기 위한 지문.
-        /// BeginChangeCheck가 놓치는 SubclassSelector의 managedReferenceValue 할당까지 잡는다.
+        /// Fingerprint that detects structural changes to the options list (add/remove/type change),
+        /// including SubclassSelector managedReferenceValue assignments that BeginChangeCheck misses.
         /// </summary>
         private static string ComputeOptionsSignature(SerializedProperty optionsProperty)
         {

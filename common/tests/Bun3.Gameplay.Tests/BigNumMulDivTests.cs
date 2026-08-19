@@ -21,7 +21,6 @@ public class BigNumMulDivTests
     [Test]
     public void Multiply_huge_matches_BigInteger_leading_digits()
     {
-        // 1.4e14 × 1.4e14 — FixedFloat이 못 하던 곱 (스펙 §6 근거)
         var a = (BigNum)140_000_000_000_000L;
         var product = a * a;
         Assert.That(product, Is.EqualTo(BigNum.FromParts(196, 26)));   // 1.96e28
@@ -30,24 +29,23 @@ public class BigNumMulDivTests
     [Test]
     public void Multiply_retains_18_significant_digits()
     {
-        // 두 18자리 수의 곱 — 선두 18~19자리가 BigInteger 오라클과 일치해야 한다
+        // Product of two 18-digit numbers: leading 18-19 digits must match the BigInteger oracle
         long m1 = 123_456_789_012_345_678L;
         long m2 = 987_654_321_098_765_432L;
         var product = (BigNum)m1 * m2;
 
-        var oracle = (BigInteger)m1 * m2;                 // 121932631137021795... (36자리)
+        var oracle = (BigInteger)m1 * m2;                 // 121932631137021795... (36 digits)
         var oracleStr = oracle.ToString();
-        // 정규화가 트레일링 0을 지수로 옮길 수 있으므로 가수 전체가 오라클의 접두인지 본다
+        // Canonicalization may shift trailing zeros into the exponent, so check the whole mantissa as an oracle prefix
         var resultDigits = Math.Abs(product.Mantissa).ToString();
         Assert.That(oracleStr.StartsWith(resultDigits), Is.True,
             $"oracle={oracleStr} result={product.Mantissa}e{product.Exponent}");
-        Assert.That(resultDigits.Length, Is.GreaterThanOrEqualTo(17), "유효 자릿수 유지 확인");
+        Assert.That(resultDigits.Length, Is.GreaterThanOrEqualTo(17), "significant digits retained");
     }
 
     [Test]
     public void Percent_scaling_pattern_works_at_idle_scale()
     {
-        // 방치형 핵심 패턴: 초대형 데미지 × 퍼센트 배율
         var damage = BigNum.FromParts(37, 28);            // 3.7e29
         var multiplied = damage * BigNum.FromParts(15, -1);   // ×1.5
         Assert.That(multiplied, Is.EqualTo(BigNum.FromParts(555, 27)));   // 5.55e29
@@ -60,7 +58,7 @@ public class BigNumMulDivTests
         Assert.That((BigNum)1 / 4, Is.EqualTo(BigNum.FromParts(25, -2)));    // 0.25
         Assert.That((BigNum)(-84) / 2, Is.EqualTo((BigNum)(-42)));
 
-        // 1/3 = 0.333... — 18~19자리 절사
+        // 1/3 = 0.333... truncated at 18-19 digits
         var third = (BigNum)1 / 3;
         Assert.That(third.Sign, Is.EqualTo(1));
         Assert.That(third < BigNum.FromParts(334, -3) && third > BigNum.FromParts(333, -3),
@@ -99,7 +97,7 @@ public class BigNumMulDivTests
     [Test]
     public void Divide_preserves_significant_digits_in_mid_range()
     {
-        // 중간값 [2^64, 1e35) 구간 — 필요 이상 깎으면 안 된다 (최종 리뷰 Critical 회귀 가드)
+        // Intermediate in [2^64, 1e35): must not shave more digits than necessary
         Assert.That((BigNum)77 / 3, Is.EqualTo(BigNum.FromParts(2_566_666_666_666_666_666L, -17)));
         Assert.That((BigNum)92 / 3, Is.EqualTo(BigNum.FromParts(3_066_666_666_666_666_666L, -17)));
     }
@@ -107,12 +105,12 @@ public class BigNumMulDivTests
     [Test]
     public void Multiply_preserves_significant_digits_in_mid_range()
     {
-        // 9999999999² = 99999999980000000001 → 19자리 절사
+        // 9999999999^2 = 99999999980000000001, truncated at 19 digits
         Assert.That((BigNum)9_999_999_999L * 9_999_999_999L,
             Is.EqualTo(BigNum.FromParts(9_999_999_998L, 10)));
 
-        // 풀정밀 가수 × 소형 배율 — "값 × 1.05 배율" 패턴의 회귀 가드
-        var third = (BigNum)1 / 3;                            // 3.33...e-1 (18자리)
+        // Full-precision mantissa times a small multiplier ("value * 1.05" pattern)
+        var third = (BigNum)1 / 3;                            // 3.33...e-1 (18 digits)
         var scaled = third * BigNum.FromParts(105, -1);       // × 10.5
         Assert.That(scaled, Is.EqualTo(BigNum.FromParts(3_499_999_999_999_999_996L, -18)));
     }
@@ -131,14 +129,14 @@ public class BigNumMulDivTests
             var mantissaStr = Math.Abs(q.Mantissa).ToString();
             Assert.That(oracleStr.StartsWith(mantissaStr), Is.True,
                 $"{n}/{d}: got {q.Mantissa}e{q.Exponent}");
-            Assert.That(mantissaStr.Length, Is.GreaterThanOrEqualTo(17), $"{n}/{d} 유효 자릿수 유지");
+            Assert.That(mantissaStr.Length, Is.GreaterThanOrEqualTo(17), $"{n}/{d} significant digits retained");
         }
     }
 
     [Test]
     public void Divide_small_by_large_mantissa_does_not_collapse_to_zero()
     {
-        // 분모 가수 > 분자×10^18 이던 옛 설계에서 0으로 붕괴하던 케이스
+        // Regression: collapsed to zero when the denominator mantissa exceeded numerator*10^18
         var q = (BigNum)1 / long.MaxValue;   // ≈ 1.0842e-19
         Assert.That(q.IsZero, Is.False);
         Assert.That(q > BigNum.FromParts(1084, -22) && q < BigNum.FromParts(1085, -22), Is.True,

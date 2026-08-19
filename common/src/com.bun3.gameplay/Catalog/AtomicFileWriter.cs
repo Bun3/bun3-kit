@@ -4,14 +4,14 @@ using System.IO;
 
 namespace Bun3.Gameplay.Tags.Catalog
 {
-    /// <summary>목적지 옆 임시 파일을 flush하고 readback 검증한 뒤 원자적으로 교체합니다.</summary>
+    /// <summary>Flushes a temp file next to the destination, verifies it by readback, then swaps it in atomically.</summary>
     public static class AtomicFileWriter
     {
-        /// <summary>임시 binary를 작성하고 검증한 뒤 목적지 파일을 교체합니다.</summary>
-        /// <param name="destinationPath">교체할 최종 파일 경로입니다.</param>
-        /// <param name="write">새 binary를 임시 스트림에 쓰는 작업입니다.</param>
-        /// <param name="verify">flush된 임시 binary를 다시 읽어 검증하는 작업입니다.</param>
-        /// <exception cref="ArgumentNullException">경로나 작업이 null인 경우입니다.</exception>
+        /// <summary>Writes and verifies a temp binary, then replaces the destination file.</summary>
+        /// <param name="destinationPath">Final file path to replace.</param>
+        /// <param name="write">Action that writes the new binary to the temp stream.</param>
+        /// <param name="verify">Action that re-reads and verifies the flushed temp binary.</param>
+        /// <exception cref="ArgumentNullException">A path or action is null.</exception>
         public static void WriteVerified(
             string destinationPath,
             Action<Stream> write,
@@ -37,7 +37,7 @@ namespace Bun3.Gameplay.Tags.Catalog
                     verify(input);
                     if (input.ReadByte() != -1)
                     {
-                        throw new InvalidDataException("검증 작업이 binary 전체를 읽지 않았습니다.");
+                        throw new InvalidDataException("Verification did not read the entire binary.");
                     }
                 }
 

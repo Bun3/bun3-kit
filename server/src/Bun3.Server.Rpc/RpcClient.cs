@@ -11,8 +11,8 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace Bun3.Server.Rpc
 {
     /// <summary>
-    /// 타입 있는 요청/응답과 푸시 구독을 제공하는 클라이언트.
-    /// 서버 판정은 Reply 값으로, 인프라 실패(타임아웃·연결 종료)는 예외로 구분된다.
+    /// Client providing typed request/response and push subscriptions.
+    /// Server verdicts arrive as Reply values; infrastructure failures (timeout, connection closed) as exceptions.
     /// </summary>
     public sealed class RpcClient<TRequest, TResponse, TUpdate> : IDisposable
         where TRequest : class, IMessage<TRequest>, new()
@@ -43,22 +43,22 @@ namespace Bun3.Server.Rpc
             _logger = logger;
         }
 
-        /// <summary>마지막 Ping의 왕복 시간(ms). 측정 전에는 -1.</summary>
+        /// <summary>Round-trip time of the last Ping in ms; -1 before first measurement.</summary>
         public long LastRttMs => Volatile.Read(ref _lastRttMs);
 
-        /// <summary>연결이 열려 있고 아직 닫히지 않았는지 여부.</summary>
+        /// <summary>Whether the connection is open and not yet closed.</summary>
         public bool IsConnected => !_closed && _connection?.IsOpen == true;
 
-        /// <summary>연결 종료 시 1회. Code 0 = 사유 미수신(자발적 Close/네트워크).
-        /// UseSynchronizationContext 시 캡처 컨텍스트에서 호출.</summary>
+        /// <summary>Raised once when the connection closes. Code 0 = no reason received (voluntary Close / network).
+        /// Invoked on the captured context when UseSynchronizationContext is set.</summary>
         public event Action<DisconnectInfo>? Closed;
 
-        /// <summary>커넥터로 연결을 수립하고 클라이언트를 생성한다. 접속 시점의 SynchronizationContext를 캡처한다.</summary>
-        /// <param name="connector">실제 소켓 연결을 수립하는 커넥터.</param>
-        /// <param name="options">클라이언트 옵션. null이면 기본값.</param>
-        /// <param name="logger">로거. null이면 무동작 로거.</param>
-        /// <param name="configure">소켓이 열리기 전에 클라이언트에 적용할 설정(주로 OnUpdate 구독) — 접속 직후 서버 푸시의 유실을 막는다.</param>
-        /// <param name="ct">연결 수립을 취소할 토큰.</param>
+        /// <summary>Establishes a connection through the connector and creates the client. Captures the SynchronizationContext at connect time.</summary>
+        /// <param name="connector">Connector that establishes the actual socket connection.</param>
+        /// <param name="options">Client options; defaults when null.</param>
+        /// <param name="logger">Logger; no-op logger when null.</param>
+        /// <param name="configure">Setup applied to the client before the socket opens (mainly OnUpdate subscriptions) — prevents losing server pushes sent right after connect.</param>
+        /// <param name="ct">Token to cancel connection establishment.</param>
         public static async ValueTask<RpcClient<TRequest, TResponse, TUpdate>> ConnectAsync(
             IConnector connector,
             RpcClientOptions? options = null,
@@ -81,13 +81,13 @@ namespace Bun3.Server.Rpc
 
             configure?.Invoke(client);
 
-            // Handler.OnConnected가 이미 client._connection을 할당하므로, 여기선 완료를 기다리기만 하면 된다.
+            // Handler.OnConnected already assigns client._connection; only completion needs awaiting here.
             _ = await connector.ConnectAsync(new Handler(client), ct).ConfigureAwait(false);
             client.StartPingLoop();
             return client;
         }
 
-        /// <summary>요청을 보내고 응답을 기다린다. 서버 판정은 Reply로, 인프라 실패는 예외로 온다.</summary>
+        /// <summary>Sends a request and awaits the response. Server verdicts come as Reply; infrastructure failures as exceptions.</summary>
         public async ValueTask<Reply<TRes>> RequestAsync<TRes>(IMessage request, CancellationToken ct = default)
             where TRes : class, IMessage<TRes>
         {
@@ -97,12 +97,12 @@ namespace Bun3.Server.Rpc
             }
 
             var requestCase = _schema.RequestMap.ByPayloadType(request.GetType())
-                ?? throw new ArgumentException($"Request oneof에 없는 타입: {request.GetType().Name}", nameof(request));
+                ?? throw new ArgumentException($"Type not in Request oneof: {request.GetType().Name}", nameof(request));
             var responseCase = _schema.ResponseMap.ByFieldNumber(requestCase.FieldNumber);
             if (responseCase != null && responseCase.PayloadType != typeof(TRes))
             {
                 throw new ArgumentException(
-                    $"{requestCase.Name}의 응답 타입은 {responseCase.PayloadType.Name} — TRes 불일치", nameof(TRes));
+                    $"Response type of {requestCase.Name} is {responseCase.PayloadType.Name} — TRes mismatch", nameof(TRes));
             }
 
             var requestId = Interlocked.Increment(ref _nextRequestId);
@@ -117,15 +117,15 @@ namespace Bun3.Server.Rpc
             {
                 if (_closed)
                 {
-                    // 재확인: insert 후엔 HandleClosed가 보게 됨 — 경합하는 HandleClosed의 TrySetException이
-                    // 아무도 관전하지 않는 TCS에 UnobservedTaskException을 남기지 않도록 먼저 취소로 관전 처리한다.
+                    // Re-check: after insert HandleClosed can see the entry — cancel first so a racing
+                    // HandleClosed.TrySetException does not leave an UnobservedTaskException on an unobserved TCS.
                     pending.TrySetCanceled();
-                    throw new ConnectionClosedException("이미 종료된 연결");
+                    throw new ConnectionClosedException("Connection already closed");
                 }
 
                 using var timeoutCts = ct.CanBeCanceled
                     ? CancellationTokenSource.CreateLinkedTokenSource(ct)
-                    : new CancellationTokenSource();   // ct가 default인 흔한 경로 — 링크드 소스/등록 할당 생략
+                    : new CancellationTokenSource();   // common default-ct path — skip linked-source/registration allocation
                 timeoutCts.CancelAfter(_options.RequestTimeout);
                 using var registration = timeoutCts.Token.Register(() =>
                 {
@@ -138,7 +138,7 @@ namespace Bun3.Server.Rpc
                         else
                         {
                             removed.TrySetException(
-                                new TimeoutException($"요청 {requestId} 응답 없음 ({_options.RequestTimeout})"));
+                                new TimeoutException($"No response for request {requestId} ({_options.RequestTimeout})"));
                         }
                     }
                 });
@@ -154,15 +154,15 @@ namespace Bun3.Server.Rpc
                 return payload is TRes typed
                     ? Reply<TRes>.Ok(typed)
                     : throw new InvalidOperationException(
-                        $"응답 본문 타입 불일치: {payload?.GetType().Name ?? "없음"} (기대: {typeof(TRes).Name})");
+                        $"Response body type mismatch: {payload?.GetType().Name ?? "none"} (expected: {typeof(TRes).Name})");
             }
             finally
             {
-                _pending.TryRemove(requestId, out _);   // 어떤 경로로 끝나든 엔트리 회수
+                _pending.TryRemove(requestId, out _);   // reclaim the entry on every exit path
             }
         }
 
-        /// <summary>푸시 구독. 같은 타입 재등록은 교체된다. 미등록 Update는 경고 로그 후 무시.</summary>
+        /// <summary>Subscribes to pushes. Re-registering the same type replaces the handler. Unregistered updates are logged and ignored.</summary>
         public void OnUpdate<TUpd>(Action<TUpd> handler) where TUpd : class, IMessage<TUpd>
         {
             if (handler == null)
@@ -173,11 +173,11 @@ namespace Bun3.Server.Rpc
             _updateHandlers[typeof(TUpd)] = message => handler((TUpd)message);
         }
 
-        /// <summary>연결을 닫는다. 대기 중인 요청은 ConnectionClosedException으로 실패한다.</summary>
+        /// <summary>Closes the connection. Pending requests fail with ConnectionClosedException.</summary>
         public void Close() => _connection?.Close();
 
-        /// <summary>연결을 닫고 내부 자원(핑 루프 CTS)을 정리한다. 멱등.
-        /// Closed 이벤트는 Dispose 반환 "이후"에 발화될 수 있다 — 콜백에서 파괴된 객체를 만지지 말 것.</summary>
+        /// <summary>Closes the connection and cleans up internals (ping-loop CTS). Idempotent.
+        /// The Closed event may fire after Dispose returns — do not touch disposed objects in the callback.</summary>
         public void Dispose()
         {
             if (Interlocked.Exchange(ref _disposed, 1) != 0)
@@ -194,7 +194,7 @@ namespace Bun3.Server.Rpc
         {
             if (packet.Length < 1)
             {
-                ViolationClose("빈 패킷");
+                ViolationClose("Empty packet");
                 return;
             }
 
@@ -211,7 +211,7 @@ namespace Bun3.Server.Rpc
                     HandleControl(packet);
                     break;
                 default:
-                    ViolationClose($"허용되지 않은 채널 0x{channel:X2}");
+                    ViolationClose($"Disallowed channel 0x{channel:X2}");
                     break;
             }
         }
@@ -221,18 +221,18 @@ namespace Bun3.Server.Rpc
             TResponse envelope;
             try
             {
-                envelope = _schema.ResponseParser.ParseFrom(packet, 1, packet.Length - 1);   // 무복사 파싱
+                envelope = _schema.ResponseParser.ParseFrom(packet, 1, packet.Length - 1);   // zero-copy parse
             }
             catch (InvalidProtocolBufferException ex)
             {
-                ViolationClose($"Response 파싱 실패: {ex.Message}");
+                ViolationClose($"Response parse failure: {ex.Message}");
                 return;
             }
 
             var requestId = (long)_schema.RequestIdOfResponse.Accessor.GetValue(envelope);
             if (!_pending.TryRemove(requestId, out var pending))
             {
-                _logger.LogWarning("대응 없는 응답 request_id={RequestId} — 무시", requestId);
+                _logger.LogWarning("Response with no matching request_id={RequestId} — ignored", requestId);
                 return;
             }
 
@@ -246,24 +246,24 @@ namespace Bun3.Server.Rpc
             TUpdate envelope;
             try
             {
-                envelope = _schema.UpdateParser.ParseFrom(packet, 1, packet.Length - 1);   // 무복사 파싱
+                envelope = _schema.UpdateParser.ParseFrom(packet, 1, packet.Length - 1);   // zero-copy parse
             }
             catch (InvalidProtocolBufferException ex)
             {
-                ViolationClose($"Update 파싱 실패: {ex.Message}");
+                ViolationClose($"Update parse failure: {ex.Message}");
                 return;
             }
 
             var updateCase = _schema.UpdateMap.GetActiveCase(envelope);
             if (updateCase == null)
             {
-                _logger.LogWarning("body 없는 Update — 무시");
+                _logger.LogWarning("Update without body — ignored");
                 return;
             }
 
             if (!_updateHandlers.TryGetValue(updateCase.PayloadType, out var handler))
             {
-                _logger.LogWarning("미등록 Update {Case} — 무시", updateCase.Name);
+                _logger.LogWarning("Unregistered Update {Case} — ignored", updateCase.Name);
                 return;
             }
 
@@ -271,7 +271,7 @@ namespace Bun3.Server.Rpc
             DispatchUpdate(handler, payload);
         }
 
-        // 업데이트 핫패스 전용 디스패치 — 클로저 2개 대신 상태 객체 1개만 할당한다(컨텍스트 없으면 0).
+        // Update hot-path dispatch — allocates one state object instead of two closures (zero without a context).
         private void DispatchUpdate(Action<IMessage> handler, IMessage payload)
         {
             var context = _syncContext;
@@ -298,7 +298,7 @@ namespace Bun3.Server.Rpc
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "푸시/이벤트 콜백 예외");
+                _logger.LogError(ex, "Push/event callback exception");
             }
         }
 
@@ -321,11 +321,11 @@ namespace Bun3.Server.Rpc
             Control control;
             try
             {
-                control = Control.Parser.ParseFrom(packet, 1, packet.Length - 1);   // 무복사 파싱
+                control = Control.Parser.ParseFrom(packet, 1, packet.Length - 1);   // zero-copy parse
             }
             catch (InvalidProtocolBufferException ex)
             {
-                ViolationClose($"Control 파싱 실패: {ex.Message}");
+                ViolationClose($"Control parse failure: {ex.Message}");
                 return;
             }
 
@@ -336,12 +336,12 @@ namespace Bun3.Server.Rpc
             }
             else if (control.BodyCase == Control.BodyOneofCase.Disconnect)
             {
-                Volatile.Write(ref _receivedDisconnectCode, control.Disconnect.Code);   // 절단 시 통지에 사용
+                Volatile.Write(ref _receivedDisconnectCode, control.Disconnect.Code);   // used in the disconnect notification
             }
             else
             {
-                // 의도적 관대함: 미래 서버의 새 Control 메시지와의 전방 호환 (서버 쪽은 엄격)
-                _logger.LogWarning("예상 밖 Control {Case} — 무시", control.BodyCase);
+                // Deliberately lenient: forward compatibility with new Control messages from future servers (server side is strict).
+                _logger.LogWarning("Unexpected Control {Case} — ignored", control.BodyCase);
             }
         }
 
@@ -354,14 +354,14 @@ namespace Bun3.Server.Rpc
             }
             catch (ObjectDisposedException)
             {
-                // Dispose()가 먼저 실행되어 이미 취소·정리된 경우 — 무해(경합 시 best-effort)
+                // Dispose() already cancelled and cleaned up — harmless (best-effort under a race).
             }
 
             foreach (var pair in _pending)
             {
                 if (_pending.TryRemove(pair.Key, out var pending))
                 {
-                    pending.TrySetException(new ConnectionClosedException("응답 대기 중 연결 종료"));
+                    pending.TrySetException(new ConnectionClosedException("Connection closed while awaiting response"));
                 }
             }
 
@@ -395,11 +395,11 @@ namespace Bun3.Server.Rpc
             }
             catch (OperationCanceledException)
             {
-                // 연결 종료로 인한 정상 취소
+                // normal cancellation from connection close
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Ping 루프 예외 — 측정 중단");
+                _logger.LogError(ex, "Ping loop exception — measurement stopped");
             }
         }
 
@@ -434,14 +434,14 @@ namespace Bun3.Server.Rpc
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "푸시/이벤트 콜백 예외");
+                    _logger.LogError(ex, "Push/event callback exception");
                 }
             }
         }
 
         private void ViolationClose(string reason)
         {
-            _logger.LogWarning("프로토콜 위반 — {Reason}; 연결 종료", reason);
+            _logger.LogWarning("Protocol violation — {Reason}; closing connection", reason);
             _connection?.Close();
         }
 

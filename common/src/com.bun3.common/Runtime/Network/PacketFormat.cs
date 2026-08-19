@@ -7,21 +7,21 @@ using System.Threading.Tasks;
 namespace Bun3.Common.Network
 {
     /// <summary>
-    /// 4바이트 리틀엔디언 길이 프리픽스 프레이밍.
-    /// 와이어 형식: [length:4(LE)][body:length]
+    /// 4-byte little-endian length-prefix framing.
+    /// Wire format: [length:4(LE)][body:length]
     /// </summary>
     public static class PacketFormat
     {
-        /// <summary>길이 프리픽스의 바이트 크기(4).</summary>
+        /// <summary>Byte size of the length prefix (4).</summary>
         public const int HeaderSize = 4;
 
-        /// <summary>패킷 하나를 길이 프리픽스와 함께 스트림에 쓴다.</summary>
+        /// <summary>Writes one packet to the stream with a length prefix.</summary>
         public static ValueTask WritePacketAsync(
             Stream stream, ReadOnlyMemory<byte> packet, CancellationToken ct = default) =>
             WritePacketAsync(stream, packet, new byte[HeaderSize], ct);
 
-        /// <summary>헤더 스크래치 버퍼(길이 ≥ 4)를 재사용하는 오버로드 — 패킷당 헤더 할당을 없앤다.
-        /// 호출자는 같은 스크래치에 대한 동시 호출이 없음을 보장해야 한다(연결당 송신 직렬화 등).</summary>
+        /// <summary>Overload reusing a header scratch buffer (length &#8805; 4) to avoid a per-packet header allocation.
+        /// The caller must ensure no concurrent calls share the scratch (e.g. serialize sends per connection).</summary>
         public static async ValueTask WritePacketAsync(
             Stream stream, ReadOnlyMemory<byte> packet, byte[] headerScratch, CancellationToken ct = default)
         {
@@ -39,17 +39,17 @@ namespace Bun3.Common.Network
         }
 
         /// <summary>
-        /// 패킷 하나를 읽는다. 패킷 경계에서의 깨끗한 EOF는 null을 반환한다.
-        /// 패킷 도중 EOF는 <see cref="EndOfStreamException"/>,
-        /// 길이가 음수이거나 maxPacketSize 초과면 <see cref="InvalidDataException"/>.
+        /// Reads one packet. A clean EOF on a packet boundary returns null.
+        /// EOF mid-packet throws <see cref="EndOfStreamException"/>;
+        /// a negative length or one above maxPacketSize throws <see cref="InvalidDataException"/>.
         /// </summary>
         public static ValueTask<byte[]?> ReadPacketAsync(
             Stream stream, int maxPacketSize, CancellationToken ct = default) =>
             ReadPacketAsync(stream, maxPacketSize, new byte[HeaderSize], ct);
 
-        /// <summary>헤더 스크래치 버퍼(길이 ≥ 4)를 재사용하는 오버로드 — 패킷당 헤더 할당을 없앤다.
-        /// 호출자는 같은 스크래치에 대한 동시 호출이 없음을 보장해야 한다(연결당 단일 수신 루프 등).
-        /// 반환된 본문 배열의 소유권은 호출자에게 있다.</summary>
+        /// <summary>Overload reusing a header scratch buffer (length &#8805; 4) to avoid a per-packet header allocation.
+        /// The caller must ensure no concurrent calls share the scratch (e.g. a single receive loop per connection).
+        /// The caller owns the returned body array.</summary>
         public static async ValueTask<byte[]?> ReadPacketAsync(
             Stream stream, int maxPacketSize, byte[] headerScratch, CancellationToken ct = default)
         {

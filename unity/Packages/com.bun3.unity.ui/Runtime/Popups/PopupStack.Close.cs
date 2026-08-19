@@ -1,20 +1,20 @@
-// PopupStack partial — 닫기·back 처리 담당.
+// PopupStack partial — close and back handling.
 using System;
 using Cysharp.Threading.Tasks;
 
 namespace Bun3.Unity.UI.Popups
 {
-    // 닫기 경로: Close/Pop과 back 키 라우팅.
+    // Close path: Close/Pop and back-key routing.
     public sealed partial class PopupStack
     {
         /// <summary>
-        /// back 키(ESC/Android back)를 최상단 팝업에 라우팅한다.
+        /// Routes the back key (ESC/Android back) to the topmost popup.
         /// </summary>
         /// <returns>
-        /// 키를 소비했으면 true. 스택이 비어 있을 때만 false — 게임이 종료 확인 등
-        /// 다음 처리를 이어간다. 최상단이 전이 중이거나 닫기 잠금 중이면 아무것도 하지 않고
-        /// 소비하며, <see cref="Popup.OnBackRequested"/>가 false를 돌려주면
-        /// 닫지 않고 소비만 한다.
+        /// True if the key was consumed. False only when the stack is empty — the game continues
+        /// with its own handling (e.g. quit confirmation). If the topmost popup is in transition
+        /// or close-locked, nothing happens but the key is consumed; if
+        /// <see cref="Popup.OnBackRequested"/> returns false, the key is consumed without closing.
         /// </returns>
         public bool HandleBack()
         {
@@ -32,7 +32,7 @@ namespace Bun3.Unity.UI.Popups
             return true;
         }
 
-        /// <summary>최상단의 닫히는 중이 아닌 팝업을 닫는다.</summary>
+        /// <summary>Closes the topmost popup that is not already closing.</summary>
         public void Pop()
         {
             for (int i = _stack.Count - 1; i >= 0; i--)
@@ -45,14 +45,15 @@ namespace Bun3.Unity.UI.Popups
             }
         }
 
-        /// <summary>팝업을 닫는다. 닫힘 연출 완료를 기다리지 않는 fire-and-forget 버전.</summary>
+        /// <summary>Closes a popup. Fire-and-forget: does not wait for the close transition.</summary>
         public void Close(Popup popup) => CloseAsync(popup).Forget();
 
         /// <summary>
-        /// 팝업을 닫고 닫힘 연출·해제 완료까지 대기한다. 이 스택 소속이 아니거나 이미 닫히는
-        /// 중이면 무시. 열림 연출 중이거나 닫기 잠금(<see cref="Popup.IsCloseBlocked"/>)
-        /// 중이면 닫기를 예약만 하고 즉시 반환한다 — 열림 완료/마지막 잠금 해제 시 자동으로
-        /// 닫힌다. 실제 닫힘까지 기다리려면 <see cref="Popup.WaitUntilClosedAsync"/>를 쓸 것.
+        /// Closes a popup and waits for the close transition and release. Ignored when the popup
+        /// belongs to another stack or is already closing. If it is still opening or close-locked
+        /// (<see cref="Popup.IsCloseBlocked"/>), the close is only deferred and this returns
+        /// immediately — it closes automatically when the open completes / the last lock releases.
+        /// Use <see cref="Popup.WaitUntilClosedAsync"/> to wait for the actual close.
         /// </summary>
         public async UniTask CloseAsync(Popup popup)
         {
@@ -74,7 +75,7 @@ namespace Bun3.Unity.UI.Popups
             }
             catch (OperationCanceledException)
             {
-                // Clear/Dispose가 해제를 맡는다.
+                // Clear/Dispose owns the release.
             }
 
             if (popup.Stack != this || popup.Phase != PopupPhase.Closing)
@@ -91,9 +92,9 @@ namespace Bun3.Unity.UI.Popups
         }
 
         /// <summary>
-        /// 열린 팝업을 전부(또는 <paramref name="except"/>만 남기고) 정상 경로로 닫는다 —
-        /// 닫힘 연출·훅·이벤트를 전부 태운다(연출 생략 강제 정리는 <see cref="Clear"/>).
-        /// 레거시 HideAllPopups(without) 대응.
+        /// Closes all open popups (optionally keeping <paramref name="except"/>) via the normal
+        /// path — close transitions, hooks, and events all run (use <see cref="Clear"/> for
+        /// forced cleanup that skips transitions).
         /// </summary>
         public void CloseAll(Popup except = null)
         {
@@ -105,7 +106,7 @@ namespace Bun3.Unity.UI.Popups
             }
         }
 
-        /// <summary>조건에 맞는 팝업만 정상 경로로 닫는다. (저빈도 경로 — 델리게이트 허용)</summary>
+        /// <summary>Closes only matching popups via the normal path. (Low-frequency path — delegate OK.)</summary>
         public void CloseAll(Predicate<Popup> match)
         {
             if (match == null)

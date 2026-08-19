@@ -3,12 +3,12 @@ using System;
 namespace Bun3.Gameplay.Numerics
 {
     /// <summary>
-    /// BigNum이 쓰는 최소한의 128비트 정수 연산. netstandard2.1에는 UInt128/Math.BigMul이
-    /// 없으므로 직접 구현한다 — 전부 정수 연산이라 플랫폼 무관 결정론.
+    /// Minimal 128-bit integer operations for BigNum. netstandard2.1 has no UInt128/Math.BigMul,
+    /// so they are implemented directly — integer-only, hence platform-independent determinism.
     /// </summary>
     internal static class Int128Math
     {
-        /// <summary>부호 없는 64×64 → 128비트 곱. 32비트 반분할 스쿨북.</summary>
+        /// <summary>Unsigned 64×64 → 128-bit multiply. 32-bit half-word schoolbook.</summary>
         internal static void Mul64(ulong a, ulong b, out ulong hi, out ulong lo)
         {
             ulong aLo = (uint)a;
@@ -27,9 +27,9 @@ namespace Bun3.Gameplay.Numerics
         }
 
         /// <summary>
-        /// 부호 없는 128비트 ÷ 64비트 → 몫 128비트 + 나머지. 상위 워드 분할 후
-        /// Knuth Algorithm D의 2-림 특수화(하드웨어 나눗셈 수 회)로 처리 — 정수 연산만
-        /// 사용하므로 결정론이 유지된다. 실측 병목(이진 루프 128회)을 교체한 구현.
+        /// Unsigned 128-bit ÷ 64-bit → 128-bit quotient + remainder. Splits the high word, then a
+        /// two-limb specialization of Knuth Algorithm D (a handful of hardware divisions) —
+        /// integer-only, so determinism holds.
         /// </summary>
         internal static void DivRem(
             ulong uHi, ulong uLo, ulong divisor, out ulong qHi, out ulong qLo, out ulong remainder)
@@ -49,8 +49,8 @@ namespace Bun3.Gameplay.Numerics
 
             if (uHi >= divisor)
             {
-                // 상위 워드를 먼저 나눠 몫의 상위 절반을 얻고, 나머지를 하위 나눗셈에 넘긴다:
-                // (uHi:uLo)/d = (uHi/d)·2^64 + ((uHi%d):uLo)/d — 정확한 분해.
+                // Divide the high word first for the upper quotient half, pass the remainder down:
+                // (uHi:uLo)/d = (uHi/d)·2^64 + ((uHi%d):uLo)/d — exact decomposition.
                 qHi = uHi / divisor;
                 uHi %= divisor;
             }
@@ -62,9 +62,9 @@ namespace Bun3.Gameplay.Numerics
             qLo = DivRem128By64(uHi, uLo, divisor, out remainder);
         }
 
-        // (uHi:uLo) ÷ divisor. 전제: uHi < divisor (몫이 64비트에 들어온다).
-        // Knuth Algorithm D의 32비트 2-림 특수화(Hacker's Delight udivdi3 계열).
-        // 추정 몫의 보정 루프는 최대 2회 — unchecked 랩어라운드는 알고리즘의 일부다.
+        // (uHi:uLo) ÷ divisor. Precondition: uHi < divisor (quotient fits in 64 bits).
+        // 32-bit two-limb specialization of Knuth Algorithm D.
+        // The quotient-estimate correction loops run at most twice — unchecked wraparound is part of the algorithm.
         private static ulong DivRem128By64(ulong uHi, ulong uLo, ulong divisor, out ulong remainder)
         {
             const ulong Base = 1UL << 32;
@@ -108,7 +108,7 @@ namespace Bun3.Gameplay.Numerics
             return q1 * Base + q0;
         }
 
-        // netstandard2.1에는 BitOperations.LeadingZeroCount가 없다 — 이진 축소 6단계.
+        // netstandard2.1 has no BitOperations.LeadingZeroCount — 6-step binary reduction.
         private static int LeadingZeroCount(ulong value)
         {
             var count = 0;

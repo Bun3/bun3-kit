@@ -26,7 +26,7 @@ namespace Bun3.Unity.UI.Editor.Tests
             Stack.Push("p2", layer: 10);
             Stack.Push("p3", layer: 0);
 
-            // 정렬: (layer 오름차순, 삽입 순서) — layer 10이 항상 위.
+            // Sort: (layer ascending, insertion order) — layer 10 always stays on top.
             Assert.AreSame(Created[1], Stack.Top);
             Assert.AreEqual(3, Stack.Count);
         }
@@ -75,7 +75,7 @@ namespace Bun3.Unity.UI.Editor.Tests
 
             Stack.Pop();
 
-            Assert.AreEqual(1, Stack.Count, "기존 팝업이 닫히면 대기열의 같은 키가 열려야 한다.");
+            Assert.AreEqual(1, Stack.Count, "Queued same-key entry must open once the existing popup closes.");
             Assert.AreSame(Created[1], Stack.Top);
             Assert.AreEqual(0, Stack.QueuedCount);
         }
@@ -97,7 +97,7 @@ namespace Bun3.Unity.UI.Editor.Tests
             Assert.AreEqual(1, Stack.Count);
             Assert.AreSame(Created[0], Stack.Top);
             Assert.AreEqual(1, Created[1].BackRequests);
-            Assert.AreEqual(0, Created[0].BackRequests, "back은 최상단에만 라우팅돼야 한다.");
+            Assert.AreEqual(0, Created[0].BackRequests, "Back must route only to the topmost popup.");
         }
 
         [Test]
@@ -119,7 +119,7 @@ namespace Bun3.Unity.UI.Editor.Tests
             Stack.Push("p1");
 
             Assert.AreEqual(PopupPhase.Opening, Created[0].Phase);
-            Assert.IsTrue(Stack.HandleBack(), "전이 중에도 키는 소비돼야 한다.");
+            Assert.IsTrue(Stack.HandleBack(), "The key must be consumed even during a transition.");
             Assert.AreEqual(0, Created[0].BackRequests);
             Assert.AreEqual(1, Stack.Count);
         }
@@ -130,7 +130,7 @@ namespace Bun3.Unity.UI.Editor.Tests
             Stack.Enqueue("p1");
             Stack.Enqueue("p2");
 
-            Assert.AreEqual(1, Stack.Count, "머리는 즉시 표시돼야 한다.");
+            Assert.AreEqual(1, Stack.Count, "The head entry must show immediately.");
             Assert.AreEqual(1, Stack.QueuedCount);
 
             Stack.Pop();
@@ -168,7 +168,7 @@ namespace Bun3.Unity.UI.Editor.Tests
 
             Stack.Close(popup);
 
-            Assert.AreEqual(PopupPhase.Opening, popup.Phase, "열림 연출 중에는 닫기가 예약만 돼야 한다.");
+            Assert.AreEqual(PopupPhase.Opening, popup.Phase, "Close must only be deferred during the open transition.");
             Assert.AreEqual(1, Stack.Count);
 
             popup.OpenSource.TrySetResult();
@@ -193,7 +193,7 @@ namespace Bun3.Unity.UI.Editor.Tests
             popup.CloseSource.TrySetResult();
 
             Assert.AreEqual(0, Stack.Count);
-            Assert.AreEqual(1, Released.Count, "릴리저는 한 번만 호출돼야 한다.");
+            Assert.AreEqual(1, Released.Count, "The releaser must be called only once.");
         }
 
         [Test]
@@ -217,13 +217,13 @@ namespace Bun3.Unity.UI.Editor.Tests
             Stack.Push("p1");
             Stack.Push("p2");
             Stack.Enqueue("p3");
-            Stack.Close(Created[1]); // 닫힘 연출 중 상태로 만든다.
+            Stack.Close(Created[1]); // Put it in the closing-transition state.
 
             Stack.Clear();
 
             Assert.AreEqual(0, Stack.Count);
             Assert.AreEqual(0, Stack.QueuedCount);
-            Assert.AreEqual(2, Released.Count, "연출 완료를 기다리지 않고 전부 해제돼야 한다.");
+            Assert.AreEqual(2, Released.Count, "Everything must be released without waiting for transitions.");
             Assert.AreEqual(PopupPhase.None, Created[0].Phase);
             Assert.AreEqual(PopupPhase.None, Created[1].Phase);
         }
@@ -238,13 +238,13 @@ namespace Bun3.Unity.UI.Editor.Tests
             Created[0].OpenSource.TrySetResult();
 
             Assert.IsNull(pushTask.GetAwaiter().GetResult(),
-                "열림 연출 중 Clear되면 이미 해제된 인스턴스 대신 null을 돌려줘야 한다.");
+                "Clear during the open transition must return null, not an already-released instance.");
         }
 
         [Test]
         public void Enqueue_FactoryThrow_ContinuesDraining()
         {
-            // 구독자가 있으면 UniTask 기본 예외 로깅이 대체된다 — 테스트 로그 오염 방지.
+            // A subscriber replaces UniTask's default exception logging — keeps the test log clean.
             static void Swallow(System.Exception _) { }
             UniTaskScheduler.UnobservedTaskException += Swallow;
             try
@@ -256,12 +256,12 @@ namespace Bun3.Unity.UI.Editor.Tests
                     ReleasePopup);
 
                 stack.Push("p9");
-                stack.Enqueue("p1"); // 로드가 던지는 키
+                stack.Enqueue("p1"); // Key whose load throws.
                 stack.Enqueue("p2");
 
-                stack.Pop(); // 스택이 비면서 드레인 시작 → 1은 실패, 2로 이어져야 한다
+                stack.Pop(); // Stack empties, draining starts → p1 fails, must continue to p2.
 
-                Assert.AreEqual(1, stack.Count, "실패한 항목 다음이 표시돼야 한다.");
+                Assert.AreEqual(1, stack.Count, "The entry after the failed one must show.");
                 Assert.AreEqual("p2", stack.Top.Key.Name);
 
                 stack.Dispose();
@@ -287,7 +287,7 @@ namespace Bun3.Unity.UI.Editor.Tests
             var late = new UnityEngine.GameObject("late").AddComponent<TestPopup>();
             source.TrySetResult(late);
 
-            Assert.AreEqual(0, stack.Count, "취소 후 도착한 인스턴스는 스택에 들어오면 안 된다.");
+            Assert.AreEqual(0, stack.Count, "An instance arriving after cancellation must not enter the stack.");
             Assert.AreEqual(1, released);
 
             stack.Dispose();
@@ -302,17 +302,17 @@ namespace Bun3.Unity.UI.Editor.Tests
             var stack = new PopupStack((key, ct) => source.Task, ReleasePopup);
 
             stack.Push("p1");
-            stack.Push("p1"); // 로딩 중 중복 — Ignore
+            stack.Push("p1"); // Duplicate while loading — Ignore.
             stack.Enqueue("p2");
 
             Assert.AreEqual(0, stack.Count);
-            Assert.AreEqual(1, stack.QueuedCount, "로딩 중에는 대기열이 드레인되면 안 된다.");
+            Assert.AreEqual(1, stack.QueuedCount, "The queue must not drain while loading.");
 
             created = new UnityEngine.GameObject("loaded").AddComponent<TestPopup>();
             Created.Add((TestPopup)created);
             source.TrySetResult(created);
 
-            Assert.AreEqual(1, stack.Count, "로딩 중 중복 Push는 무시돼야 한다.");
+            Assert.AreEqual(1, stack.Count, "A duplicate Push while loading must be ignored.");
             Assert.AreSame(created, stack.Top);
 
             stack.Dispose();

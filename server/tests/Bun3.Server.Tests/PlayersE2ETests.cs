@@ -39,7 +39,7 @@ public class PlayersE2ETests
         {
             var auth = await verifier.VerifyAsync(req.DeviceId);
             if (!auth.Succeeded)
-                throw new InvalidOperationException(auth.Error);   // 이 E2E에 실패 경로 없음 — 방어만
+                throw new InvalidOperationException(auth.Error);   // no failure path in this E2E — defensive only
 
             var result = await s.SignInAsync(auth.Identity.ToAccountKey());
             return new LoginResponse { Gold = result.Player.Gold, IsReconnect = result.IsReconnect };
@@ -62,26 +62,26 @@ public class PlayersE2ETests
                 RpcClient<PlayersRequest, PlayersResponse, PlayersUpdate>.ConnectAsync(
                     new TcpConnector(new TcpConnectorOptions { Host = "127.0.0.1", Port = listener.BoundPort!.Value }));
 
-            // ⓪ 미인증 게이트
+            // ⓪ unauthenticated gate
             var client1 = await Connect();
             var gated = await client1.RequestAsync<GetGoldResponse>(new GetGoldRequest()).AsTask().WaitAsync(Timeout);
             Assert.That(gated.Status, Is.EqualTo(RpcStatus.Unauthenticated));
 
-            // ① 게스트 로그인
+            // ① guest login
             var login1 = await client1.RequestAsync<LoginResponse>(new LoginRequest { DeviceId = "e2e" })
                 .AsTask().WaitAsync(Timeout);
             Assert.That(login1.Value!.IsReconnect, Is.False);
             Assert.That(login1.Value.Gold, Is.EqualTo(100));
 
-            // ② Player 상태를 쓰는 요청
+            // ② request that writes Player state
             var added = await client1.RequestAsync<AddGoldResponse>(new AddGoldRequest { Amount = 23 })
                 .AsTask().WaitAsync(Timeout);
             Assert.That(added.Value!.Gold, Is.EqualTo(123));
 
-            // ③ 강제 절단
+            // ③ forced disconnect
             client1.Close();
 
-            // ④ 유예(기본 60초) 내 재접속 — 상태 그대로, 로더 재호출 없음
+            // ④ reconnect within grace period (default 60s) — state intact, loader not called again
             var client2 = await Connect();
             var login2 = await client2.RequestAsync<LoginResponse>(new LoginRequest { DeviceId = "e2e" })
                 .AsTask().WaitAsync(Timeout);
@@ -89,7 +89,7 @@ public class PlayersE2ETests
             Assert.That(login2.Value.Gold, Is.EqualTo(123));
             Assert.That(loaderCalls, Is.EqualTo(1));
 
-            // ⑤ 같은 계정 두 번째 클라 → 기존 클라 킥
+            // ⑤ second client on the same account -> existing client kicked
             var client2Closed = new TaskCompletionSource<DisconnectInfo>(TaskCreationOptions.RunContinuationsAsynchronously);
             client2.Closed += info => client2Closed.TrySetResult(info);
             var client3 = await Connect();
@@ -98,7 +98,7 @@ public class PlayersE2ETests
             Assert.That(login3.Value!.IsReconnect, Is.True);
             Assert.That(login3.Value.Gold, Is.EqualTo(123));
             var kicked = await client2Closed.Task.WaitAsync(Timeout);
-            Assert.That(kicked.Code, Is.EqualTo(DisconnectCode.DuplicateLogin));   // "다른 기기에서 로그인" 사유 전달
+            Assert.That(kicked.Code, Is.EqualTo(DisconnectCode.DuplicateLogin));   // "logged in on another device" reason delivered
             Assert.That(loaderCalls, Is.EqualTo(1));
             client3.Close();
         }

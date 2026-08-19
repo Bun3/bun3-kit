@@ -5,13 +5,14 @@ using UnityEngine;
 namespace Bun3.Unity.UI.Popups
 {
     /// <summary>
-    /// 스택 순서가 바뀔 때마다(열림/닫힘/Focus) 팝업들의 sibling index를 스택 순서에 맞춰
-    /// 정렬하는 선택 도우미. (순서 통지와 딤 토글은 스택이 직접 하므로 여기서는 트랜스폼만.)
+    /// Optional helper that keeps popups' sibling indices matching stack order on every order
+    /// change (open/close/Focus). (Order notification and dim toggling are done by the stack —
+    /// only transforms here.)
     /// </summary>
     /// <remarks>
-    /// 팝업 전용 부모를 전제로 한다 — 부모에 팝업 아닌 자식이 섞여 있으면 인덱스 보장이 없다.
-    /// 부모가 서로 다른 팝업이 섞여도 부모별로 상대 순서를 맞춘다.
-    /// 스택과 수명을 같이하려면 게임이 <see cref="Dispose"/>를 챙긴다.
+    /// Assumes a popup-only parent — no index guarantee if non-popup children share the parent.
+    /// Popups under different parents keep their relative order per parent.
+    /// The game calls <see cref="Dispose"/> to tie its lifetime to the stack.
     /// </remarks>
     public sealed class PopupSiblingArranger : IDisposable
     {
@@ -19,7 +20,7 @@ namespace Bun3.Unity.UI.Popups
         private readonly Dictionary<Transform, int> _siblingCounters = new();
         private readonly Action<Popup> _onStackChanged;
 
-        /// <param name="stack">정렬 대상 스택. 열림/닫힘/Focus 이벤트를 구독한다.</param>
+        /// <param name="stack">Stack to arrange for. Subscribes to open/close/Focus events.</param>
         public PopupSiblingArranger(PopupStack stack)
         {
             _stack = stack ?? throw new ArgumentNullException(nameof(stack));
@@ -30,7 +31,7 @@ namespace Bun3.Unity.UI.Popups
             _stack.Focused += _onStackChanged;
         }
 
-        /// <summary>스택 이벤트 구독을 해지한다. 이후 재정렬은 일어나지 않는다.</summary>
+        /// <summary>Unsubscribes from stack events. No rearranging happens afterward.</summary>
         public void Dispose()
         {
             _stack.Opened -= _onStackChanged;
@@ -40,7 +41,7 @@ namespace Bun3.Unity.UI.Popups
 
         private void OnStackChanged(Popup popup) => Arrange();
 
-        /// <summary>즉시 재정렬한다. 게임이 팝업 부모를 옮긴 직후 등 수동 갱신용.</summary>
+        /// <summary>Rearranges immediately. For manual refresh, e.g. right after the game reparents a popup.</summary>
         public void Arrange()
         {
             _siblingCounters.Clear();

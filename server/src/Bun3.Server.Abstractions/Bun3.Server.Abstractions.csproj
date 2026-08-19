@@ -10,7 +10,7 @@
     <Authors>Bun3</Authors>
     <RepositoryUrl>https://github.com/Bun3/bun3-kit</RepositoryUrl>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <Description>게임 서버 모듈의 전송·로깅 계약 (netstandard2.1, Unity 호환)</Description>
+    <Description>Transport and logging contracts for game server modules (netstandard2.1, Unity-compatible)</Description>
   </PropertyGroup>
 
   <ItemGroup>

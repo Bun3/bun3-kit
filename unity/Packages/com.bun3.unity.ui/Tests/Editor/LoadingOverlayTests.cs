@@ -37,7 +37,7 @@ namespace Bun3.Unity.UI.Editor.Tests
         [SetUp]
         public void SetUp()
         {
-            _view = null; // NUnit 픽스처 재사용 — 이전 테스트의 파괴된 참조 제거
+            _view = null; // NUnit reuses the fixture — drop the previous test's destroyed reference.
             _overlay = new TestLoadingOverlay(CreateView);
         }
 
@@ -53,19 +53,19 @@ namespace Bun3.Unity.UI.Editor.Tests
         public void ShortWork_NeverShows()
         {
             var scope = _overlay.Begin();
-            scope.Dispose(); // 지연 시간 안에 끝난 작업
+            scope.Dispose(); // Work finished within the show delay.
 
             _overlay.DelaySource.TrySetResult();
 
-            Assert.IsFalse(_overlay.IsVisible, "지연 안에 끝나면 오버레이가 뜨지 않아야 한다(플래시 방지).");
-            Assert.IsNull(_view, "뷰 생성조차 하지 않아야 한다.");
+            Assert.IsFalse(_overlay.IsVisible, "Work finishing within the delay must never show the overlay (flash prevention).");
+            Assert.IsNull(_view, "The view must not even be created.");
         }
 
         [Test]
         public void LongWork_ShowsAfterDelay_HidesOnRelease()
         {
             var scope = _overlay.Begin();
-            _overlay.DelaySource.TrySetResult(); // 지연 경과
+            _overlay.DelaySource.TrySetResult(); // Delay elapsed.
 
             Assert.IsTrue(_overlay.IsVisible);
             Assert.IsTrue(_view.gameObject.activeSelf);
@@ -84,7 +84,7 @@ namespace Bun3.Unity.UI.Editor.Tests
             var inner = _overlay.Begin();
 
             inner.Dispose();
-            Assert.IsTrue(_overlay.IsVisible, "구간이 남아 있으면 유지돼야 한다.");
+            Assert.IsTrue(_overlay.IsVisible, "Must stay visible while a section remains.");
 
             outer.Dispose();
             Assert.IsFalse(_overlay.IsVisible);

@@ -9,7 +9,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Bun3.Server.Transport.Tcp
 {
-    /// <summary>순수 Socket 기반 TCP 리스너. 프레이밍은 PacketFormat(4바이트 길이 프리픽스).</summary>
+    /// <summary>Plain Socket-based TCP listener. Framing is PacketFormat (4-byte length prefix).</summary>
     public sealed class TcpTransportListener : ITransportListener
     {
         private readonly TcpTransportOptions _options;
@@ -18,19 +18,19 @@ namespace Bun3.Server.Transport.Tcp
         private TcpListener? _listener;
         private Task? _acceptLoop;
         private long _nextConnectionId;
-        private int _boundPort = -1; // int?는 토런 리드 가능 — 센티널 int + Volatile로 원자 보장
+        private int _boundPort = -1; // int? can tear — sentinel int + Volatile guarantees atomicity.
         private volatile bool _stopping;
         private int _activeConnections;
         private volatile bool _capacityLogged;
 
-        /// <summary>TCP 리스너를 구성한다. StartAsync 전까지는 바인딩하지 않는다.</summary>
+        /// <summary>Constructs the TCP listener. Does not bind until StartAsync.</summary>
         public TcpTransportListener(TcpTransportOptions options, ILogger? logger = null)
         {
             _options = options ?? throw new ArgumentNullException(nameof(options));
             _logger = new SafeLogger(logger ?? NullLogger.Instance);
         }
 
-        /// <summary>실제 바인딩된 포트. Options.Port가 0이면 시작 후 여기서 확인한다. Stop 이후에도 유효.</summary>
+        /// <summary>The actually bound port. If Options.Port is 0, read it here after start. Remains valid after Stop.</summary>
         public int? BoundPort
         {
             get
@@ -40,7 +40,7 @@ namespace Bun3.Server.Transport.Tcp
             }
         }
 
-        /// <remarks>단일 사용: StopAsync 이후 재시작할 수 없다. 새 인스턴스를 생성할 것.</remarks>
+        /// <remarks>Single use: cannot be restarted after StopAsync. Create a new instance instead.</remarks>
         public Task StartAsync(IConnectionHandler handler, CancellationToken ct = default)
         {
             if (handler == null)
@@ -61,12 +61,12 @@ namespace Bun3.Server.Transport.Tcp
             return Task.CompletedTask;
         }
 
-        /// <summary>신규 연결 수락을 중단하고 accept 루프가 끝나기를 기다린다.</summary>
+        /// <summary>Stops accepting new connections and waits for the accept loop to finish.</summary>
         public async Task StopAsync(CancellationToken ct = default)
         {
             _stopping = true;
-            _stopCts.Cancel(); // accept 실패 백오프(100ms) 대기 중이어도 즉시 깨운다
-            _listener?.Stop(); // AcceptTcpClientAsync를 깨운다
+            _stopCts.Cancel(); // Wakes immediately even if waiting in the accept-failure backoff (100ms).
+            _listener?.Stop(); // Wakes AcceptTcpClientAsync.
             if (_acceptLoop != null)
             {
                 await _acceptLoop.ConfigureAwait(false);
@@ -76,7 +76,7 @@ namespace Bun3.Server.Transport.Tcp
         private async Task AcceptLoopAsync(IConnectionHandler handler)
         {
             var listener = _listener!;
-            var counted = new CountingHandler(this, handler);   // OnClosed에서 활성 연결 수를 회수한다
+            var counted = new CountingHandler(this, handler);   // Reclaims the active connection count in OnClosed.
             while (true)
             {
                 TcpClient client;
@@ -86,30 +86,30 @@ namespace Bun3.Server.Transport.Tcp
                 }
                 catch (Exception) when (_stopping)
                 {
-                    break; // Stop()에 의한 정상 종료
+                    break; // Normal shutdown via Stop().
                 }
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, "Accept failed.");
                     try
                     {
-                        await Task.Delay(100, _stopCts.Token).ConfigureAwait(false); // 지속 실패 시 핫스핀 방지
+                        await Task.Delay(100, _stopCts.Token).ConfigureAwait(false); // Avoid hot spin on persistent failure.
                     }
                     catch (OperationCanceledException)
                     {
-                        break; // StopAsync — 백오프를 기다리지 않고 즉시 종료
+                        break; // StopAsync — exit immediately without waiting out the backoff.
                     }
 
                     continue;
                 }
 
-                // 연결 수 상한 — accept 루프는 단일 스레드이므로 검사·증가에 경합이 없다.
+                // Connection cap — the accept loop is single-threaded, so check-then-increment has no race.
                 if (_options.MaxConnections > 0
                     && Volatile.Read(ref _activeConnections) >= _options.MaxConnections)
                 {
                     if (!_capacityLogged)
                     {
-                        _capacityLogged = true;   // 상한 도달당 1회만 경고 — 거부 폭주가 로그를 뒤덮지 않게
+                        _capacityLogged = true;   // Warn once per time the cap is hit — a rejection burst must not flood the log.
                         _logger.LogWarning(
                             "Connection limit {MaxConnections} reached; rejecting new connections.",
                             _options.MaxConnections);
@@ -126,9 +126,10 @@ namespace Bun3.Server.Transport.Tcp
                     var connection = new TcpConnection(
                         Interlocked.Increment(ref _nextConnectionId), client, _options, counted, _logger);
 
-                    // 계약: OnConnected 반환 전에는 OnPacket/OnClosed가 발생하지 않도록
-                    // 수신 루프는 OnConnected 이후에 시작한다. 루프는 내부에서 예외를 삼키지만
-                    // finally의 OnClosed(핸들러 코드)가 던질 수 있으므로 폴트를 관찰해 로그로 남긴다.
+                    // Contract: the receive loop starts after OnConnected so no OnPacket/OnClosed
+                    // occurs before OnConnected returns. The loop swallows exceptions internally,
+                    // but OnClosed in its finally (handler code) may throw, so observe the fault
+                    // and log it.
                     counted.OnConnected(connection);
                     var connectionId = connection.Id;
                     _ = Task.Run(connection.RunReceiveLoopAsync).ContinueWith(
@@ -139,9 +140,10 @@ namespace Bun3.Server.Transport.Tcp
                 }
                 catch (Exception ex)
                 {
-                    // OnConnected가 던지면 핸들러가 이 연결을 등록하지 못한 것이므로
-                    // OnClosed를 통지하지 않고 소켓만 정리한다 (exactly-once는 OnConnected가
-                    // 정상 반환한 연결에 대한 계약). OnClosed가 오지 않으므로 카운트도 여기서 회수.
+                    // If OnConnected throws, the handler never registered this connection, so do
+                    // not report OnClosed and only clean up the socket (exactly-once applies to
+                    // connections whose OnConnected returned normally). No OnClosed will come, so
+                    // reclaim the count here.
                     OnConnectionClosed();
                     _logger.LogError(ex, "Connection setup failed; closing client.");
                     try { client.Close(); } catch { }
@@ -152,7 +154,7 @@ namespace Bun3.Server.Transport.Tcp
         private void OnConnectionClosed()
         {
             Interlocked.Decrement(ref _activeConnections);
-            _capacityLogged = false;   // 다음에 다시 상한에 닿으면 재경고
+            _capacityLogged = false;   // Warn again the next time the cap is reached.
         }
 
         private sealed class CountingHandler : IConnectionHandler

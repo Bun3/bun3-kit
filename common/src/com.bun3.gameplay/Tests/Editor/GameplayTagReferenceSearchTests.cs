@@ -195,7 +195,7 @@ namespace Bun3.Gameplay.Unity.Tests
                 Is.True);
         }
 
-        /// <summary>열거 실패가 완전한 검색 결과를 불완전으로 낮춰 일괄 정리를 막는지 검증합니다.</summary>
+        /// <summary>Verifies enumeration failures downgrade a complete search result to incomplete, blocking bulk cleanup.</summary>
         [Test]
         public void Enumeration_errors_make_a_complete_search_incomplete_and_block_cleanup()
         {

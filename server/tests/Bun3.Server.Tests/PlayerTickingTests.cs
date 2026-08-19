@@ -93,8 +93,8 @@ public class PlayerTickingTests
                 player.Exit();
                 return new AddGoldResponse { Gold = player.Gold };
             });
-            // 배포 편차: players_game.proto의 Request oneof에는 get_gold도 있어 부트 검증
-            // (RpcSchema.Validate)이 미등록 핸들러를 거부한다 — Task 2에서 확인된 동일 이슈.
+            // The Request oneof also includes get_gold, so boot validation (RpcSchema.Validate)
+            // rejects unregistered handlers — a stub is required.
             config.OnRequest<GetGoldRequest, GetGoldResponse>((s, req) =>
                 new ValueTask<Reply<GetGoldResponse>>(new GetGoldResponse { Gold = s.Player!.Gold }));
 
@@ -163,7 +163,7 @@ public class PlayerTickingTests
             Assert.That(reply.IsOk, Is.True);
         }
 
-        Assert.That(player.Violations, Is.Empty, "틱 훅과 핸들러가 동시에 실행되면 안 된다");
+        Assert.That(player.Violations, Is.Empty, "tick hook and handlers must never run concurrently");
         Assert.That(player.TickDeltas.Count, Is.GreaterThanOrEqualTo(1));
         client.Close();
     }
@@ -177,16 +177,16 @@ public class PlayerTickingTests
         await Task.Delay(150);
 
         client1.Close();
-        await Task.Delay(200);                       // detach 전파 대기
+        await Task.Delay(200);                       // wait for detach propagation
         var countDuringGraceStart = player.TickDeltas.Count;
-        await Task.Delay(500);                       // 유예 중 — 오프라인 구간
+        await Task.Delay(500);                       // during grace — offline window
         Assert.That(player.TickDeltas.Count, Is.LessThanOrEqualTo(countDuringGraceStart + 1),
-            "유예 중에는 틱이 멈춰야 한다 (전파 경계의 1회 오차 허용)");
+            "ticks must pause during grace (1-tick tolerance at the propagation boundary)");
 
-        var client2 = await h.LoginAsync("t3");      // 재바인딩
+        var client2 = await h.LoginAsync("t3");      // rebind
         await Task.Delay(300);
-        Assert.That(player.TickDeltas.Count, Is.GreaterThan(countDuringGraceStart + 1), "재접속 후 틱 재개");
-        // delta 리셋 — 오프라인 500ms가 delta에 합산되지 않았다
+        Assert.That(player.TickDeltas.Count, Is.GreaterThan(countDuringGraceStart + 1), "ticks resume after relogin");
+        // delta reset — the 500ms offline window was not added into delta
         foreach (var delta in player.TickDeltas)
         {
             Assert.That(delta, Is.LessThan(TimeSpan.FromMilliseconds(450)));
@@ -203,12 +203,12 @@ public class PlayerTickingTests
 
         await client.RequestAsync<AddGoldResponse>(new AddGoldRequest { Amount = 5 }).AsTask().WaitAsync(Timeout);
         await Task.Delay(600);
-        Assert.That(player.SaveCalls, Is.GreaterThanOrEqualTo(1), "dirty면 주기 저장");
-        Assert.That(player.IsDirty, Is.False, "저장 성공 시 dirty 해제");
+        Assert.That(player.SaveCalls, Is.GreaterThanOrEqualTo(1), "periodic save when dirty");
+        Assert.That(player.IsDirty, Is.False, "dirty cleared on successful save");
 
         var saved = player.SaveCalls;
         await Task.Delay(500);
-        Assert.That(player.SaveCalls, Is.EqualTo(saved), "클린이면 저장하지 않는다");
+        Assert.That(player.SaveCalls, Is.EqualTo(saved), "no save when clean");
         client.Close();
     }
 
@@ -223,15 +223,15 @@ public class PlayerTickingTests
         await client.RequestAsync<AddGoldResponse>(new AddGoldRequest { Amount = 5 }).AsTask().WaitAsync(Timeout);
         await Task.Delay(800);
 
-        Assert.That(player.SaveCalls, Is.GreaterThanOrEqualTo(2), "실패 후 dirty 유지로 재시도되어야 한다");
-        Assert.That(player.IsDirty, Is.False, "재시도 성공 후 클린");
+        Assert.That(player.SaveCalls, Is.GreaterThanOrEqualTo(2), "must retry — dirty is kept after failure");
+        Assert.That(player.IsDirty, Is.False, "clean after successful retry");
         client.Close();
     }
 
     [Test]
     public async Task Detach_saves_dirty_immediately()
     {
-        // 저장 주기를 아주 길게 — 주기 스윕이 아니라 detach 경로의 저장임을 보장
+        // very long save interval — proves the save comes from the detach path, not the periodic sweep
         await using var h = await Harness.StartAsync(saveInterval: TimeSpan.FromSeconds(60));
         var client = await h.LoginAsync("t6");
         var player = h.Registry.TryGet("guest:t6")!;
@@ -246,7 +246,7 @@ public class PlayerTickingTests
             await Task.Delay(20);
         }
 
-        Assert.That(player.SaveCalls, Is.EqualTo(1), "detach 시 즉시 저장 1회");
+        Assert.That(player.SaveCalls, Is.EqualTo(1), "exactly one immediate save on detach");
         Assert.That(player.IsDirty, Is.False);
     }
 
@@ -258,13 +258,13 @@ public class PlayerTickingTests
         var player = h.Registry.TryGet("guest:t7")!;
         await Task.Delay(150);
 
-        var client2 = await h.LoginAsync("t7");      // NewWins — client1 킥
+        var client2 = await h.LoginAsync("t7");      // NewWins — client1 kicked
         await Task.Delay(400);
 
-        Assert.That(player.Violations, Is.Empty, "소유권 이전 경합에서도 동시 실행 금지 유지");
+        Assert.That(player.Violations, Is.Empty, "no concurrent execution even during ownership transfer race");
         var before = player.TickDeltas.Count;
         await Task.Delay(300);
-        Assert.That(player.TickDeltas.Count, Is.GreaterThan(before), "새 세션에서 틱 계속");
+        Assert.That(player.TickDeltas.Count, Is.GreaterThan(before), "ticks continue on the new session");
         client2.Close();
         client1.Close();
     }

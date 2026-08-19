@@ -12,8 +12,8 @@ public class InventoryTransactionTests
     private const uint FlagLocked = 1u << 0;
 
     private ItemCatalog<string> _catalog = null!;
-    private ItemId _gold;      // 스택형
-    private ItemId _sword;     // 비스택형
+    private ItemId _gold;      // stackable
+    private ItemId _sword;     // unstackable
     private long _nextId;
     private ItemInventory<ItemState> _inventory = null!;
 
@@ -21,8 +21,8 @@ public class InventoryTransactionTests
     public void SetUp()
     {
         _catalog = new ItemCatalogBuilder<string>()
-            .Register("gold", "골드")
-            .Register("sword", "검", unstackable: true)
+            .Register("gold", "Gold")
+            .Register("sword", "Sword", unstackable: true)
             .Build();
         _gold = _catalog.GetRequired("gold");
         _sword = _catalog.GetRequired("sword");
@@ -38,10 +38,10 @@ public class InventoryTransactionTests
     public void Commit_mixes_definition_and_instance_ops_atomically()
     {
         var created = new List<ItemInstance<ItemState>>();
-        _inventory.TryAdd(_sword, 2, created);   // 검 #1, #2
+        _inventory.TryAdd(_sword, 2, created);   // swords #1, #2
         _inventory.TryAdd(_gold, 100);
 
-        // 특정 검 파괴 + 골드 소모 + 새 검 지급 — TryApply로는 불가능한 배치
+        // Destroy a specific sword + spend gold + grant a new sword — a batch TryApply cannot express
         var tx = _inventory.BeginTransaction();
         tx.RemoveInstance(created[0].InstanceId);
         tx.Remove(_gold, 30);
@@ -57,10 +57,11 @@ public class InventoryTransactionTests
     public void Targeted_instances_are_excluded_from_definition_pool()
     {
         var created = new List<ItemInstance<ItemState>>();
-        _inventory.TryAdd(_sword, 2, created);   // 검 2자루
+        _inventory.TryAdd(_sword, 2, created);   // 2 swords
 
-        // 정의 단위 소모(1)가 지정 인스턴스를 집으면 지정 소모가 깨진다 — 풀에서 제외돼야 함.
-        // 순서를 정의 소모 → 인스턴스 지정으로 놓아 전역 제외 규칙을 검증한다.
+        // If a definition-level removal (1) picked the targeted instance, the targeted removal
+        // would break — it must be excluded from the pool. Ordering definition removal before
+        // the instance target verifies the exclusion is global, not order-dependent.
         var tx = _inventory.BeginTransaction();
         tx.Remove(_sword, 1);
         tx.RemoveInstance(created[0].InstanceId);
@@ -68,14 +69,14 @@ public class InventoryTransactionTests
         Assert.That(tx.Commit(out _), Is.EqualTo(InventoryError.None));
         Assert.That(_inventory.InstanceCount, Is.EqualTo(0));
 
-        // 검 1자루뿐인데 지정 + 정의 소모를 동시에 요구하면 부족이 맞다
+        // With only 1 sword, demanding both targeted and definition removal is insufficient
         _inventory.TryAdd(_sword, 1, created);
         var tx2 = _inventory.BeginTransaction();
         tx2.RemoveInstance(created[^1].InstanceId);
         tx2.Remove(_sword, 1);
         Assert.That(tx2.Commit(out var failedIndex), Is.EqualTo(InventoryError.Insufficient));
         Assert.That(failedIndex, Is.EqualTo(1));
-        Assert.That(_inventory.InstanceCount, Is.EqualTo(1), "실패한 배치는 무변경");
+        Assert.That(_inventory.InstanceCount, Is.EqualTo(1), "failed batch leaves no changes");
     }
 
     [Test]
@@ -85,18 +86,18 @@ public class InventoryTransactionTests
         _inventory.TryAdd(_gold, 100, created);
         var goldId = created[0].InstanceId;
 
-        // 부분 소모 + 정의 소모가 같은 풀에서 정산된다
+        // Partial instance removal and definition removal settle against the same pool
         var tx = _inventory.BeginTransaction();
         tx.RemoveInstance(goldId, 60);
-        tx.Remove(_gold, 50);   // 잔량 40 < 50
+        tx.Remove(_gold, 50);   // remaining 40 < 50
         Assert.That(tx.Commit(out var failedIndex), Is.EqualTo(InventoryError.Insufficient));
         Assert.That(failedIndex, Is.EqualTo(1));
         Assert.That(_inventory.GetQuantity(_gold), Is.EqualTo((BigNum)100));
 
-        // 전량 지정(RemoveInstanceAll)은 잔량 전부를 정산한다
+        // Full-instance removal (RemoveInstanceAll) settles the entire remainder
         var tx2 = _inventory.BeginTransaction();
         tx2.Remove(_gold, 40);
-        tx2.RemoveInstance(goldId);   // 남은 60 전부
+        tx2.RemoveInstance(goldId);   // all remaining 60
         Assert.That(tx2.Commit(out _), Is.EqualTo(InventoryError.None));
         Assert.That(_inventory.InstanceCount, Is.EqualTo(0));
     }
@@ -109,7 +110,7 @@ public class InventoryTransactionTests
 
         var tx = _inventory.BeginTransaction();
         tx.RemoveInstance(created[0].InstanceId);
-        tx.RemoveInstance(created[0].InstanceId);   // 같은 인스턴스 중복 지정
+        tx.RemoveInstance(created[0].InstanceId);   // same instance targeted twice
         Assert.That(tx.Commit(out var failedIndex), Is.EqualTo(InventoryError.Insufficient));
         Assert.That(failedIndex, Is.EqualTo(1));
 
@@ -117,7 +118,7 @@ public class InventoryTransactionTests
         var tx2 = _inventory.BeginTransaction();
         tx2.RemoveInstance(created[1].InstanceId);
         Assert.That(tx2.Commit(out _), Is.EqualTo(InventoryError.Locked));
-        Assert.That(_inventory.InstanceCount, Is.EqualTo(2), "실패한 배치는 무변경");
+        Assert.That(_inventory.InstanceCount, Is.EqualTo(2), "failed batch leaves no changes");
     }
 
     [Test]
@@ -126,13 +127,13 @@ public class InventoryTransactionTests
         var tx = _inventory.BeginTransaction();
         tx.Add(_gold, 1);
 
-        var tx2 = _inventory.BeginTransaction();   // 이전 배치 폐기
+        var tx2 = _inventory.BeginTransaction();   // discards the previous batch
         Assert.That(() => tx.Add(_gold, 1), Throws.InvalidOperationException);
 
         tx2.Add(_gold, 5);
         Assert.That(tx2.Commit(out _), Is.EqualTo(InventoryError.None));
-        Assert.That(_inventory.GetQuantity(_gold), Is.EqualTo((BigNum)5), "폐기된 배치의 연산은 반영 안 됨");
-        Assert.That(() => tx2.Commit(out _), Throws.InvalidOperationException, "커밋 후 재사용 금지");
+        Assert.That(_inventory.GetQuantity(_gold), Is.EqualTo((BigNum)5), "discarded batch ops are not applied");
+        Assert.That(() => tx2.Commit(out _), Throws.InvalidOperationException, "no reuse after commit");
     }
 
     [Test]
@@ -140,7 +141,7 @@ public class InventoryTransactionTests
     {
         _inventory.TryAdd(_gold, 1_000_000);
 
-        for (var i = 0; i < 3; i++)   // 워밍업
+        for (var i = 0; i < 3; i++)   // warmup
         {
             var warm = _inventory.BeginTransaction();
             warm.Add(_gold, 10);

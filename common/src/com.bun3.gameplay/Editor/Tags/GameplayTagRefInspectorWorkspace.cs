@@ -31,7 +31,7 @@ namespace Bun3.Gameplay.Editor.Tags
             if (_current is not null && now < _expiresAt) return _current;
 
             _current = _openWorkspace()
-                ?? throw new InvalidOperationException("GameplayTag Inspector Workspace가 null입니다.");
+                ?? throw new InvalidOperationException("GameplayTag inspector workspace is null.");
             _expiresAt = now + _duration;
             return _current;
         }
@@ -104,7 +104,7 @@ namespace Bun3.Gameplay.Editor.Tags
             {
                 return new GameplayTagRefFieldState(
                     displayText,
-                    "선택한 객체에 서로 다른 GameplayTag 값이 있습니다.",
+                    "Selected objects have different GameplayTag values.",
                     false,
                     canSelect);
             }
@@ -113,7 +113,7 @@ namespace Bun3.Gameplay.Editor.Tags
             {
                 return new GameplayTagRefFieldState(
                     "None",
-                    "GameplayTag를 참조하지 않습니다.",
+                    "No GameplayTag is referenced.",
                     false,
                     canSelect);
             }
@@ -122,7 +122,7 @@ namespace Bun3.Gameplay.Editor.Tags
             {
                 return new GameplayTagRefFieldState(
                     displayText,
-                    "직렬화된 GameplayTag 경로 문법이 올바르지 않습니다.",
+                    "Serialized GameplayTag path has invalid syntax.",
                     true,
                     canSelect);
             }
@@ -130,7 +130,7 @@ namespace Bun3.Gameplay.Editor.Tags
             if (!canSelect)
             {
                 var tooltip = workspace.Diagnostics.Count == 0
-                    ? "현재 GameplayTag Workspace가 유효하지 않습니다."
+                    ? "Current GameplayTag workspace is invalid."
                     : string.Join(Environment.NewLine, workspace.Diagnostics);
                 return new GameplayTagRefFieldState(displayText, tooltip, true, false);
             }
@@ -139,7 +139,7 @@ namespace Bun3.Gameplay.Editor.Tags
             {
                 return new GameplayTagRefFieldState(
                     displayText,
-                    "현재 Runtime Catalog에 이 GameplayTag가 없습니다.",
+                    "This GameplayTag is missing from the current runtime catalog.",
                     true,
                     true);
             }

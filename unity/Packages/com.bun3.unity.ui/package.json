@@ -17,7 +17,7 @@
   "samples": [
     {
       "displayName": "Button Interactable Scope",
-      "description": "여러 조건의 결과를 모아 버튼의 interactable 상태를 결정하고, disabled 시 사유를 IButtonDisabledHandler로 전달하는 예시.",
+      "description": "Combines multiple conditions to drive a button's interactable state and reports the disabled reason via IButtonDisabledHandler.",
       "path": "Samples~/ButtonInteractableScope"
     }
   ]

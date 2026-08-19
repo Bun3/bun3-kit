@@ -3,25 +3,25 @@ using System;
 
 namespace Bun3.Gameplay.Tags.Catalog
 {
-    /// <summary>태그 카탈로그 컴파일 중 발견한 안정적인 진단입니다.</summary>
+    /// <summary>Stable diagnostic found during tag catalog compilation.</summary>
     public sealed class TagCatalogDiagnostic
     {
-        /// <summary>기계가 판별할 수 있는 안정적인 진단 코드입니다.</summary>
+        /// <summary>Stable machine-readable diagnostic code.</summary>
         public string Code { get; }
 
-        /// <summary>진단의 심각도입니다.</summary>
+        /// <summary>Severity of the diagnostic.</summary>
         public TagCatalogDiagnosticSeverity Severity { get; }
 
-        /// <summary>진단과 관련된 Source 식별자이며 전체 Catalog 진단이면 빈 문자열입니다.</summary>
+        /// <summary>Source identifier for the diagnostic, or empty for catalog-wide diagnostics.</summary>
         public string SourceId { get; }
 
-        /// <summary>진단과 관련된 원본 경로 또는 선언 레이블입니다.</summary>
+        /// <summary>Origin path or declaration label the diagnostic refers to.</summary>
         public string Origin { get; }
 
-        /// <summary>진단과 관련된 canonical 태그 경로입니다.</summary>
+        /// <summary>Canonical tag path the diagnostic refers to.</summary>
         public string CanonicalPath { get; }
 
-        /// <summary>사람이 읽을 수 있는 진단 설명입니다.</summary>
+        /// <summary>Human-readable diagnostic description.</summary>
         public string Message { get; }
 
         internal TagCatalogDiagnostic(

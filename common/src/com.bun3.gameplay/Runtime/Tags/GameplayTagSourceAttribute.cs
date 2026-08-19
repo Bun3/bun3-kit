@@ -5,17 +5,17 @@ using System.Diagnostics;
 namespace Bun3.Gameplay.Tags
 {
     /// <summary>
-    /// Native GameplayTag 선언을 제공하는 어셈블리의 안정적인 Source 정보를 지정합니다.
+    /// Declares the stable source identity of an assembly that provides native GameplayTag declarations.
     /// </summary>
     [Conditional("BUN3_GAMEPLAY_TAGS_AUTHORING")]
     [AttributeUsage(AttributeTargets.Assembly, AllowMultiple = true)]
     public sealed class GameplayTagSourceAttribute : Attribute
     {
         /// <summary>
-        /// Native GameplayTag Source 특성을 초기화합니다.
+        /// Initializes the native GameplayTag source attribute.
         /// </summary>
-        /// <param name="sourceId">Source의 안정적인 소문자 식별자입니다.</param>
-        /// <param name="displayName">사용자에게 표시할 Source 이름입니다.</param>
+        /// <param name="sourceId">Stable lowercase identifier of the source.</param>
+        /// <param name="displayName">Source name shown to users.</param>
         public GameplayTagSourceAttribute(string sourceId, string displayName)
         {
             SourceId = sourceId;
@@ -23,12 +23,12 @@ namespace Bun3.Gameplay.Tags
         }
 
         /// <summary>
-        /// Source의 안정적인 소문자 식별자를 가져옵니다.
+        /// Gets the stable lowercase identifier of the source.
         /// </summary>
         public string SourceId { get; }
 
         /// <summary>
-        /// 사용자에게 표시할 Source 이름을 가져옵니다.
+        /// Gets the source name shown to users.
         /// </summary>
         public string DisplayName { get; }
     }

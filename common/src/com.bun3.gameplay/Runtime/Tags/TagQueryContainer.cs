@@ -4,45 +4,45 @@ using System;
 namespace Bun3.Gameplay.Tags
 {
     /// <summary>
-    /// 하나의 카탈로그에 묶여 계층 태그 질의를 받는 컨테이너의 공통 기반입니다.
+    /// Common base for containers bound to one catalog that answer hierarchical tag queries.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>프로세스 내 카탈로그는 하나여야 합니다.</b> 여러 태그 Source를 하나의 카탈로그로 합쳐
-    /// 런타임에 동작시키는 것이 이 설계의 전제이며, <see cref="GameplayTag"/>는 그 카탈로그
-    /// 안에서만 뜻을 가지는 2바이트 index입니다. 서로 다른 카탈로그의 태그를 섞으면 index는
-    /// 같아도 가리키는 태그가 달라 계층 질의가 조용히 다른 답을 냅니다.
+    /// <b>One catalog per process.</b> A <see cref="GameplayTag"/> is a 2-byte index that is only
+    /// meaningful inside its catalog; mixing tags from different catalogs makes hierarchical
+    /// queries silently return wrong answers even when indices coincide.
     /// </para>
     /// <para>
-    /// 변경 경로는 카탈로그 범위를 벗어난 index를 예외로 거부합니다. 다만 크기가 같은 서로 다른
-    /// 카탈로그를 섞는 경우는 index만으로 탐지할 수 없으므로, 계약을 지키는 것은 호출자 책임입니다.
-    /// 조회 경로는 틱 핫패스이므로 범위 밖 태그를 예외 대신 미일치로 처리합니다.
+    /// Mutation paths reject out-of-range indices with an exception. Same-sized foreign catalogs
+    /// cannot be detected by index alone, so honoring the contract is the responsibility of the
+    /// caller. Query paths are tick hot paths, so out-of-range tags are treated as non-matches
+    /// instead of throwing.
     /// </para>
     /// </remarks>
     public abstract class TagQueryContainer
     {
         private readonly TagCatalog _catalog;
 
-        // internal 생성자 — 외부 파생을 막아 파생 타입의 sealed 의미를 유지한다.
+        // internal ctor - blocks external derivation so derived types stay effectively sealed.
         internal TagQueryContainer(TagCatalog catalog) => _catalog = catalog;
 
         internal TagCatalog Catalog => _catalog;
 
-        /// <summary>조회 태그 자신 또는 그 자손이 이 컨테이너에 담겨 있는지 확인합니다.</summary>
-        /// <param name="tag">조회할 태그입니다.</param>
-        /// <returns>일치하는 태그가 있으면 <see langword="true"/>입니다.</returns>
+        /// <summary>Checks whether the query tag itself or one of its descendants is held in this container.</summary>
+        /// <param name="tag">Tag to query.</param>
+        /// <returns><see langword="true"/> if a matching tag is present.</returns>
         public abstract bool Has(GameplayTag tag);
 
-        /// <summary>조회 태그가 정확히 담겨 있는지 확인합니다.</summary>
-        /// <param name="tag">조회할 태그입니다.</param>
-        /// <returns>정확히 일치하는 태그가 있으면 <see langword="true"/>입니다.</returns>
+        /// <summary>Checks whether the query tag is held exactly.</summary>
+        /// <param name="tag">Tag to query.</param>
+        /// <returns><see langword="true"/> if an exactly matching tag is present.</returns>
         public abstract bool HasExact(GameplayTag tag);
 
-        /// <summary>계층형 조회 태그 중 하나라도 이 컨테이너와 일치하는지 확인합니다.</summary>
-        /// <param name="query">같은 카탈로그 인스턴스에서 만든 조회 태그입니다.</param>
-        /// <returns>조회 태그 중 하나라도 일치하면 <see langword="true"/>입니다.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="query"/>가 <see langword="null"/>인 경우입니다.</exception>
-        /// <exception cref="ArgumentException"><paramref name="query"/>가 다른 카탈로그 인스턴스에 속한 경우입니다.</exception>
+        /// <summary>Checks whether any hierarchical query tag matches this container.</summary>
+        /// <param name="query">Query tags built from the same catalog instance.</param>
+        /// <returns><see langword="true"/> if any query tag matches.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="query"/> is <see langword="null"/>.</exception>
+        /// <exception cref="ArgumentException"><paramref name="query"/> belongs to a different catalog instance.</exception>
         public bool HasAny(TagContainer query)
         {
             ValidateQueryCatalog(query);
@@ -55,11 +55,11 @@ namespace Bun3.Gameplay.Tags
             return false;
         }
 
-        /// <summary>계층형 조회 태그가 모두 이 컨테이너와 일치하는지 확인합니다.</summary>
-        /// <param name="query">같은 카탈로그 인스턴스에서 만든 조회 태그입니다.</param>
-        /// <returns>빈 조회를 포함해 모든 조회 태그가 일치하면 <see langword="true"/>입니다.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="query"/>가 <see langword="null"/>인 경우입니다.</exception>
-        /// <exception cref="ArgumentException"><paramref name="query"/>가 다른 카탈로그 인스턴스에 속한 경우입니다.</exception>
+        /// <summary>Checks whether all hierarchical query tags match this container.</summary>
+        /// <param name="query">Query tags built from the same catalog instance.</param>
+        /// <returns><see langword="true"/> if all query tags match, including an empty query.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="query"/> is <see langword="null"/>.</exception>
+        /// <exception cref="ArgumentException"><paramref name="query"/> belongs to a different catalog instance.</exception>
         public bool HasAll(TagContainer query)
         {
             ValidateQueryCatalog(query);
@@ -72,11 +72,11 @@ namespace Bun3.Gameplay.Tags
             return true;
         }
 
-        /// <summary>정확한 조회 태그 중 하나라도 이 컨테이너에 있는지 확인합니다.</summary>
-        /// <param name="query">같은 카탈로그 인스턴스에서 만든 조회 태그입니다.</param>
-        /// <returns>정확한 조회 태그 중 하나라도 일치하면 <see langword="true"/>입니다.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="query"/>가 <see langword="null"/>인 경우입니다.</exception>
-        /// <exception cref="ArgumentException"><paramref name="query"/>가 다른 카탈로그 인스턴스에 속한 경우입니다.</exception>
+        /// <summary>Checks whether any exact query tag is present in this container.</summary>
+        /// <param name="query">Query tags built from the same catalog instance.</param>
+        /// <returns><see langword="true"/> if any exact query tag matches.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="query"/> is <see langword="null"/>.</exception>
+        /// <exception cref="ArgumentException"><paramref name="query"/> belongs to a different catalog instance.</exception>
         public bool HasAnyExact(TagContainer query)
         {
             ValidateQueryCatalog(query);
@@ -89,11 +89,11 @@ namespace Bun3.Gameplay.Tags
             return false;
         }
 
-        /// <summary>정확한 조회 태그가 모두 이 컨테이너에 있는지 확인합니다.</summary>
-        /// <param name="query">같은 카탈로그 인스턴스에서 만든 조회 태그입니다.</param>
-        /// <returns>빈 조회를 포함해 모든 정확한 조회 태그가 일치하면 <see langword="true"/>입니다.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="query"/>가 <see langword="null"/>인 경우입니다.</exception>
-        /// <exception cref="ArgumentException"><paramref name="query"/>가 다른 카탈로그 인스턴스에 속한 경우입니다.</exception>
+        /// <summary>Checks whether all exact query tags are present in this container.</summary>
+        /// <param name="query">Query tags built from the same catalog instance.</param>
+        /// <returns><see langword="true"/> if all exact query tags match, including an empty query.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="query"/> is <see langword="null"/>.</exception>
+        /// <exception cref="ArgumentException"><paramref name="query"/> belongs to a different catalog instance.</exception>
         public bool HasAllExact(TagContainer query)
         {
             ValidateQueryCatalog(query);
@@ -106,15 +106,15 @@ namespace Bun3.Gameplay.Tags
             return true;
         }
 
-        // 변경 경로 공통 검증 — None과 다른 카탈로그의 index를 거부한다.
+        // Shared mutation-path validation - rejects None and indices from other catalogs.
         private protected void ValidateMutationTag(GameplayTag tag)
         {
             if (!tag.IsValid)
-                throw new ArgumentException("GameplayTag.None은 컨테이너에 담을 수 없습니다.", nameof(tag));
+                throw new ArgumentException("GameplayTag.None cannot be stored in a container.", nameof(tag));
             if (tag.Index > _catalog.Count)
                 throw new ArgumentOutOfRangeException(
                     nameof(tag),
-                    "이 컨테이너의 카탈로그 범위를 벗어난 태그입니다 — 프로세스 내 카탈로그는 하나여야 합니다.");
+                    "Tag is outside the catalog range of this container; there must be one catalog per process.");
         }
 
         private void ValidateQueryCatalog(TagContainer query)
@@ -122,7 +122,7 @@ namespace Bun3.Gameplay.Tags
             if (query is null)
                 throw new ArgumentNullException(nameof(query));
             if (!ReferenceEquals(_catalog, query.Catalog))
-                throw new ArgumentException("태그 질의는 같은 TagCatalog 인스턴스를 요구합니다.", nameof(query));
+                throw new ArgumentException("Tag queries require the same TagCatalog instance.", nameof(query));
         }
     }
 }

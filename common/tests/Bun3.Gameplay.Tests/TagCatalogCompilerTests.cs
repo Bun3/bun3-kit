@@ -8,7 +8,7 @@ using NUnit.Framework;
 
 namespace Bun3.Gameplay.Tests;
 
-/// <summary>여러 GameplayTag Source의 결정적 병합 계약을 검증합니다.</summary>
+/// <summary>Verifies the deterministic merge contract across multiple GameplayTag sources.</summary>
 [TestFixture]
 public sealed class TagCatalogCompilerTests
 {

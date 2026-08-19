@@ -4,11 +4,11 @@ using System.Collections.Generic;
 namespace Bun3.Server.Items
 {
     /// <summary>
-    /// 카탈로그 빌더 — 기동 시 게임이 정의 소스(DB/JSON/코드)를 읽어 채우고
-    /// <see cref="Build"/> 1회로 불변 카탈로그를 만든다. 검증 델리게이트는 빌드 시
-    /// 일괄 실행되며 실패는 <see cref="ItemCatalogException"/>으로 기동을 막는다.
+    /// Catalog builder — at startup the game fills it from its definition source (DB/JSON/code)
+    /// and calls <see cref="Build"/> once to produce an immutable catalog. Validator delegates
+    /// run in bulk at build time; failures throw <see cref="ItemCatalogException"/> and block startup.
     /// </summary>
-    /// <typeparam name="TDefinition">게임이 정의하는 아이템 정의 타입.</typeparam>
+    /// <typeparam name="TDefinition">Game-defined item definition type.</typeparam>
     public sealed class ItemCatalogBuilder<TDefinition>
     {
         private readonly List<string> _ids = new List<string>();
@@ -25,25 +25,27 @@ namespace Bun3.Server.Items
         private bool _built;
 
         /// <summary>
-        /// 정의를 등록한다. id는 카탈로그가 인터닝해 보관하며 이후
-        /// <see cref="ItemCatalog.GetIdString"/>이 같은 참조를 돌려준다.
+        /// Registers a definition. The id is interned by the catalog and
+        /// <see cref="ItemCatalog.GetIdString"/> later returns the same reference.
         /// </summary>
-        /// <param name="id">고유 문자열 id(서수 비교) — 정식 키. 중복이면 던진다.</param>
-        /// <param name="definition">게임 정의(불투명 보관).</param>
-        /// <param name="maxCount">정의당 최대 보유량 하드 상한(스택형=수량, 비스택형=인스턴스 수).
-        /// 기본 <see cref="long.MaxValue"/> = 무제한 — 리젠 정의도 기본은 목표선 초과 적립
-        /// 허용이며, 엄격히 막으려면 maxCount를 maxRegen과 같게 명시한다. 0 이하는 거부.</param>
-        /// <param name="externalId">선택적 외부 숫자 id(DB 컬럼·Steam itemdefid 등) — 역색인에
-        /// 등록된다. 중복이면 던진다. <see cref="long.MinValue"/>는 예약값이라 거부.</param>
-        /// <param name="unstackable">true면 비스택형(인스턴스형) — 수량 병합 대신
-        /// 수량 1 인스턴스 N개로 보유하며 maxCount가 최대 인스턴스 수가 된다.</param>
-        /// <param name="regenPeriodTicks">리젠 주기(ticks). 0 = 리젠 없음. 지정 시
-        /// <see cref="ItemInventory{TState}.SettleRegen"/>이 이 정의를 자동 정산한다 —
-        /// 스택형 + <paramref name="maxRegen"/> 필수이며, 수량은 정수만 허용된다.</param>
-        /// <param name="maxRegen">리젠 목표선 — 리젠은 총량이 이 값 미만일 때만 채운다.
-        /// 반드시 maxCount 이하(위반은 데이터 오류로 던짐). 명시적 지급은 목표선을 넘어
-        /// maxCount까지 쌓일 수 있다(growninja 보상 티켓 패턴).</param>
-        /// <returns>체이닝용 빌더 자신.</returns>
+        /// <param name="id">Unique string id (ordinal comparison) — the canonical key. Duplicates throw.</param>
+        /// <param name="definition">Game definition (stored opaquely).</param>
+        /// <param name="maxCount">Hard cap on holdings per definition (stackable = amount,
+        /// unstackable = instance count). Default <see cref="long.MaxValue"/> = unlimited — regen
+        /// definitions also allow accruing past the target by default; to forbid strictly, set
+        /// maxCount equal to maxRegen. Non-positive values are rejected.</param>
+        /// <param name="externalId">Optional external numeric id (DB column, Steam itemdefid, etc.) —
+        /// registered in the reverse index. Duplicates throw. <see cref="long.MinValue"/> is reserved
+        /// and rejected.</param>
+        /// <param name="unstackable">If true, the definition is unstackable (instance-based) — held
+        /// as N amount-1 instances instead of a merged amount, with maxCount as the max instance count.</param>
+        /// <param name="regenPeriodTicks">Regen period (ticks). 0 = no regen. When set,
+        /// <see cref="ItemInventory{TState}.SettleRegen"/> auto-settles this definition — requires
+        /// stackable + <paramref name="maxRegen"/>, and only integer amounts are allowed.</param>
+        /// <param name="maxRegen">Regen target — regen only fills while the total is below this value.
+        /// Must be at most maxCount (a violation is a data error and throws). Explicit grants may
+        /// accrue past the target up to maxCount.</param>
+        /// <returns>This builder, for chaining.</returns>
         public ItemCatalogBuilder<TDefinition> Register(
             string id,
             TDefinition definition,
@@ -56,57 +58,57 @@ namespace Bun3.Server.Items
             ThrowIfBuilt();
             if (string.IsNullOrWhiteSpace(id))
             {
-                throw new ArgumentException("아이템 id는 비어 있을 수 없습니다.", nameof(id));
+                throw new ArgumentException("Item id must not be empty.", nameof(id));
             }
 
             if (maxCount <= 0)
             {
-                throw new ArgumentOutOfRangeException(nameof(maxCount), maxCount, "maxCount는 1 이상이어야 합니다.");
+                throw new ArgumentOutOfRangeException(nameof(maxCount), maxCount, "maxCount must be at least 1.");
             }
 
             if (maxRegen < 0)
             {
-                throw new ArgumentOutOfRangeException(nameof(maxRegen), maxRegen, "maxRegen은 0(없음) 이상이어야 합니다.");
+                throw new ArgumentOutOfRangeException(nameof(maxRegen), maxRegen, "maxRegen must be 0 (none) or greater.");
             }
 
             if (externalId == ItemCatalog.NoExternalId)
             {
-                throw new ArgumentOutOfRangeException(nameof(externalId), externalId, "long.MinValue는 예약값입니다.");
+                throw new ArgumentOutOfRangeException(nameof(externalId), externalId, "long.MinValue is reserved.");
             }
 
             if (regenPeriodTicks < 0)
             {
-                throw new ArgumentOutOfRangeException(nameof(regenPeriodTicks), regenPeriodTicks, "리젠 주기는 0(없음) 또는 양수여야 합니다.");
+                throw new ArgumentOutOfRangeException(nameof(regenPeriodTicks), regenPeriodTicks, "Regen period must be 0 (none) or positive.");
             }
 
             if (regenPeriodTicks > 0 && unstackable)
             {
-                throw new ItemCatalogException($"비스택형 정의는 리젠을 지원하지 않습니다: '{id}'");
+                throw new ItemCatalogException($"Unstackable definitions do not support regen: '{id}'");
             }
 
             if (regenPeriodTicks > 0 && maxRegen <= 0)
             {
-                throw new ItemCatalogException($"리젠 정의는 maxRegen(목표선)이 필요합니다: '{id}'");
+                throw new ItemCatalogException($"Regen definitions require maxRegen (target): '{id}'");
             }
 
             if (maxRegen > 0 && regenPeriodTicks <= 0)
             {
-                throw new ItemCatalogException($"maxRegen은 리젠 주기 없이는 의미가 없습니다: '{id}'");
+                throw new ItemCatalogException($"maxRegen is meaningless without a regen period: '{id}'");
             }
 
             if (maxRegen > maxCount)
             {
-                throw new ItemCatalogException($"maxRegen({maxRegen})은 maxCount({maxCount}) 이하여야 합니다: '{id}'");
+                throw new ItemCatalogException($"maxRegen ({maxRegen}) must be at most maxCount ({maxCount}): '{id}'");
             }
 
             if (_lookup.ContainsKey(id))
             {
-                throw new ItemCatalogException($"중복 등록된 아이템 id: '{id}'");
+                throw new ItemCatalogException($"Duplicate item id: '{id}'");
             }
 
             if (externalId.HasValue && _externalLookup.ContainsKey(externalId.Value))
             {
-                throw new ItemCatalogException($"중복 등록된 외부 id: {externalId.Value} (아이템 '{id}')");
+                throw new ItemCatalogException($"Duplicate external id: {externalId.Value} (item '{id}')");
             }
 
             if (externalId.HasValue)
@@ -126,11 +128,11 @@ namespace Bun3.Server.Items
         }
 
         /// <summary>
-        /// 빌드 시 실행할 검증 델리게이트를 추가한다. 게임 규칙 위반은
-        /// <see cref="ItemCatalogException"/>을 던져 기동을 막는다.
+        /// Adds a validator delegate run at build time. Game-rule violations throw
+        /// <see cref="ItemCatalogException"/> and block startup.
         /// </summary>
-        /// <param name="validator">완성된 카탈로그를 받아 검증하는 델리게이트.</param>
-        /// <returns>체이닝용 빌더 자신.</returns>
+        /// <param name="validator">Delegate that receives the finished catalog and validates it.</param>
+        /// <returns>This builder, for chaining.</returns>
         public ItemCatalogBuilder<TDefinition> AddValidator(Action<ItemCatalog<TDefinition>> validator)
         {
             ThrowIfBuilt();
@@ -139,13 +141,13 @@ namespace Bun3.Server.Items
         }
 
         /// <summary>
-        /// 단일 키 보조 색인을 선언한다(타입·카테고리 등). 색인은 <see cref="Build"/> 시
-        /// 1회 구축되며, 그전 조회는 던진다. 검증 델리게이트보다 먼저 구축되므로
-        /// 검증기에서 색인을 사용할 수 있다.
+        /// Declares a single-key secondary index (type, category, etc.). The index is built once
+        /// during <see cref="Build"/>; querying before that throws. Indexes are built before
+        /// validator delegates run, so validators may use them.
         /// </summary>
-        /// <typeparam name="TKey">색인 키 타입.</typeparam>
-        /// <param name="keySelector">정의에서 키를 뽑는 셀렉터(빌드 시에만 호출).</param>
-        /// <returns>빌드 후 조회 가능한 색인 핸들.</returns>
+        /// <typeparam name="TKey">Index key type.</typeparam>
+        /// <param name="keySelector">Selector extracting the key from a definition (called only at build time).</param>
+        /// <returns>Index handle, queryable after build.</returns>
         public ItemCatalogIndex<TKey> CreateIndex<TKey>(Func<TDefinition, TKey> keySelector)
             where TKey : notnull
         {
@@ -169,11 +171,11 @@ namespace Bun3.Server.Items
             return index;
         }
 
-        /// <summary>다중 키 보조 색인을 선언한다(태그 목록 등). 동작은
-        /// <see cref="CreateIndex{TKey}"/>와 동일하되 정의당 키 여러 개를 허용한다.</summary>
-        /// <typeparam name="TKey">색인 키 타입.</typeparam>
-        /// <param name="keysSelector">정의에서 키들을 뽑는 셀렉터(빌드 시에만 호출).</param>
-        /// <returns>빌드 후 조회 가능한 색인 핸들.</returns>
+        /// <summary>Declares a multi-key secondary index (tag lists, etc.). Behaves like
+        /// <see cref="CreateIndex{TKey}"/> but allows multiple keys per definition.</summary>
+        /// <typeparam name="TKey">Index key type.</typeparam>
+        /// <param name="keysSelector">Selector extracting the keys from a definition (called only at build time).</param>
+        /// <returns>Index handle, queryable after build.</returns>
         public ItemCatalogIndex<TKey> CreateMultiIndex<TKey>(Func<TDefinition, IEnumerable<TKey>> keysSelector)
             where TKey : notnull
         {
@@ -212,7 +214,7 @@ namespace Bun3.Server.Items
             list.Add(item);
         }
 
-        /// <summary>카탈로그를 빌드하고 검증을 실행한다. 빌더당 1회만 호출할 수 있다.</summary>
+        /// <summary>Builds the catalog and runs validation. May be called only once per builder.</summary>
         public ItemCatalog<TDefinition> Build()
         {
             ThrowIfBuilt();
@@ -256,7 +258,7 @@ namespace Bun3.Server.Items
         {
             if (_built)
             {
-                throw new InvalidOperationException("이미 빌드된 빌더입니다 — 카탈로그는 기동 시 1회만 만든다.");
+                throw new InvalidOperationException("Builder already built — the catalog is created once at startup.");
             }
         }
     }

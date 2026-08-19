@@ -3,17 +3,17 @@ using System;
 namespace Bun3.Unity.UI.Buttons
 {
     /// <summary>
-    /// 버튼이 비활성화된 사유. 메시지 또는 동작 중 하나만 갖는다.
+    /// Why a button is disabled. Holds exactly one of a message or an action.
     /// </summary>
     public readonly struct DisabledReason
     {
-        /// <summary>표시할 메시지. <see cref="DisabledAction"/>이 있으면 null이다.</summary>
+        /// <summary>Message to display. Null when <see cref="DisabledAction"/> is set.</summary>
         public string DisabledMessage { get; }
 
-        /// <summary>실행할 동작. <see cref="DisabledMessage"/>가 있으면 null이다.</summary>
+        /// <summary>Action to run. Null when <see cref="DisabledMessage"/> is set.</summary>
         public Action DisabledAction { get; }
 
-        /// <summary>전달할 사유가 없으면 true. 이 경우 핸들러는 호출되지 않는다.</summary>
+        /// <summary>True when there is no reason to deliver; the handler is not called.</summary>
         public bool IsEmpty => DisabledMessage == null && DisabledAction == null;
 
         public DisabledReason(string disabledMessage)

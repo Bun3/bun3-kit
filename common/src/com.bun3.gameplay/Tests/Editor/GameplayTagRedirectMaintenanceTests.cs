@@ -8,11 +8,11 @@ using NUnit.Framework;
 
 namespace Bun3.Gameplay.Unity.Tests
 {
-    /// <summary>redirect 정리 정책이 완전한 검색 결과만 신뢰하는지 검증합니다.</summary>
+    /// <summary>Verifies the redirect cleanup policy trusts only complete search results.</summary>
     [TestFixture]
     internal sealed class GameplayTagRedirectMaintenanceTests
     {
-        /// <summary>프로젝트 match가 없는 redirect만 일괄 후보가 되는지 검증합니다.</summary>
+        /// <summary>Verifies only redirects without project matches become bulk candidates.</summary>
         [Test]
         public void Bulk_cleanup_returns_only_sources_without_project_matches()
         {
@@ -35,7 +35,7 @@ namespace Bun3.Gameplay.Unity.Tests
                 Is.EqualTo(new[] { "Ability.Old" }));
         }
 
-        /// <summary>Source별 redirect projection이 Source ID와 old path 순서로 결정되고 shadow 상태를 보존하는지 검증합니다.</summary>
+        /// <summary>Verifies the per-source redirect projection orders by source ID and old path and preserves shadow state.</summary>
         [Test]
         public void Redirect_rows_are_grouped_by_source_and_mark_active_old_names_as_shadowed()
         {
@@ -80,7 +80,7 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(rows[0].IsShadowed, Is.False);
         }
 
-        /// <summary>대소문자만 다른 match도 후보에서 제외하고 redirect 순서를 유지하는지 검증합니다.</summary>
+        /// <summary>Verifies case-only-different matches are also excluded from candidates while redirect order is kept.</summary>
         [Test]
         public void Bulk_cleanup_ignores_case_and_preserves_redirect_order()
         {
@@ -100,7 +100,7 @@ namespace Bun3.Gameplay.Unity.Tests
                 Is.EqualTo(new[] { "State.Killed", "Item.Old" }));
         }
 
-        /// <summary>불완전한 검색이 정리 후보를 만들지 못하는지 검증합니다.</summary>
+        /// <summary>Verifies an incomplete search produces no cleanup candidates.</summary>
         [Test]
         public void Incomplete_scan_cannot_produce_cleanup_candidates()
         {
@@ -112,9 +112,9 @@ namespace Bun3.Gameplay.Unity.Tests
                 () => GameplayTagRedirectMaintenance.GetUnreferencedSources(redirects, incomplete));
         }
 
-        /// <summary>참조된 redirect dialog 결과가 명시적 결정으로 변환되는지 검증합니다.</summary>
-        /// <param name="result">DisplayDialogComplex가 반환한 버튼 index입니다.</param>
-        /// <param name="expected">기대하는 결정입니다.</param>
+        /// <summary>Verifies referenced-redirect dialog results convert to explicit decisions.</summary>
+        /// <param name="result">Button index returned by DisplayDialogComplex.</param>
+        /// <param name="expected">Expected decision.</param>
         [TestCase(0, ReferencedRedirectDecision.OpenReferences)]
         [TestCase(1, ReferencedRedirectDecision.Cancel)]
         [TestCase(2, ReferencedRedirectDecision.RemoveAnyway)]
@@ -124,7 +124,7 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(GameplayTagRedirectMaintenance.MapReferencedDialogResult(result), Is.EqualTo(expected));
         }
 
-        /// <summary>정의되지 않은 dialog 결과를 거부하는지 검증합니다.</summary>
+        /// <summary>Verifies an undefined dialog result is rejected.</summary>
         [Test]
         public void Unknown_dialog_result_is_rejected()
         {
@@ -132,7 +132,7 @@ namespace Bun3.Gameplay.Unity.Tests
                 () => GameplayTagRedirectMaintenance.MapReferencedDialogResult(3));
         }
 
-        /// <summary>정리 경고가 검사하지 못한 외부 데이터를 항상 알리는지 검증합니다.</summary>
+        /// <summary>Verifies the cleanup warning always mentions uninspected external data.</summary>
         [Test]
         public void Cleanup_warning_always_names_the_unscanned_external_data()
         {

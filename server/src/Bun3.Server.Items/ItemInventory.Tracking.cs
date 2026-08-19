@@ -1,20 +1,21 @@
-// ItemInventory partial — 변경 추적(DrainChanges)·인스턴스 로드 담당.
+// ItemInventory partial — change tracking (DrainChanges) and instance loading.
 using System;
 using System.Collections.Generic;
 using Bun3.Gameplay.Numerics;
 
 namespace Bun3.Server.Items
 {
-    // 변경 추적과 저장 로드 — DB upsert/delete와 클라 전송의 원천.
+    // Change tracking and save loading — the source for DB upsert/delete and client sync.
     public sealed partial class ItemInventory<TState>
     {
-        /// <summary>마지막 드레인 이후 변경이 있는지 여부.</summary>
+        /// <summary>Whether there are changes since the last drain.</summary>
         public bool HasChanges => _hasChanges;
 
         /// <summary>
-        /// 저장 로드용 — 기존 인스턴스 id(DB·Steam 권위)를 그대로 수용하고 추적·통지하지
-        /// 않는다. 중복 id·스택형 정의의 두 번째 인스턴스는 <see cref="InventoryError.DuplicateInstance"/>,
-        /// 비스택형에 수량 1 외는 <see cref="InventoryError.InvalidAmount"/>, maxCount 검사 수행.
+        /// For save loading — accepts an existing instance id (DB/Steam authoritative) as-is,
+        /// with no tracking or notification. Duplicate ids and a second instance of a stackable
+        /// definition return <see cref="InventoryError.DuplicateInstance"/>; unstackables with
+        /// amount other than 1 return <see cref="InventoryError.InvalidAmount"/>; maxCount is checked.
         /// </summary>
         public InventoryError TryLoadInstance(
             long instanceId,
@@ -61,7 +62,7 @@ namespace Bun3.Server.Items
 
                 if (_catalog.GetRegenPeriodTicks(item) > 0 && quantity.Exponent < 0)
                 {
-                    return InventoryError.InvalidAmount;   // 리젠 정의는 정수 수량만
+                    return InventoryError.InvalidAmount;   // Regen definitions allow integer amounts only.
                 }
 
                 if (maxCount != long.MaxValue && quantity.CompareTo(maxCount) > 0)
@@ -77,11 +78,12 @@ namespace Bun3.Server.Items
         }
 
         /// <summary>
-        /// 마지막 드레인 이후의 변경(Created/Updated/Removed)을 버퍼에 담고 추적을
-        /// 초기화한다. 순서는 Removed 먼저, 이후 순서 미보장. 드레인은 인메모리 스냅샷이며
-        /// 파괴적이다 — <b>버퍼가 변경 집합의 소유권을 넘겨받으므로</b> 게임은 영속화 성공
-        /// 전까지 버퍼를 유지하고, 실패 시 같은 버퍼로 재시도한다(Created/Updated는 인스턴스
-        /// 참조라 재시도 시점의 최신 상태가 나간다). DB I/O는 게임의 async 저장 훅 몫.
+        /// Collects the changes since the last drain (Created/Updated/Removed) into the buffer and
+        /// resets tracking. Removed entries come first; order is otherwise unspecified. The drain is
+        /// an in-memory snapshot and destructive — <b>the buffer takes ownership of the change set</b>,
+        /// so the game keeps the buffer until persistence succeeds and retries with the same buffer
+        /// on failure (Created/Updated hold instance references, so retries carry the latest state).
+        /// DB I/O belongs to the game's async save hook.
         /// </summary>
         public void DrainChanges(List<ItemChange<TState>> buffer)
         {

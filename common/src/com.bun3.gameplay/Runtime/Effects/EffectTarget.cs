@@ -8,7 +8,7 @@ using Bun3.Gameplay.Tags;
 namespace Bun3.Gameplay.Effects
 {
     /// <summary>
-    /// 효과가 적용될 수 있는 대상 하나입니다. 속성 집합·보유 태그·활성 효과 목록을 소유합니다.
+    /// One target effects can be applied to. Owns its attribute set, owned tags, and active effect list.
     /// </summary>
     public sealed class EffectTarget
     {
@@ -18,45 +18,45 @@ namespace Bun3.Gameplay.Effects
         private DrHistoryEntry[] _drHistory = Array.Empty<DrHistoryEntry>();
         private int _drHistoryCount;
 
-        /// <summary>DR(체감 저항, 스펙 §15 G6) 계열 태그 하나의 적용 이력 한 행입니다.</summary>
+        /// <summary>One application-history row for a DR (diminishing returns) category tag.</summary>
         internal struct DrHistoryEntry
         {
-            /// <summary>DR 계열을 식별하는 태그의 카탈로그 인덱스입니다.</summary>
+            /// <summary>Catalog index of the tag identifying the DR category.</summary>
             internal ushort CategoryTagIndex;
 
-            /// <summary>리셋 창 안에서 누적된 적용 횟수입니다(면역으로 무산된 적용도 포함).</summary>
+            /// <summary>Application count accumulated within the reset window (including applications voided by immunity).</summary>
             internal int AppliedCount;
 
-            /// <summary>이 계열이 마지막으로 적용(무산 포함)된 파이프라인 틱입니다.</summary>
+            /// <summary>Pipeline tick of this category's last application (voided ones included).</summary>
             internal long LastAppliedTick;
         }
 
-        /// <summary>대상 식별자입니다.</summary>
+        /// <summary>Target id.</summary>
         public TargetId Id { get; }
 
-        /// <summary>이 대상의 속성 집합입니다.</summary>
+        /// <summary>Attribute set of this target.</summary>
         public AttributeSet Attributes { get; }
 
-        /// <summary>이 대상이 보유한 태그와 누적 수입니다.</summary>
+        /// <summary>Tags this target owns, with their counts.</summary>
         public TagCountContainer Tags { get; }
 
-        /// <summary>현재 활성 효과 인스턴스 수입니다.</summary>
+        /// <summary>Number of currently active effect instances.</summary>
         public int ActiveEffectCount => _activeEffects.Count;
 
-        /// <summary>Id 오름차순으로 유지되는 활성 효과 인스턴스 목록입니다.</summary>
+        /// <summary>Active effect instances, kept in ascending Id order.</summary>
         internal List<EffectInstance> ActiveEffects => _activeEffects;
 
-        /// <summary>아직 소비되지 않은 효과 생애주기 이벤트들입니다.</summary>
+        /// <summary>Effect lifecycle events not yet consumed.</summary>
         public ReadOnlySpan<EffectLifecycleEvent> PendingEffectEvents => _events.AsSpan(0, _eventCount);
 
-        /// <summary>효과 생애주기 이벤트 버퍼를 비웁니다.</summary>
+        /// <summary>Clears the effect lifecycle event buffer.</summary>
         public void ClearEffectEvents() => _eventCount = 0;
 
-        /// <summary>대상 식별자·속성 레지스트리·아키타입이 선언한 속성들·태그 카탈로그로 대상을 만듭니다.</summary>
-        /// <param name="id">대상 식별자입니다.</param>
-        /// <param name="registry">속성 정의를 담은 레지스트리입니다.</param>
-        /// <param name="attributeIds">이 대상이 선언하는 속성 id들입니다.</param>
-        /// <param name="tagCatalog">보유 태그 집계에 쓸 태그 카탈로그입니다.</param>
+        /// <summary>Creates a target from an id, attribute registry, archetype-declared attributes, and tag catalog.</summary>
+        /// <param name="id">Target id.</param>
+        /// <param name="registry">Registry holding the attribute definitions.</param>
+        /// <param name="attributeIds">Attribute ids this target declares.</param>
+        /// <param name="tagCatalog">Tag catalog used for owned-tag counting.</param>
         public EffectTarget(TargetId id, AttributeRegistry registry, ReadOnlySpan<ushort> attributeIds, TagCatalog tagCatalog)
         {
             if (tagCatalog is null) throw new ArgumentNullException(nameof(tagCatalog));
@@ -65,7 +65,7 @@ namespace Bun3.Gameplay.Effects
             Tags = tagCatalog.CreateCountContainer();
         }
 
-        /// <summary>Id 오름차순 위치에 활성 효과 인스턴스를 삽입합니다.</summary>
+        /// <summary>Inserts an active effect instance at its ascending-Id position.</summary>
         internal void InsertActive(EffectInstance instance)
         {
             var position = _activeEffects.Count;
@@ -73,17 +73,17 @@ namespace Bun3.Gameplay.Effects
             _activeEffects.Insert(position, instance);
         }
 
-        /// <summary>활성 효과 목록에서 인스턴스를 제거합니다.</summary>
+        /// <summary>Removes an instance from the active effect list.</summary>
         internal void RemoveActive(EffectInstance instance) => _activeEffects.Remove(instance);
 
-        /// <summary>효과 생애주기 이벤트를 버퍼에 적재합니다.</summary>
+        /// <summary>Appends an effect lifecycle event to the buffer.</summary>
         internal void RaiseEffectEvent(EffectLifecycleEvent evt)
         {
             if (_eventCount == _events.Length) Array.Resize(ref _events, _events.Length * 2);
             _events[_eventCount++] = evt;
         }
 
-        /// <summary>DR 계열 태그의 이력 슬롯을 찾거나(없으면 카운트 0으로) 새로 만들어 인덱스를 반환합니다.</summary>
+        /// <summary>Finds the history slot for a DR category tag, or creates one (count 0) and returns its index.</summary>
         internal int FindOrCreateDrHistory(ushort categoryTagIndex)
         {
             for (var i = 0; i < _drHistoryCount; i++)
@@ -103,14 +103,14 @@ namespace Bun3.Gameplay.Effects
             return _drHistoryCount++;
         }
 
-        /// <summary>DR 이력 슬롯을 인덱스로 직접(가변) 참조합니다. <see cref="FindOrCreateDrHistory"/>가
-        /// 반환한 인덱스로만 호출해야 합니다.</summary>
+        /// <summary>Returns a direct (mutable) reference to a DR history slot. Must only be called with
+        /// an index returned by <see cref="FindOrCreateDrHistory"/>.</summary>
         internal ref DrHistoryEntry DrHistoryAt(int index) => ref _drHistory[index];
 
         /// <summary>
-        /// 이 대상의 결정론적 상태(속성 Base·활성 효과 인스턴스)를 깊은 복사한 스냅샷을 만듭니다.
-        /// Current·보유 태그·대기 적용 큐·파이프라인 틱 카운터는 포함하지 않습니다 —
-        /// <see cref="EffectTargetSnapshot"/> 문서 참고.
+        /// Creates a deep-copy snapshot of this target's deterministic state (attribute Base values,
+        /// active effect instances). Current, owned tags, pending application queue, and pipeline tick
+        /// counter are not included — see <see cref="EffectTargetSnapshot"/>.
         /// </summary>
         public EffectTargetSnapshot CreateSnapshot()
         {
@@ -151,27 +151,29 @@ namespace Bun3.Gameplay.Effects
         }
 
         /// <summary>
-        /// 스냅샷으로 이 대상을 복원합니다. 현재 활성 인스턴스는 전부 이벤트 없이 분리·회수되고
-        /// (복원은 관측 불가), 스냅샷의 인스턴스가 선언 순서 그대로 수정자 재부착까지 포함해 원시
-        /// 복원됩니다. Base도 클램프 없이 raw로 씁니다. 이 원시 복원 전체가 끝난 뒤 마지막에 딱 한 번
-        /// <see cref="AttributeSet.RebuildDirty"/>를 호출하며, 이 한 번의 재계산이 레지스트리의 위상
-        /// (EvaluationOrder) 순서로 Current를 재구성합니다 — 그 결정론이 비트 동일성을 보장합니다.
-        /// 대기 적용 큐·파이프라인 틱 카운터·다음 발급 Id는 호출자가 별도로 복원해야 합니다.
+        /// Restores this target from a snapshot. All current active instances are detached and
+        /// reclaimed without events (a restore is unobservable), then the snapshot's instances are
+        /// restored raw in stored order, including modifier reattachment. Base values are also
+        /// written raw, without clamping. After the whole raw restore, <see cref="AttributeSet.RebuildDirty"/>
+        /// is called exactly once; that single recompute rebuilds Current in the registry's
+        /// topological (EvaluationOrder) order — that determinism guarantees bit-identical results.
+        /// Pending application queue, pipeline tick counter, and next issued id must be restored
+        /// separately by the caller.
         /// </summary>
-        /// <param name="snapshot">복원할 스냅샷입니다.</param>
-        /// <param name="catalog">GrantedTags 회수·재부여에 쓸 효과 카탈로그입니다(스냅샷 시점과 같은 카탈로그여야 합니다).</param>
+        /// <param name="snapshot">Snapshot to restore.</param>
+        /// <param name="catalog">Effect catalog used to reclaim/regrant GrantedTags (must be the same catalog as at snapshot time).</param>
         public void RestoreSnapshot(EffectTargetSnapshot snapshot, EffectCatalog catalog)
         {
             if (snapshot is null) throw new ArgumentNullException(nameof(snapshot));
             if (catalog is null) throw new ArgumentNullException(nameof(catalog));
             if (snapshot.TargetId != Id)
-                throw new ArgumentException("다른 대상의 스냅샷은 복원할 수 없습니다.", nameof(snapshot));
+                throw new ArgumentException("Cannot restore a snapshot taken from a different target.", nameof(snapshot));
 
             for (var i = 0; i < _activeEffects.Count; i++)
             {
                 var instance = _activeEffects[i];
                 Attributes.DetachModifiers(instance);
-                if (instance.Enabled)   // 비활성 인스턴스는 태그를 보유하지 않는다 — 회수하면 이중 감산.
+                if (instance.Enabled)   // Disabled instances hold no tags — removing would double-decrement.
                 {
                     var grantedTags = catalog.GetSpec(instance.SpecId).GrantedTags;
                     for (var g = 0; g < grantedTags.Length; g++) Tags.Remove(grantedTags[g]);
@@ -204,7 +206,7 @@ namespace Bun3.Gameplay.Effects
                         modifier.Magnitude, modifier.ScaleWithStack);
                 }
 
-                if (row.Enabled)   // 비활성 인스턴스는 태그를 부여하지 않는다 — 부여하면 영구 누수.
+                if (row.Enabled)   // Disabled instances grant no tags — adding would leak permanently.
                 {
                     var grantedTags = catalog.GetSpec(row.SpecId).GrantedTags;
                     for (var g = 0; g < grantedTags.Length; g++) Tags.Add(grantedTags[g]);
@@ -213,8 +215,9 @@ namespace Bun3.Gameplay.Effects
 
             Attributes.RebuildDirty();
 
-            // G6: DR 이력도 스냅샷 시점으로 되돌린다 — 결정론 재생에는 지속시간 계산에 쓰이는 이 이력이
-            // 필수다. 기존 슬롯은 논리적으로만 비우고(카운트 0) 배열은 재사용한다.
+            // Restore DR history to the snapshot state — deterministic replay requires this history,
+            // which feeds duration calculation. Existing slots are cleared logically only (count 0);
+            // the array is reused.
             _drHistoryCount = 0;
             var drRows = snapshot.DrHistory;
             for (var i = 0; i < drRows.Length; i++)

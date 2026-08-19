@@ -66,9 +66,9 @@ public class HostingTests
             await client.ConnectAsync(IPAddress.Loopback, port);
             var stream = client.GetStream();
 
-            await PacketFormat.WritePacketAsync(stream, new byte[65]); // 초과 패킷
+            await PacketFormat.WritePacketAsync(stream, new byte[65]); // oversized packet
 
-            // 서버가 프로토콜 위반으로 연결을 닫는다 — EOF(null) 또는 IO 예외
+            // server closes the connection on protocol violation — EOF (null) or IO exception
             try
             {
                 var packet = await PacketFormat.ReadPacketAsync(stream, 1024).AsTask().WaitAsync(Timeout);
@@ -126,6 +126,6 @@ public class HostingTests
 
         var options = host.Services.GetRequiredService<IOptions<ServerOptions>>().Value;
 
-        Assert.That(options.Port, Is.EqualTo(0)); // 람다가 나중에 적용되어 우선한다
+        Assert.That(options.Port, Is.EqualTo(0)); // the lambda applies later and wins
     }
 }

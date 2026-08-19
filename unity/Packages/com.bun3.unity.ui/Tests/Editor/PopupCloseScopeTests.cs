@@ -15,12 +15,12 @@ namespace Bun3.Unity.UI.Editor.Tests
             var scope = popup.BlockClose();
             Stack.Close(popup);
 
-            Assert.AreEqual(PopupPhase.Open, popup.Phase, "잠금 중 닫기는 예약만 돼야 한다.");
+            Assert.AreEqual(PopupPhase.Open, popup.Phase, "A close while locked must only be deferred.");
             Assert.AreEqual(1, Stack.Count);
 
             scope.Dispose();
 
-            Assert.AreEqual(PopupPhase.None, popup.Phase, "마지막 잠금 해제 시 예약된 닫기가 실행돼야 한다.");
+            Assert.AreEqual(PopupPhase.None, popup.Phase, "The deferred close must run when the last lock releases.");
             Assert.AreEqual(0, Stack.Count);
         }
 
@@ -36,7 +36,7 @@ namespace Bun3.Unity.UI.Editor.Tests
 
             inner.Dispose();
 
-            Assert.AreEqual(PopupPhase.Open, popup.Phase, "잠금이 남아 있으면 아직 닫히면 안 된다.");
+            Assert.AreEqual(PopupPhase.Open, popup.Phase, "Must not close while a lock remains.");
 
             outer.Dispose();
 
@@ -54,7 +54,7 @@ namespace Bun3.Unity.UI.Editor.Tests
             }
 
             Assert.AreEqual(PopupPhase.Open, popup.Phase);
-            Assert.AreEqual(2, popup.BlockedChanges, "잠김/풀림 훅이 한 번씩 호출돼야 한다.");
+            Assert.AreEqual(2, popup.BlockedChanges, "The lock/unlock hook must fire once each.");
             Assert.IsFalse(popup.LastBlocked);
         }
 
@@ -69,7 +69,7 @@ namespace Bun3.Unity.UI.Editor.Tests
                 Assert.IsTrue(Stack.HandleBack());
             }
 
-            Assert.AreEqual(0, popup.BackRequests, "잠금 중에는 OnBackRequested도 호출되면 안 된다.");
+            Assert.AreEqual(0, popup.BackRequests, "OnBackRequested must not be called while locked either.");
             Assert.AreEqual(PopupPhase.Open, popup.Phase);
         }
 
@@ -87,7 +87,7 @@ namespace Bun3.Unity.UI.Editor.Tests
 
             work.TrySetResult();
 
-            Assert.AreEqual(PopupPhase.None, popup.Phase, "작업 완료로 잠금이 풀리면 예약된 닫기가 실행돼야 한다.");
+            Assert.AreEqual(PopupPhase.None, popup.Phase, "The deferred close must run when work completion unlocks.");
         }
 
         [Test]
@@ -101,7 +101,7 @@ namespace Bun3.Unity.UI.Editor.Tests
             work.TrySetException(new System.InvalidOperationException("boom"));
 
             Assert.Throws<System.InvalidOperationException>(() => wrapped.GetAwaiter().GetResult());
-            Assert.IsFalse(popup.IsCloseBlocked, "예외가 나도 잠금은 해제돼야 한다.");
+            Assert.IsFalse(popup.IsCloseBlocked, "The lock must release even on exception.");
         }
 
         [Test]
@@ -115,7 +115,7 @@ namespace Bun3.Unity.UI.Editor.Tests
             Stack.Close(popup);
             popup.OpenSource.TrySetResult();
 
-            Assert.AreEqual(PopupPhase.Open, popup.Phase, "열림은 완료되지만 잠금 중이라 닫히면 안 된다.");
+            Assert.AreEqual(PopupPhase.Open, popup.Phase, "Open completes, but locked, so it must not close.");
 
             scope.Dispose();
 
@@ -138,15 +138,15 @@ namespace Bun3.Unity.UI.Editor.Tests
             stack.Clear();
 
             Assert.IsFalse(popup.IsCloseBlocked);
-            Assert.IsFalse(popup.LastBlocked, "강제 해제 시 잠금 해제 표현 통지가 와야 한다.");
+            Assert.IsFalse(popup.LastBlocked, "The unblock presentation notice must fire on forced release.");
 
-            stack.Push("p1"); // 풀 재사용 — 같은 인스턴스의 새 세션
+            stack.Push("p1"); // Pool reuse — a new session of the same instance.
             Assert.AreSame(popup, stack.Top);
 
             using (popup.BlockClose())
             {
-                staleScope.Dispose(); // 이전 세션 스코프의 늦은 해제
-                Assert.IsTrue(popup.IsCloseBlocked, "이전 세션 스코프가 새 세션 잠금을 풀면 안 된다.");
+                staleScope.Dispose(); // Late release from a previous-session scope.
+                Assert.IsTrue(popup.IsCloseBlocked, "A previous-session scope must not unlock the new session.");
             }
 
             Assert.IsFalse(popup.IsCloseBlocked);
@@ -164,10 +164,10 @@ namespace Bun3.Unity.UI.Editor.Tests
 
             Stack.Clear();
 
-            Assert.AreEqual(PopupPhase.None, popup.Phase, "Clear는 잠금을 무시하고 강제 해제한다.");
+            Assert.AreEqual(PopupPhase.None, popup.Phase, "Clear ignores locks and force-releases.");
             Assert.AreEqual(0, Stack.Count);
 
-            scope.Dispose(); // 늦은 해제가 예외 없이 무시되는지
+            scope.Dispose(); // A late release must be ignored without throwing.
         }
     }
 }

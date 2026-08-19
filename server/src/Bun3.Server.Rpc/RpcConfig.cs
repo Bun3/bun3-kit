@@ -6,7 +6,7 @@ using Google.Protobuf;
 
 namespace Bun3.Server.Rpc
 {
-    /// <summary>서버 수준 핸들러 등록표. 부팅 시 1회 구성되고 RpcSchema.Validate로 전수 검증된다.</summary>
+    /// <summary>Server-level handler registration table. Built once at boot and fully validated by RpcSchema.Validate.</summary>
     public sealed class RpcConfig<TSession> where TSession : Session
     {
         internal sealed class Registration
@@ -28,7 +28,7 @@ namespace Bun3.Server.Rpc
 
         internal Dictionary<Type, Registration> Registrations { get; } = new Dictionary<Type, Registration>();
 
-        /// <summary>요청 타입 하나의 핸들러를 등록한다. 같은 TReq 중복 등록은 즉시 예외.</summary>
+        /// <summary>Registers the handler for one request type. Duplicate registration of the same TReq throws immediately.</summary>
         public void OnRequest<TReq, TRes>(Func<TSession, TReq, ValueTask<Reply<TRes>>> handler)
             where TReq : class, IMessage<TReq>
             where TRes : class, IMessage<TRes>
@@ -40,7 +40,7 @@ namespace Bun3.Server.Rpc
 
             if (Registrations.ContainsKey(typeof(TReq)))
             {
-                throw new RpcValidationException(new[] { $"중복 등록: {typeof(TReq).Name}" });
+                throw new RpcValidationException(new[] { $"Duplicate registration: {typeof(TReq).Name}" });
             }
 
             Registrations.Add(typeof(TReq), new Registration(

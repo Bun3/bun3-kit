@@ -9,7 +9,7 @@ public sealed class BigNumFormulaTests
 {
     private static BigNum N(string s)
     {
-        Assert.That(BigNum.TryParse(s, out var v), Is.True, $"파싱 실패: {s}");
+        Assert.That(BigNum.TryParse(s, out var v), Is.True, $"parse failed: {s}");
         return v;
     }
 

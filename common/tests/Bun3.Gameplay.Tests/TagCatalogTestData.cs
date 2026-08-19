@@ -12,9 +12,9 @@ internal static class TagCatalogTestData
     {
       "schemaVersion": 1,
       "tags": [
-        { "name": "State.Rooted", "comment": "이동 불가" },
-        { "name": "ability.movement.Jump", "comment": "점프" },
-        { "name": "State.Dead.Ghost", "comment": "유령" }
+        { "name": "State.Rooted", "comment": "cannot move" },
+        { "name": "ability.movement.Jump", "comment": "jump" },
+        { "name": "State.Dead.Ghost", "comment": "ghost" }
       ],
       "redirects": []
     }

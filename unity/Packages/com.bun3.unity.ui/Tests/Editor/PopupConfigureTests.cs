@@ -9,7 +9,7 @@ namespace Bun3.Unity.UI.Editor.Tests
 {
     public class PopupConfigureTests
     {
-        // 레거시 Popup_Alert 스타일: fluent 세터 + 결과 await.
+        // Fluent-setter alert popup + result await.
         private sealed class AlertPopup : Popup<bool>
         {
             public string Title;
@@ -69,21 +69,21 @@ namespace Bun3.Unity.UI.Editor.Tests
         [Test]
         public void Configure_RunsAfterLoad_BeforeOpen()
         {
-            var popup = _stack.PushAsync<AlertPopup>(p => p.SetTitle("확인").SetDesc("내용"))
+            var popup = _stack.PushAsync<AlertPopup>(p => p.SetTitle("confirm").SetDesc("body"))
                 .GetAwaiter().GetResult();
 
-            Assert.AreEqual("확인", popup.Title);
-            Assert.AreEqual("내용", popup.Desc);
-            Assert.AreEqual(PopupPhase.None, popup.PhaseAtConfigure, "구성은 스택 삽입 전에 실행돼야 한다.");
+            Assert.AreEqual("confirm", popup.Title);
+            Assert.AreEqual("body", popup.Desc);
+            Assert.AreEqual(PopupPhase.None, popup.PhaseAtConfigure, "Configure must run before stack insertion.");
             Assert.AreEqual(PopupPhase.Open, popup.Phase);
         }
 
         [Test]
-        public void ConfigureWithResult_LegacyAlertFlow()
+        public void ConfigureWithResult_AlertFlow()
         {
-            // 레거시 Popup_Alert.Show().SetDesc(...).WaitResultAsync() 대응 흐름.
+            // Show().SetDesc(...).WaitResultAsync() style alert flow.
             var task = _stack.PushForResultAsync<AlertPopup, bool>(
-                p => p.SetTitle("보상 선택").SetDesc("정말?"));
+                p => p.SetTitle("choose reward").SetDesc("are you sure?"));
 
             _created[0].ClickOk();
 
@@ -95,7 +95,7 @@ namespace Bun3.Unity.UI.Editor.Tests
         {
             var task = _stack.PushForResultAsync<AlertPopup, bool>(p => p.SetTitle("t"));
 
-            _stack.Pop(); // back/딤 격
+            _stack.Pop(); // Like back/dim.
 
             Assert.IsFalse(task.GetAwaiter().GetResult());
         }
@@ -103,14 +103,14 @@ namespace Bun3.Unity.UI.Editor.Tests
         [Test]
         public void Configure_Focus_ReappliesToExisting()
         {
-            _stack.Push<AlertPopup>(p => p.SetTitle("첫 구성"));
+            _stack.Push<AlertPopup>(p => p.SetTitle("first-config"));
 
-            var focused = _stack.PushAsync<AlertPopup>(p => p.SetTitle("재구성"),
+            var focused = _stack.PushAsync<AlertPopup>(p => p.SetTitle("re-config"),
                 duplicate: PopupDuplicatePolicy.Focus).GetAwaiter().GetResult();
 
-            Assert.AreEqual(1, _created.Count, "새로 만들지 않고 재사용해야 한다.");
+            Assert.AreEqual(1, _created.Count, "Must reuse, not create anew.");
             Assert.AreSame(_created[0], focused);
-            Assert.AreEqual("재구성", focused.Title, "레거시 GetOrShow().Set체인처럼 재적용돼야 한다.");
+            Assert.AreEqual("re-config", focused.Title, "Focus must re-apply the configure chain to the existing instance.");
             Assert.AreEqual(2, focused.ConfigureCount);
         }
 
@@ -126,7 +126,7 @@ namespace Bun3.Unity.UI.Editor.Tests
 
             _stack.Pop();
 
-            Assert.AreEqual("queued", _created[1].Title, "대기열 표시 시점에 구성이 적용돼야 한다.");
+            Assert.AreEqual("queued", _created[1].Title, "Configure must apply at queue display time.");
         }
     }
 }

@@ -10,21 +10,21 @@ using UnityEditor.Build;
 
 namespace Bun3.Gameplay.Unity.Tests
 {
-    /// <summary>Gameplay Tag Catalog ID Project Settings 계약을 검증합니다.</summary>
+    /// <summary>Verifies the Gameplay Tag catalog ID project settings contract.</summary>
     [TestFixture]
     public sealed class GameplayTagProjectSettingsTests
     {
-        /// <summary>제품 이름과 사용자 입력을 안정적인 공개 Catalog ID로 정규화하는지 검증합니다.</summary>
+        /// <summary>Verifies product names and user input normalize to a stable public catalog ID.</summary>
         [TestCase("Jurassic Paradise", "jurassic-paradise")]
         [TestCase("Bun3.Game.Core", "bun3-game-core")]
         [TestCase("  GAME__SERVER  ", "game-server")]
-        [TestCase("한국 게임", "")]
+        [TestCase("£¥€", "")]
         public void Catalog_id_normalization_is_deterministic(string input, string expected)
         {
             Assert.That(GameplayTagCatalogId.Normalize(input), Is.EqualTo(expected));
         }
 
-        /// <summary>유효하지 않은 ID가 persistence를 호출하기 전에 거부되는지 검증합니다.</summary>
+        /// <summary>Verifies an invalid ID is rejected before persistence is called.</summary>
         [Test]
         public void Empty_normalized_id_is_rejected_before_persistence()
         {
@@ -36,7 +36,7 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(saveCount, Is.Zero);
         }
 
-        /// <summary>정규화한 ID를 정확히 한 번 persistence에 전달하고 반환하는지 검증합니다.</summary>
+        /// <summary>Verifies the normalized ID is passed to persistence exactly once and returned.</summary>
         [Test]
         public void Applying_catalog_id_persists_the_normalized_value_once()
         {
@@ -54,7 +54,7 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(saveCount, Is.EqualTo(1));
         }
 
-        /// <summary>설정 값을 읽는 동작이 Project Settings asset을 만들거나 수정하지 않는지 검증합니다.</summary>
+        /// <summary>Verifies reading the setting neither creates nor modifies the project settings asset.</summary>
         [Test]
         public void Reading_catalog_id_does_not_create_or_modify_the_settings_asset()
         {
@@ -71,7 +71,7 @@ namespace Bun3.Gameplay.Unity.Tests
             if (existed) Assert.That(File.ReadAllBytes(path), Is.EqualTo(before));
         }
 
-        /// <summary>설정 Provider가 Unity Project Settings의 고정 경로로 등록되는지 검증합니다.</summary>
+        /// <summary>Verifies the settings provider registers at the fixed Unity project settings path.</summary>
         [Test]
         public void Settings_provider_uses_the_project_gameplay_tags_path()
         {
@@ -81,7 +81,7 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(provider.scope, Is.EqualTo(SettingsScope.Project));
         }
 
-        /// <summary>설정 Provider 활성화 뒤 편집 버퍼가 연속 GUI 이벤트 사이에 유지되는지 검증합니다.</summary>
+        /// <summary>Verifies the edit buffer persists across consecutive GUI events after provider activation.</summary>
         [Test]
         public void Settings_provider_keeps_the_edited_catalog_id_between_gui_events()
         {
@@ -107,7 +107,7 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(observedValues, Is.EqualTo(new[] { "saved-game", "edited-game" }));
         }
 
-        /// <summary>정규화 결과가 저장된 raw 값과 같으면 저장과 editor 갱신 알림을 생략하는지 검증합니다.</summary>
+        /// <summary>Verifies save and editor refresh notification are skipped when the normalized result equals the stored raw value.</summary>
         [Test]
         public void Applying_an_unchanged_normalized_id_skips_persistence_and_refresh()
         {
@@ -129,7 +129,7 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(refreshCount, Is.Zero);
         }
 
-        /// <summary>변경된 입력은 canonical 값으로 한 번 저장한 뒤 editor 갱신을 한 번 알리는지 검증합니다.</summary>
+        /// <summary>Verifies changed input is saved once as the canonical value and then notifies editor refresh once.</summary>
         [Test]
         public void Applying_a_changed_id_persists_canonical_value_before_refresh()
         {
@@ -151,7 +151,7 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(refreshCount, Is.EqualTo(1));
         }
 
-        /// <summary>저장 예외가 나면 알림 없이 예외를 그대로 전달하는지 검증합니다.</summary>
+        /// <summary>Verifies a save exception propagates unchanged without notification.</summary>
         [Test]
         public void Failed_apply_does_not_notify_open_editors()
         {
@@ -167,7 +167,7 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(refreshCount, Is.Zero);
         }
 
-        /// <summary>persistence가 대입 뒤 실패하면 singleton의 이전 raw 값을 복원하는지 검증합니다.</summary>
+        /// <summary>Verifies the singleton's previous raw value is restored when persistence fails after assignment.</summary>
         [Test]
         public void Save_failure_restores_the_previous_in_memory_raw_value()
         {
@@ -189,7 +189,7 @@ namespace Bun3.Gameplay.Unity.Tests
             });
         }
 
-        /// <summary>production development resolver가 malformed raw 설정을 정규화하지 않고 거부하는지 검증합니다.</summary>
+        /// <summary>Verifies the production development resolver rejects a malformed raw setting instead of normalizing it.</summary>
         [TestCase("test--game")]
         [TestCase(" TEST-GAME ")]
         public void Production_development_resolution_rejects_noncanonical_raw_settings(
@@ -219,7 +219,7 @@ namespace Bun3.Gameplay.Unity.Tests
             }
         }
 
-        /// <summary>production Published 진입점도 malformed raw 설정을 artifact 접근 전에 거부하는지 검증합니다.</summary>
+        /// <summary>Verifies the production published entry point also rejects a malformed raw setting before artifact access.</summary>
         [Test]
         public void Production_published_resolution_rejects_noncanonical_raw_settings()
         {
@@ -233,7 +233,7 @@ namespace Bun3.Gameplay.Unity.Tests
             });
         }
 
-        /// <summary>Provider가 없으면 development fallback 안내를 반환하는지 검증합니다.</summary>
+        /// <summary>Verifies the development fallback guidance is returned when no provider exists.</summary>
         [Test]
         public void Provider_status_reports_the_development_fallback_when_no_provider_exists()
         {
@@ -244,7 +244,7 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(status.Message, Does.Contain("Development"));
         }
 
-        /// <summary>하나의 Provider가 설정된 Catalog ID와 일치하면 전체 타입 이름과 성공 상태를 표시하는지 검증합니다.</summary>
+        /// <summary>Verifies a single provider matching the configured catalog ID shows its full type name and success state.</summary>
         [Test]
         public void Provider_status_shows_the_full_name_for_a_matching_catalog_id()
         {
@@ -257,7 +257,7 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(status.Message, Does.Contain("matches"));
         }
 
-        /// <summary>Project Settings가 없어도 단일 Provider를 활성 상태로 안내하는지 검증합니다.</summary>
+        /// <summary>Verifies a single provider is reported active even without project settings.</summary>
         [Test]
         public void Provider_status_treats_a_provider_without_project_settings_as_active()
         {
@@ -269,7 +269,7 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(status.Message, Does.Contain("active"));
         }
 
-        /// <summary>하나의 Provider ID가 Project Settings와 다르면 오류 상태를 표시하는지 검증합니다.</summary>
+        /// <summary>Verifies a single provider ID differing from project settings shows an error state.</summary>
         [Test]
         public void Provider_status_reports_an_error_for_a_mismatching_catalog_id()
         {
@@ -282,7 +282,7 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(status.Message, Does.Contain("configured-game"));
         }
 
-        /// <summary>여러 Provider를 ordinal 전체 타입 이름 순서로 표시하고 오류 상태를 반환하는지 검증합니다.</summary>
+        /// <summary>Verifies multiple providers are listed in ordinal full-type-name order with an error state.</summary>
         [Test]
         public void Provider_status_reports_multiple_providers_in_ordinal_full_name_order()
         {

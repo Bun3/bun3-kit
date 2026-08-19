@@ -5,308 +5,313 @@ using Bun3.Gameplay.Numerics;
 
 namespace Bun3.Gameplay.Effects
 {
-    /// <summary>효과의 지속 방식입니다.</summary>
+    /// <summary>How an effect persists.</summary>
     public enum EffectDurationType : byte
     {
-        /// <summary>즉시 적용되고 곧바로 사라집니다.</summary>
+        /// <summary>Applies immediately and vanishes right away.</summary>
         Instant = 0,
-        /// <summary>정해진 틱 수만큼 지속됩니다.</summary>
+        /// <summary>Lasts a fixed number of ticks.</summary>
         Duration = 1,
-        /// <summary>명시적으로 제거되기 전까지 무한히 지속됩니다.</summary>
+        /// <summary>Lasts indefinitely until explicitly removed.</summary>
         Infinite = 2,
     }
 
-    /// <summary>스택형 효과에 재적용될 때의 동작입니다.</summary>
+    /// <summary>Behavior when a stackable effect is reapplied.</summary>
     public enum StackReapply : byte
     {
-        /// <summary>지속시간만 갱신합니다.</summary>
+        /// <summary>Only refreshes the duration.</summary>
         Refresh = 0,
-        /// <summary>스택 하나를 추가합니다.</summary>
+        /// <summary>Adds one stack.</summary>
         AddStack = 1,
-        /// <summary>스택은 그대로 두고 남은 지속시간에 신규 지속시간을 더하되, 상한(신규 지속시간 ×
-        /// <see cref="StackPolicy.ExtendCapMultiplier"/>)을 넘지 않게 절사합니다(판데믹 관례).</summary>
+        /// <summary>Keeps the stack and adds the new duration to the remaining duration, truncated at a
+        /// cap (new duration × <see cref="StackPolicy.ExtendCapMultiplier"/>).</summary>
         ExtendCapped = 2,
     }
 
-    /// <summary>스택이 소멸(만료)될 때의 동작입니다.</summary>
+    /// <summary>Behavior when a stack expires.</summary>
     public enum StackExpiration : byte
     {
-        /// <summary>모든 스택을 한 번에 제거합니다.</summary>
+        /// <summary>Removes all stacks at once.</summary>
         ClearAll = 0,
-        /// <summary>스택 하나만 제거하고 지속시간을 갱신합니다.</summary>
+        /// <summary>Removes a single stack and refreshes the duration.</summary>
         RemoveOneAndRefresh = 1,
     }
 
-    /// <summary>최대 스택 수를 초과해 재적용될 때의 동작입니다.</summary>
+    /// <summary>Behavior when a reapplication exceeds the maximum stack count.</summary>
     public enum StackOverflow : byte
     {
-        /// <summary>재적용을 거부합니다.</summary>
+        /// <summary>Rejects the reapplication.</summary>
         Deny = 0,
-        /// <summary>지정된 다른 효과를 대신 적용합니다.</summary>
+        /// <summary>Applies a designated other effect instead.</summary>
         ApplyEffect = 1,
     }
 
-    /// <summary>체인 효과가 발동하는 시점입니다.</summary>
+    /// <summary>When a chained effect fires.</summary>
     public enum ChainTrigger : byte
     {
-        /// <summary>원본 효과가 적용되는 시점입니다.</summary>
+        /// <summary>When the source effect is applied.</summary>
         OnApplication = 0,
-        /// <summary>원본 효과가 정상적으로 종료되는 시점입니다.</summary>
+        /// <summary>When the source effect ends normally.</summary>
         OnCompleteNormal = 1,
-        /// <summary>원본 효과가 조기(비정상)에 종료되는 시점입니다.</summary>
+        /// <summary>When the source effect ends prematurely (abnormally).</summary>
         OnCompletePrematurely = 2,
-        /// <summary>원본 효과가 스택 초과를 겪는 시점입니다.</summary>
+        /// <summary>When the source effect hits stack overflow.</summary>
         OnStackOverflow = 3,
     }
 
-    /// <summary>체인으로 발동하는 효과의 레벨을 결정하는 규칙입니다.</summary>
+    /// <summary>Rule deciding the level of a chain-triggered effect.</summary>
     public enum ChainLevelRule : byte
     {
-        /// <summary>원본 효과의 레벨을 그대로 물려받습니다.</summary>
+        /// <summary>Inherits the source effect's level.</summary>
         Inherit = 0,
-        /// <summary>고정된 레벨을 사용합니다.</summary>
+        /// <summary>Uses a fixed level.</summary>
         Fixed = 1,
     }
 
-    /// <summary>레벨 테이블에서 MaxLevel을 넘는 레벨을 다루는 방식입니다.</summary>
+    /// <summary>How a level table handles levels beyond MaxLevel.</summary>
     public enum LevelTail : byte
     {
-        /// <summary>MaxLevel의 마지막 값을 그대로 유지합니다.</summary>
+        /// <summary>Keeps the last value at MaxLevel.</summary>
         Clamp = 0,
-        /// <summary>마지막 값에서 레벨당 증분을 더해 선형 외삽합니다.</summary>
+        /// <summary>Extrapolates linearly from the last value with a per-level increment.</summary>
         Extrapolate = 1,
     }
 
-    /// <summary>희소 레벨 커브의 키 하나입니다(레벨, 값).</summary>
+    /// <summary>One key of a sparse level curve (level, value).</summary>
     public sealed class LevelKey
     {
-        /// <summary>레벨입니다.</summary>
+        /// <summary>Level.</summary>
         public int Level { get; set; }
 
-        /// <summary>해당 레벨의 값입니다.</summary>
+        /// <summary>Value at that level.</summary>
         public BigNum Value { get; set; }
     }
 
     /// <summary>
-    /// 크기 정의입니다. 레벨 스케일링 표기는 상호 배타 계열 5종 중 정확히 하나입니다 —
-    /// ① <see cref="Base"/>(+<see cref="PerLevel"/>) 선형, ② <see cref="PerLevelValues"/> 명시 배열,
-    /// ③ <see cref="Formula"/> 결정론 수식, ④ <see cref="CurveKeys"/> 희소 키+선형 보간,
-    /// 또는 SeamRegistry에 등록된 <see cref="CalcTag"/>. 스펙 §15.1 참고.
+    /// Magnitude definition. Level-scaling notations are mutually exclusive — exactly one of five:
+    /// ① <see cref="Base"/> (+<see cref="PerLevel"/>) linear, ② <see cref="PerLevelValues"/> explicit array,
+    /// ③ <see cref="Formula"/> deterministic formula, ④ <see cref="CurveKeys"/> sparse keys + linear
+    /// interpolation, or a <see cref="CalcTag"/> registered in SeamRegistry.
     /// </summary>
     public sealed class MagnitudeDef
     {
-        /// <summary>레벨 무관 기본 크기입니다(표기 ①). 다른 표기들과는 배타적입니다.</summary>
+        /// <summary>Level-independent base magnitude (notation ①). Exclusive with the other notations.</summary>
         public Operand? Base { get; set; }
 
-        /// <summary>레벨 1당 추가되는 크기입니다(표기 ①). <see cref="Base"/>가 있을 때만 사용할 수 있습니다.</summary>
+        /// <summary>Additional magnitude per level (notation ①). Only usable when <see cref="Base"/> is set.</summary>
         public Operand? PerLevel { get; set; }
 
-        /// <summary>레벨별 명시 값 배열입니다(표기 ②). 길이가 곧 <see cref="EffectSpec.MaxLevel"/>이어야 합니다.</summary>
+        /// <summary>Explicit per-level values (notation ②). The length must equal <see cref="EffectSpec.MaxLevel"/>.</summary>
         public List<BigNum>? PerLevelValues { get; set; }
 
-        /// <summary>결정론 수식입니다(표기 ③). <see cref="Numerics.BigNumFormula"/> 문법을 따르며
-        /// 변수 x에 레벨을 대입해 평가합니다.</summary>
+        /// <summary>Deterministic formula (notation ③). Follows <see cref="Numerics.BigNumFormula"/> syntax
+        /// and is evaluated with the level bound to variable x.</summary>
         public string? Formula { get; set; }
 
-        /// <summary>희소 레벨 키 목록입니다(표기 ④). 레벨 오름차순, 중복 금지, 첫 키는 레벨 1이어야 합니다.
-        /// 키 사이는 선형 보간, 마지막 키 뒤는 <see cref="Tail"/> 정책을 따릅니다.</summary>
+        /// <summary>Sparse level keys (notation ④). Ascending levels, no duplicates, first key must be
+        /// level 1. Linear interpolation between keys; past the last key the <see cref="Tail"/> policy applies.</summary>
         public List<LevelKey>? CurveKeys { get; set; }
 
-        /// <summary>SeamRegistry에 등록된 크기 계산 태그입니다. 다른 표기들과는 배타적입니다.</summary>
+        /// <summary>Magnitude-calc tag registered in SeamRegistry. Exclusive with the other notations.</summary>
         public string? CalcTag { get; set; }
 
-        /// <summary>레벨 테이블(②③④)이 MaxLevel을 넘는 레벨을 다루는 방식입니다.</summary>
+        /// <summary>How the level table (②③④) handles levels beyond MaxLevel.</summary>
         public LevelTail Tail { get; set; }
 
-        /// <summary><see cref="Tail"/>이 Extrapolate일 때 레벨당 증분입니다. 0이면 배열의 마지막
-        /// 두 값의 차로 자동 계산됩니다.</summary>
+        /// <summary>Per-level increment when <see cref="Tail"/> is Extrapolate. 0 means it is derived
+        /// automatically from the difference of the array's last two values.</summary>
         public BigNum ExtrapolateIncrement { get; set; }
     }
 
-    /// <summary>속성 수정자 정의입니다.</summary>
+    /// <summary>Attribute modifier definition.</summary>
     public sealed class ModifierDef
     {
-        /// <summary>수정할 대상 속성 id입니다.</summary>
+        /// <summary>Id of the attribute to modify.</summary>
         public ushort AttributeId { get; set; }
 
-        /// <summary>수정자 연산 종류입니다.</summary>
+        /// <summary>Modifier operation kind.</summary>
         public AttributeModifierOp Op { get; set; }
 
-        /// <summary>수정 크기 정의입니다.</summary>
+        /// <summary>Magnitude definition of the modification.</summary>
         public MagnitudeDef Magnitude { get; set; } = new MagnitudeDef();
 
-        /// <summary>스택 수에 비례해 크기를 배율할지 여부입니다. 기본값은 true입니다.</summary>
+        /// <summary>Whether the magnitude scales with the stack count. Defaults to true.</summary>
         public bool ScaleWithStack { get; set; } = true;
     }
 
-    /// <summary>효과 실행(부수효과) 정의입니다.</summary>
+    /// <summary>Effect execution (side effect) definition.</summary>
     public sealed class ExecutionDef
     {
-        /// <summary>SeamRegistry에 등록된 실행 태그입니다.</summary>
+        /// <summary>Execution tag registered in SeamRegistry.</summary>
         public string CalcTag { get; set; } = string.Empty;
 
-        /// <summary>실행에 전달할 입력 피연산자들입니다.</summary>
+        /// <summary>Input operands passed to the execution.</summary>
         public List<Operand> Inputs { get; set; } = new List<Operand>();
     }
 
-    /// <summary>조건 정의 — 좌변과 우변을 비교 연산자로 비교합니다.</summary>
+    /// <summary>Condition definition — compares a left and a right operand with a comparison operator.</summary>
     public sealed class ConditionDef
     {
-        /// <summary>좌변 피연산자입니다.</summary>
+        /// <summary>Left operand.</summary>
         public Operand Left { get; set; }
 
-        /// <summary>비교 연산자입니다.</summary>
+        /// <summary>Comparison operator.</summary>
         public ComparisonOp Op { get; set; }
 
-        /// <summary>우변 피연산자입니다.</summary>
+        /// <summary>Right operand.</summary>
         public Operand Right { get; set; }
     }
 
-    /// <summary>체인 엣지 정의 — 원본 효과에서 다른 효과로 이어지는 발동 조건입니다.</summary>
+    /// <summary>Chain edge definition — a trigger leading from a source effect to another effect.</summary>
     public sealed class ChainEdgeDef
     {
-        /// <summary>발동 시점입니다.</summary>
+        /// <summary>Trigger timing.</summary>
         public ChainTrigger Trigger { get; set; }
 
-        /// <summary>발동할 대상 효과의 이름입니다.</summary>
+        /// <summary>Name of the effect to trigger.</summary>
         public string EffectName { get; set; } = string.Empty;
 
-        /// <summary>SeamRegistry에 등록된 대상 선택 태그이며 없으면 null입니다(원본 대상 그대로 사용).</summary>
+        /// <summary>Target-selector tag registered in SeamRegistry, or null (use the source target as is).</summary>
         public string? SelectorTag { get; set; }
 
-        /// <summary>대상 선택에 전달할 매개변수들입니다.</summary>
+        /// <summary>Parameters passed to target selection.</summary>
         public List<BigNum> SelectorParams { get; set; } = new List<BigNum>();
 
-        /// <summary>발동 조건들이며 전부 만족해야 발동합니다.</summary>
+        /// <summary>Trigger conditions; all must hold to fire.</summary>
         public List<ConditionDef> Conditions { get; set; } = new List<ConditionDef>();
 
-        /// <summary>대상 효과의 레벨 결정 규칙입니다.</summary>
+        /// <summary>Rule deciding the target effect's level.</summary>
         public ChainLevelRule LevelRule { get; set; }
 
-        /// <summary><see cref="LevelRule"/>이 Fixed일 때 사용할 레벨입니다.</summary>
+        /// <summary>Level to use when <see cref="LevelRule"/> is Fixed.</summary>
         public int FixedLevel { get; set; }
     }
 
-    /// <summary>스택 정책입니다.</summary>
+    /// <summary>Stack policy.</summary>
     public sealed class StackPolicy
     {
-        /// <summary>최대 스택 수이며 0이면 스택을 사용하지 않는 효과입니다.</summary>
+        /// <summary>Maximum stack count; 0 means the effect does not stack.</summary>
         public int MaxStack { get; set; }
 
-        /// <summary>스택 가능한 효과가 재적용될 때의 동작입니다.</summary>
+        /// <summary>Behavior when a stackable effect is reapplied.</summary>
         public StackReapply OnReapply { get; set; }
 
-        /// <summary>재적용마다 추가할 스택 수입니다. 기본값은 1입니다.</summary>
+        /// <summary>Stacks added per reapplication. Defaults to 1.</summary>
         public int AddStackCount { get; set; } = 1;
 
-        /// <summary>재적용 시 지속시간을 갱신할지 여부입니다. 기본값은 true입니다.</summary>
+        /// <summary>Whether reapplication refreshes the duration. Defaults to true.</summary>
         public bool RefreshDurationOnReapply { get; set; } = true;
 
-        /// <summary>재적용 시 주기 실행 타이머를 리셋할지 여부입니다.</summary>
+        /// <summary>Whether reapplication resets the periodic execution timer.</summary>
         public bool ResetPeriodOnReapply { get; set; }
 
-        /// <summary>스택이 소멸될 때의 동작입니다.</summary>
+        /// <summary>Behavior when a stack expires.</summary>
         public StackExpiration OnExpiration { get; set; }
 
-        /// <summary>최대 스택 수를 초과할 때의 동작입니다.</summary>
+        /// <summary>Behavior when the maximum stack count is exceeded.</summary>
         public StackOverflow OnOverflow { get; set; }
 
-        /// <summary><see cref="OnOverflow"/>가 ApplyEffect일 때 대신 적용할 효과의 이름입니다.</summary>
+        /// <summary>Name of the effect to apply instead when <see cref="OnOverflow"/> is ApplyEffect.</summary>
         public string? OverflowEffectName { get; set; }
 
-        /// <summary>초과 적용 시 기존 스택을 모두 지울지 여부입니다.</summary>
+        /// <summary>Whether an overflow application clears all existing stacks.</summary>
         public bool ClearStacksOnOverflow { get; set; }
 
-        /// <summary>true면 병합(재적용) 시 인스턴스 Level을 Stack 값으로 동기화합니다. 레벨 테이블과
-        /// 결합해 스택별 비선형 크기를 표현할 때 씁니다. MaxStack이 0이면 Build에서 거부됩니다.</summary>
+        /// <summary>If true, merging (reapplication) syncs the instance Level to the Stack value.
+        /// Combine with a level table to express non-linear per-stack magnitudes. Rejected in Build
+        /// when MaxStack is 0.</summary>
         public bool LevelFromStack { get; set; }
 
-        /// <summary><see cref="StackReapply.ExtendCapped"/>에서 지속시간 상한을 정하는 배수입니다.
-        /// 상한 = DurationTicks × 이 값. 기본값 1.3(WoW 판데믹 관례). 1 미만이면 Build에서 거부됩니다.</summary>
+        /// <summary>Multiplier that caps the duration for <see cref="StackReapply.ExtendCapped"/>.
+        /// Cap = DurationTicks × this value. Defaults to 1.3. Values below 1 are rejected in Build.</summary>
         public BigNum ExtendCapMultiplier { get; set; } = BigNum.FromParts(13, -1);
     }
 
     /// <summary>
-    /// 효과 하나의 저작 스펙입니다. 로더가 채우는 프로퍼티 가방이며,
-    /// <see cref="Effects.EffectCatalogBuilder"/>가 검증한 뒤 컴파일합니다.
+    /// Authoring spec for one effect. A property bag filled by a loader, then validated and
+    /// compiled by <see cref="Effects.EffectCatalogBuilder"/>.
     /// </summary>
     public sealed class EffectSpec
     {
-        /// <summary>카탈로그 내에서 고유해야 하는 효과 이름입니다.</summary>
+        /// <summary>Effect name; must be unique within the catalog.</summary>
         public string Name { get; set; } = string.Empty;
 
-        /// <summary>레벨 테이블 표기(②③④) 사용 시 필요한 최대 레벨입니다. 0이면 미선언입니다.</summary>
+        /// <summary>Maximum level, required when a level-table notation (②③④) is used. 0 means undeclared.</summary>
         public int MaxLevel { get; set; }
 
-        /// <summary>지속 방식입니다.</summary>
+        /// <summary>How the effect persists.</summary>
         public EffectDurationType DurationType { get; set; }
 
-        /// <summary>지속 틱 수입니다. Instant/Infinite는 0이어야 합니다.</summary>
+        /// <summary>Duration in ticks. Must be 0 for Instant/Infinite.</summary>
         public int DurationTicks { get; set; }
 
-        /// <summary>주기 실행 간격(틱)이며 0이면 주기 실행이 없습니다.</summary>
+        /// <summary>Periodic execution interval (ticks); 0 means no periodic execution.</summary>
         public int PeriodTicks { get; set; }
 
-        /// <summary>스택 정책입니다.</summary>
+        /// <summary>Stack policy.</summary>
         public StackPolicy Stack { get; set; } = new StackPolicy();
 
-        /// <summary>속성 수정자들입니다.</summary>
+        /// <summary>Attribute modifiers.</summary>
         public List<ModifierDef> Modifiers { get; set; } = new List<ModifierDef>();
 
-        /// <summary>효과 실행(부수효과)들입니다.</summary>
+        /// <summary>Effect executions (side effects).</summary>
         public List<ExecutionDef> Executions { get; set; } = new List<ExecutionDef>();
 
-        /// <summary>적용 조건들이며 전부 만족해야 적용됩니다.</summary>
+        /// <summary>Application conditions; all must hold to apply.</summary>
         public List<ConditionDef> ApplicationConditions { get; set; } = new List<ConditionDef>();
 
-        /// <summary>지속 조건들이며 하나라도 깨지면 효과가 제거되지 않고 비활성(enabled=false)으로
-        /// 토글되어 수정자·부여 태그가 꺼집니다. 조건이 다시 충족되면 활성으로 되돌아옵니다.</summary>
+        /// <summary>Ongoing conditions; if any breaks, the effect is not removed but toggled disabled
+        /// (enabled=false), turning off its modifiers and granted tags. It re-enables once the
+        /// conditions hold again.</summary>
         public List<ConditionDef> OngoingConditions { get; set; } = new List<ConditionDef>();
 
-        /// <summary>효과가 적용되어 있는 동안 대상에게 부여되는 태그들입니다.</summary>
+        /// <summary>Tags granted to the target while the effect is applied.</summary>
         public List<string> GrantedTags { get; set; } = new List<string>();
 
-        /// <summary>효과 자체를 분류하는 자산 태그들입니다.</summary>
+        /// <summary>Asset tags classifying the effect itself.</summary>
         public List<string> AssetTags { get; set; } = new List<string>();
 
-        /// <summary>이 효과가 활성인 동안, AssetTags가 이 태그들의 자손-또는-자신인 다른 효과의
-        /// 적용을 차단합니다.</summary>
+        /// <summary>While this effect is active, blocks application of other effects whose AssetTags
+        /// are descendants-or-self of these tags.</summary>
         public List<string> ImmunityTags { get; set; } = new List<string>();
 
-        /// <summary>다른 효과로 이어지는 체인 엣지들입니다.</summary>
+        /// <summary>Chain edges leading to other effects.</summary>
         public List<ChainEdgeDef> Chains { get; set; } = new List<ChainEdgeDef>();
 
-        /// <summary>이 효과가 성공적으로 적용될 때, 대상의 활성 효과 중 AssetTags가 이 태그들의
-        /// 자손-또는-자신인 것을 적용 직전에 즉시 제거합니다(상위 티어가 하위 티어를 교체하는 등).
-        /// 병합 대상(같은 스펙)은 제외됩니다.</summary>
+        /// <summary>When this effect applies successfully, immediately removes (right before
+        /// application) the target's active effects whose AssetTags are descendants-or-self of these
+        /// tags (e.g. a higher tier replacing a lower one). The merge target (same spec) is excluded.</summary>
         public List<string> RemoveOnApplyTags { get; set; } = new List<string>();
 
-        /// <summary>적용 확률을 정하는 크기 정의입니다. null이면 항상 적용됩니다. 평가값은 [0,1]로
-        /// 해석하며(0 이하 무산, 1 이상 통과) World 시드 Rng로 결정론 롤을 굴립니다.</summary>
+        /// <summary>Magnitude definition of the application chance. Null means it always applies. The
+        /// evaluated value is interpreted in [0,1] (≤0 fails, ≥1 passes) and rolled deterministically
+        /// with the World-seeded Rng.</summary>
         public MagnitudeDef? ChanceToApply { get; set; }
 
-        /// <summary>레벨별 지속 틱입니다(표기 ②만 지원 — 스펙 §15 G3). 길이가 <see cref="MaxLevel"/>과
-        /// 같아야 하고 <see cref="DurationTicks"/>와는 상호 배타입니다(하나가 있으면 다른 하나는 0).
-        /// <see cref="DurationType"/>이 Duration일 때만 쓸 수 있습니다.</summary>
+        /// <summary>Per-level duration ticks (notation ② only). The length must equal
+        /// <see cref="MaxLevel"/>, and it is mutually exclusive with <see cref="DurationTicks"/>
+        /// (if one is set the other must be 0). Only usable when <see cref="DurationType"/> is Duration.</summary>
         public List<BigNum>? DurationPerLevel { get; set; }
 
-        /// <summary>적용(신규 인스턴스 생성) 시 1회 평가되는 지속시간 배수입니다(스펙 §15 G3). 최종
-        /// 지속 = (<see cref="DurationPerLevel"/>?[level-1] ?? <see cref="DurationTicks"/>) × 이 값을
-        /// 정수 틱으로 절사한 뒤 최소 1틱으로 클램프합니다(DR이 없을 때). <see cref="DurationType"/>이
-        /// Duration일 때만 쓸 수 있습니다.</summary>
+        /// <summary>Duration multiplier evaluated once on application (new instance creation). Final
+        /// duration = (<see cref="DurationPerLevel"/>?[level-1] ?? <see cref="DurationTicks"/>) × this
+        /// value, truncated to integer ticks, then clamped to a minimum of 1 tick (when DR does not
+        /// zero it). Only usable when <see cref="DurationType"/> is Duration.</summary>
         public MagnitudeDef? DurationScale { get; set; }
 
-        /// <summary>체감 저항(DR) 계열을 식별하는 분류 태그 경로입니다(스펙 §15 G6). null이면 이 효과는
-        /// DR을 쓰지 않습니다. <see cref="DurationType"/>이 Duration일 때만 쓸 수 있습니다.</summary>
+        /// <summary>Category tag path identifying the diminishing-returns (DR) series. Null means this
+        /// effect does not use DR. Only usable when <see cref="DurationType"/> is Duration.</summary>
         public string? DrCategory { get; set; }
 
-        /// <summary>DR 적용 횟수가 리셋되는 창(틱)입니다. <see cref="DrCategory"/>가 있으면 1 이상이어야
-        /// 합니다 — 대상의 이 계열 마지막 적용 이후 이 틱 수가 지나면 카운트가 0으로 리셋됩니다.</summary>
+        /// <summary>Window (ticks) after which the DR application count resets. Must be at least 1 when
+        /// <see cref="DrCategory"/> is set — the count resets to 0 once this many ticks pass after the
+        /// target's last application in this category.</summary>
         public int DrWindowTicks { get; set; }
 
-        /// <summary>DR 단계별 지속시간 배수입니다(예: ["0.5","0.25","0"]). 첫 적용은 항상 배수 1이고,
-        /// n번째(n≥1) 적용은 이 배열의 min(n-1, 길이-1) 번째 값을 씁니다. 마지막 값 0은 면역을 뜻합니다.
-        /// <see cref="DrCategory"/>가 있으면 비어있을 수 없고 전부 0 이상이어야 합니다.</summary>
+        /// <summary>Per-stage duration multipliers for DR (e.g. ["0.5","0.25","0"]). The first
+        /// application always uses multiplier 1; the nth (n≥1) application uses index min(n-1,
+        /// length-1). A final value of 0 means immunity. Must be non-empty with all values ≥0 when
+        /// <see cref="DrCategory"/> is set.</summary>
         public List<BigNum> DrStageMultipliers { get; set; } = new List<BigNum>();
     }
 }

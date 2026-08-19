@@ -41,7 +41,7 @@ namespace Bun3.Gameplay.Editor.Tags
         private IReadOnlyList<GameplayTagRedirectRowModel> _redirectRows =
             Array.Empty<GameplayTagRedirectRowModel>();
 
-        /// <summary>게임플레이 태그 카탈로그 창을 엽니다.</summary>
+        /// <summary>Opens the gameplay tag catalog window.</summary>
         [MenuItem("Gameplay/Tag Editor")]
         public static void OpenWindow()
         {
@@ -75,14 +75,14 @@ namespace Bun3.Gameplay.Editor.Tags
             EditorApplication.update -= RefreshWorkspaceOnEditorUpdate;
         }
 
-        /// <summary>현재 게임플레이 태그 카탈로그의 변경 사항을 저장합니다.</summary>
+        /// <summary>Saves changes to the current gameplay tag catalog.</summary>
         public override void SaveChanges()
         {
             if (!Execute(_controller.Save)) return;
             base.SaveChanges();
         }
 
-        /// <summary>현재 게임플레이 태그 카탈로그의 저장하지 않은 변경 사항을 버립니다.</summary>
+        /// <summary>Discards unsaved changes to the current gameplay tag catalog.</summary>
         public override void DiscardChanges()
         {
             _controller.DiscardChanges();
@@ -341,13 +341,13 @@ namespace Bun3.Gameplay.Editor.Tags
             GameplayTagReferenceResultsWindow.Show(
                 SearchRedirectReferences(CollectRedirectSources()));
 
-        /// <summary>단일 redirect를 참조 확인과 외부 데이터 경고를 거쳐 제거합니다.</summary>
+        /// <summary>Removes a single redirect after reference checks and the external-data warning.</summary>
         private void RemoveRedirect(string sourceId, string source)
         {
             var result = SearchRedirectReferences(new[] { source });
             if (!result.IsComplete)
             {
-                // 검색이 불완전하면 override조차 제공하지 않고 결과만 보여 준다.
+                // If the search is incomplete, show the results only — no override is offered.
                 GameplayTagReferenceResultsWindow.Show(result);
                 return;
             }
@@ -403,9 +403,9 @@ namespace Bun3.Gameplay.Editor.Tags
             });
         }
 
-        /// <summary>완전한 검색 결과에서 사용자가 고른 redirect만 제거합니다.</summary>
-        /// <param name="result">참조 검색 결과입니다.</param>
-        /// <param name="selectSources">후보 중 제거할 old path를 고르는 선택기입니다.</param>
+        /// <summary>Removes only the redirects the user selected from a complete search result.</summary>
+        /// <param name="result">Reference search result.</param>
+        /// <param name="selectSources">Selector choosing which candidate old paths to remove.</param>
         internal bool TryApplyBulkCleanup(
             GameplayTagReferenceSearchResult result,
             Func<IReadOnlyList<string>, IReadOnlyList<string>> selectSources)
@@ -436,7 +436,7 @@ namespace Bun3.Gameplay.Editor.Tags
             try
             {
                 var files = GameplayTagProjectReferenceFiles.Enumerate();
-                // 훑지 못한 디렉터리가 있으면 검색 자체가 성공해도 증거가 불완전하다.
+                // Any unscanned directory makes the evidence incomplete even if the search itself succeeded.
                 return new GameplayTagTextReferenceScanner(File.OpenText).Search(
                     files.Files,
                     sources,
@@ -470,7 +470,7 @@ namespace Bun3.Gameplay.Editor.Tags
             }
         }
 
-        /// <summary>redirect 행의 전체 표시 문구를 도구 설명까지 담은 content로 만듭니다.</summary>
+        /// <summary>Builds the full display content for a redirect row, including its tooltip.</summary>
         internal static GUIContent CreateRedirectContent(GameplayTagRedirectRowModel redirect)
         {
             var text = redirect.From + "  →  " + redirect.To;
@@ -555,7 +555,7 @@ namespace Bun3.Gameplay.Editor.Tags
             GameplayTagReferenceResultsWindow.Show(
                 SearchTagReferences(selection.CanonicalPath));
 
-        /// <summary>선택한 경로 뒤에 구분자를 붙여 추가 입력을 준비하고 focus합니다.</summary>
+        /// <summary>Appends a separator to the selected path, prepares further input, and focuses it.</summary>
         internal void PrepareSubTag(string path)
         {
             if (path is null) throw new ArgumentNullException(nameof(path));
@@ -565,11 +565,11 @@ namespace Bun3.Gameplay.Editor.Tags
             Repaint();
         }
 
-        /// <summary>표시용 전체 경로를 시스템 clipboard에 복사합니다.</summary>
+        /// <summary>Copies the full display path to the system clipboard.</summary>
         internal void CopyTag(string path) =>
             EditorGUIUtility.systemCopyBuffer = path ?? throw new ArgumentNullException(nameof(path));
 
-        /// <summary>승인된 이름 변경 결과를 마지막 세그먼트 rename으로 적용합니다.</summary>
+        /// <summary>Applies an approved rename result as a last-segment rename.</summary>
         internal void ApplyRename(string path, GameplayTagTextEditResult result)
         {
             ApplyRename(new GameplayTagTreeSelectionKey("game", path), result);
@@ -590,7 +590,7 @@ namespace Bun3.Gameplay.Editor.Tags
             }
         }
 
-        /// <summary>승인된 comment 결과를 적용하고 암시 부모를 명시 행으로 승격합니다.</summary>
+        /// <summary>Applies an approved comment result and promotes implied parents to explicit rows.</summary>
         internal void ApplyComment(string path, GameplayTagTextEditResult result)
         {
             ApplyComment(new GameplayTagTreeSelectionKey("game", path), result);
@@ -623,7 +623,7 @@ namespace Bun3.Gameplay.Editor.Tags
                 GameplayTagReferenceResultsWindow.Show);
         }
 
-        /// <summary>완전한 무참조 증거와 확인이 있을 때만 exact Source 선언을 삭제합니다.</summary>
+        /// <summary>Deletes the exact source declaration only with complete no-reference evidence and confirmation.</summary>
         internal bool TryDeleteSelected(
             GameplayTagTreeSelectionKey selection,
             GameplayTagReferenceSearchResult result,

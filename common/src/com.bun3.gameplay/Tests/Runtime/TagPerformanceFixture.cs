@@ -405,8 +405,9 @@ namespace Bun3.Gameplay.Tests
             return kind == TagQueryKind.ParentHit ? _parentQueries : _missQueries;
         }
 
-        // 런타임 조립 코어를 직접 부른다 — 이 fixture는 저작 어셈블리를 참조할 수 없는
-        // IL2CPP/Mono 플레이어에서 돌기 때문에 JSON 로더를 쓸 수 없다. 부모는 암묵 활성화된다.
+        // Calls the runtime assembly core directly — this fixture runs in IL2CPP/Mono players
+        // that cannot reference the authoring assembly, so the JSON loader is unavailable.
+        // Parents are implicitly activated.
         private static List<string> BuildCatalogTagNames(int catalogSize, int exactKinds, int depth)
         {
             var names = new List<string>(catalogSize);

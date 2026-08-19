@@ -4,7 +4,7 @@ option csharp_namespace = "Bun3.Server.Rpc.ControlMessages";
 
 package bun3.control;
 
-// 채널 0x01의 프레임워크 소유 메시지.
+// Framework-owned messages on channel 0x01.
 message Control {
   oneof body {
     Ping ping = 1;
@@ -17,12 +17,12 @@ message Ping {
   int64 client_time_unix_ms = 1;
 }
 
-// 서버는 client_time_unix_ms를 그대로 에코한다 — 클라가 RTT를 계산한다.
+// The server echoes client_time_unix_ms unchanged — the client computes RTT.
 message Pong {
   int64 client_time_unix_ms = 1;
 }
 
-// 서버가 사유 있는 킥 직전에 best-effort로 보낸다. 클라는 절단 시 이 코드로 통지한다.
+// Sent best-effort by the server just before a reasoned kick. The client reports this code on disconnect.
 message Disconnect {
-  int32 code = 1;   // 1~99 프레임워크 예약, 음수 게임 정의 (Reply.Status와 동일 규약)
+  int32 code = 1;   // 1-99 framework-reserved, negative game-defined (same convention as Reply.Status)
 }

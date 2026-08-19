@@ -14,7 +14,7 @@ public sealed class EffectInstantTests
     [Test]
     public void Instant_modifier_permanently_changes_base()
     {
-        var kit = EffectTestKit.Create();                       // 카탈로그·레지스트리·타깃 2개(공/수) 조립
+        var kit = EffectTestKit.Create();
         var damage = EffectTestKit.MinimalInstant("hit");
         damage.Modifiers.Add(new ModifierDef
         {
@@ -31,19 +31,19 @@ public sealed class EffectInstantTests
         pipeline.Tick();
 
         Assert.That(kit.Defender.Attributes.GetBase(EffectTestKit.Hp), Is.EqualTo((BigNum)70));
-        Assert.That(kit.Defender.ActiveEffectCount, Is.Zero);   // Instant는 인스턴스 없음
+        Assert.That(kit.Defender.ActiveEffectCount, Is.Zero);   // Instant leaves no instance
     }
 
     [Test]
     public void Execution_calc_reads_inputs_and_writes_through_clamp()
     {
         var kit = EffectTestKit.Create();
-        kit.RegisterExecutionCalc("calc.execution.dmg", new EffectTestKit.SubtractHpCalc()); // Input(0)만큼 Hp 감소
+        kit.RegisterExecutionCalc("calc.execution.dmg", new EffectTestKit.SubtractHpCalc()); // subtracts Input(0) from Hp
         var spell = EffectTestKit.MinimalInstant("spell");
         spell.Executions.Add(new ExecutionDef
         {
             CalcTag = "calc.execution.dmg",
-            Inputs = { Operand.Attribute(EffectTestKit.MaxHp, BigNum.FromParts(5, -1)) }, // 최대체력의 50%
+            Inputs = { Operand.Attribute(EffectTestKit.MaxHp, BigNum.FromParts(5, -1)) }, // 50% of MaxHp
         });
         kit.AddSpec(spell);
         var pipeline = kit.BuildPipeline();
@@ -92,13 +92,13 @@ public sealed class EffectInstantTests
 
         pipeline.EnqueueApply(kit.SpecId("gated"), kit.Attacker.Id, kit.Defender.Id);
         pipeline.Tick();
-        Assert.That(kit.Defender.Attributes.GetBase(EffectTestKit.Hp), Is.EqualTo((BigNum)90)); // Hp<30% 아님
+        Assert.That(kit.Defender.Attributes.GetBase(EffectTestKit.Hp), Is.EqualTo((BigNum)90)); // Hp<30% not met
 
         pipeline.EnqueueApply(kit.SpecId("ward"), kit.Defender.Id, kit.Defender.Id);
         pipeline.Tick();
         pipeline.EnqueueApply(kit.SpecId("fireball"), kit.Attacker.Id, kit.Defender.Id);
         pipeline.Tick();
-        Assert.That(kit.Defender.Attributes.GetBase(EffectTestKit.Hp), Is.EqualTo((BigNum)90)); // 면역 차단
+        Assert.That(kit.Defender.Attributes.GetBase(EffectTestKit.Hp), Is.EqualTo((BigNum)90)); // blocked by immunity
     }
 
     [Test]
@@ -122,7 +122,7 @@ public sealed class EffectInstantTests
         pipeline.EnqueueApply(kit.SpecId("slash"), kit.Attacker.Id, kit.Defender.Id);
         pipeline.Tick();
 
-        // 공격력 100 × -1.2 = -120 → Hp 150 - 120 = 30.
+        // Attack 100 x -1.2 = -120 -> Hp 150 - 120 = 30.
         Assert.That(kit.Defender.Attributes.GetBase(EffectTestKit.Hp), Is.EqualTo((BigNum)30));
     }
 
@@ -163,24 +163,24 @@ public sealed class EffectInstantTests
         kit.Defender.Attributes.SetBase(EffectTestKit.MaxHp, 200);
         kit.Defender.Attributes.SetBase(EffectTestKit.Hp, 200);
 
-        // TargetHasTag: 대상에 frozen 없음 → 배율 없이 -10.
+        // TargetHasTag: target lacks frozen -> plain -10.
         pipeline.EnqueueApply(kit.SpecId("hitTarget"), kit.Attacker.Id, kit.Defender.Id);
         pipeline.Tick();
         Assert.That(kit.Defender.Attributes.GetBase(EffectTestKit.Hp), Is.EqualTo((BigNum)190));
 
-        // 대상에 frozen 부여 후 → 2배 -20.
+        // After granting frozen to the target -> doubled, -20.
         pipeline.EnqueueApply(kit.SpecId("frost"), kit.Attacker.Id, kit.Defender.Id);
         pipeline.Tick();
         pipeline.EnqueueApply(kit.SpecId("hitTarget"), kit.Attacker.Id, kit.Defender.Id);
         pipeline.Tick();
         Assert.That(kit.Defender.Attributes.GetBase(EffectTestKit.Hp), Is.EqualTo((BigNum)170));
 
-        // SourceHasTag: 시전자(Attacker)에 hasted 없음 → 배율 없이 -10.
+        // SourceHasTag: caster (Attacker) lacks hasted -> plain -10.
         pipeline.EnqueueApply(kit.SpecId("hitSource"), kit.Attacker.Id, kit.Defender.Id);
         pipeline.Tick();
         Assert.That(kit.Defender.Attributes.GetBase(EffectTestKit.Hp), Is.EqualTo((BigNum)160));
 
-        // 시전자에 hasted 부여 후 → 2배 -20.
+        // After granting hasted to the caster -> doubled, -20.
         pipeline.EnqueueApply(kit.SpecId("haste"), kit.Attacker.Id, kit.Attacker.Id);
         pipeline.Tick();
         pipeline.EnqueueApply(kit.SpecId("hitSource"), kit.Attacker.Id, kit.Defender.Id);
@@ -188,8 +188,8 @@ public sealed class EffectInstantTests
         Assert.That(kit.Defender.Attributes.GetBase(EffectTestKit.Hp), Is.EqualTo((BigNum)140));
     }
 
-    /// <summary>MagnitudeContext.TargetHasTag/SourceHasTag 회귀 테스트 전용 계산 — 지정한 쪽(대상 또는
-    /// 시전자)이 태그를 보유하면 크기를 2배로 반환합니다.</summary>
+    /// <summary>Calc for MagnitudeContext.TargetHasTag/SourceHasTag regression tests — doubles the
+    /// magnitude when the chosen side (target or caster) holds the tag.</summary>
     private sealed class TagGatedMagnitudeCalc : IMagnitudeCalc
     {
         private readonly GameplayTag _tag;

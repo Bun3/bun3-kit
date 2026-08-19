@@ -8,7 +8,7 @@ using NUnit.Framework;
 
 namespace Bun3.Gameplay.Tests;
 
-/// <summary>B3DK reader가 손상 단계별로 입력을 거부하는지 검증합니다.</summary>
+/// <summary>Verifies the B3DK reader rejects input at each corruption stage.</summary>
 [TestFixture]
 public sealed class TagCatalogBinaryCorruptionTests
 {
@@ -134,7 +134,7 @@ public sealed class TagCatalogBinaryCorruptionTests
         {
             Assert.That(error, Is.Not.Null);
             Assert.That(allocated, Is.LessThan(300_000),
-                "파일 길이 guard 전에 큰 tag 배열이나 Dictionary를 할당했습니다.");
+                "Allocated a large tag array or dictionary before the file-length guard.");
         });
     }
 

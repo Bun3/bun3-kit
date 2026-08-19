@@ -7,8 +7,8 @@ using NUnit.Framework;
 namespace Bun3.Server.Tests;
 
 /// <summary>
-/// Transport.Tcp 계약 테스트(TcpTransportTests/TcpConnectorTests)와 동일한 시나리오를
-/// 인프로세스 전송에 적용하고, 인프로세스 고유 계약(복사, 드레인, 백프레셔)을 추가로 검증한다.
+/// Applies the Transport.Tcp contract scenarios (TcpTransportTests/TcpConnectorTests) to the
+/// in-process transport, plus in-process-specific contracts (copying, draining, backpressure).
 /// </summary>
 [TestFixture]
 public class InProcessTransportTests
@@ -32,7 +32,7 @@ public class InProcessTransportTests
 
         var connection = await transport.Connector.ConnectAsync(clientHandler).AsTask().WaitAsync(Timeout);
 
-        Assert.That(clientHandler.Connected.Task.IsCompletedSuccessfully, Is.True); // 반환 전에 이미 호출됨
+        Assert.That(clientHandler.Connected.Task.IsCompletedSuccessfully, Is.True); // already invoked before return
         Assert.That(connection.IsOpen, Is.True);
         Assert.That(connection.Id, Is.GreaterThan(0));
         var serverConn = await serverHandler.Connected.Task.WaitAsync(Timeout);
@@ -107,10 +107,10 @@ public class InProcessTransportTests
 
         await clientConn.SendAsync(buffer);
         await serverHandler.PacketSignal.WaitAsync(Timeout);
-        buffer[0] = 99; // 송신자가 버퍼를 재사용해도
+        buffer[0] = 99; // sender reuses the buffer
 
         Assert.That(serverHandler.Packets.TryDequeue(out var received), Is.True);
-        Assert.That(received, Is.EqualTo(new byte[] { 1, 2, 3 })); // 수신 패킷은 영향을 받지 않는다
+        Assert.That(received, Is.EqualTo(new byte[] { 1, 2, 3 })); // received packet is unaffected
         Assert.That(received, Is.Not.SameAs(buffer));
         clientConn.Close();
     }
@@ -142,12 +142,12 @@ public class InProcessTransportTests
         var serverConn = serverHandler.Connection!;
 
         clientConn.Close();
-        serverConn.Close(); // 양쪽에서 동시에 닫아도
-        clientConn.Close(); // 멱등
+        serverConn.Close(); // both ends closing concurrently
+        clientConn.Close(); // idempotent
 
         await clientHandler.ClosedOnce.Task.WaitAsync(Timeout);
         await serverHandler.ClosedOnce.Task.WaitAsync(Timeout);
-        await Task.Delay(100); // 중복 통지가 있다면 드러날 시간
+        await Task.Delay(100); // time for any duplicate notification to surface
         Assert.That(clientHandler.ClosedCount, Is.EqualTo(1));
         Assert.That(serverHandler.ClosedCount, Is.EqualTo(1));
     }
@@ -156,7 +156,7 @@ public class InProcessTransportTests
     public async Task Packets_sent_before_close_are_drained_to_peer()
     {
         var (transport, serverHandler) = await StartTransportAsync();
-        // 서버 펌프가 느려도 순서가 보장되는지 보기 위해 여러 개를 보낸 직후 닫는다
+        // send several then close immediately, to verify ordering even with a slow server pump
         var clientConn = await transport.Connector.ConnectAsync(new RecordingHandler()).AsTask().WaitAsync(Timeout);
         for (byte i = 0; i < 5; i++)
         {
@@ -167,7 +167,7 @@ public class InProcessTransportTests
 
         var error = await serverHandler.Closed.Task.WaitAsync(Timeout);
         Assert.That(error, Is.Null);
-        Assert.That(serverHandler.Packets.Count, Is.EqualTo(5)); // 큐잉분은 OnClosed 전에 전부 전달
+        Assert.That(serverHandler.Packets.Count, Is.EqualTo(5)); // queued packets all delivered before OnClosed
         for (byte i = 0; i < 5; i++)
         {
             Assert.That(serverHandler.Packets.TryDequeue(out var p), Is.True);
@@ -184,9 +184,9 @@ public class InProcessTransportTests
         var canceled = new CancellationToken(canceled: true);
         Assert.CatchAsync<OperationCanceledException>(
             async () => await clientConn.SendAsync(new byte[] { 1 }, canceled));
-        Assert.That(clientConn.IsOpen, Is.True); // 취소는 연결을 닫지 않는다
+        Assert.That(clientConn.IsOpen, Is.True); // cancellation does not close the connection
 
-        await clientConn.SendAsync(new byte[] { 2 }); // 이후 송신은 정상 동작
+        await clientConn.SendAsync(new byte[] { 2 }); // subsequent sends work normally
         await serverHandler.PacketSignal.WaitAsync(Timeout);
         Assert.That(serverHandler.Packets.TryDequeue(out var received), Is.True);
         Assert.That(received, Is.EqualTo(new byte[] { 2 }));
@@ -222,7 +222,7 @@ public class InProcessTransportTests
         await serverHandler.ConnectedSignal.WaitAsync(Timeout);
         var serverIds = serverHandler.ConnectionIds.ToArray();
         var allIds = new[] { c1.Id, c2.Id, serverIds[0], serverIds[1] };
-        Assert.That(allIds, Is.Unique); // 클라/서버 끝점 4개 모두 서로 다른 Id
+        Assert.That(allIds, Is.Unique); // all 4 client/server endpoints have distinct ids
         c1.Close();
         c2.Close();
     }
@@ -235,7 +235,7 @@ public class InProcessTransportTests
         Assert.ThrowsAsync<InvalidOperationException>(async () =>
             await transport.Connector.ConnectAsync(new ThrowingConnectHandler()).AsTask().WaitAsync(Timeout));
 
-        // 페어가 정리되었음을 서버 측 종료 통지로 증명한다(TcpConnector 계약과 동일)
+        // server-side close notification proves the pair was cleaned up (same as TcpConnector contract)
         await serverHandler.Connected.Task.WaitAsync(Timeout);
         Assert.That(await serverHandler.Closed.Task.WaitAsync(Timeout), Is.Null);
     }
@@ -248,18 +248,18 @@ public class InProcessTransportTests
         await transport.Listener.StartAsync(serverHandler);
         var clientHandler = new RecordingHandler();
 
-        // 원격 거부의 TCP 관측과 동일: 클라 연결 자체는 성공하고 곧 닫힌다
+        // same as TCP observation of a remote reject: client connect itself succeeds, then closes soon
         var clientConn = await transport.Connector.ConnectAsync(clientHandler).AsTask().WaitAsync(Timeout);
 
         Assert.That(clientHandler.Connected.Task.IsCompletedSuccessfully, Is.True);
         Assert.That(await clientHandler.Closed.Task.WaitAsync(Timeout), Is.Null);
         Assert.That(clientConn.IsOpen, Is.False);
 
-        // 서버 OnConnected가 던져도 수락은 계속된다(Tcp의 accept 루프 생존 계약과 동일)
+        // accepting continues even if server OnConnected throws (same as Tcp accept-loop survival contract)
         var secondClient = new RecordingHandler();
         await transport.Connector.ConnectAsync(secondClient).AsTask().WaitAsync(Timeout);
         Assert.That(secondClient.Connected.Task.IsCompletedSuccessfully, Is.True);
-        Assert.That(await secondClient.Closed.Task.WaitAsync(Timeout), Is.Null); // 이번에도 거부되지만 수락 자체는 산다
+        Assert.That(await secondClient.Closed.Task.WaitAsync(Timeout), Is.Null); // rejected again, but accepting survives
     }
 
     [Test]
@@ -274,7 +274,7 @@ public class InProcessTransportTests
         await clientConn.SendAsync(new byte[] { 1 });
 
         var error = await serverHandler.Closed.Task.WaitAsync(Timeout);
-        Assert.That(error, Is.InstanceOf<InvalidOperationException>()); // Tcp 수신 루프와 동일
+        Assert.That(error, Is.InstanceOf<InvalidOperationException>()); // same as Tcp receive loop
         Assert.That(await clientHandler.Closed.Task.WaitAsync(Timeout), Is.Null);
     }
 
@@ -286,17 +286,17 @@ public class InProcessTransportTests
         await transport.Listener.StartAsync(serverHandler);
         var clientConn = await transport.Connector.ConnectAsync(new RecordingHandler()).AsTask().WaitAsync(Timeout);
 
-        // 펌프가 1개를 꺼내 블록 + 인박스 2개 = 3개까지는 즉시, 4번째는 슬롯 대기
+        // pump dequeues 1 and blocks + inbox holds 2 = 3 go through immediately, 4th waits for a slot
         await clientConn.SendAsync(new byte[] { 1 }).AsTask().WaitAsync(Timeout);
-        await serverHandler.Entered.Task.WaitAsync(Timeout); // 펌프가 OnPacket에서 블록됨을 확정
+        await serverHandler.Entered.Task.WaitAsync(Timeout); // confirm pump is blocked in OnPacket
         await clientConn.SendAsync(new byte[] { 2 }).AsTask().WaitAsync(Timeout);
         await clientConn.SendAsync(new byte[] { 3 }).AsTask().WaitAsync(Timeout);
         var blocked = clientConn.SendAsync(new byte[] { 4 }).AsTask();
 
         await Task.Delay(200);
-        Assert.That(blocked.IsCompleted, Is.False); // 백프레셔로 대기 중
+        Assert.That(blocked.IsCompleted, Is.False); // waiting due to backpressure
 
-        // 수신 측이 닫히면 대기 중인 송신자는 예외 없이 풀려난다
+        // when the receiving side closes, the waiting sender is released without an exception
         var serverConn = serverHandler.Connection!;
         serverConn.Close();
         serverHandler.Unblock.Release();
@@ -319,12 +319,12 @@ public class InProcessTransportTests
         await Task.Delay(100);
         Assert.That(blocked.IsCompleted, Is.False);
 
-        // 송신자 쪽을 닫는다 — 상대(서버) 펌프가 OnPacket에 갇혀 있어도 블록된 송신은
-        // 예외 없이 no-op으로 풀려야 한다(TCP의 로컬 Close가 블록된 write를 깨우는 동작)
+        // close the sender side — even with the peer (server) pump stuck in OnPacket, the blocked
+        // send must resolve as a no-op without an exception (like TCP local Close waking a blocked write)
         clientConn.Close();
         Assert.DoesNotThrowAsync(async () => await blocked.WaitAsync(Timeout));
 
-        // 펌프를 재개하면 닫기 전 큐잉분(2,3)만 드레인되고 4번째는 드롭된다
+        // resuming the pump drains only the pre-close queued packets (2, 3); the 4th is dropped
         serverHandler.Unblock.Release(3);
         var error = await serverHandler.Closed.Task.WaitAsync(Timeout);
         Assert.That(error, Is.Null);

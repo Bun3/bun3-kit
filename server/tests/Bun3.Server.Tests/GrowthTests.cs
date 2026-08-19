@@ -6,20 +6,20 @@ namespace Bun3.Server.Tests;
 [TestFixture]
 public class GrowthTests
 {
-    // idlez RequiredExps 상당 — 레벨 n → n+1 필요 경험치
+    // required exp for level n -> n+1
     private static long Table(int level) => level * 100;
 
     [Test]
     public void Settles_multiple_levels_and_preserves_remainder()
     {
         var level = 1;
-        long exp = 350;   // 1→2: 100, 2→3: 200 소진, 잔여 50
+        long exp = 350;   // consumes 100 for 1->2, 200 for 2->3, remainder 50
 
         Assert.That(Growth.SettleExp(ref level, ref exp, maxLevel: 10, Table), Is.EqualTo(2));
         Assert.That(level, Is.EqualTo(3));
-        Assert.That(exp, Is.EqualTo(50), "잔여 경험치 보존");
+        Assert.That(exp, Is.EqualTo(50), "remainder exp preserved");
 
-        // 부족하면 무변화
+        // no change when insufficient
         Assert.That(Growth.SettleExp(ref level, ref exp, maxLevel: 10, Table), Is.EqualTo(0));
         Assert.That((level, exp), Is.EqualTo((3, 50L)));
     }
@@ -31,10 +31,10 @@ public class GrowthTests
         long exp = 1_000_000;
 
         Assert.That(Growth.SettleExp(ref level, ref exp, maxLevel: 3, Table), Is.EqualTo(2));
-        Assert.That(level, Is.EqualTo(3), "만렙 정지");
-        Assert.That(exp, Is.EqualTo(1_000_000 - 100 - 200), "만렙 잔여는 보존 — 버릴지는 호출측 정책");
+        Assert.That(level, Is.EqualTo(3), "stops at max level");
+        Assert.That(exp, Is.EqualTo(1_000_000 - 100 - 200), "overflow exp at max level is preserved — discarding is caller policy");
 
-        // 이미 만렙 — 테이블 조회조차 없음
+        // already at max level — not even a table lookup
         Assert.That(Growth.SettleExp(ref level, ref exp, maxLevel: 3, _ => throw new Exception()), Is.EqualTo(0));
     }
 
@@ -44,6 +44,6 @@ public class GrowthTests
         var level = 1;
         long exp = 100;
         Assert.That(() => Growth.SettleExp(ref level, ref exp, 10, _ => 0),
-            Throws.TypeOf<ArgumentOutOfRangeException>(), "필요치 0 이하는 데이터 오류");
+            Throws.TypeOf<ArgumentOutOfRangeException>(), "required exp <= 0 is a data error");
     }
 }

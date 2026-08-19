@@ -7,7 +7,7 @@ using Bun3.Gameplay.Tags;
 
 namespace Bun3.Gameplay.Effects
 {
-    /// <summary><see cref="EffectCatalogBuilder"/>.Build로 검증까지 끝난, 변경되지 않는 효과 카탈로그입니다.</summary>
+    /// <summary>Immutable effect catalog, fully validated by <see cref="EffectCatalogBuilder"/>.Build.</summary>
     public sealed class EffectCatalog
     {
         private readonly Dictionary<string, int> _nameToId;
@@ -22,13 +22,13 @@ namespace Bun3.Gameplay.Effects
             _buildWarnings = buildWarnings.ToArray();
         }
 
-        /// <summary>카탈로그에 등록된 효과 수입니다.</summary>
+        /// <summary>Number of effects registered in the catalog.</summary>
         public int Count => _specs.Length;
 
-        /// <summary>이름으로 효과 id를 찾거나 없으면 예외를 던집니다.</summary>
-        /// <param name="name">조회할 효과 이름입니다.</param>
-        /// <returns>찾은 효과 id입니다.</returns>
-        /// <exception cref="KeyNotFoundException">이름이 등록되어 있지 않은 경우입니다.</exception>
+        /// <summary>Looks up an effect id by name, throwing when absent.</summary>
+        /// <param name="name">Effect name to look up.</param>
+        /// <returns>The effect id found.</returns>
+        /// <exception cref="KeyNotFoundException">The name is not registered.</exception>
         public int GetRequiredId(string name)
         {
             if (TryGetId(name, out var id))
@@ -36,23 +36,23 @@ namespace Bun3.Gameplay.Effects
                 return id;
             }
 
-            throw new KeyNotFoundException($"등록되지 않은 효과 이름입니다: {name}");
+            throw new KeyNotFoundException($"Unregistered effect name: {name}");
         }
 
-        /// <summary>이름으로 효과 id를 시도합니다.</summary>
-        /// <param name="name">조회할 효과 이름입니다.</param>
-        /// <param name="id">찾은 효과 id입니다.</param>
-        /// <returns>이름이 등록되어 있으면 true입니다.</returns>
+        /// <summary>Tries to look up an effect id by name.</summary>
+        /// <param name="name">Effect name to look up.</param>
+        /// <param name="id">The effect id found.</param>
+        /// <returns>True if the name is registered.</returns>
         public bool TryGetId(string name, out int id) => _nameToId.TryGetValue(name, out id);
 
-        /// <summary>id로 컴파일된 스펙을 가져옵니다.</summary>
+        /// <summary>Gets the compiled spec by id.</summary>
         internal CompiledEffectSpec GetSpec(int id) => _specs[id];
 
-        /// <summary>Build 시 발견된 체인 순환 경고들입니다. 예외를 던지지 않고 여기 쌓입니다.</summary>
+        /// <summary>Chain-cycle warnings found during Build. They accumulate here instead of throwing.</summary>
         public IReadOnlyList<string> BuildWarnings => _buildWarnings;
     }
 
-    /// <summary>컴파일된 속성 수정자입니다.</summary>
+    /// <summary>Compiled attribute modifier.</summary>
     internal sealed class CompiledModifier
     {
         internal CompiledModifier(
@@ -71,36 +71,37 @@ namespace Bun3.Gameplay.Effects
             ScaleWithStack = scaleWithStack;
         }
 
-        /// <summary>수정할 대상 속성 id입니다.</summary>
+        /// <summary>Id of the attribute to modify.</summary>
         internal ushort AttributeId { get; }
 
-        /// <summary>수정자 연산 종류입니다.</summary>
+        /// <summary>Modifier operation kind.</summary>
         internal AttributeModifierOp Op { get; }
 
-        /// <summary>레벨 무관 기본 크기이며 <see cref="Calc"/>·<see cref="ByLevel"/>이 있으면 null입니다.</summary>
+        /// <summary>Level-independent base magnitude; null when <see cref="Calc"/> or <see cref="ByLevel"/> is set.</summary>
         internal Operand? Base { get; }
 
-        /// <summary>레벨당 추가 크기입니다.</summary>
+        /// <summary>Additional magnitude per level.</summary>
         internal Operand? PerLevel { get; }
 
-        /// <summary>해석된 크기 계산 계약이며 상수/속성/레벨 테이블 기반 크기면 null입니다.</summary>
+        /// <summary>Resolved magnitude-calc contract; null for constant/attribute/level-table magnitudes.</summary>
         internal IMagnitudeCalc? Calc { get; }
 
-        /// <summary>레벨 테이블(표기 ②③④가 컴파일된 밀집 배열)이며, 없으면(표기 ①·Calc) null입니다.</summary>
+        /// <summary>Level table (notations ②③④ compiled to a dense array); null when absent (notation ① or Calc).</summary>
         internal BigNum[]? ByLevel { get; }
 
-        /// <summary><see cref="ByLevel"/>의 길이(MaxLevel)를 넘는 레벨을 다루는 방식입니다.</summary>
+        /// <summary>How levels beyond the length of <see cref="ByLevel"/> (MaxLevel) are handled.</summary>
         internal LevelTail Tail { get; }
 
-        /// <summary>Tail이 Extrapolate일 때 레벨당 증분입니다.</summary>
+        /// <summary>Per-level increment when Tail is Extrapolate.</summary>
         internal BigNum Increment { get; }
 
-        /// <summary>스택 수에 비례해 크기를 배율할지 여부입니다.</summary>
+        /// <summary>Whether the magnitude scales with the stack count.</summary>
         internal bool ScaleWithStack { get; }
     }
 
-    /// <summary>CompiledModifier와 같은 표기(①~④·CalcTag)로 해석된, 속성 소유 없는 단독 크기입니다.
-    /// ChanceToApply처럼 특정 AttributeId에 매이지 않는 크기 정의에 씁니다.</summary>
+    /// <summary>Standalone magnitude resolved with the same notations as CompiledModifier (①–④,
+    /// CalcTag) but without an owning attribute. Used for magnitude definitions not tied to a
+    /// specific AttributeId, such as ChanceToApply.</summary>
     internal sealed class CompiledMagnitude
     {
         internal CompiledMagnitude(
@@ -115,26 +116,26 @@ namespace Bun3.Gameplay.Effects
             Increment = increment;
         }
 
-        /// <summary>레벨 무관 기본 크기이며 <see cref="Calc"/>·<see cref="ByLevel"/>이 있으면 null입니다.</summary>
+        /// <summary>Level-independent base magnitude; null when <see cref="Calc"/> or <see cref="ByLevel"/> is set.</summary>
         internal Operand? Base { get; }
 
-        /// <summary>레벨당 추가 크기입니다.</summary>
+        /// <summary>Additional magnitude per level.</summary>
         internal Operand? PerLevel { get; }
 
-        /// <summary>해석된 크기 계산 계약이며 상수/속성/레벨 테이블 기반 크기면 null입니다.</summary>
+        /// <summary>Resolved magnitude-calc contract; null for constant/attribute/level-table magnitudes.</summary>
         internal IMagnitudeCalc? Calc { get; }
 
-        /// <summary>레벨 테이블(표기 ②③④가 컴파일된 밀집 배열)이며, 없으면(표기 ①·Calc) null입니다.</summary>
+        /// <summary>Level table (notations ②③④ compiled to a dense array); null when absent (notation ① or Calc).</summary>
         internal BigNum[]? ByLevel { get; }
 
-        /// <summary><see cref="ByLevel"/>의 길이(MaxLevel)를 넘는 레벨을 다루는 방식입니다.</summary>
+        /// <summary>How levels beyond the length of <see cref="ByLevel"/> (MaxLevel) are handled.</summary>
         internal LevelTail Tail { get; }
 
-        /// <summary>Tail이 Extrapolate일 때 레벨당 증분입니다.</summary>
+        /// <summary>Per-level increment when Tail is Extrapolate.</summary>
         internal BigNum Increment { get; }
     }
 
-    /// <summary>컴파일된 효과 실행입니다.</summary>
+    /// <summary>Compiled effect execution.</summary>
     internal sealed class CompiledExecution
     {
         internal CompiledExecution(IExecutionCalc calc, Operand[] inputs)
@@ -143,14 +144,14 @@ namespace Bun3.Gameplay.Effects
             Inputs = inputs;
         }
 
-        /// <summary>해석된 실행 계약입니다.</summary>
+        /// <summary>Resolved execution contract.</summary>
         internal IExecutionCalc Calc { get; }
 
-        /// <summary>실행에 전달할 입력 피연산자들입니다.</summary>
+        /// <summary>Input operands passed to the execution.</summary>
         internal Operand[] Inputs { get; }
     }
 
-    /// <summary>컴파일된 조건입니다.</summary>
+    /// <summary>Compiled condition.</summary>
     internal readonly struct CompiledCondition
     {
         internal CompiledCondition(Operand left, ComparisonOp op, Operand right)
@@ -160,17 +161,17 @@ namespace Bun3.Gameplay.Effects
             Right = right;
         }
 
-        /// <summary>좌변 피연산자입니다.</summary>
+        /// <summary>Left operand.</summary>
         internal Operand Left { get; }
 
-        /// <summary>비교 연산자입니다.</summary>
+        /// <summary>Comparison operator.</summary>
         internal ComparisonOp Op { get; }
 
-        /// <summary>우변 피연산자입니다.</summary>
+        /// <summary>Right operand.</summary>
         internal Operand Right { get; }
     }
 
-    /// <summary>컴파일된 체인 엣지입니다.</summary>
+    /// <summary>Compiled chain edge.</summary>
     internal sealed class CompiledChain
     {
         internal CompiledChain(
@@ -186,29 +187,29 @@ namespace Bun3.Gameplay.Effects
             FixedLevel = fixedLevel;
         }
 
-        /// <summary>발동 시점입니다.</summary>
+        /// <summary>Trigger timing.</summary>
         internal ChainTrigger Trigger { get; }
 
-        /// <summary>발동할 대상 효과의 id입니다.</summary>
+        /// <summary>Id of the effect to trigger.</summary>
         internal int EffectId { get; }
 
-        /// <summary>해석된 대상 선택 계약이며 없으면 null입니다(원본 대상 그대로 사용).</summary>
+        /// <summary>Resolved target-selector contract, or null (use the source target as is).</summary>
         internal ITargetSelector? Selector { get; }
 
-        /// <summary>대상 선택에 전달할 매개변수들입니다.</summary>
+        /// <summary>Parameters passed to target selection.</summary>
         internal BigNum[] SelectorParams { get; }
 
-        /// <summary>발동 조건들입니다.</summary>
+        /// <summary>Trigger conditions.</summary>
         internal CompiledCondition[] Conditions { get; }
 
-        /// <summary>대상 효과의 레벨 결정 규칙입니다.</summary>
+        /// <summary>Rule deciding the target effect's level.</summary>
         internal ChainLevelRule LevelRule { get; }
 
-        /// <summary>LevelRule이 Fixed일 때 사용할 레벨입니다.</summary>
+        /// <summary>Level to use when LevelRule is Fixed.</summary>
         internal int FixedLevel { get; }
     }
 
-    /// <summary>Build에서 검증·해석까지 끝난 효과 스펙입니다.</summary>
+    /// <summary>Effect spec fully validated and resolved by Build.</summary>
     internal sealed class CompiledEffectSpec
     {
         internal CompiledEffectSpec(
@@ -257,70 +258,69 @@ namespace Bun3.Gameplay.Effects
             DrStageMultipliers = drStageMultipliers;
         }
 
-        /// <summary>효과 이름입니다.</summary>
+        /// <summary>Effect name.</summary>
         internal string Name { get; }
 
-        /// <summary>지속 방식입니다.</summary>
+        /// <summary>How the effect persists.</summary>
         internal EffectDurationType DurationType { get; }
 
-        /// <summary>지속 틱 수입니다.</summary>
+        /// <summary>Duration in ticks.</summary>
         internal int DurationTicks { get; }
 
-        /// <summary>주기 실행 간격(틱)입니다.</summary>
+        /// <summary>Periodic execution interval (ticks).</summary>
         internal int PeriodTicks { get; }
 
-        /// <summary>스택 정책입니다.</summary>
+        /// <summary>Stack policy.</summary>
         internal StackPolicy Stack { get; }
 
-        /// <summary>컴파일된 속성 수정자들입니다.</summary>
+        /// <summary>Compiled attribute modifiers.</summary>
         internal CompiledModifier[] Modifiers { get; }
 
-        /// <summary>컴파일된 효과 실행들입니다.</summary>
+        /// <summary>Compiled effect executions.</summary>
         internal CompiledExecution[] Executions { get; }
 
-        /// <summary>컴파일된 적용 조건들입니다.</summary>
+        /// <summary>Compiled application conditions.</summary>
         internal CompiledCondition[] ApplicationConditions { get; }
 
-        /// <summary>컴파일된 지속 조건들입니다.</summary>
+        /// <summary>Compiled ongoing conditions.</summary>
         internal CompiledCondition[] OngoingConditions { get; }
 
-        /// <summary>해석된 부여 태그들입니다.</summary>
+        /// <summary>Resolved granted tags.</summary>
         internal GameplayTag[] GrantedTags { get; }
 
-        /// <summary>해석된 자산 태그들입니다.</summary>
+        /// <summary>Resolved asset tags.</summary>
         internal GameplayTag[] AssetTags { get; }
 
-        /// <summary>해석된 면역 태그들입니다.</summary>
+        /// <summary>Resolved immunity tags.</summary>
         internal GameplayTag[] ImmunityTags { get; }
 
-        /// <summary>컴파일된 체인 엣지들입니다.</summary>
+        /// <summary>Compiled chain edges.</summary>
         internal CompiledChain[] Chains { get; }
 
-        /// <summary>스택 초과 시 대신 적용할 효과의 id이며 -1이면 없습니다.</summary>
+        /// <summary>Id of the effect applied instead on stack overflow; -1 when none.</summary>
         internal int OverflowEffectId { get; }
 
-        /// <summary>해석된 RemoveOnApply 태그들입니다. 이 효과가 적용될 때 매칭되는 대상의 활성
-        /// 효과를 즉시 제거합니다.</summary>
+        /// <summary>Resolved RemoveOnApply tags. When this effect applies, matching active effects on
+        /// the target are removed immediately.</summary>
         internal GameplayTag[] RemoveOnApplyTags { get; }
 
-        /// <summary>적용 확률을 정하는 컴파일된 크기이며 null이면 항상 적용됩니다.</summary>
+        /// <summary>Compiled application-chance magnitude; null means it always applies.</summary>
         internal CompiledMagnitude? ChanceToApply { get; }
 
-        /// <summary>레벨별 지속 틱(표기 ②만)이며 없으면(<see cref="EffectSpec.DurationTicks"/> 단일값
-        /// 사용) null입니다. 스펙 §15 G3.</summary>
+        /// <summary>Per-level duration ticks (notation ② only); null when absent
+        /// (single <see cref="EffectSpec.DurationTicks"/> value is used).</summary>
         internal BigNum[]? DurationPerLevel { get; }
 
-        /// <summary>적용 시 1회 평가되는 지속시간 배수이며 없으면 null(배수 1과 동일)입니다. 스펙 §15 G3.</summary>
+        /// <summary>Duration multiplier evaluated once on application; null when absent (same as multiplier 1).</summary>
         internal CompiledMagnitude? DurationScale { get; }
 
-        /// <summary>DR 계열 분류 태그이며 미사용이면 <see cref="GameplayTag.None"/>입니다. 스펙 §15 G6.</summary>
+        /// <summary>DR category tag; <see cref="GameplayTag.None"/> when DR is unused.</summary>
         internal GameplayTag DrCategory { get; }
 
-        /// <summary>DR 적용 횟수 리셋 창(틱)입니다. 스펙 §15 G6.</summary>
+        /// <summary>Window (ticks) after which the DR application count resets.</summary>
         internal int DrWindowTicks { get; }
 
-        /// <summary>DR 단계별 지속시간 배수이며 <see cref="DrCategory"/>가 미사용이면 빈 배열입니다.
-        /// 스펙 §15 G6.</summary>
+        /// <summary>Per-stage DR duration multipliers; empty when <see cref="DrCategory"/> is unused.</summary>
         internal BigNum[] DrStageMultipliers { get; }
     }
 }

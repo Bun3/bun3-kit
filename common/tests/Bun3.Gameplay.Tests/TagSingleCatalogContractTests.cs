@@ -5,8 +5,8 @@ using NUnit.Framework;
 namespace Bun3.Gameplay.Tests;
 
 /// <summary>
-/// 프로세스 내 카탈로그가 하나라는 계약을 컨테이너가 강제하는지 검사한다. 다른 카탈로그의
-/// 태그는 index만으로 전부 걸러낼 수 없지만, 최소한 범위를 벗어난 index는 조용히 통과하면 안 된다.
+/// Checks the container enforces the one-catalog-per-process contract. Tags from another
+/// catalog cannot all be filtered out by index alone, but an out-of-range index must not pass silently.
 /// </summary>
 [TestFixture]
 public sealed class TagSingleCatalogContractTests
@@ -40,7 +40,7 @@ public sealed class TagSingleCatalogContractTests
     [Test]
     public void Queries_stay_allocation_free_and_treat_an_outside_tag_as_a_miss()
     {
-        // 조회는 틱 핫패스이므로 예외 대신 미일치로 처리한다.
+        // Lookups are on the tick hot path, so treat this as a miss instead of throwing.
         var tags = _catalog.CreateContainer();
         tags.Add(_catalog.GetRequired("State.Dead.Ghost"));
 

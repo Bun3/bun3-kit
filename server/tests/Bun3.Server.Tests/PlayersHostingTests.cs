@@ -143,6 +143,6 @@ public class PlayersHostingTests
         await Task.Delay(400);
         await host.StopAsync();
 
-        Assert.That(jobRuns, Is.GreaterThanOrEqualTo(3), "AddPlayerServer만으로 틱 루프가 돌고 jobs가 실행된다");
+        Assert.That(jobRuns, Is.GreaterThanOrEqualTo(3), "AddPlayerServer alone runs the tick loop and executes jobs");
     }
 }

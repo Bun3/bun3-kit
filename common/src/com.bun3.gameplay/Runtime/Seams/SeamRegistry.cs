@@ -5,7 +5,7 @@ using Bun3.Gameplay.Tags;
 
 namespace Bun3.Gameplay.Seams
 {
-    /// <summary>등록된 시섬(Seam) 계약을 관리하는 레지스트리입니다.</summary>
+    /// <summary>Registry managing the registered seam contracts.</summary>
     public sealed class SeamRegistry
     {
         private readonly IReadOnlyDictionary<ushort, IMagnitudeCalc> _magnitudeCalcs;
@@ -22,61 +22,61 @@ namespace Bun3.Gameplay.Seams
             _targetSelectors = targetSelectors;
         }
 
-        /// <summary>주어진 태그에 등록된 크기 계산 계약을 반환합니다.</summary>
-        /// <param name="tag">조회할 태그입니다.</param>
-        /// <returns>등록된 계약입니다.</returns>
-        /// <exception cref="KeyNotFoundException">태그가 등록되지 않았을 때 발생합니다.</exception>
+        /// <summary>Returns the magnitude calculation contract registered for the tag.</summary>
+        /// <param name="tag">Tag to look up.</param>
+        /// <returns>Registered contract.</returns>
+        /// <exception cref="KeyNotFoundException">Thrown when the tag is not registered.</exception>
         internal IMagnitudeCalc GetMagnitudeCalc(GameplayTag tag)
         {
             if (_magnitudeCalcs.TryGetValue(tag.Index, out var calc))
                 return calc;
-            throw new KeyNotFoundException($"태그 {tag.Index}에 등록된 크기 계산이 없습니다.");
+            throw new KeyNotFoundException($"No magnitude calc registered for tag {tag.Index}.");
         }
 
-        /// <summary>주어진 태그에 등록된 효과 실행 계약을 반환합니다.</summary>
-        /// <param name="tag">조회할 태그입니다.</param>
-        /// <returns>등록된 계약입니다.</returns>
-        /// <exception cref="KeyNotFoundException">태그가 등록되지 않았을 때 발생합니다.</exception>
+        /// <summary>Returns the effect execution contract registered for the tag.</summary>
+        /// <param name="tag">Tag to look up.</param>
+        /// <returns>Registered contract.</returns>
+        /// <exception cref="KeyNotFoundException">Thrown when the tag is not registered.</exception>
         internal IExecutionCalc GetExecutionCalc(GameplayTag tag)
         {
             if (_executionCalcs.TryGetValue(tag.Index, out var exec))
                 return exec;
-            throw new KeyNotFoundException($"태그 {tag.Index}에 등록된 효과 실행이 없습니다.");
+            throw new KeyNotFoundException($"No execution calc registered for tag {tag.Index}.");
         }
 
-        /// <summary>주어진 태그에 등록된 대상 선택 계약을 반환합니다.</summary>
-        /// <param name="tag">조회할 태그입니다.</param>
-        /// <returns>등록된 계약입니다.</returns>
-        /// <exception cref="KeyNotFoundException">태그가 등록되지 않았을 때 발생합니다.</exception>
+        /// <summary>Returns the target selector contract registered for the tag.</summary>
+        /// <param name="tag">Tag to look up.</param>
+        /// <returns>Registered contract.</returns>
+        /// <exception cref="KeyNotFoundException">Thrown when the tag is not registered.</exception>
         internal ITargetSelector GetTargetSelector(GameplayTag tag)
         {
             if (_targetSelectors.TryGetValue(tag.Index, out var selector))
                 return selector;
-            throw new KeyNotFoundException($"태그 {tag.Index}에 등록된 대상 선택이 없습니다.");
+            throw new KeyNotFoundException($"No target selector registered for tag {tag.Index}.");
         }
 
-        /// <summary>주어진 태그에 등록된 크기 계산 계약을 시도합니다.</summary>
-        /// <param name="tag">조회할 태그입니다.</param>
-        /// <param name="calc">찾은 계약입니다.</param>
-        /// <returns>태그가 등록되었으면 true입니다.</returns>
+        /// <summary>Tries to get the magnitude calculation contract registered for the tag.</summary>
+        /// <param name="tag">Tag to look up.</param>
+        /// <param name="calc">Found contract.</param>
+        /// <returns>True when the tag is registered.</returns>
         internal bool TryGetMagnitudeCalc(GameplayTag tag, out IMagnitudeCalc? calc)
         {
             return _magnitudeCalcs.TryGetValue(tag.Index, out calc);
         }
 
-        /// <summary>주어진 태그에 등록된 효과 실행 계약을 시도합니다.</summary>
-        /// <param name="tag">조회할 태그입니다.</param>
-        /// <param name="exec">찾은 계약입니다.</param>
-        /// <returns>태그가 등록되었으면 true입니다.</returns>
+        /// <summary>Tries to get the effect execution contract registered for the tag.</summary>
+        /// <param name="tag">Tag to look up.</param>
+        /// <param name="exec">Found contract.</param>
+        /// <returns>True when the tag is registered.</returns>
         internal bool TryGetExecutionCalc(GameplayTag tag, out IExecutionCalc? exec)
         {
             return _executionCalcs.TryGetValue(tag.Index, out exec);
         }
 
-        /// <summary>주어진 태그에 등록된 대상 선택 계약을 시도합니다.</summary>
-        /// <param name="tag">조회할 태그입니다.</param>
-        /// <param name="selector">찾은 계약입니다.</param>
-        /// <returns>태그가 등록되었으면 true입니다.</returns>
+        /// <summary>Tries to get the target selector contract registered for the tag.</summary>
+        /// <param name="tag">Tag to look up.</param>
+        /// <param name="selector">Found contract.</param>
+        /// <returns>True when the tag is registered.</returns>
         internal bool TryGetTargetSelector(GameplayTag tag, out ITargetSelector? selector)
         {
             return _targetSelectors.TryGetValue(tag.Index, out selector);

@@ -14,8 +14,8 @@ namespace Bun3.Gameplay.Editor.Tags
         private bool[] _selected = Array.Empty<bool>();
         private Vector2 _scroll;
 
-        /// <summary>제거 후보를 기본 선택 상태로 보여 주고 선택된 old path를 반환합니다.</summary>
-        /// <param name="candidates">프로젝트 참조가 없는 redirect old path입니다.</param>
+        /// <summary>Shows removal candidates selected by default and returns the chosen old paths.</summary>
+        /// <param name="candidates">Redirect old paths without project references.</param>
         internal static IReadOnlyList<string> ShowModal(IReadOnlyList<string> candidates)
         {
             if (candidates is null) throw new ArgumentNullException(nameof(candidates));

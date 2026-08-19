@@ -12,11 +12,11 @@ using UnityEngine;
 
 namespace Bun3.Gameplay.Unity.Tests
 {
-    /// <summary>병합 GameplayTag Picker projection과 선택 경계를 검증합니다.</summary>
+    /// <summary>Verifies the merged GameplayTag picker projection and selection boundaries.</summary>
     [TestFixture]
     public sealed class GameplayTagPickerTests
     {
-        /// <summary>여러 Source의 같은 선언이 Source 상세를 가진 단일 런타임 행이 되는지 검증합니다.</summary>
+        /// <summary>Verifies identical declarations across sources become one runtime row with source details.</summary>
         [Test]
         public void Duplicate_source_declarations_produce_one_runtime_row_with_ordered_source_details()
         {
@@ -41,7 +41,7 @@ namespace Bun3.Gameplay.Unity.Tests
                 Does.StartWith("ability.jump\n").And.Contain(row.SourceDetails));
         }
 
-        /// <summary>빈 comment의 명시 선언과 실제 implicit 부모를 provenance flag로 구분하는지 검증합니다.</summary>
+        /// <summary>Verifies an explicit declaration with an empty comment and a truly implicit parent are distinguished by the provenance flag.</summary>
         [Test]
         public void Empty_comment_explicit_contribution_is_not_reported_as_implicit()
         {
@@ -64,7 +64,7 @@ namespace Bun3.Gameplay.Unity.Tests
                     .And.Contain("game (Game): implicit"));
         }
 
-        /// <summary>검색이 canonical 전체 경로만 대소문자와 무관하게 찾고 조상을 유지하는지 검증합니다.</summary>
+        /// <summary>Verifies search matches only canonical full paths case-insensitively and keeps ancestors.</summary>
         [Test]
         public void Filter_matches_the_canonical_path_case_insensitively_and_keeps_only_ancestors()
         {
@@ -85,7 +85,7 @@ namespace Bun3.Gameplay.Unity.Tests
                 Is.EqualTo(new[] { false, false, true }));
         }
 
-        /// <summary>검색 확장이 임시이며 양축 scroll 위치와 일반 확장이 복원되는지 검증합니다.</summary>
+        /// <summary>Verifies search expansion is temporary and both scroll axes and normal expansion are restored.</summary>
         [Test]
         public void Picker_filter_temporarily_expands_results_and_preserves_both_scroll_axes()
         {
@@ -115,7 +115,7 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(tree.UsesScrollView, Is.True);
         }
 
-        /// <summary>공유 renderer가 disclosure 뒤에서 그리고 전체 canonical 경로를 tooltip에 두는지 검증합니다.</summary>
+        /// <summary>Verifies the shared renderer draws after the disclosure and puts the full canonical path in the tooltip.</summary>
         [Test]
         public void Picker_label_uses_the_shared_disclosure_geometry_and_keeps_the_full_path_in_tooltip()
         {
@@ -207,7 +207,7 @@ namespace Bun3.Gameplay.Unity.Tests
             }
         }
 
-        /// <summary>선택 callback이 Source 정보 없이 canonical 런타임 경로만 반환하는지 검증합니다.</summary>
+        /// <summary>Verifies the selection callback returns only the canonical runtime path without source info.</summary>
         [Test]
         public void Selection_returns_only_the_canonical_runtime_path()
         {
@@ -240,7 +240,7 @@ namespace Bun3.Gameplay.Unity.Tests
             }
         }
 
-        /// <summary>잘못된 Workspace에서 기존 raw 값을 보존하고 신규 선택을 막는지 검증합니다.</summary>
+        /// <summary>Verifies an invalid workspace preserves the existing raw value and blocks new selection.</summary>
         [Test]
         public void Invalid_workspace_keeps_the_raw_current_value_visible_and_disables_new_selection()
         {
@@ -268,7 +268,7 @@ namespace Bun3.Gameplay.Unity.Tests
             }
         }
 
-        /// <summary>live Workspace가 무효해지면 열린 Picker의 raw 값은 유지하고 선택만 차단함을 검증합니다.</summary>
+        /// <summary>Verifies a live workspace turning invalid keeps the open picker's raw value and blocks only selection.</summary>
         [Test]
         public void Live_workspace_refresh_invalidates_an_open_picker_without_replacing_the_raw_value()
         {

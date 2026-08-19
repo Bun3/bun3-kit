@@ -40,18 +40,18 @@ public class SteamSessionVerifierTests
         var result = (SteamAuthResult)await verify;
         Assert.That(result.Succeeded, Is.True);
         Assert.That(result.Identity.ToAccountKey(), Is.EqualTo("steam:76561198000000001"));
-        Assert.That(result.OwnerSteamId, Is.EqualTo(SteamId));   // 네이티브 경로: 소유자 정보 없음
+        Assert.That(result.OwnerSteamId, Is.EqualTo(SteamId));   // native path: no owner info
         Assert.That(h.BeginCalls, Has.Count.EqualTo(1));
         Assert.That(h.BeginCalls[0].SteamId, Is.EqualTo(SteamId));
         Assert.That(h.BeginCalls[0].Ticket, Is.EqualTo(new byte[] { 0xa1, 0xb2, 0xc3, 0xd4 }));
-        Assert.That(h.EndCalls, Is.Empty);   // 성공 시 세션 유지 — 정리는 게임 몫
+        Assert.That(h.EndCalls, Is.Empty);   // session kept on success; cleanup is the game's job
     }
 
     [TestCase("not-a-number:a1b2")]
-    [TestCase("76561198000000001")]        // 구분자 없음
-    [TestCase("76561198000000001:")]       // 티켓 없음
-    [TestCase("76561198000000001:a1b")]    // 홀수 hex
-    [TestCase("76561198000000001:zz")]     // hex 아님
+    [TestCase("76561198000000001")]        // no separator
+    [TestCase("76561198000000001:")]       // no ticket
+    [TestCase("76561198000000001:a1b")]    // odd-length hex
+    [TestCase("76561198000000001:zz")]     // not hex
     [TestCase("0:a1b2")]                   // steamId 0
     public async Task Malformed_credential_fails_without_begin_call(string credential)
     {
@@ -71,7 +71,7 @@ public class SteamSessionVerifierTests
         Assert.That(result.Failure, Is.EqualTo(AuthFailure.Rejected));
         Assert.That(result.ValveErrorCode, Is.EqualTo(1));
         Assert.That(result.SteamId, Is.EqualTo(SteamId));
-        Assert.That(h.EndCalls, Is.EqualTo(new[] { SteamId }));   // 실패 정리 규약
+        Assert.That(h.EndCalls, Is.EqualTo(new[] { SteamId }));   // cleanup contract on failure
     }
 
     [Test]
@@ -120,7 +120,7 @@ public class SteamSessionVerifierTests
 
         var second = await h.Verifier.VerifyAsync(Credential);
         Assert.That(second.Failure, Is.EqualTo(AuthFailure.Rejected));
-        Assert.That(h.BeginCalls, Has.Count.EqualTo(1));   // 두 번째는 Begin 미호출
+        Assert.That(h.BeginCalls, Has.Count.EqualTo(1));   // second attempt must not call Begin
 
         h.Verifier.HandleValidateResult(SteamId, 0);
         Assert.That((await first).Succeeded, Is.True);
@@ -137,7 +137,7 @@ public class SteamSessionVerifierTests
         h.Verifier.HandleValidateResult(SteamId, 0);
         await verify;
 
-        h.Verifier.HandleValidateResult(SteamId, 6);   // 접속 승인 후 티켓 취소
+        h.Verifier.HandleValidateResult(SteamId, 6);   // ticket canceled after approval
         Assert.That(invalidated, Is.EqualTo(new[] { (SteamId, 6) }));
     }
 
@@ -148,7 +148,7 @@ public class SteamSessionVerifierTests
         var invalidated = 0;
         h.Verifier.SessionInvalidated += (_, _) => invalidated++;
 
-        h.Verifier.HandleValidateResult(SteamId, 0);   // pending 없음 + OK → 무시
+        h.Verifier.HandleValidateResult(SteamId, 0);   // no pending + OK -> ignored
         Assert.That(invalidated, Is.Zero);
     }
 

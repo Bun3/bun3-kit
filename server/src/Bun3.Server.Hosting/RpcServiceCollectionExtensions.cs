@@ -7,17 +7,19 @@ using Microsoft.Extensions.Options;
 
 namespace Bun3.Server.Hosting;
 
-/// <summary>메시징 서버를 Generic Host DI 컨테이너에 등록하는 확장 메서드 모음.</summary>
+/// <summary>Extension methods that register a messaging server into the Generic Host DI container.</summary>
 public static class RpcServiceCollectionExtensions
 {
     /// <summary>
-    /// 메시징 서버(TCP)를 Generic Host에 등록한다. 핸들러 등록표는 여기서 1회 구성되며,
-    /// 구성 오류(미등록 핸들러 등)는 호스트 StartAsync에서 전체 목록과 함께 실패한다.
-    /// TSession은 IConnection을 받는 public 생성자가 필요하며 나머지 인자는 DI로 주입된다.
+    /// Registers a messaging server (TCP) with the Generic Host. The handler table is built once
+    /// here; configuration errors (unregistered handlers, etc.) fail in the host's StartAsync with
+    /// the full list. TSession needs a public constructor taking IConnection; remaining arguments
+    /// are DI-injected.
     /// </summary>
-    /// <remarks>제약(v0/v1 동일): 세션 생성자 의존성은 루트 컨테이너에서 해석되고(스코프 금지),
-    /// 호스트당 1회만 호출한다 — 서버 등록 확장을 중복·혼용하면 등록 시점에
-    /// <see cref="InvalidOperationException"/>으로 실패한다.</remarks>
+    /// <remarks>Constraints (same in v0/v1): session constructor dependencies resolve from the
+    /// root container (no scoped services), and call at most once per host — duplicating or
+    /// mixing the server registration extensions fails at registration time with
+    /// <see cref="InvalidOperationException"/>.</remarks>
     public static IServiceCollection AddRpcServer<TSession, TRequest, TResponse, TUpdate>(
         this IServiceCollection services,
         Action<RpcConfig<TSession>> configure,
@@ -45,8 +47,8 @@ public static class RpcServiceCollectionExtensions
             TSession Factory(IConnection connection) =>
                 ActivatorUtilities.CreateInstance<TSession>(sp, connection);
 
-            // RpcServer ctor가 스키마 구축 + 전수 검증을 수행 — 여기서 throw되면
-            // 호스트 StartAsync가 RpcValidationException으로 실패한다(fail-fast).
+            // The RpcServer ctor builds the schema and validates it exhaustively — a throw here
+            // fails the host's StartAsync with RpcValidationException (fail-fast).
             return new RpcServer<TSession, TRequest, TResponse, TUpdate>(
                 sp.GetRequiredService<TcpTransportListener>(),
                 Factory,

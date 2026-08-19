@@ -4,7 +4,7 @@ using NUnit.Framework;
 
 namespace Bun3.Server.Tests;
 
-/// <summary>인벤토리 간 이동 — 같은 플레이어의 가방↔창고 (유저간 거래 아님).</summary>
+/// <summary>Inventory-to-inventory transfer — same player's bag/warehouse (not player-to-player trade).</summary>
 [TestFixture]
 public class ItemTransferTests
 {
@@ -16,9 +16,9 @@ public class ItemTransferTests
     private const uint FlagLocked = 1u << 0;
 
     private ItemCatalog<string> _catalog = null!;
-    private ItemId _gold;      // 스택형, 무제한
-    private ItemId _potion;    // 스택형, maxCount 10
-    private ItemId _sword;     // 비스택형, 최대 3개
+    private ItemId _gold;      // stackable, unbounded
+    private ItemId _potion;    // stackable, maxCount 10
+    private ItemId _sword;     // unstackable, max 3
     private long _nextId;
     private ItemInventory<ItemState> _bag = null!;
     private ItemInventory<ItemState> _warehouse = null!;
@@ -27,9 +27,9 @@ public class ItemTransferTests
     public void SetUp()
     {
         _catalog = new ItemCatalogBuilder<string>()
-            .Register("gold", "골드")
-            .Register("potion", "물약", maxCount: 10)
-            .Register("sword", "검", maxCount: 3, unstackable: true)
+            .Register("gold", "Gold")
+            .Register("potion", "Potion", maxCount: 10)
+            .Register("sword", "Sword", maxCount: 3, unstackable: true)
             .Build();
         _gold = _catalog.GetRequired("gold");
         _potion = _catalog.GetRequired("potion");
@@ -49,14 +49,14 @@ public class ItemTransferTests
         _bag.TryAdd(_sword, 2, created);
         created[0].State.Level = 7;
         var movedId = created[0].InstanceId;
-        _bag.DrainChanges(new List<ItemChange<ItemState>>());   // 저장 시뮬레이션 — INSERT 완료 상태
+        _bag.DrainChanges(new List<ItemChange<ItemState>>());   // simulate save — INSERT completed
 
         Assert.That(_bag.TryTransferByInstance(_warehouse, movedId), Is.EqualTo(InventoryError.None));
         Assert.That(_bag.GetQuantity(_sword), Is.EqualTo(BigNum.One));
-        Assert.That(_warehouse.TryGetInstance(movedId, out var moved), Is.True, "id 보존");
-        Assert.That(moved.State.Level, Is.EqualTo(7), "상태 보존");
+        Assert.That(_warehouse.TryGetInstance(movedId, out var moved), Is.True, "id preserved");
+        Assert.That(moved.State.Level, Is.EqualTo(7), "state preserved");
 
-        // 변경 추적: 출발 Removed, 도착 Created — DB에선 소유 컬럼 UPDATE로 매핑 가능
+        // Change tracking: source Removed, target Created — maps to an owner-column UPDATE in the DB
         var bagChanges = new List<ItemChange<ItemState>>();
         var whChanges = new List<ItemChange<ItemState>>();
         _bag.DrainChanges(bagChanges);
@@ -75,7 +75,7 @@ public class ItemTransferTests
         Assert.That(_bag.TryTransfer(_warehouse, _potion, 5), Is.EqualTo(InventoryError.None));
         Assert.That(_bag.GetQuantity(_potion), Is.EqualTo((BigNum)3));
         Assert.That(_warehouse.GetQuantity(_potion), Is.EqualTo((BigNum)10));
-        Assert.That(_warehouse.InstanceCount, Is.EqualTo(1), "싱글턴 병합");
+        Assert.That(_warehouse.InstanceCount, Is.EqualTo(1), "singleton merge");
     }
 
     [Test]
@@ -86,16 +86,16 @@ public class ItemTransferTests
         _bag.TryAdd(_gold, 100, created);
         created[0].Flags = FlagLocked;
 
-        Assert.That(_bag.TryTransfer(_warehouse, _sword, 2), Is.EqualTo(InventoryError.Insufficient), "잠금 제외 1개뿐");
+        Assert.That(_bag.TryTransfer(_warehouse, _sword, 2), Is.EqualTo(InventoryError.Insufficient), "only 1 unlocked");
         Assert.That(_bag.TryTransferByInstance(_warehouse, created[0].InstanceId), Is.EqualTo(InventoryError.Locked));
         Assert.That(_bag.TryTransfer(_warehouse, _gold, 200), Is.EqualTo(InventoryError.Insufficient));
         Assert.That(_bag.GetQuantity(_sword), Is.EqualTo((BigNum)2));
         Assert.That(_warehouse.InstanceCount, Is.EqualTo(0));
 
-        Assert.That(() => _bag.TryTransfer(_bag, _gold, 1), Throws.ArgumentException, "자기 자신 금지");
-        var foreign = new ItemCatalogBuilder<string>().Register("gold", "골드").Build();
+        Assert.That(() => _bag.TryTransfer(_bag, _gold, 1), Throws.ArgumentException, "self-transfer forbidden");
+        var foreign = new ItemCatalogBuilder<string>().Register("gold", "Gold").Build();
         var other = new ItemInventory<ItemState>(foreign, () => ++_nextId, _ => new ItemState());
-        Assert.That(() => _bag.TryTransfer(other, _gold, 1), Throws.ArgumentException, "카탈로그 불일치 금지");
+        Assert.That(() => _bag.TryTransfer(other, _gold, 1), Throws.ArgumentException, "catalog mismatch forbidden");
     }
 
     [Test]

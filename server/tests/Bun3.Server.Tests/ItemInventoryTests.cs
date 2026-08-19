@@ -16,10 +16,10 @@ public class ItemInventoryTests
     private const uint FlagUserLocked = 1u << 1;
 
     private ItemCatalog<string> _catalog = null!;
-    private ItemId _gold;      // 스택형, 무제한
-    private ItemId _potion;    // 스택형, maxCount 10
-    private ItemId _sword;     // 비스택형, 최대 3개 보유
-    private ItemId _relic;     // 비스택형, 무제한
+    private ItemId _gold;      // stackable, unbounded
+    private ItemId _potion;    // stackable, maxCount 10
+    private ItemId _sword;     // unstackable, max 3 held
+    private ItemId _relic;     // unstackable, unbounded
 
     private long _nextId;
     private ItemInventory<ItemState> _inventory = null!;
@@ -29,10 +29,10 @@ public class ItemInventoryTests
     public void SetUp()
     {
         _catalog = new ItemCatalogBuilder<string>()
-            .Register("gold", "골드")
-            .Register("potion", "물약", maxCount: 10)
-            .Register("sword", "검", maxCount: 3, unstackable: true)
-            .Register("relic", "유물", unstackable: true)
+            .Register("gold", "Gold")
+            .Register("potion", "Potion", maxCount: 10)
+            .Register("sword", "Sword", maxCount: 3, unstackable: true)
+            .Register("relic", "Relic", unstackable: true)
             .Build();
         _gold = _catalog.GetRequired("gold");
         _potion = _catalog.GetRequired("potion");
@@ -49,7 +49,7 @@ public class ItemInventoryTests
             removeBlockingFlags: FlagInUse | FlagUserLocked);
     }
 
-    // ---- 판정 내부 흡수: 스택형 ----
+    // ---- Stackable ----
 
     [Test]
     public void Stackable_merges_into_singleton_instance()
@@ -73,7 +73,7 @@ public class ItemInventoryTests
         Assert.That(_inventory.GetQuantity(_potion), Is.EqualTo((BigNum)8));
     }
 
-    // ---- BigNum 수량 (재화 = 아이템 행) ----
+    // ---- BigNum quantities (currency = item row) ----
 
     [Test]
     public void Stackable_holds_astronomical_quantities()
@@ -82,7 +82,7 @@ public class ItemInventoryTests
 
         Assert.That(_inventory.TryAdd(_gold, huge), Is.EqualTo(InventoryError.None));
         Assert.That(_inventory.TryRemove(_gold, BigNum.FromParts(6, 1000)), Is.EqualTo(InventoryError.Insufficient));
-        // 전량 소모 — BigNum 뺄셈이 정확히 Zero를 돌려주고 엔트리가 제거된다
+        // Full drain — BigNum subtraction returns exactly Zero and the entry is removed
         Assert.That(_inventory.TryRemove(_gold, huge), Is.EqualTo(InventoryError.None));
         Assert.That(_inventory.InstanceCount, Is.EqualTo(0));
     }
@@ -93,7 +93,7 @@ public class ItemInventoryTests
         var huge = BigNum.FromParts(1, 30);   // 1e30
 
         _inventory.TryAdd(_gold, huge);
-        _inventory.TryAdd(_gold, 1);          // 유효 자릿수 밖 — 흡수된다
+        _inventory.TryAdd(_gold, 1);          // beyond significant digits — absorbed
 
         Assert.That(_inventory.GetQuantity(_gold), Is.EqualTo(huge));
     }
@@ -106,7 +106,7 @@ public class ItemInventoryTests
         Assert.That(_inventory.InstanceCount, Is.EqualTo(0));
     }
 
-    // ---- 판정 내부 흡수: 비스택형 ----
+    // ---- Unstackable ----
 
     [Test]
     public void Unstackable_grant_creates_quantity_one_instances()
@@ -130,7 +130,7 @@ public class ItemInventoryTests
         Assert.That(_inventory.InstanceCount, Is.EqualTo(3));
     }
 
-    // ---- 잠금 ----
+    // ---- Locking ----
 
     [Test]
     public void Locked_instances_are_excluded_from_removal()
@@ -142,7 +142,7 @@ public class ItemInventoryTests
         Assert.That(_inventory.TryRemove(_sword, 2), Is.EqualTo(InventoryError.Insufficient));
         Assert.That(_inventory.TryRemove(_sword, 1), Is.EqualTo(InventoryError.None));
         Assert.That(_inventory.TryGetInstance(created[0].InstanceId, out _), Is.True,
-            "잠긴 인스턴스가 남아야 한다");
+            "locked instance must remain");
         Assert.That(_inventory.TryRemoveByInstance(created[0].InstanceId, 1), Is.EqualTo(InventoryError.Locked));
     }
 
@@ -172,7 +172,7 @@ public class ItemInventoryTests
         Assert.That(_inventory.TryRemoveByInstance(9999, 1), Is.EqualTo(InventoryError.UnknownInstance));
     }
 
-    // ---- 트랜잭션 (델타 span 경로) ----
+    // ---- Transactions (delta span path) ----
 
     [Test]
     public void Apply_mixes_stack_and_instance_deltas_atomically()
@@ -189,7 +189,7 @@ public class ItemInventoryTests
         Assert.That(_inventory.GetQuantity(_gold), Is.EqualTo((BigNum)200));
         Assert.That(_inventory.GetQuantity(_sword), Is.EqualTo(BigNum.One));
         Assert.That(_inventory.GetQuantity(_potion), Is.EqualTo((BigNum)5));
-        Assert.That(created, Has.Count.EqualTo(2));   // 검 인스턴스 + 물약 싱글턴
+        Assert.That(created, Has.Count.EqualTo(2));   // sword instance + potion singleton
     }
 
     [Test]
@@ -201,13 +201,13 @@ public class ItemInventoryTests
         Span<ItemDelta> deltas = stackalloc ItemDelta[3];
         deltas[0] = new ItemDelta(_sword, 2);
         deltas[1] = new ItemDelta(_gold, -50);
-        deltas[2] = new ItemDelta(_gold, -60);    // 잔량 50 < 60
+        deltas[2] = new ItemDelta(_gold, -60);    // remaining 50 < 60
 
         Assert.That(_inventory.TryApply(deltas, out var failedIndex), Is.EqualTo(InventoryError.Insufficient));
         Assert.That(failedIndex, Is.EqualTo(2));
         Assert.That(_inventory.GetQuantity(_gold), Is.EqualTo((BigNum)100));
         Assert.That(_inventory.GetQuantity(_sword), Is.EqualTo(BigNum.Zero));
-        Assert.That(_nextId, Is.EqualTo(idsBefore), "실패한 배치는 id 발급자를 호출하면 안 된다");
+        Assert.That(_nextId, Is.EqualTo(idsBefore), "failed batch must not call the id issuer");
     }
 
     [Test]
@@ -215,7 +215,7 @@ public class ItemInventoryTests
     {
         Span<ItemDelta> deltas = stackalloc ItemDelta[2];
         deltas[0] = new ItemDelta(_sword, 2);
-        deltas[1] = new ItemDelta(_sword, 2);   // 누적 4 > 최대 3
+        deltas[1] = new ItemDelta(_sword, 2);   // cumulative 4 > max 3
 
         Assert.That(_inventory.TryApply(deltas, out var failedIndex), Is.EqualTo(InventoryError.ExceedsMaxCount));
         Assert.That(failedIndex, Is.EqualTo(1));
@@ -235,7 +235,7 @@ public class ItemInventoryTests
         Assert.That(container.TryApply(ReadOnlySpan<ItemDelta>.Empty, out _), Is.EqualTo(InventoryError.None));
     }
 
-    // ---- 변경 추적 ----
+    // ---- Change tracking ----
 
     [Test]
     public void Drain_reports_created_updated_removed()
@@ -271,7 +271,7 @@ public class ItemInventoryTests
 
         var buffer = new List<ItemChange<ItemState>>();
         _inventory.DrainChanges(buffer);
-        Assert.That(buffer, Is.Empty, "저장된 적 없는 인스턴스는 DELETE가 나가면 안 된다");
+        Assert.That(buffer, Is.Empty, "never-persisted instance must not emit a DELETE");
     }
 
     [Test]
@@ -282,13 +282,13 @@ public class ItemInventoryTests
         var baseline = _changed;
 
         created[0].Flags = FlagInUse;    // +1
-        created[0].Flags = FlagInUse;    // 동일값 — 통지 없음
+        created[0].Flags = FlagInUse;    // same value — no notification
         created[0].MarkChanged();        // +1
 
         Assert.That(_changed, Is.EqualTo(baseline + 2));
     }
 
-    // ---- 로드 ----
+    // ---- Loading ----
 
     [Test]
     public void Load_accepts_external_ids_without_tracking()
@@ -313,14 +313,14 @@ public class ItemInventoryTests
         Assert.That(_inventory.TryLoadInstance(1, _sword, 1, 0, new ItemState()),
             Is.EqualTo(InventoryError.DuplicateInstance));
         Assert.That(_inventory.TryLoadInstance(2, _gold, 10, 0, new ItemState()),
-            Is.EqualTo(InventoryError.DuplicateInstance), "스택형 정의의 두 번째 인스턴스");
+            Is.EqualTo(InventoryError.DuplicateInstance), "second instance of a stackable definition");
         Assert.That(_inventory.TryLoadInstance(3, _sword, 2, 0, new ItemState()),
-            Is.EqualTo(InventoryError.InvalidAmount), "비스택형은 수량 1만");
+            Is.EqualTo(InventoryError.InvalidAmount), "unstackable allows quantity 1 only");
         Assert.That(_inventory.TryLoadInstance(4, _potion, 11, 0, new ItemState()),
             Is.EqualTo(InventoryError.ExceedsMaxCount));
     }
 
-    // ---- 무할당 ----
+    // ---- Zero allocation ----
 
     [Test]
     public void Query_and_stack_paths_do_not_allocate()
@@ -331,7 +331,7 @@ public class ItemInventoryTests
         deltas[0] = new ItemDelta(_gold, 10);
         deltas[1] = new ItemDelta(_gold, -10);
 
-        for (var i = 0; i < 3; i++)   // 워밍업 (열거 포함 — Dictionary.Values 지연 할당 1회 소화)
+        for (var i = 0; i < 3; i++)   // warmup (incl. enumeration — absorbs Dictionary.Values one-time lazy alloc)
         {
             _inventory.GetQuantity(_gold);
             _inventory.TryApply(deltas, out _);

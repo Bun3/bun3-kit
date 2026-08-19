@@ -132,7 +132,7 @@ public sealed class TagCatalogValidationTests
 
         var error = Assert.Throws<TagCatalogException>(() => TagCatalogTestData.Load(json));
 
-        Assert.That(error!.Message, Does.StartWith("JSON 중첩 깊이는 8을 넘을 수 없습니다."));
+        Assert.That(error!.Message, Does.StartWith("JSON nesting depth cannot exceed 8."));
         Assert.That(error.LineNumber, Is.EqualTo(1));
     }
 
@@ -167,7 +167,7 @@ public sealed class TagCatalogValidationTests
 
         var error = Assert.Throws<TagCatalogException>(() => TagCatalogTestData.Load(json));
 
-        Assert.That(error!.Message, Does.Not.StartWith("ASCII 영숫자 이외의 문자는 사용할 수 없습니다."));
+        Assert.That(error!.Message, Does.Not.StartWith("Tag name"));
     }
 
     [Test]
@@ -186,7 +186,7 @@ public sealed class TagCatalogValidationTests
 
         var error = Assert.Throws<TagCatalogException>(() => TagCatalogTestData.Load(json));
 
-        Assert.That(error!.Message, Does.StartWith("허용되지 않은 필드입니다:"));
+        Assert.That(error!.Message, Does.StartWith("Field not allowed:"));
     }
 
     [TestCase("1.")]
@@ -198,7 +198,7 @@ public sealed class TagCatalogValidationTests
 
         var error = Assert.Throws<TagCatalogException>(() => TagCatalogTestData.Load(json));
 
-        Assert.That(error!.Message, Does.Not.StartWith("허용되지 않은 필드입니다:"));
+        Assert.That(error!.Message, Does.Not.StartWith("Field not allowed:"));
     }
 
     [Test]

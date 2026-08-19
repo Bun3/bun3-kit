@@ -7,27 +7,27 @@ using System.Text;
 
 namespace Bun3.Gameplay.Tags.Catalog
 {
-    /// <summary>컴파일된 불변 태그 카탈로그를 결정적인 schema 1 B3DK 파일로 씁니다.</summary>
+    /// <summary>Writes a compiled immutable tag catalog as a deterministic schema 1 B3DK file.</summary>
     public static class TagCatalogBinaryWriter
     {
         private const int HeaderSize = 78;
         private const int ChecksumOffset = 46;
         private static readonly Encoding StrictUtf8 = new UTF8Encoding(false, true);
 
-        /// <summary>식별 정보가 있는 컴파일 결과를 현재 위치에 하나의 B3DK 파일로 씁니다.</summary>
-        /// <param name="output">쓸 수 있는 출력 스트림입니다.</param>
-        /// <param name="catalog">성공한 Source compiler가 만든 불변 카탈로그입니다.</param>
-        /// <exception cref="ArgumentNullException">출력 또는 카탈로그가 null인 경우입니다.</exception>
-        /// <exception cref="ArgumentException">출력 스트림을 쓸 수 없거나 문자열이 format 한계를 넘는 경우입니다.</exception>
-        /// <exception cref="InvalidOperationException">레거시 JSON처럼 명시적인 Catalog 식별 정보가 없는 경우입니다.</exception>
+        /// <summary>Writes a compilation result with identity as a single B3DK file at the current position.</summary>
+        /// <param name="output">Writable output stream.</param>
+        /// <param name="catalog">Immutable catalog produced by a successful source compilation.</param>
+        /// <exception cref="ArgumentNullException">The output or catalog is null.</exception>
+        /// <exception cref="ArgumentException">The output stream is not writable or a string exceeds a format limit.</exception>
+        /// <exception cref="InvalidOperationException">No explicit catalog identity is present (e.g. legacy JSON).</exception>
         public static void Write(Stream output, TagCatalog catalog)
         {
             if (output is null) throw new ArgumentNullException(nameof(output));
             if (catalog is null) throw new ArgumentNullException(nameof(catalog));
-            if (!output.CanWrite) throw new ArgumentException("쓸 수 있는 스트림이 필요합니다.", nameof(output));
+            if (!output.CanWrite) throw new ArgumentException("A writable stream is required.", nameof(output));
             if (catalog.CatalogId.Length == 0 || catalog.CatalogVersion.Length == 0)
             {
-                throw new InvalidOperationException("명시적인 Catalog ID와 Version이 있는 컴파일 결과만 B3DK로 쓸 수 있습니다.");
+                throw new InvalidOperationException("Only compilation results with an explicit catalog ID and version can be written as B3DK.");
             }
 
             var catalogId = Encode(catalog.CatalogId, "Catalog ID");
@@ -78,7 +78,7 @@ namespace Bun3.Gameplay.Tags.Catalog
             var byteCount = StrictUtf8.GetByteCount(value);
             if (byteCount > ushort.MaxValue)
             {
-                throw new ArgumentException(label + "의 UTF-8 길이는 65,535바이트를 넘을 수 없습니다.");
+                throw new ArgumentException(label + " must not exceed 65,535 bytes in UTF-8.");
             }
 
             return StrictUtf8.GetBytes(value);

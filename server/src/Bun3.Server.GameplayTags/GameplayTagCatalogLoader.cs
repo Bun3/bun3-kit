@@ -29,13 +29,13 @@ namespace Bun3.Server.GameplayTags
             var path = GameplayTagCatalogPathResolver.Resolve(_options);
             if (!File.Exists(path))
             {
-                throw new FileNotFoundException("GameplayTag Catalog 파일을 찾을 수 없습니다.", path);
+                throw new FileNotFoundException("GameplayTag catalog file not found.", path);
             }
 
             using var input = File.OpenRead(path);
             var catalog = TagCatalogBinary.Load(input, expectations);
             _logger.LogInformation(
-                "GameplayTag Catalog {CatalogId} {CatalogVersion} {Fingerprint} 로드 완료",
+                "GameplayTag catalog {CatalogId} {CatalogVersion} {Fingerprint} loaded",
                 catalog.CatalogId,
                 catalog.CatalogVersion,
                 Convert.ToHexString(catalog.Fingerprint).ToLowerInvariant());

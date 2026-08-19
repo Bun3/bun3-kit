@@ -19,19 +19,19 @@ namespace Bun3.Unity.Core.UnifiedToggle
             return default;
         }
 
-        // ToggleGroup의 preset 카운트만큼 존재. 사이즈는 SetOptionValues로만 변경.
+        // One entry per ToggleGroup preset; size changes only via SetOptionValues.
         [SerializeField] protected List<Option> _options = new();
 
         public IReadOnlyCollection<Option> Options => _options;
 
         public void SetOptionValues(string[] values)
         {
-            // 더 이상 존재하지 않는 프리셋에 해당하는 옵션 제거
+            // Remove options for presets that no longer exist.
             _options.RemoveAll(opt => !values.Contains(opt.key));
 
             var currentKeys = _options.Select(opt => opt.key).ToHashSet();
 
-            // 새로 추가된 프리셋에 대한 옵션 추가
+            // Add options for newly added presets.
             foreach (var value in values)
             {
                 if (!currentKeys.Contains(value))
