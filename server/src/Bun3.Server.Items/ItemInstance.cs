@@ -1,3 +1,4 @@
+using System;
 using Bun3.Gameplay.Numerics;
 
 namespace Bun3.Server.Items
@@ -8,8 +9,9 @@ namespace Bun3.Server.Items
     /// instance per definition. Amounts are <see cref="BigNum"/> — long converts implicitly,
     /// and BigNum addition is lossy, absorbing terms outside the significant digits
     /// (idle-game amount semantics; full consumption is exactly Zero).
-    /// <see cref="State"/> is game-owned opaque state (level, exp, options, etc.) —
-    /// call <see cref="MarkChanged"/> after mutating it so save/sync tracking sees the change.
+    /// <see cref="State"/> is game-owned opaque state (level, exp, options, etc.) — assign it as a
+    /// value, or use <see cref="BeginStateChange"/> for a mutable state type; <see cref="MarkChanged"/>
+    /// covers manual in-place mutation outside a transaction.
     /// </summary>
     /// <typeparam name="TState">Game-defined instance state type.</typeparam>
     public sealed class ItemInstance<TState>
@@ -63,7 +65,7 @@ namespace Bun3.Server.Items
                 {
                     _owner?.CaptureForRollback(this);
                     _flags = value;
-                    MarkChanged();
+                    MarkChangedInternal();
                 }
             }
         }
@@ -82,17 +84,52 @@ namespace Bun3.Server.Items
                 {
                     _owner?.CaptureForRollback(this);
                     _expiresAtTicksUtc = value;
-                    MarkChanged();
+                    MarkChangedInternal();
                 }
             }
         }
 
-        /// <summary>Game-owned state — the framework does not interpret it.</summary>
-        public TState State => _state;
+        /// <summary>Game-owned state — the framework does not interpret it. Assign a replacement
+        /// rather than mutating in place: the previous value is what a transaction restores on
+        /// rollback. For mutable state types use <see cref="BeginStateChange"/> instead.
+        /// The setter feeds change tracking automatically.</summary>
+        public TState State
+        {
+            get => _state;
+            set
+            {
+                _owner?.CaptureForRollback(this);
+                _state = value;
+                MarkChangedInternal();
+            }
+        }
 
-        /// <summary>Call after mutating <see cref="State"/> — feeds change tracking (Updated) and
-        /// the inventory's onDirty (save cadence). Ignored after removal from the inventory.</summary>
+        /// <summary>Opens a mutation scope for a mutable state type. Inside a transaction the
+        /// framework deep-copies the state through the inventory's snapshotState delegate here, so
+        /// the change is reversible.</summary>
+        /// <exception cref="InvalidOperationException">Inside a transaction when the inventory was
+        /// created without a snapshotState delegate.</exception>
+        public ItemStateScope<TState> BeginStateChange()
+        {
+            _owner?.CaptureStateForRollback(this);
+            return new ItemStateScope<TState>(this);
+        }
+
+        /// <summary>Call after mutating <see cref="State"/> in place outside a transaction — feeds
+        /// change tracking (Updated) and the inventory's onDirty. Ignored after removal from the
+        /// inventory.</summary>
+        /// <exception cref="InvalidOperationException">Inside an active transaction — in-place
+        /// mutation is not rollback-safe.</exception>
         public void MarkChanged()
+        {
+            _owner?.ThrowIfTransactionActive();
+            MarkChangedInternal();
+        }
+
+        /// <summary>Marks the instance changed without the transaction guard — internal callers
+        /// (property setters, <see cref="ItemStateScope{TState}"/>) already know the mutation is
+        /// rollback-safe.</summary>
+        internal void MarkChangedInternal()
         {
             Changed = true;
             _owner?.OnInstanceChanged();

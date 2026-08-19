@@ -1,4 +1,5 @@
 // ItemInventory partial — transaction participation (snapshot, rollback) and notification buffering.
+using System;
 using System.Collections.Generic;
 using Bun3.Gameplay.Numerics;
 using Bun3.Server.Core;
@@ -13,7 +14,7 @@ namespace Bun3.Server.Items
         {
             internal InstanceSnapshot(
                 ItemInstance<TState> instance, BigNum quantity, uint flags, long expiresAt,
-                bool isNew, bool changed, TState state)
+                bool isNew, bool changed, TState state, bool stateSnapshotted)
             {
                 Instance = instance;
                 Quantity = quantity;
@@ -22,6 +23,7 @@ namespace Bun3.Server.Items
                 IsNew = isNew;
                 Changed = changed;
                 State = state;
+                StateSnapshotted = stateSnapshotted;
             }
 
             internal ItemInstance<TState> Instance { get; }
@@ -31,6 +33,13 @@ namespace Bun3.Server.Items
             internal bool IsNew { get; }
             internal bool Changed { get; }
             internal TState State { get; }
+            /// <summary>Whether <see cref="State"/> already holds a deep copy from the inventory's
+            /// snapshotState delegate, as opposed to the shallow reference captured at first touch.</summary>
+            internal bool StateSnapshotted { get; }
+
+            /// <summary>Returns a copy with a deep-copied state, marked as snapshotted.</summary>
+            internal InstanceSnapshot WithState(TState state) =>
+                new InstanceSnapshot(Instance, Quantity, Flags, ExpiresAt, IsNew, Changed, state, true);
         }
 
         private readonly List<ItemInstance<TState>> _txCreated = new List<ItemInstance<TState>>();
@@ -89,11 +98,46 @@ namespace Bun3.Server.Items
             instance.TxSnapshotIndex = _txSnapshots.Count;
             _txSnapshots.Add(new InstanceSnapshot(
                 instance, instance.Quantity, instance.Flags, instance.ExpiresAtTicksUtc,
-                instance.IsNew, instance.Changed, instance.State));
+                instance.IsNew, instance.Changed, instance.State, false));
         }
 
         /// <summary>Snapshot entry point for <see cref="ItemInstance{TState}"/> property setters.</summary>
         internal void CaptureForRollback(ItemInstance<TState> instance) => Capture(instance);
+
+        /// <summary>Snapshot entry point for <see cref="ItemInstance{TState}.BeginStateChange"/> —
+        /// promotes the shallow reference captured at first touch to a deep copy via the
+        /// inventory's snapshotState delegate, so a mutable state type is reversible.</summary>
+        internal void CaptureStateForRollback(ItemInstance<TState> instance)
+        {
+            if (!InTransaction)
+            {
+                return;
+            }
+
+            if (_snapshotState == null)
+            {
+                throw new InvalidOperationException(
+                    "BeginStateChange inside a transaction requires a snapshotState delegate — pass one to the inventory, or assign State instead of mutating in place.");
+            }
+
+            Capture(instance);
+            var index = instance.TxSnapshotIndex;
+            if (index >= 0 && !_txSnapshots[index].StateSnapshotted)
+            {
+                _txSnapshots[index] = _txSnapshots[index].WithState(_snapshotState(instance.State));
+            }
+        }
+
+        /// <summary>Guard for <see cref="ItemInstance{TState}.MarkChanged"/> — in-place mutation is
+        /// not rollback-safe, so it is rejected while a transaction is active.</summary>
+        internal void ThrowIfTransactionActive()
+        {
+            if (InTransaction)
+            {
+                throw new InvalidOperationException(
+                    "MarkChanged is not available inside a transaction — assign State or use BeginStateChange so the change can be rolled back.");
+            }
+        }
 
         /// <summary>Records a newly created instance so a rollback can drop it.</summary>
         private void CaptureCreated(ItemInstance<TState> instance)

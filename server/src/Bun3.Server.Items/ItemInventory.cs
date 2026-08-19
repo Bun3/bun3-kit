@@ -65,6 +65,9 @@ namespace Bun3.Server.Items
         // Session-wide transaction — when unset, no snapshotting or notification buffering happens.
         private readonly Transaction? _transaction;
 
+        // Deep-copy delegate for mutable TState — used only by BeginStateChange inside a transaction.
+        private readonly Func<TState, TState>? _snapshotState;
+
         /// <summary>Creates the inventory.</summary>
         /// <param name="catalog">Item catalog.</param>
         /// <param name="instanceIdIssuer">Instance id issuer — must be unique across sessions
@@ -86,6 +89,9 @@ namespace Bun3.Server.Items
         /// <param name="transaction">Session-wide transaction (<see cref="Transaction"/>) — when
         /// set, changes made while it is open are reversible and notifications are buffered until
         /// commit. Nothing is snapshotted when no transaction is open.</param>
+        /// <param name="snapshotState">Deep-copy delegate for mutable state types — called when a
+        /// <see cref="ItemInstance{TState}.BeginStateChange"/> scope opens inside a transaction.
+        /// Leave null when state is treated as a value (assigned rather than mutated).</param>
         public ItemInventory(
             ItemCatalog catalog,
             Func<long> instanceIdIssuer,
@@ -96,12 +102,14 @@ namespace Bun3.Server.Items
             InventoryAppliedHandler? onApplied = null,
             ActionLog? log = null,
             string? logLabel = null,
-            Transaction? transaction = null)
+            Transaction? transaction = null,
+            Func<TState, TState>? snapshotState = null)
         {
             _onApplied = onApplied;
             _log = log;
             _logLabel = logLabel;
             _transaction = transaction;
+            _snapshotState = snapshotState;
             _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
             _instanceIdIssuer = instanceIdIssuer ?? throw new ArgumentNullException(nameof(instanceIdIssuer));
             _stateFactory = stateFactory ?? throw new ArgumentNullException(nameof(stateFactory));
