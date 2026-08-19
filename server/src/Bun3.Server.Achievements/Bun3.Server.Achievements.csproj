@@ -13,4 +13,8 @@
     <Description>Server achievement framework — definition catalog (id interning), progress tracking, completion/claim states, dirty integration</Description>
   </PropertyGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\Bun3.Server.Core\Bun3.Server.Core.csproj" />
+  </ItemGroup>
+
 </Project>

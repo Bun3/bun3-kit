@@ -1,4 +1,5 @@
 using System;
+using Bun3.Server.Core;
 
 namespace Bun3.Server.Achievements
 {
@@ -14,7 +15,7 @@ namespace Bun3.Server.Achievements
     /// is pending the UI shows min(Progress, Target)/Target as "10/10 [Claim]".
     /// </summary>
     /// <typeparam name="TDef">Game achievement definition type.</typeparam>
-    public sealed class AchievementManager<TDef> where TDef : AchievementDefinition
+    public sealed partial class AchievementManager<TDef> where TDef : AchievementDefinition
     {
         private static readonly Func<long> DefaultClock = () => DateTime.UtcNow.Ticks;
 
@@ -22,6 +23,7 @@ namespace Bun3.Server.Achievements
         private readonly AchievementState[] _states;
         private readonly Action? _onDirty;
         private readonly Func<long> _utcNowTicks;
+        private readonly Transaction? _transaction;
 
         /// <summary>Hook fired right after completion — (identifier, definition, new completion
         /// count). Called after state updates finish, so the hook may Increase/Activate other
@@ -33,15 +35,27 @@ namespace Bun3.Server.Achievements
         public int Count => _states.Length;
 
         /// <summary>Creates the tracker. Initial availability follows each definition's
-        /// InitialAvailability. Pass the Player's MarkDirty as <paramref name="onDirty"/> to flag
-        /// the save sweep whenever state actually changes. <paramref name="utcNowTicks"/> is the
-        /// completion time source (default UTC now) — an injection point for tests.</summary>
-        public AchievementManager(AchievementCatalog<TDef> catalog, Action? onDirty = null, Func<long>? utcNowTicks = null)
+        /// InitialAvailability.</summary>
+        /// <param name="catalog">Achievement definition catalog.</param>
+        /// <param name="onDirty">Pass the Player's MarkDirty to flag the save sweep whenever state
+        /// actually changes.</param>
+        /// <param name="utcNowTicks">Completion time source (default UTC now) — an injection point
+        /// for tests.</param>
+        /// <param name="transaction">Session-wide transaction (<see cref="Transaction"/>) — when
+        /// set, changes made while it is open are reversible and dirty/completion notifications are
+        /// buffered until commit. Nothing is snapshotted when no transaction is open.</param>
+        public AchievementManager(
+            AchievementCatalog<TDef> catalog,
+            Action? onDirty = null,
+            Func<long>? utcNowTicks = null,
+            Transaction? transaction = null)
         {
             _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
             _states = new AchievementState[catalog.Count];
             _onDirty = onDirty;
             _utcNowTicks = utcNowTicks ?? DefaultClock;
+            _transaction = transaction;
+            _txCaptured = new bool[catalog.Count];
             for (var i = 0; i < _states.Length; i++)
             {
                 _states[i].Availability = catalog.GetDefinition(new AchievementId(i)).InitialAvailability;
@@ -187,6 +201,7 @@ namespace Bun3.Server.Achievements
 
         private int ApplyProgress(AchievementId id, TDef def, ref AchievementState state, long newProgress)
         {
+            Capture(id);
             var changed = state.Progress != newProgress;
             state.Progress = newProgress;
 
@@ -220,12 +235,12 @@ namespace Bun3.Server.Achievements
 
             if (changed)
             {
-                _onDirty?.Invoke();
+                NotifyDirty();
             }
 
             if (newCompletions > 0)
             {
-                OnCompleted?.Invoke(id, def, newCompletions);
+                NotifyCompleted(id, newCompletions);
             }
 
             return newCompletions;
@@ -247,6 +262,7 @@ namespace Bun3.Server.Achievements
                 return false;
             }
 
+            Capture(id);
             state.ClaimedCount++;
             var def = _catalog.GetDefinition(id);
             if (def.Repeatable)
@@ -255,7 +271,7 @@ namespace Bun3.Server.Achievements
                 state.Progress = remaining > 0 ? remaining : 0;   // Floor at 0 to tolerate a lenient Restore.
             }
 
-            _onDirty?.Invoke();
+            NotifyDirty();
             return true;
         }
 
@@ -306,8 +322,9 @@ namespace Bun3.Server.Achievements
                 return false;
             }
 
+            Capture(id);
             state.Availability = AchievementStatus.Ready;
-            _onDirty?.Invoke();
+            NotifyDirty();
             return true;
         }
 
@@ -321,8 +338,9 @@ namespace Bun3.Server.Achievements
                 return false;
             }
 
+            Capture(id);
             state.Availability = AchievementStatus.Active;
-            _onDirty?.Invoke();
+            NotifyDirty();
             return true;
         }
 
@@ -338,8 +356,9 @@ namespace Bun3.Server.Achievements
                 return false;
             }
 
+            Capture(id);
             state.Availability = AchievementStatus.Locked;
-            _onDirty?.Invoke();
+            NotifyDirty();
             return true;
         }
 
@@ -402,11 +421,12 @@ namespace Bun3.Server.Achievements
                 return;
             }
 
+            Capture(id);
             state.Progress = 0;
             state.CompletedCount = 0;
             state.ClaimedCount = 0;
             state.LastCompletedAtUtcTicks = 0;
-            _onDirty?.Invoke();
+            NotifyDirty();
         }
     }
 }
