@@ -21,6 +21,7 @@ namespace Bun3.Gameplay.Effects
         {
             public int Select(in SelectorContext ctx, Span<TargetId> results)
             {
+                if (results.Length == 0) return 1;
                 results[0] = ctx.EventSource;
                 return 1;
             }
@@ -30,6 +31,7 @@ namespace Bun3.Gameplay.Effects
         {
             public int Select(in SelectorContext ctx, Span<TargetId> results)
             {
+                if (results.Length == 0) return 1;
                 results[0] = ctx.EventTarget;
                 return 1;
             }

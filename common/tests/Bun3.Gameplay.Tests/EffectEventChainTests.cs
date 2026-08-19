@@ -671,4 +671,38 @@ public sealed class EffectEventChainTests
         Assert.That(kit.Defender.Attributes.GetBase(EffectTestKit.Hp), Is.EqualTo((BigNum)55));
         Assert.That(kit.Attacker.Attributes.GetBase(EffectTestKit.Hp), Is.EqualTo((BigNum)100));
     }
+
+    [Test]
+    public void Event_selector_on_a_non_event_chain_edge_is_a_build_error()
+    {
+        var kit = EffectTestKit.Create();
+        var second = EffectTestKit.MinimalInstant("second");
+        kit.AddSpec(second);
+
+        var first = EffectTestKit.MinimalInstant("first");
+        var edge = EffectTestKit.Edge(ChainTrigger.OnApplication, "second");
+        edge.SelectorTag = BuiltInSelectors.EventSourceTag;
+        first.Chains.Add(edge);
+        kit.AddSpec(first);
+
+        Assert.That(
+            () => kit.BuildPipeline(),
+            Throws.InvalidOperationException.With.Message.Contains("only meaningful on an OnEvent"));
+    }
+
+    [Test]
+    public void Event_selector_on_an_OnEvent_chain_edge_still_builds()
+    {
+        var kit = EffectTestKit.Create();
+        kit.AddSpec(Damage("bolt", 1, "event.damage.taken"));
+        kit.AddSpec(Damage("retaliate", 1, eventTag: null));
+
+        var thorns = EffectTestKit.MinimalInfinite("thorns");
+        var edge = EventEdge("event.damage.taken", "retaliate", ChainListen.AsTarget);
+        edge.SelectorTag = BuiltInSelectors.EventSourceTag;
+        thorns.Chains.Add(edge);
+        kit.AddSpec(thorns);
+
+        Assert.That(() => kit.BuildPipeline(), Throws.Nothing);
+    }
 }

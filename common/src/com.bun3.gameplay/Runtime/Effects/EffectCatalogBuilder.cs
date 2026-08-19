@@ -569,6 +569,13 @@ namespace Bun3.Gameplay.Effects
             if (!string.IsNullOrEmpty(edge.SelectorTag))
             {
                 selector = MagnitudeCompiler.ResolveTargetSelector(edge.SelectorTag!, $"Effect '{ownerSpec.Name}'", tags, seams);
+                if (edge.Trigger != ChainTrigger.OnEvent
+                    && (edge.SelectorTag == BuiltInSelectors.EventSourceTag || edge.SelectorTag == BuiltInSelectors.EventTargetTag))
+                {
+                    throw new InvalidOperationException(
+                        $"Effect '{ownerSpec.Name}': selector '{edge.SelectorTag}' is only meaningful on an OnEvent "
+                        + $"chain edge, but this edge's trigger is {edge.Trigger}.");
+                }
             }
 
             var eventTag = default(GameplayTag);

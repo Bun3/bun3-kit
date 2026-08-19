@@ -160,4 +160,35 @@ public sealed class SeamRegistryTests
 
         Assert.That(returned, Is.EqualTo(40), "AllTargetsSelector should return total count (40), not written count (32)");
     }
+
+    private sealed class StubSelector : ITargetSelector
+    {
+        public int Select(in SelectorContext ctx, Span<TargetId> results) => 0;
+    }
+
+    [Test]
+    public void Games_own_selector_registration_wins_over_the_built_in()
+    {
+        const string json = "{\"schemaVersion\":1,\"tags\":[{\"name\":\"selector.event.source\"}]}";
+        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(json));
+        var catalog = TagCatalogJson.Load(stream);
+
+        var builder = new SeamRegistryBuilder();
+        var stub = new StubSelector();
+        builder.RegisterTargetSelector(catalog.GetRequired(BuiltInSelectors.EventSourceTag), stub);
+        var registry = builder.Build(catalog);
+
+        Assert.That(
+            registry.GetTargetSelector(catalog.GetRequired(BuiltInSelectors.EventSourceTag)), Is.SameAs(stub));
+    }
+
+    [Test]
+    public void Build_skips_the_built_ins_when_the_catalog_has_no_event_selector_tags()
+    {
+        const string json = "{\"schemaVersion\":1,\"tags\":[{\"name\":\"state.dead\"}]}";
+        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(json));
+        var catalog = TagCatalogJson.Load(stream);
+
+        Assert.That(() => new SeamRegistryBuilder().Build(catalog), Throws.Nothing);
+    }
 }
