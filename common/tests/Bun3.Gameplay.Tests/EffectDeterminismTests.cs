@@ -182,6 +182,40 @@ public sealed class EffectDeterminismTests
     }
 
     [Test]
+    public void Same_seed_produces_the_same_world_state_hash()
+    {
+        var kit = EffectScenario.ScenarioKit();
+        var first = EffectScenario.RunHash(kit.Effects, kit.Abilities, kit.Tags, seed: 20260820);
+        var second = EffectScenario.RunHash(kit.Effects, kit.Abilities, kit.Tags, seed: 20260820);
+
+        Assert.That(second, Is.EqualTo(first));
+    }
+
+    [Test]
+    public void Reflection_round_trip_leaves_no_residue()
+    {
+        // A reflects onto B and B reflects onto A; after the exchange settles, removing both
+        // reflect effects must return every attribute Base to its starting value.
+        var kit = EffectScenario.ScenarioKit();
+        var before = EffectScenario.CaptureBases(kit);
+        EffectScenario.RunMutualReflection(kit, ticks: 30);
+        EffectScenario.RemoveAllEffects(kit);
+        for (var i = 0; i < 3; i++) kit.World.Tick();
+
+        Assert.That(EffectScenario.CaptureBases(kit), Is.EqualTo(before));
+    }
+
+    [Test]
+    public void Grant_and_revoke_round_trip_restores_the_ability_set()
+    {
+        var kit = EffectScenario.ScenarioKit();
+        var before = EffectScenario.CaptureGrants(kit);
+        EffectScenario.ApplyGrantingEffectsAndRemoveThem(kit);
+
+        Assert.That(EffectScenario.CaptureGrants(kit), Is.EqualTo(before));
+    }
+
+    [Test]
     public void Settled_tick_loop_does_not_allocate()
     {
         var kit = EffectTestKit.Create();

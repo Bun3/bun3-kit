@@ -163,10 +163,20 @@ public sealed class GameplayCatalogBinaryTests
     }
 
     [Test]
-    [Ignore("Enabled in Task 16 once EffectScenario.RunHash exists.")]
     public void Binary_and_json_paths_produce_the_same_scenario_hash()
     {
-        Assert.Fail("Placeholder for the Task 16 scenario-hash equivalence check.");
+        var kit = EffectScenario.ScenarioKit();
+        using var stream = new MemoryStream();
+        GameplayCatalogBinary.Write(stream, kit.Effects, kit.Abilities, kit.Tags, kit.Attributes);
+        stream.Position = 0;
+
+        var (loadedEffects, loadedAbilities) =
+            GameplayCatalogBinary.Load(stream, kit.Tags, kit.Seams, kit.Attributes);
+
+        var builderHash = EffectScenario.RunHash(kit.Effects, kit.Abilities, kit.Tags, seed: 20260820);
+        var binaryHash = EffectScenario.RunHash(loadedEffects, loadedAbilities, kit.Tags, seed: 20260820);
+
+        Assert.That(binaryHash, Is.EqualTo(builderHash));
     }
 
     // A catalog exercising every compiled member: seam-backed magnitudes and executions, level tables,

@@ -1,6 +1,7 @@
 #nullable enable
 using System;
 using System.Collections.Generic;
+using Bun3.Gameplay.Abilities;
 using Bun3.Gameplay.Attributes;
 using Bun3.Gameplay.Effects;
 using Bun3.Gameplay.Numerics;
@@ -168,6 +169,416 @@ namespace Bun3.Gameplay.Tests
         }
 
         private static ulong NonZero(ulong value) => value == 0 ? 1UL : value;
+
+        // ---- World-based scenario (real Bun3.Gameplay.World/Unit — distinct from ScenarioWorld
+        // above) — exercises ability activation, event-driven chains, and ability grants through
+        // effects, which the tagless mini universe above cannot reach. Shared by RunHash (built
+        // from caller-supplied catalogs, so it works identically over a JSON/builder catalog and a
+        // binary-round-tripped one) and by ScenarioKit (its own catalogs, for the reflection/grant
+        // round-trip oracles).
+
+        private const ushort Mp = 4;
+        private const string EventHitTag = "event.hit";
+        private const string CooldownTag = "cooldown.strike";
+        private const string ArmedTag = "state.armed";
+        private const string SlashAbilityName = "Slash";
+        private const string WardAbilityName = "Ward";
+        private const int ScenarioWorldTicks = 200;
+
+        /// <summary>Assembles the World-based scenario catalogs and units, and returns them together
+        /// with the world driving them. Used directly by the reflection/grant round-trip oracles, and
+        /// as the catalog source for the binary-artifact scenario-hash equivalence check.</summary>
+        internal static Kit ScenarioKit()
+        {
+            var tags = BuildScenarioTagCatalog();
+            var attributes = BuildScenarioAttributeRegistry();
+            var seams = new SeamRegistryBuilder().Build(tags);
+
+            var effectBuilder = new EffectCatalogBuilder();
+            AddScenarioSpecs(effectBuilder);
+            var effects = effectBuilder.Build(tags, seams, attributes);
+
+            var abilityBuilder = new AbilityCatalogBuilder();
+            AddScenarioAbilities(abilityBuilder);
+            var abilities = abilityBuilder.Build(tags, seams, attributes, effects);
+
+            var world = new World(effects, abilities, new XorShiftRng(NonZero(1)));
+            var unitIds = SpawnScenarioUnits(world, attributes, tags);
+            GrantScenarioBaseline(world, tags, abilities, unitIds, out var slashAbilityId);
+
+            return new Kit(
+                world, effects, abilities, tags, attributes, seams, unitIds, slashAbilityId,
+                effects.GetRequiredId("Mark"), effects.GetRequiredId("Reflect"));
+        }
+
+        /// <summary>Runs the fixed World-based scenario (spawn 3 units, 200 ticks of deterministic
+        /// ability activation / effect application / dispel) over caller-supplied catalogs and folds
+        /// the final state into an FNV-1a 64-bit hash. Building the catalogs is the caller's job —
+        /// the same catalog contents must come out of both the code-builder path and a
+        /// binary-round-tripped one for the two hashes to agree.</summary>
+        /// <param name="effects">Effect catalog to run against.</param>
+        /// <param name="abilities">Ability catalog to run against.</param>
+        /// <param name="tags">Tag catalog the units count owned tags with.</param>
+        /// <param name="seed">Rng seed; the same seed must always produce the same hash.</param>
+        /// <returns>State hash after the scenario.</returns>
+        internal static ulong RunHash(EffectCatalog effects, AbilityCatalog abilities, TagCatalog tags, ulong seed)
+        {
+            var attributes = BuildScenarioAttributeRegistry();
+            var world = new World(effects, abilities, new XorShiftRng(NonZero(seed + 1)));
+            var unitIds = SpawnScenarioUnits(world, attributes, tags);
+            GrantScenarioBaseline(world, tags, abilities, unitIds, out var slashAbilityId);
+
+            var driverRng = new XorShiftRng(NonZero(seed));
+            for (var t = 0; t < ScenarioWorldTicks; t++)
+            {
+                DriveOneWorldTick(world, driverRng, unitIds, slashAbilityId, effects.Count);
+                world.Tick();
+                ClearWorldChangeBuffers(world, unitIds);
+            }
+
+            return HashWorldState(world, abilities, unitIds);
+        }
+
+        /// <summary>Captures every unit's attribute Base values, in a fixed order comparable across calls.</summary>
+        internal static BigNum[] CaptureBases(Kit kit)
+        {
+            var result = new BigNum[kit.UnitIds.Length * ScenarioAttributeIds.Length];
+            var index = 0;
+            for (var i = 0; i < kit.UnitIds.Length; i++)
+            {
+                kit.World.TryGetUnit(kit.UnitIds[i], out var unit);
+                for (var a = 0; a < ScenarioAttributeIds.Length; a++)
+                {
+                    result[index++] = unit!.Attributes.GetBase(ScenarioAttributeIds[a]);
+                }
+            }
+
+            return result;
+        }
+
+        /// <summary>Captures every unit's effective level for every catalog ability, in a fixed order comparable across calls.</summary>
+        internal static int[] CaptureGrants(Kit kit)
+        {
+            var result = new int[kit.UnitIds.Length * kit.Abilities.Count];
+            var index = 0;
+            for (var i = 0; i < kit.UnitIds.Length; i++)
+            {
+                kit.World.TryGetUnit(kit.UnitIds[i], out var unit);
+                for (var abilityId = 0; abilityId < kit.Abilities.Count; abilityId++)
+                {
+                    result[index++] = unit!.Abilities.GetLevel(abilityId);
+                }
+            }
+
+            return result;
+        }
+
+        /// <summary>Applies the "Reflect" effect from unit 0 onto unit 1 and from unit 1 onto unit 0
+        /// (modifier-only, so it never touches Base), then ticks the world forward.</summary>
+        internal static void RunMutualReflection(Kit kit, int ticks)
+        {
+            var pipeline = kit.World.Pipeline;
+            var a = kit.UnitIds[0];
+            var b = kit.UnitIds[1];
+            pipeline.EnqueueApply(kit.ReflectSpecId, a, b);
+            pipeline.EnqueueApply(kit.ReflectSpecId, b, a);
+
+            for (var i = 0; i < ticks; i++) kit.World.Tick();
+        }
+
+        /// <summary>Dispels every active effect instance on every unit.</summary>
+        internal static void RemoveAllEffects(Kit kit)
+        {
+            var pipeline = kit.World.Pipeline;
+            for (var i = 0; i < kit.UnitIds.Length; i++)
+            {
+                kit.World.TryGetUnit(kit.UnitIds[i], out var unit);
+                var active = unit!.Effects.ActiveEffects;
+                while (active.Count > 0)
+                {
+                    pipeline.RemoveById(unit.Id, active[0].Id);
+                }
+            }
+        }
+
+        /// <summary>Applies the "Mark" effect (grants the Ward ability) to the third unit and removes
+        /// it again — the ability-grant hook must revoke exactly what it granted.</summary>
+        internal static void ApplyGrantingEffectsAndRemoveThem(Kit kit)
+        {
+            var pipeline = kit.World.Pipeline;
+            var target = kit.UnitIds[2];
+
+            pipeline.EnqueueApply(kit.MarkSpecId, target, target);
+            kit.World.Tick();
+
+            kit.World.TryGetUnit(target, out var unit);
+            var active = unit!.Effects.ActiveEffects;
+            for (var i = 0; i < active.Count; i++)
+            {
+                if (active[i].SpecId != kit.MarkSpecId) continue;
+                pipeline.RemoveById(target, active[i].Id);
+                break;
+            }
+        }
+
+        private static readonly ushort[] ScenarioAttributeIds = { Hp, MaxHp, Attack, Mp };
+
+        private static TagCatalog BuildScenarioTagCatalog()
+        {
+            var names = new List<string> { EventHitTag, BuiltInSelectors.EventSourceTag, CooldownTag, ArmedTag };
+            return TagCatalog.Create(names, new List<TagCatalog.RedirectDefinition>());
+        }
+
+        private static AttributeRegistry BuildScenarioAttributeRegistry()
+        {
+            var builder = new AttributeRegistryBuilder();
+            builder.Register(MaxHp, min: Operand.Constant(BigNum.FromParts(1, 0)));
+            builder.Register(Hp, min: Operand.Constant(BigNum.Zero), max: Operand.Attribute(MaxHp));
+            builder.Register(Attack, min: Operand.Constant(BigNum.Zero));
+            builder.Register(Mp, min: Operand.Constant(BigNum.Zero));
+            return builder.Build();
+        }
+
+        // Damage/StrikeBack/Retaliate form the event-driven chain (application → RaiseEvents →
+        // OnEvent chain → application); Cooldown/Buff/Regen exercise duration ticking, stacking, and
+        // periodic Base changes; Reflect is modifier-only (Duration/Infinite never touch Base) for the
+        // no-residue oracle; Mark grants an ability through an effect instance.
+        private static void AddScenarioSpecs(EffectCatalogBuilder builder)
+        {
+            builder.Add(new EffectSpec
+            {
+                Name = "Strike",
+                DurationType = EffectDurationType.Instant,
+                Modifiers = { AddModifier(Hp, Constant(-8)) },
+                RaiseEvents = { new RaiseEventDef { Tag = EventHitTag, AttributeId = Hp } },
+            });
+
+            builder.Add(new EffectSpec
+            {
+                Name = "StrikeBack",
+                DurationType = EffectDurationType.Instant,
+                Modifiers = { AddModifier(Hp, Constant(-4)) },
+            });
+
+            builder.Add(new EffectSpec
+            {
+                Name = "Retaliate",
+                DurationType = EffectDurationType.Infinite,
+                Chains =
+                {
+                    new ChainEdgeDef
+                    {
+                        Trigger = ChainTrigger.OnEvent,
+                        EffectName = "StrikeBack",
+                        EventTag = EventHitTag,
+                        Listen = ChainListen.AsTarget,
+                        SelectorTag = BuiltInSelectors.EventSourceTag,
+                        LevelRule = ChainLevelRule.Inherit,
+                    },
+                },
+            });
+
+            builder.Add(new EffectSpec
+            {
+                Name = "Cooldown",
+                DurationType = EffectDurationType.Duration,
+                DurationTicks = 15,
+                GrantedTags = { CooldownTag },
+            });
+
+            builder.Add(new EffectSpec
+            {
+                Name = "Regen",
+                DurationType = EffectDurationType.Duration,
+                DurationTicks = 40,
+                PeriodTicks = 4,
+                Modifiers = { AddModifier(Hp, Constant(3)) },
+            });
+
+            builder.Add(new EffectSpec
+            {
+                Name = "Buff",
+                DurationType = EffectDurationType.Duration,
+                DurationTicks = 25,
+                Stack = new StackPolicy
+                {
+                    MaxStack = 4,
+                    OnReapply = StackReapply.AddStack,
+                    AddStackCount = 1,
+                    RefreshDurationOnReapply = true,
+                    OnExpiration = StackExpiration.ClearAll,
+                    OnOverflow = StackOverflow.Deny,
+                },
+                Modifiers = { AddModifier(Attack, Constant(2)) },
+            });
+
+            builder.Add(new EffectSpec
+            {
+                Name = "Reflect",
+                DurationType = EffectDurationType.Infinite,
+                Modifiers = { AddModifier(Attack, Constant(6)) },
+            });
+
+            builder.Add(new EffectSpec
+            {
+                Name = "Mark",
+                DurationType = EffectDurationType.Infinite,
+                GrantedAbilities = { WardAbilityName },
+            });
+        }
+
+        private static void AddScenarioAbilities(AbilityCatalogBuilder builder)
+        {
+            var slash = new AbilityDef { Name = SlashAbilityName, MaxLevel = 1, CooldownEffect = "Cooldown" };
+            slash.RequiredTags.Add(ArmedTag);
+            slash.BlockedTags.Add(CooldownTag);
+            slash.Costs.Add(new CostDef { AttributeId = Mp, Magnitude = new MagnitudeDef { Base = Constant(5) } });
+            slash.Effects.Add(new AbilityEffectDef { EffectName = "Strike" });
+            builder.Add(slash);
+
+            builder.Add(new AbilityDef { Name = WardAbilityName, MaxLevel = 1 });
+        }
+
+        private static TargetId[] SpawnScenarioUnits(World world, AttributeRegistry attributes, TagCatalog tags)
+        {
+            var ids = new TargetId[TargetCount];
+            Span<ushort> attributeIds = stackalloc ushort[] { Hp, MaxHp, Attack, Mp };
+            for (var i = 0; i < TargetCount; i++)
+            {
+                var id = new TargetId((ulong)(i + 1));
+                var unit = new Unit(id, attributes, attributeIds, tags);
+                unit.Attributes.SetBase(MaxHp, BigNum.FromParts(1000, 0));
+                unit.Attributes.SetBase(Hp, BigNum.FromParts(1000, 0));
+                unit.Attributes.SetBase(Attack, BigNum.FromParts(20, 0));
+                unit.Attributes.SetBase(Mp, BigNum.FromParts(500, 0));
+                world.Spawn(unit);
+                ids[i] = id;
+            }
+
+            world.Tick();
+            return ids;
+        }
+
+        private static void GrantScenarioBaseline(
+            World world, TagCatalog tags, AbilityCatalog abilities, TargetId[] unitIds, out int slashAbilityId)
+        {
+            var armedTag = tags.GetRequired(ArmedTag);
+            slashAbilityId = abilities.GetRequiredId(SlashAbilityName);
+            for (var i = 0; i < unitIds.Length; i++)
+            {
+                world.TryGetUnit(unitIds[i], out var unit);
+                unit!.Tags.Add(armedTag);
+                unit.Abilities.Grant(slashAbilityId, GrantSource.Archetype(), level: 1);
+            }
+        }
+
+        private static void DriveOneWorldTick(
+            World world, XorShiftRng rng, TargetId[] unitIds, int slashAbilityId, int specCount)
+        {
+            var unitCount = (uint)unitIds.Length;
+            var roll = rng.NextUInt32() % 4;
+            if (roll == 0)
+            {
+                world.TryActivateAbility(unitIds[rng.NextUInt32() % unitCount], slashAbilityId);
+            }
+            else if (roll == 1)
+            {
+                var specId = (int)(rng.NextUInt32() % (uint)specCount);
+                var source = unitIds[rng.NextUInt32() % unitCount];
+                var target = unitIds[rng.NextUInt32() % unitCount];
+                var level = 1 + (int)(rng.NextUInt32() % 2);
+                world.Pipeline.EnqueueApply(specId, source, target, level);
+            }
+            else if (roll == 2)
+            {
+                var unitId = unitIds[rng.NextUInt32() % unitCount];
+                world.TryGetUnit(unitId, out var unit);
+                var active = unit!.Effects.ActiveEffects;
+                if (active.Count > 0)
+                {
+                    var index = (int)(rng.NextUInt32() % (uint)active.Count);
+                    world.Pipeline.RemoveById(unitId, active[index].Id);
+                }
+            }
+            // roll == 3: no action this tick — lets duration/period timers advance untouched.
+        }
+
+        private static void ClearWorldChangeBuffers(World world, TargetId[] unitIds)
+        {
+            for (var i = 0; i < unitIds.Length; i++)
+            {
+                world.TryGetUnit(unitIds[i], out var unit);
+                unit!.Attributes.ClearChanges();
+                unit.Effects.ClearEffectEvents();
+            }
+        }
+
+        private static ulong HashWorldState(World world, AbilityCatalog abilities, TargetId[] unitIds)
+        {
+            var hash = FnvOffset;
+            for (var i = 0; i < unitIds.Length; i++)
+            {
+                world.TryGetUnit(unitIds[i], out var unit);
+                var u = unit!;
+                for (var a = 0; a < ScenarioAttributeIds.Length; a++)
+                {
+                    var b = u.Attributes.GetBase(ScenarioAttributeIds[a]);
+                    hash = Fold(hash, b.Mantissa);
+                    hash = Fold(hash, b.Exponent);
+                }
+
+                var active = u.Effects.ActiveEffects;
+                for (var k = 0; k < active.Count; k++)
+                {
+                    var instance = active[k];
+                    hash = Fold(hash, unchecked((long)instance.Id));
+                    hash = Fold(hash, instance.SpecId);
+                    hash = Fold(hash, instance.Level);
+                    hash = Fold(hash, instance.Stack);
+                    hash = Fold(hash, instance.RemainingTicks);
+                }
+
+                for (var abilityId = 0; abilityId < abilities.Count; abilityId++)
+                {
+                    hash = Fold(hash, u.Abilities.GetLevel(abilityId));
+                }
+            }
+
+            return hash;
+        }
+
+        /// <summary>Assembled World-based scenario — catalogs, seams, attribute registry, the world
+        /// driving them, and the unit/spec/ability ids the oracles above operate on.</summary>
+        internal sealed class Kit
+        {
+            internal Kit(
+                World world, EffectCatalog effects, AbilityCatalog abilities, TagCatalog tags,
+                AttributeRegistry attributes, SeamRegistry seams, TargetId[] unitIds, int slashAbilityId,
+                int markSpecId, int reflectSpecId)
+            {
+                World = world;
+                Effects = effects;
+                Abilities = abilities;
+                Tags = tags;
+                Attributes = attributes;
+                Seams = seams;
+                UnitIds = unitIds;
+                SlashAbilityId = slashAbilityId;
+                MarkSpecId = markSpecId;
+                ReflectSpecId = reflectSpecId;
+            }
+
+            internal World World { get; }
+            internal EffectCatalog Effects { get; }
+            internal AbilityCatalog Abilities { get; }
+            internal TagCatalog Tags { get; }
+            internal AttributeRegistry Attributes { get; }
+            internal SeamRegistry Seams { get; }
+            internal TargetId[] UnitIds { get; }
+            internal int SlashAbilityId { get; }
+            internal int MarkSpecId { get; }
+            internal int ReflectSpecId { get; }
+        }
 
         // Six kinds (chains use trigger + follower specs) — instant damage, duration buff with
         // stacks, poison (duration + period), on-apply chain (follower fires on apply), ongoing
