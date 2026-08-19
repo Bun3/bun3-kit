@@ -41,7 +41,10 @@ internal sealed class EffectTestKit
         { "name": "state.lowhealth" },
         { "name": "effect.fire.bolt" },
         { "name": "effect.frost" },
-        { "name": "effect.magic.curse" }
+        { "name": "effect.magic.curse" },
+        { "name": "event.damage.taken" },
+        { "name": "event.damage" },
+        { "name": "event.heal.taken" }
       ]
     }
     """;

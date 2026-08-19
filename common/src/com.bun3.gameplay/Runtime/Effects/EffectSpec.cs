@@ -57,6 +57,27 @@ namespace Bun3.Gameplay.Effects
         OnCompletePrematurely = 2,
         /// <summary>When the source effect hits stack overflow.</summary>
         OnStackOverflow = 3,
+        /// <summary>When a matching gameplay event reaches the owner of this effect.</summary>
+        OnEvent = 4,
+    }
+
+    /// <summary>Which side of a gameplay event an OnEvent chain listens on.</summary>
+    public enum ChainListen : byte
+    {
+        /// <summary>Fires on the effect owner that the event was applied to — retaliation and on-hit reactions.</summary>
+        AsTarget = 0,
+        /// <summary>Fires on the effect owner that caused the event — leech and on-deal reactions.</summary>
+        AsSource = 1,
+    }
+
+    /// <summary>Gameplay event this effect raises, and the attribute whose change carries its magnitude.</summary>
+    public sealed class RaiseEventDef
+    {
+        /// <summary>Tag path of the event to raise.</summary>
+        public string Tag { get; set; } = string.Empty;
+
+        /// <summary>Attribute whose Base change becomes the event magnitude. Must be modified by this effect.</summary>
+        public ushort AttributeId { get; set; }
     }
 
     /// <summary>Rule deciding the level of a chain-triggered effect.</summary>
@@ -185,6 +206,15 @@ namespace Bun3.Gameplay.Effects
 
         /// <summary>Level to use when <see cref="LevelRule"/> is Fixed.</summary>
         public int FixedLevel { get; set; }
+
+        /// <summary>Event tag this edge listens for. Required when <see cref="Trigger"/> is
+        /// <see cref="ChainTrigger.OnEvent"/> and rejected otherwise. Matches an event whose tag is
+        /// this tag or one of its descendants.</summary>
+        public string? EventTag { get; set; }
+
+        /// <summary>Which side of the event this edge listens on. Only meaningful for
+        /// <see cref="ChainTrigger.OnEvent"/>.</summary>
+        public ChainListen Listen { get; set; }
     }
 
     /// <summary>Stack policy.</summary>
@@ -313,5 +343,8 @@ namespace Bun3.Gameplay.Effects
         /// length-1). A final value of 0 means immunity. Must be non-empty with all values ≥0 when
         /// <see cref="DrCategory"/> is set.</summary>
         public List<BigNum> DrStageMultipliers { get; set; } = new List<BigNum>();
+
+        /// <summary>Gameplay events raised when this effect applies instantly or executes periodically.</summary>
+        public List<RaiseEventDef> RaiseEvents { get; set; } = new List<RaiseEventDef>();
     }
 }

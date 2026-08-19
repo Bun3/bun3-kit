@@ -18,7 +18,7 @@ namespace Bun3.Gameplay.Effects
     /// (5) <see cref="RebuildToggled"/> (rebuilds slots marked dirty by 4) → (6) event finalization
     /// (no pipeline work — the game drains the lifecycle/attribute-change event buffers itself).
     /// </summary>
-    public sealed class EffectPipeline
+    public sealed partial class EffectPipeline
     {
         private struct PendingApply
         {
@@ -488,11 +488,25 @@ namespace Bun3.Gameplay.Effects
         private void ApplyInstant(
             CompiledEffectSpec spec, EffectTarget target, EffectTarget? source, bool hasSource, in PendingApply pending)
         {
+            var raises = spec.RaiseEvents;
+            Span<BigNum> before = stackalloc BigNum[raises.Length];
+            Span<BigNum> nominal = stackalloc BigNum[raises.Length];
+            for (var r = 0; r < raises.Length; r++)
+            {
+                before[r] = target.Attributes.GetBase(raises[r].AttributeId);
+                nominal[r] = BigNum.Zero;
+            }
+
             var modifiers = spec.Modifiers;
             for (var i = 0; i < modifiers.Length; i++)
             {
                 var modifier = modifiers[i];
                 var magnitude = EvaluateMagnitude(modifier, target, source, hasSource, pending.Level, stack: 1);
+                for (var r = 0; r < raises.Length; r++)
+                {
+                    if (raises[r].AttributeId == modifier.AttributeId) nominal[r] += magnitude;
+                }
+
                 ApplyModifierToBase(target, modifier, magnitude);
             }
 
@@ -500,6 +514,13 @@ namespace Bun3.Gameplay.Effects
             for (var i = 0; i < executions.Length; i++)
             {
                 RunExecution(executions[i], target, source, hasSource, pending.Source, pending.Target, pending.Level, stack: 1);
+            }
+
+            for (var r = 0; r < raises.Length; r++)
+            {
+                var delta = target.Attributes.GetBase(raises[r].AttributeId) - before[r];
+                var evt = new GameplayEvent(raises[r].Tag, pending.Source, pending.Target, delta, nominal[r]);
+                RaiseGameplayEvent(in evt);
             }
 
             FireChain(spec.Chains, ChainTrigger.OnApplication, pending.Source, pending.Level, pending.Target, target);
@@ -567,20 +588,26 @@ namespace Bun3.Gameplay.Effects
                 Span<TargetId> targets = stackalloc TargetId[32];
                 var selectorCtx = new SelectorContext(
                     source, originTargetId, chain.SelectorParams, _rng, _resolver,
-                    eventSource: default, eventTarget: default);
-                var selected = chain.Selector.Select(in selectorCtx, targets);
-                var count = selected;
-                if (count > targets.Length)
-                {
-                    SelectorTruncationCount++;
-                    count = targets.Length;
-                }
+                    eventSource: default, eventTarget: default, eventMagnitude: BigNum.Zero, eventNominalMagnitude: BigNum.Zero);
+                var count = SelectTargets(chain.Selector, in selectorCtx, targets);
 
                 for (var k = 0; k < count; k++)
                 {
                     EnqueueApply(chain.EffectId, source, targets[k], chainLevel);
                 }
             }
+        }
+
+        // Shared selector-invocation step for FireChain and FireEventChain: calls Select, counts
+        // truncation when the reported total exceeds the buffer, and returns the clamped count actually
+        // written into results.
+        private int SelectTargets(ITargetSelector selector, in SelectorContext ctx, Span<TargetId> results)
+        {
+            var selected = selector.Select(in ctx, results);
+            if (selected <= results.Length) return selected;
+
+            SelectorTruncationCount++;
+            return results.Length;
         }
 
         // Duration/Infinite: if the target has an active instance with the same SpecId, merge via the
@@ -846,11 +873,25 @@ namespace Bun3.Gameplay.Effects
         {
             var hasSource = _resolver.TryResolve(instance.Source, out var source) && source is not null;
 
+            var raises = spec.RaiseEvents;
+            Span<BigNum> before = stackalloc BigNum[raises.Length];
+            Span<BigNum> nominal = stackalloc BigNum[raises.Length];
+            for (var r = 0; r < raises.Length; r++)
+            {
+                before[r] = target.Attributes.GetBase(raises[r].AttributeId);
+                nominal[r] = BigNum.Zero;
+            }
+
             var modifiers = spec.Modifiers;
             for (var i = 0; i < modifiers.Length; i++)
             {
                 var modifier = modifiers[i];
                 var magnitude = EvaluateMagnitude(modifier, target, source, hasSource, instance.Level, instance.Stack);
+                for (var r = 0; r < raises.Length; r++)
+                {
+                    if (raises[r].AttributeId == modifier.AttributeId) nominal[r] += magnitude;
+                }
+
                 ApplyModifierToBase(target, modifier, magnitude);
             }
 
@@ -858,6 +899,13 @@ namespace Bun3.Gameplay.Effects
             for (var i = 0; i < executions.Length; i++)
             {
                 RunExecution(executions[i], target, source, hasSource, instance.Source, target.Id, instance.Level, instance.Stack);
+            }
+
+            for (var r = 0; r < raises.Length; r++)
+            {
+                var delta = target.Attributes.GetBase(raises[r].AttributeId) - before[r];
+                var evt = new GameplayEvent(raises[r].Tag, instance.Source, target.Id, delta, nominal[r]);
+                RaiseGameplayEvent(in evt);
             }
         }
 

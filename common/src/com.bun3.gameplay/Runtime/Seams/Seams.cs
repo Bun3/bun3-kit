@@ -167,7 +167,8 @@ namespace Bun3.Gameplay.Seams
 
         internal SelectorContext(
             TargetId source, TargetId origin, ReadOnlySpan<BigNum> parameters, IRng rng,
-            IEffectTargetResolver resolver, TargetId eventSource, TargetId eventTarget)
+            IEffectTargetResolver resolver, TargetId eventSource, TargetId eventTarget,
+            BigNum eventMagnitude, BigNum eventNominalMagnitude)
         {
             Source = source;
             Origin = origin;
@@ -176,6 +177,8 @@ namespace Bun3.Gameplay.Seams
             _resolver = resolver;
             EventSource = eventSource;
             EventTarget = eventTarget;
+            EventMagnitude = eventMagnitude;
+            EventNominalMagnitude = eventNominalMagnitude;
         }
 
         /// <summary>Source that triggered the selection.</summary>
@@ -189,6 +192,12 @@ namespace Bun3.Gameplay.Seams
 
         /// <summary>Target of the gameplay event that triggered this selection. Default outside an event path.</summary>
         public TargetId EventTarget { get; }
+
+        /// <summary>Clamped magnitude of the gameplay event that triggered this selection. Zero outside an event path.</summary>
+        public BigNum EventMagnitude { get; }
+
+        /// <summary>Pre-clamp magnitude of the gameplay event that triggered this selection. Zero outside an event path.</summary>
+        public BigNum EventNominalMagnitude { get; }
 
         /// <summary>Random number generator usable in this selection.</summary>
         public IRng Rng { get; }

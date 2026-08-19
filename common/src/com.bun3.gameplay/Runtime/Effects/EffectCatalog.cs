@@ -171,12 +171,29 @@ namespace Bun3.Gameplay.Effects
         internal Operand Right { get; }
     }
 
+    /// <summary>One compiled event declaration.</summary>
+    internal readonly struct CompiledRaiseEvent
+    {
+        internal CompiledRaiseEvent(GameplayTag tag, ushort attributeId)
+        {
+            Tag = tag;
+            AttributeId = attributeId;
+        }
+
+        /// <summary>Event tag.</summary>
+        internal GameplayTag Tag { get; }
+
+        /// <summary>Attribute whose Base change becomes the event magnitude.</summary>
+        internal ushort AttributeId { get; }
+    }
+
     /// <summary>Compiled chain edge.</summary>
     internal sealed class CompiledChain
     {
         internal CompiledChain(
             ChainTrigger trigger, int effectId, ITargetSelector? selector, BigNum[] selectorParams,
-            CompiledCondition[] conditions, ChainLevelRule levelRule, int fixedLevel)
+            CompiledCondition[] conditions, ChainLevelRule levelRule, int fixedLevel,
+            GameplayTag eventTag, ChainListen listen)
         {
             Trigger = trigger;
             EffectId = effectId;
@@ -185,6 +202,8 @@ namespace Bun3.Gameplay.Effects
             Conditions = conditions;
             LevelRule = levelRule;
             FixedLevel = fixedLevel;
+            EventTag = eventTag;
+            Listen = listen;
         }
 
         /// <summary>Trigger timing.</summary>
@@ -207,6 +226,14 @@ namespace Bun3.Gameplay.Effects
 
         /// <summary>Level to use when LevelRule is Fixed.</summary>
         internal int FixedLevel { get; }
+
+        /// <summary>Event tag this edge listens for. Only meaningful when <see cref="Trigger"/> is
+        /// <see cref="ChainTrigger.OnEvent"/>.</summary>
+        internal GameplayTag EventTag { get; }
+
+        /// <summary>Which side of the event this edge listens on. Only meaningful when <see cref="Trigger"/> is
+        /// <see cref="ChainTrigger.OnEvent"/>.</summary>
+        internal ChainListen Listen { get; }
     }
 
     /// <summary>Effect spec fully validated and resolved by Build.</summary>
@@ -234,7 +261,8 @@ namespace Bun3.Gameplay.Effects
             CompiledMagnitude? durationScale,
             GameplayTag drCategory,
             int drWindowTicks,
-            BigNum[] drStageMultipliers)
+            BigNum[] drStageMultipliers,
+            CompiledRaiseEvent[] raiseEvents)
         {
             Name = name;
             MaxLevel = maxLevel;
@@ -258,6 +286,15 @@ namespace Bun3.Gameplay.Effects
             DrCategory = drCategory;
             DrWindowTicks = drWindowTicks;
             DrStageMultipliers = drStageMultipliers;
+            RaiseEvents = raiseEvents;
+
+            HasEventChains = false;
+            for (var i = 0; i < chains.Length; i++)
+            {
+                if (chains[i].Trigger != ChainTrigger.OnEvent) continue;
+                HasEventChains = true;
+                break;
+            }
         }
 
         /// <summary>Effect name.</summary>
@@ -327,5 +364,12 @@ namespace Bun3.Gameplay.Effects
 
         /// <summary>Per-stage DR duration multipliers; empty when <see cref="DrCategory"/> is unused.</summary>
         internal BigNum[] DrStageMultipliers { get; }
+
+        /// <summary>Gameplay events raised when this effect applies instantly or executes periodically.</summary>
+        internal CompiledRaiseEvent[] RaiseEvents { get; }
+
+        /// <summary>Whether any chain edge on this spec listens with <see cref="ChainTrigger.OnEvent"/>.
+        /// Lets event dispatch skip the inner chain loop for the common case.</summary>
+        internal bool HasEventChains { get; }
     }
 }

@@ -159,12 +159,41 @@ namespace Bun3.Gameplay.Effects
                 ? spec.DrStageMultipliers.ToArray()
                 : Array.Empty<BigNum>();
 
+            var raiseEvents = new CompiledRaiseEvent[spec.RaiseEvents.Count];
+            for (var i = 0; i < spec.RaiseEvents.Count; i++)
+            {
+                var raise = spec.RaiseEvents[i];
+                if (string.IsNullOrEmpty(raise.Tag))
+                    throw new InvalidOperationException($"Effect '{spec.Name}': RaiseEvents entry has an empty Tag.");
+                if (!attributes.Contains(raise.AttributeId))
+                {
+                    throw new InvalidOperationException(
+                        $"Effect '{spec.Name}': RaiseEvents references unregistered attribute {raise.AttributeId}.");
+                }
+
+                var modified = false;
+                for (var m = 0; m < spec.Modifiers.Count; m++)
+                {
+                    if (spec.Modifiers[m].AttributeId != raise.AttributeId) continue;
+                    modified = true;
+                    break;
+                }
+
+                if (!modified)
+                {
+                    throw new InvalidOperationException(
+                        $"Effect '{spec.Name}': RaiseEvents attribute {raise.AttributeId} is not modified by this effect.");
+                }
+
+                raiseEvents[i] = new CompiledRaiseEvent(tags.GetRequired(raise.Tag), raise.AttributeId);
+            }
+
             return new CompiledEffectSpec(
                 spec.Name, spec.MaxLevel, spec.DurationType, spec.DurationTicks, spec.PeriodTicks, spec.Stack,
                 modifiers, executions, applicationConditions, ongoingConditions,
                 grantedTags, assetTags, immunityTags, chains, overflowEffectId,
                 removeOnApplyTags, chanceToApply, durationPerLevel, durationScale,
-                drCategory, spec.DrWindowTicks, drStageMultipliers);
+                drCategory, spec.DrWindowTicks, drStageMultipliers, raiseEvents);
         }
 
         private static void ValidateDurationTypeFields(EffectSpec spec)
@@ -431,10 +460,27 @@ namespace Bun3.Gameplay.Effects
                 selector = MagnitudeCompiler.ResolveTargetSelector(edge.SelectorTag!, $"Effect '{ownerSpec.Name}'", tags, seams);
             }
 
+            var eventTag = default(GameplayTag);
+            if (edge.Trigger == ChainTrigger.OnEvent)
+            {
+                if (string.IsNullOrEmpty(edge.EventTag))
+                {
+                    throw new InvalidOperationException(
+                        $"Effect '{ownerSpec.Name}': an OnEvent chain requires EventTag.");
+                }
+
+                eventTag = tags.GetRequired(edge.EventTag!);
+            }
+            else if (!string.IsNullOrEmpty(edge.EventTag))
+            {
+                throw new InvalidOperationException(
+                    $"Effect '{ownerSpec.Name}': EventTag is only valid on an OnEvent chain.");
+            }
+
             var conditions = ResolveConditions(edge.Conditions, $"Effect '{ownerSpec.Name}'", attributes, allowSourceAttribute: true);
             return new CompiledChain(
                 edge.Trigger, effectId, selector, edge.SelectorParams.ToArray(),
-                conditions, edge.LevelRule, edge.FixedLevel);
+                conditions, edge.LevelRule, edge.FixedLevel, eventTag, edge.Listen);
         }
 
         // Cycle detection via DFS gray/black coloring following OnApplication edges only. A cycle passing
