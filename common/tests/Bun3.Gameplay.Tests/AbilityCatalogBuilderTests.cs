@@ -183,4 +183,19 @@ public sealed class AbilityCatalogBuilderTests
             () => builder.Build(kit.TagCatalog, kit.Seams, kit.Attributes, kit.Catalog),
             Throws.InvalidOperationException.With.Message.Contains("selector.nope"));
     }
+
+    [Test]
+    public void Event_selector_on_an_ability_effect_is_rejected()
+    {
+        var kit = EffectTestKit.Create();
+        kit.AddSpec(EffectTestKit.MinimalInstant("bolt"));
+        var ability = Minimal("caster");
+        ability.Effects.Add(new AbilityEffectDef { EffectName = "bolt", SelectorTag = BuiltInSelectors.EventSourceTag });
+        var builder = new AbilityCatalogBuilder();
+        builder.Add(ability);
+
+        Assert.That(
+            () => builder.Build(kit.TagCatalog, kit.Seams, kit.Attributes, kit.Catalog),
+            Throws.InvalidOperationException.With.Message.Contains("only meaningful on an OnEvent"));
+    }
 }

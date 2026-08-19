@@ -110,6 +110,12 @@ namespace Bun3.Gameplay.Abilities
                 var selector = string.IsNullOrEmpty(entry.SelectorTag)
                     ? null
                     : MagnitudeCompiler.ResolveTargetSelector(entry.SelectorTag!, owner, tags, seams);
+                if (entry.SelectorTag == BuiltInSelectors.EventSourceTag || entry.SelectorTag == BuiltInSelectors.EventTargetTag)
+                {
+                    throw new InvalidOperationException(
+                        $"{owner}: selector '{entry.SelectorTag}' is only meaningful on an OnEvent chain edge, "
+                        + "but ability activation has no event context.");
+                }
 
                 abilityEffects[i] = new CompiledAbilityEffect(
                     effectId, selector, entry.SelectorParams.ToArray(), entry.LevelRule, entry.FixedLevel);

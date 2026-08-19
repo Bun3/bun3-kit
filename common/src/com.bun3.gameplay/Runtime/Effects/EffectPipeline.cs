@@ -106,6 +106,29 @@ namespace Bun3.Gameplay.Effects
             });
         }
 
+        /// <summary>Random source shared with this pipeline.</summary>
+        internal IRng Rng => _rng;
+
+        /// <summary>Evaluates a compiled condition list outside the drain loop, with no event context.</summary>
+        internal bool CheckConditions(
+            CompiledCondition[] conditions, EffectTarget target, EffectTarget? source, bool hasSource) =>
+            EvaluateConditions(conditions, target, source, hasSource, BigNum.Zero);
+
+        /// <summary>Evaluates a standalone compiled magnitude outside the drain loop, with no event context.</summary>
+        internal BigNum ComputeMagnitude(
+            CompiledMagnitude magnitude, EffectTarget target, EffectTarget? source, bool hasSource, int level) =>
+            EvaluateMagnitudeCore(
+                magnitude.Base, magnitude.PerLevel, magnitude.Calc, magnitude.ByLevel, magnitude.Tail, magnitude.Increment,
+                target, source, hasSource, level, stack: 1, BigNum.Zero);
+
+        // Applies one effect outside the drain loop. Must not be called from inside Tick — the drain
+        // loop owns the queue while it runs, and re-entering it would break the per-tick budget.
+        internal void ApplyImmediate(int specId, TargetId source, TargetId target, int level) =>
+            ProcessPendingApply(new PendingApply
+            {
+                SpecId = specId, Source = source, Target = target, Level = level, EventMagnitude = BigNum.Zero,
+            });
+
         /// <summary>Processes one tick in the six-phase order documented on the class.</summary>
         public void Tick()
         {
@@ -622,10 +645,10 @@ namespace Bun3.Gameplay.Effects
             }
         }
 
-        // Shared selector-invocation step for FireChain and FireEventChain: calls Select, counts
-        // truncation when the reported total exceeds the buffer, and returns the clamped count actually
-        // written into results.
-        private int SelectTargets(ITargetSelector selector, in SelectorContext ctx, Span<TargetId> results)
+        // Shared selector-invocation step for FireChain, FireEventChain, and World.TryActivateAbility:
+        // calls Select, counts truncation when the reported total exceeds the buffer, and returns the
+        // clamped count actually written into results.
+        internal int SelectTargets(ITargetSelector selector, in SelectorContext ctx, Span<TargetId> results)
         {
             var selected = selector.Select(in ctx, results);
             if (selected <= results.Length) return selected;

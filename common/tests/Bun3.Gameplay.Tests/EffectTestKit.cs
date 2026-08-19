@@ -46,7 +46,10 @@ internal sealed class EffectTestKit
         { "name": "event.damage" },
         { "name": "event.heal.taken" },
         { "name": "selector.event.source" },
-        { "name": "selector.event.target" }
+        { "name": "selector.event.target" },
+        { "name": "cooldown.fireball" },
+        { "name": "state.silenced" },
+        { "name": "state.armed" }
       ]
     }
     """;
