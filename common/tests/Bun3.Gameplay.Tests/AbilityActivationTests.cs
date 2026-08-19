@@ -169,6 +169,87 @@ public sealed class AbilityActivationTests
     }
 
     [Test]
+    public void A_modifier_that_raises_current_does_not_fund_a_cost_the_base_cannot_afford()
+    {
+        var f = Build((kit, b) =>
+        {
+            var boost = EffectTestKit.MinimalInfinite("mp.boost");
+            boost.Modifiers.Add(new ModifierDef
+            {
+                AttributeId = EffectTestKit.Mp,
+                Op = AttributeModifierOp.Add,
+                Magnitude = new MagnitudeDef { Base = Operand.Constant(40) },
+            });
+            kit.AddSpec(boost);
+
+            var ability = Fireball();
+            ability.Costs.Add(new CostDef
+            {
+                AttributeId = EffectTestKit.Mp,
+                Magnitude = new MagnitudeDef { Base = Operand.Constant(80) },
+            });
+            b.Add(ability);
+        });
+        var id = f.Abilities.GetRequiredId("fireball");
+        f.Caster.Abilities.Grant(id, GrantSource.Archetype(), level: 1);
+
+        f.World.Pipeline.EnqueueApply(f.Kit.SpecId("mp.boost"), f.Caster.Id, f.Caster.Id);
+        f.World.Tick();
+        Assert.That(f.Caster.Attributes.GetCurrent(EffectTestKit.Mp), Is.EqualTo((BigNum)90));
+        Assert.That(f.Caster.Attributes.GetBase(EffectTestKit.Mp), Is.EqualTo((BigNum)50));
+
+        Assert.That(f.World.TryActivateAbility(f.Caster.Id, id), Is.EqualTo(AbilityActivationResult.CostInsufficient));
+        Assert.That(f.Caster.Attributes.GetBase(EffectTestKit.Mp), Is.EqualTo((BigNum)50));
+    }
+
+    [Test]
+    public void Cost_on_a_min_bounded_attribute_charges_exactly()
+    {
+        var f = Build((_, b) =>
+        {
+            var ability = Fireball();
+            ability.Costs.Add(new CostDef
+            {
+                AttributeId = EffectTestKit.Attack,
+                Magnitude = new MagnitudeDef { Base = Operand.Constant(10) },
+            });
+            b.Add(ability);
+        });
+        var id = f.Abilities.GetRequiredId("fireball");
+        f.Caster.Abilities.Grant(id, GrantSource.Archetype(), level: 1);
+        f.Caster.Attributes.SetBase(EffectTestKit.Attack, 10);
+
+        Assert.That(f.World.TryActivateAbility(f.Caster.Id, id), Is.EqualTo(AbilityActivationResult.Success));
+        Assert.That(f.Caster.Attributes.GetBase(EffectTestKit.Attack), Is.EqualTo((BigNum)0));
+    }
+
+    [Test]
+    public void An_unaffordable_second_cost_leaves_the_first_cost_undebited()
+    {
+        var f = Build((_, b) =>
+        {
+            var ability = Fireball();
+            ability.Costs.Add(new CostDef
+            {
+                AttributeId = EffectTestKit.Mp,
+                Magnitude = new MagnitudeDef { Base = Operand.Constant(10) },
+            });
+            ability.Costs.Add(new CostDef
+            {
+                AttributeId = EffectTestKit.Attack,
+                Magnitude = new MagnitudeDef { Base = Operand.Constant(999) },
+            });
+            b.Add(ability);
+        });
+        var id = f.Abilities.GetRequiredId("fireball");
+        f.Caster.Abilities.Grant(id, GrantSource.Archetype(), level: 1);
+
+        Assert.That(f.World.TryActivateAbility(f.Caster.Id, id), Is.EqualTo(AbilityActivationResult.CostInsufficient));
+        Assert.That(f.Caster.Attributes.GetBase(EffectTestKit.Mp), Is.EqualTo((BigNum)50));
+        Assert.That(f.Caster.Attributes.GetBase(EffectTestKit.Attack), Is.EqualTo((BigNum)0));
+    }
+
+    [Test]
     public void Cost_is_deducted_immediately_so_repeat_activation_in_one_tick_fails()
     {
         var f = Build((_, b) =>

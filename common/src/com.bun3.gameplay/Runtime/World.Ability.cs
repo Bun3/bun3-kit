@@ -17,6 +17,8 @@ namespace Bun3.Gameplay
         /// <param name="abilityId">Compiled ability id.</param>
         /// <returns><see cref="AbilityActivationResult.Success"/> when every gate passed, otherwise the
         /// reason the activation was refused. Gate failures are results, not exceptions.</returns>
+        /// <remarks>Costs are checked and paid against each attribute's Base, not its Current — a
+        /// modifier on a cost attribute does not fund the spend.</remarks>
         public AbilityActivationResult TryActivateAbility(TargetId unitId, int abilityId)
         {
             if (!TryGetUnit(unitId, out var unit) || unit is null) return AbilityActivationResult.UnknownUnit;
@@ -50,7 +52,7 @@ namespace Bun3.Gameplay
             {
                 amounts[i] = Pipeline.ComputeMagnitude(
                     costs[i].Magnitude, unit.Effects, unit.Effects, hasSource: true, level);
-                if (unit.Attributes.GetCurrent(costs[i].AttributeId) < amounts[i])
+                if (unit.Attributes.GetBase(costs[i].AttributeId) < amounts[i])
                 {
                     return AbilityActivationResult.CostInsufficient;
                 }
