@@ -239,10 +239,13 @@ namespace Bun3.Gameplay.Tests
             return HashWorldState(world, abilities, unitIds);
         }
 
-        /// <summary>Captures every unit's attribute Base values, in a fixed order comparable across calls.</summary>
-        internal static BigNum[] CaptureBases(Kit kit)
+        /// <summary>Captures every unit's attribute Base and Current values, in a fixed order
+        /// comparable across calls. Current is included deliberately - a modifier-only Duration/
+        /// Infinite effect never touches Base, so Base alone cannot detect a stuck modifier left
+        /// behind by a broken removal.</summary>
+        internal static BigNum[] CaptureAttributes(Kit kit)
         {
-            var result = new BigNum[kit.UnitIds.Length * ScenarioAttributeIds.Length];
+            var result = new BigNum[kit.UnitIds.Length * ScenarioAttributeIds.Length * 2];
             var index = 0;
             for (var i = 0; i < kit.UnitIds.Length; i++)
             {
@@ -250,6 +253,7 @@ namespace Bun3.Gameplay.Tests
                 for (var a = 0; a < ScenarioAttributeIds.Length; a++)
                 {
                     result[index++] = unit!.Attributes.GetBase(ScenarioAttributeIds[a]);
+                    result[index++] = unit.Attributes.GetCurrent(ScenarioAttributeIds[a]);
                 }
             }
 
@@ -523,10 +527,17 @@ namespace Bun3.Gameplay.Tests
                 for (var a = 0; a < ScenarioAttributeIds.Length; a++)
                 {
                     var b = u.Attributes.GetBase(ScenarioAttributeIds[a]);
+                    var c = u.Attributes.GetCurrent(ScenarioAttributeIds[a]);
                     hash = Fold(hash, b.Mantissa);
                     hash = Fold(hash, b.Exponent);
+                    hash = Fold(hash, c.Mantissa);
+                    hash = Fold(hash, c.Exponent);
                 }
 
+                // Ascending instance id: List<T>.Add appends (ids are assigned monotonically) and
+                // RemoveActive uses List<T>.Remove (shifts, never swap-removes), so the live list
+                // stays a subsequence of creation order — no extra sort needed to keep the fold order
+                // canonical.
                 var active = u.Effects.ActiveEffects;
                 for (var k = 0; k < active.Count; k++)
                 {
@@ -536,6 +547,8 @@ namespace Bun3.Gameplay.Tests
                     hash = Fold(hash, instance.Level);
                     hash = Fold(hash, instance.Stack);
                     hash = Fold(hash, instance.RemainingTicks);
+                    hash = Fold(hash, instance.PeriodCountdown);
+                    hash = Fold(hash, instance.Enabled ? 1 : 0);
                 }
 
                 for (var abilityId = 0; abilityId < abilities.Count; abilityId++)

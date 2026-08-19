@@ -195,14 +195,16 @@ public sealed class EffectDeterminismTests
     public void Reflection_round_trip_leaves_no_residue()
     {
         // A reflects onto B and B reflects onto A; after the exchange settles, removing both
-        // reflect effects must return every attribute Base to its starting value.
+        // reflect effects must return every attribute (Base and Current) to its starting value.
+        // Reflect is a modifier-only Duration/Infinite effect, so Base alone would pass even if
+        // removal left the modifier attached — Current is what actually proves it is gone.
         var kit = EffectScenario.ScenarioKit();
-        var before = EffectScenario.CaptureBases(kit);
+        var before = EffectScenario.CaptureAttributes(kit);
         EffectScenario.RunMutualReflection(kit, ticks: 30);
         EffectScenario.RemoveAllEffects(kit);
         for (var i = 0; i < 3; i++) kit.World.Tick();
 
-        Assert.That(EffectScenario.CaptureBases(kit), Is.EqualTo(before));
+        Assert.That(EffectScenario.CaptureAttributes(kit), Is.EqualTo(before));
     }
 
     [Test]
