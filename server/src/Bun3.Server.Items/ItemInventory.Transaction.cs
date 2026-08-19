@@ -122,9 +122,19 @@ namespace Bun3.Server.Items
 
             Capture(instance);
             var index = instance.TxSnapshotIndex;
-            if (index >= 0 && !_txSnapshots[index].StateSnapshotted)
+            if (index < 0)
             {
-                _txSnapshots[index] = _txSnapshots[index].WithState(_snapshotState(instance.State));
+                return;   // Created within this transaction — rollback drops it wholesale.
+            }
+
+            // Promote only while the snapshot still holds what the instance holds: after a State
+            // assignment the snapshot holds the original and a deep copy of the current value
+            // would overwrite it.
+            var snapshot = _txSnapshots[index];
+            if (!snapshot.StateSnapshotted
+                && EqualityComparer<TState>.Default.Equals(snapshot.State, instance.State))
+            {
+                _txSnapshots[index] = snapshot.WithState(_snapshotState(instance.State));
             }
         }
 
@@ -217,6 +227,7 @@ namespace Bun3.Server.Items
             }
 
             FlushApplied();
+            ClearSnapshots();
         }
 
         /// <inheritdoc />
@@ -271,6 +282,13 @@ namespace Bun3.Server.Items
             }
 
             _hasChanges = _txHasChangesMark;
+            ClearSnapshots();
+        }
+
+        /// <summary>Releases the snapshot buffers — they hold removed instances and their state,
+        /// so both commit and rollback drop them rather than waiting for the next transaction.</summary>
+        private void ClearSnapshots()
+        {
             _txCreated.Clear();
             _txRemoved.Clear();
             _txSnapshots.Clear();

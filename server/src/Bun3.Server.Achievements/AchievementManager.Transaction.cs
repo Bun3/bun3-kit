@@ -44,6 +44,17 @@ namespace Bun3.Server.Achievements
             _txStates.Add(_states[id.Index]);
         }
 
+        /// <summary>Guard for <see cref="AchievementManager{TDef}.Restore"/> — the load path writes
+        /// without snapshotting, so it is rejected while a transaction is active.</summary>
+        private void ThrowIfTransactionActive()
+        {
+            if (InTransaction)
+            {
+                throw new System.InvalidOperationException(
+                    "Restore is not available inside a transaction — load before the transaction begins.");
+            }
+        }
+
         /// <summary>Raises onDirty, or buffers it until commit while a transaction is active.</summary>
         private void NotifyDirty()
         {

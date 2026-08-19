@@ -150,7 +150,8 @@ public class OutgameLedgerIntegrationTests
         var bare = new ItemInventory<ItemState>(
             _items,
             instanceIdIssuer: () => 1,
-            stateFactory: _ => new ItemState());
+            stateFactory: _ => new ItemState(),
+            transaction: _transaction);   // Injected but never opened — the configuration a game ships.
         bare.TryAdd(_gold, 1_000_000);
 
         for (var i = 0; i < 100; i++)

@@ -303,4 +303,48 @@ public class ItemInventoryTransactionTests
             Assert.That(() => _inventory.DrainChanges(buffer), Throws.TypeOf<InvalidOperationException>());
         }
     }
+
+    [Test]
+    public void TryLoadInstance_inside_a_transaction_throws()
+    {
+        using (_transaction.Begin())
+        {
+            Assert.That(
+                () => _inventory.TryLoadInstance(900, _sword, 1, 0, new ItemState()),
+                Throws.TypeOf<InvalidOperationException>());
+        }
+
+        Assert.That(_inventory.InstanceCount, Is.Zero);
+    }
+
+    [Test]
+    public void TryLoadInstance_outside_a_transaction_still_loads()
+    {
+        Assert.That(
+            _inventory.TryLoadInstance(900, _sword, 1, 0, new ItemState()),
+            Is.EqualTo(InventoryError.None));
+        Assert.That(_inventory.InstanceCount, Is.EqualTo(1));
+        Assert.That(_inventory.TryGetInstance(900, out _), Is.True);
+    }
+
+    [Test]
+    public void LoadRegenBasis_inside_a_transaction_throws()
+    {
+        using (_transaction.Begin())
+        {
+            Assert.That(
+                () => _inventory.LoadRegenBasis(_ticket, 1234),
+                Throws.TypeOf<InvalidOperationException>());
+        }
+
+        Assert.That(_inventory.GetRegenBasis(_ticket), Is.Zero);
+    }
+
+    [Test]
+    public void LoadRegenBasis_outside_a_transaction_still_loads()
+    {
+        _inventory.LoadRegenBasis(_ticket, 1234);
+
+        Assert.That(_inventory.GetRegenBasis(_ticket), Is.EqualTo(1234));
+    }
 }

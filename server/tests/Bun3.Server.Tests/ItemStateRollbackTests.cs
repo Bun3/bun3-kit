@@ -104,6 +104,57 @@ public class ItemStateRollbackTests
     }
 
     [Test]
+    public void Assigning_state_then_opening_a_change_scope_still_rolls_back_to_the_original()
+    {
+        var inventory = Inventory<MutableState>(_ => new MutableState { Level = 1 }, s => s.Clone());
+        inventory.TryAdd(_sword, 1);
+        var instance = Single(inventory, _sword);
+        var original = instance.State;
+
+        using (_transaction.Begin())
+        {
+            instance.State = new MutableState { Level = 5 };
+            using (var scope = instance.BeginStateChange())
+            {
+                scope.State.Level = 9;
+                scope.State.Options.Add(42);
+            }
+        }
+
+        Assert.That(instance.State, Is.SameAs(original));
+        Assert.That(instance.State.Level, Is.EqualTo(1));
+        Assert.That(instance.State.Options, Is.Empty);
+    }
+
+    [Test]
+    public void Both_state_paths_roll_back_within_one_transaction()
+    {
+        var inventory = Inventory<MutableState>(_ => new MutableState { Level = 1 }, s => s.Clone());
+        inventory.TryAdd(_sword, 1);
+        inventory.TryAdd(_sword, 1);
+        var buffer = new List<ItemInstance<MutableState>>();
+        inventory.CollectInstances(_sword, buffer);
+        var viaSetter = buffer[0];
+        var viaScope = buffer[1];
+        var setterOriginal = viaSetter.State;
+
+        using (_transaction.Begin())
+        {
+            viaSetter.State = new MutableState { Level = 7 };
+            using (var scope = viaScope.BeginStateChange())
+            {
+                scope.State.Level = 8;
+                scope.State.Options.Add(1);
+            }
+        }
+
+        Assert.That(viaSetter.State, Is.SameAs(setterOriginal));
+        Assert.That(viaSetter.State.Level, Is.EqualTo(1));
+        Assert.That(viaScope.State.Level, Is.EqualTo(1));
+        Assert.That(viaScope.State.Options, Is.Empty);
+    }
+
+    [Test]
     public void Change_scope_marks_the_instance_changed()
     {
         var inventory = Inventory<MutableState>(_ => new MutableState(), s => s.Clone());

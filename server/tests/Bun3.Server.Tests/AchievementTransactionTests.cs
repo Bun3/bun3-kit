@@ -197,4 +197,26 @@ public class AchievementTransactionTests
         Assert.That(change.Kind, Is.EqualTo(AchievementChangeKind.AvailabilityChanged));
         Assert.That(change.Availability, Is.EqualTo(AchievementStatus.Locked));
     }
+
+    [Test]
+    public void Restore_inside_a_transaction_throws()
+    {
+        var state = new AchievementState { Progress = 3 };
+
+        using (_transaction.Begin())
+        {
+            Assert.That(() => _achievements.Restore(_kill, state), Throws.TypeOf<InvalidOperationException>());
+        }
+
+        Assert.That(_achievements.GetState(_kill).Progress, Is.Zero);
+    }
+
+    [Test]
+    public void Restore_outside_a_transaction_still_loads()
+    {
+        _achievements.Restore(_kill, new AchievementState { Progress = 3 });
+
+        Assert.That(_achievements.GetState(_kill).Progress, Is.EqualTo(3));
+        Assert.That(_dirty, Is.Zero);
+    }
 }

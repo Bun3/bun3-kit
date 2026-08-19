@@ -90,9 +90,18 @@ namespace Bun3.Server.Items
             return basis;
         }
 
-        /// <summary>For save loading — restores the regen basis (no tracking, no notification).</summary>
+        /// <summary>For save loading — restores the regen basis (no tracking, no notification).
+        /// Not available inside a transaction — the write is untracked and therefore not
+        /// rollback-safe, so load before the session's transactional lifecycle starts.</summary>
+        /// <exception cref="System.InvalidOperationException">When a transaction is active.</exception>
         public void LoadRegenBasis(ItemId item, long lastRegenTicksUtc)
         {
+            if (InTransaction)
+            {
+                throw new System.InvalidOperationException(
+                    "LoadRegenBasis is not available inside a transaction — load before the transaction begins.");
+            }
+
             if (!_catalog.Contains(item))
             {
                 throw new System.ArgumentOutOfRangeException(nameof(item), "Not an identifier of this catalog.");

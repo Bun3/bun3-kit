@@ -16,7 +16,10 @@ namespace Bun3.Server.Items
         /// with no tracking or notification. Duplicate ids and a second instance of a stackable
         /// definition return <see cref="InventoryError.DuplicateInstance"/>; unstackables with
         /// amount other than 1 return <see cref="InventoryError.InvalidAmount"/>; maxCount is checked.
+        /// Not available inside a transaction — loading is untracked and therefore not
+        /// rollback-safe, so load before the session's transactional lifecycle starts.
         /// </summary>
+        /// <exception cref="InvalidOperationException">When a transaction is active.</exception>
         public InventoryError TryLoadInstance(
             long instanceId,
             ItemId item,
@@ -25,6 +28,12 @@ namespace Bun3.Server.Items
             TState state,
             long expiresAtTicksUtc = 0)
         {
+            if (InTransaction)
+            {
+                throw new InvalidOperationException(
+                    "TryLoadInstance is not available inside a transaction — load before the transaction begins.");
+            }
+
             if (!_catalog.Contains(item))
             {
                 return InventoryError.UnknownItem;

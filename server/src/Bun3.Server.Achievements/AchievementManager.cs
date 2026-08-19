@@ -394,11 +394,15 @@ namespace Bun3.Server.Achievements
         /// the target — re-judge with the next Increase(id, 0)).
         /// Restoring a state whose completion count lags its progress fires the difference in bulk
         /// on the next Increase/SetProgress (at-least-once — the safe direction for crash recovery
-        /// mid-completion).</summary>
+        /// mid-completion).
+        /// Not available inside a transaction — the write is untracked and therefore not
+        /// rollback-safe, so load before the session's transactional lifecycle starts.</summary>
         /// <exception cref="ArgumentException">When the state violates an invariant.</exception>
         /// <exception cref="ArgumentOutOfRangeException">When id is not an identifier of this catalog.</exception>
+        /// <exception cref="InvalidOperationException">When a transaction is active.</exception>
         public void Restore(AchievementId id, in AchievementState state)
         {
+            ThrowIfTransactionActive();
             if (state.Progress < 0 || state.CompletedCount < 0 || state.ClaimedCount < 0 || state.LastCompletedAtUtcTicks < 0)
             {
                 throw new ArgumentException("Achievement state contains a negative value.", nameof(state));

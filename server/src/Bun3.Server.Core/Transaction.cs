@@ -52,15 +52,24 @@ namespace Bun3.Server.Core
         private readonly List<ITransactionParticipant> _participants = new List<ITransactionParticipant>();
         private int _token;
         private bool _active;
+        private bool _notifying;
 
         /// <summary>Whether a transaction is currently open. False while participants are being
         /// notified, so commit hooks may mutate freely.</summary>
         public bool IsActive => _active;
 
-        /// <summary>Opens the transaction.</summary>
-        /// <exception cref="InvalidOperationException">When a transaction is already open.</exception>
+        /// <summary>Opens the transaction. Not available from a commit or rollback hook — the
+        /// participant list is being walked at that point.</summary>
+        /// <exception cref="InvalidOperationException">When a transaction is already open, or while
+        /// participants are being notified.</exception>
         public TransactionScope Begin()
         {
+            if (_notifying)
+            {
+                throw new InvalidOperationException(
+                    "Cannot begin a transaction while participants are being notified — commit and rollback hooks must not open a transaction.");
+            }
+
             if (_active)
             {
                 throw new InvalidOperationException("Nested transactions are not supported.");
@@ -106,12 +115,19 @@ namespace Bun3.Server.Core
             }
 
             _active = false;
-            for (var i = 0; i < _participants.Count; i++)
+            _notifying = true;
+            try
             {
-                _participants[i].OnCommit();
+                for (var i = 0; i < _participants.Count; i++)
+                {
+                    _participants[i].OnCommit();
+                }
             }
-
-            _participants.Clear();
+            finally
+            {
+                _notifying = false;
+                _participants.Clear();
+            }
         }
 
         internal void Rollback(int token)
@@ -122,13 +138,20 @@ namespace Bun3.Server.Core
             }
 
             _active = false;
-            // Reverse order; participants restore independent state, so the order is immaterial.
-            for (var i = _participants.Count - 1; i >= 0; i--)
+            _notifying = true;
+            try
             {
-                _participants[i].OnRollback();
+                // Reverse enlist order.
+                for (var i = _participants.Count - 1; i >= 0; i--)
+                {
+                    _participants[i].OnRollback();
+                }
             }
-
-            _participants.Clear();
+            finally
+            {
+                _notifying = false;
+                _participants.Clear();
+            }
         }
     }
 }

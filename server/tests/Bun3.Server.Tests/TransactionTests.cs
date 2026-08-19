@@ -137,6 +137,124 @@ public class TransactionTests
         Assert.That(trace, Is.EqualTo(new[] { "commit:a" }));
     }
 
+    [Test]
+    public void Rollback_notifies_participants_in_reverse_enlist_order()
+    {
+        var trace = new List<string>();
+        var transaction = new Transaction();
+
+        using (transaction.Begin())
+        {
+            transaction.Enlist(new Participant(trace, "a"));
+            transaction.Enlist(new Participant(trace, "b"));
+            transaction.Enlist(new Participant(trace, "c"));
+        }
+
+        Assert.That(trace, Is.EqualTo(new[] { "rollback:c", "rollback:b", "rollback:a" }));
+    }
+
+    [Test]
+    public void Begin_from_a_commit_hook_throws_and_the_remaining_participants_still_commit()
+    {
+        var trace = new List<string>();
+        var transaction = new Transaction();
+        Exception? caught = null;
+        Exception? caughtEnlist = null;
+        var reentrant = new DelegateParticipant(
+            () =>
+            {
+                trace.Add("commit:b");
+                caught = Assert.Catch<InvalidOperationException>(() => transaction.Begin());
+                caughtEnlist = Assert.Catch<InvalidOperationException>(
+                    () => transaction.Enlist(new Participant(trace, "x")));
+            },
+            () => { });
+
+        using (var scope = transaction.Begin())
+        {
+            transaction.Enlist(new Participant(trace, "a"));
+            transaction.Enlist(reentrant);
+            transaction.Enlist(new Participant(trace, "c"));
+            transaction.Enlist(new Participant(trace, "d"));
+            scope.Commit();
+        }
+
+        Assert.That(caught, Is.Not.Null);
+        Assert.That(caughtEnlist, Is.Not.Null);
+        Assert.That(trace, Is.EqualTo(new[] { "commit:a", "commit:b", "commit:c", "commit:d" }));
+    }
+
+    [Test]
+    public void Begin_from_a_rollback_hook_throws_and_the_remaining_participants_still_roll_back()
+    {
+        var trace = new List<string>();
+        var transaction = new Transaction();
+        Exception? caught = null;
+        var reentrant = new DelegateParticipant(
+            () => { },
+            () =>
+            {
+                trace.Add("rollback:c");
+                caught = Assert.Catch<InvalidOperationException>(() => transaction.Begin());
+            });
+
+        using (transaction.Begin())
+        {
+            transaction.Enlist(new Participant(trace, "a"));
+            transaction.Enlist(new Participant(trace, "b"));
+            transaction.Enlist(reentrant);
+            transaction.Enlist(new Participant(trace, "d"));
+        }
+
+        Assert.That(caught, Is.Not.Null);
+        Assert.That(trace, Is.EqualTo(new[] { "rollback:d", "rollback:c", "rollback:b", "rollback:a" }));
+    }
+
+    [Test]
+    public void A_transaction_still_works_after_a_hook_tried_to_begin_one()
+    {
+        var trace = new List<string>();
+        var transaction = new Transaction();
+        var reentrant = new DelegateParticipant(
+            () => Assert.Catch<InvalidOperationException>(() => transaction.Begin()),
+            () => { });
+
+        using (var scope = transaction.Begin())
+        {
+            transaction.Enlist(reentrant);
+            scope.Commit();
+        }
+
+        using (var scope = transaction.Begin())
+        {
+            transaction.Enlist(new Participant(trace, "a"));
+            scope.Commit();
+        }
+
+        Assert.That(trace, Is.EqualTo(new[] { "commit:a" }));
+        Assert.That(transaction.IsActive, Is.False);
+    }
+
+    [Test]
+    public void A_throwing_commit_hook_does_not_block_the_next_transaction()
+    {
+        var trace = new List<string>();
+        var transaction = new Transaction();
+        var thrower = new DelegateParticipant(() => throw new InvalidOperationException("hook"), () => { });
+
+        var scope = transaction.Begin();
+        transaction.Enlist(thrower);
+        Assert.That(() => scope.Commit(), Throws.TypeOf<InvalidOperationException>());
+
+        using (var next = transaction.Begin())
+        {
+            transaction.Enlist(new Participant(trace, "a"));
+            next.Commit();
+        }
+
+        Assert.That(trace, Is.EqualTo(new[] { "commit:a" }));
+    }
+
     private sealed class DelegateParticipant : ITransactionParticipant
     {
         private readonly Action _commit;
