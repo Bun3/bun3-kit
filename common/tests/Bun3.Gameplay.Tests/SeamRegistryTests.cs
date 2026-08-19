@@ -131,4 +131,20 @@ public sealed class SeamRegistryTests
 
         Assert.That(pipeline.SelectorTruncationCount, Is.Zero);
     }
+
+    [Test]
+    public void AllTargetsSelector_with_many_targets_returns_total_count_not_written_count()
+    {
+        var manyTargets = new System.Collections.Generic.List<TargetId>();
+        for (var i = 0; i < 40; i++) manyTargets.Add(new TargetId((ulong)(i + 1)));
+
+        Span<TargetId> buffer = stackalloc TargetId[32];
+        var selector = new EffectTestKit.AllTargetsSelector();
+        selector.Bind(manyTargets);
+
+        var selectorCtx = new SelectorContext(new TargetId(1), System.Array.Empty<BigNum>(), new XorShiftRng(1));
+        var returned = selector.Select(in selectorCtx, buffer);
+
+        Assert.That(returned, Is.EqualTo(40), "AllTargetsSelector should return total count (40), not written count (32)");
+    }
 }

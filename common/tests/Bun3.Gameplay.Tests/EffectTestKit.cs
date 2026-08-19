@@ -216,7 +216,7 @@ internal sealed class EffectTestKit
             var ids = _allTargetIds ?? throw new InvalidOperationException("Bind via RegisterSelector first.");
             var count = Math.Min(ids.Count, results.Length);
             for (var i = 0; i < count; i++) results[i] = ids[i];
-            return count;
+            return ids.Count;
         }
     }
 }
