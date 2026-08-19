@@ -111,6 +111,7 @@ internal sealed class EffectTestKit
     private readonly EffectCatalogBuilder _effectCatalogBuilder = new EffectCatalogBuilder();
     private readonly Dictionary<ulong, EffectTarget> _targetsById = new Dictionary<ulong, EffectTarget>();
     private readonly List<TargetId> _targetIds = new List<TargetId>();
+    private SeamRegistry? _seams;
     private EffectCatalog? _catalog;
 
     private EffectTestKit()
@@ -167,14 +168,24 @@ internal sealed class EffectTestKit
     /// <summary>The shared tag catalog.</summary>
     public TagCatalog TagCatalog => _tagCatalog;
 
+    /// <summary>Seam registry backing this kit.</summary>
+    public SeamRegistry Seams => BuiltSeams;
+
+    /// <summary>Attribute registry backing this kit.</summary>
+    public AttributeRegistry Attributes => BuiltAttributes;
+
     /// <summary>Gets the catalog id of a registered effect name. Call after BuildPipeline.</summary>
     public int SpecId(string name) => BuiltCatalog.GetRequiredId(name);
 
     /// <summary>The built effect catalog (for calls needing it, e.g. RestoreSnapshot). Call after BuildPipeline.</summary>
     public EffectCatalog Catalog => BuiltCatalog;
 
+    private SeamRegistry BuiltSeams => _seams ??= _seamRegistryBuilder.Build(_tagCatalog);
+
+    private AttributeRegistry BuiltAttributes => _attributeRegistry;
+
     private EffectCatalog BuiltCatalog =>
-        _catalog ??= _effectCatalogBuilder.Build(_tagCatalog, _seamRegistryBuilder.Build(_tagCatalog), _attributeRegistry);
+        _catalog ??= _effectCatalogBuilder.Build(_tagCatalog, BuiltSeams, BuiltAttributes);
 
     /// <summary>Freezes the catalog with everything registered so far and creates a pipeline.</summary>
     public EffectPipeline BuildPipeline(int applyBudgetPerTick = 64) =>
