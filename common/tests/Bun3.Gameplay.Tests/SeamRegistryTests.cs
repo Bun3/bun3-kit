@@ -77,4 +77,58 @@ public sealed class SeamRegistryTests
             Assert.That(a.NextUInt32(), Is.EqualTo(b.NextUInt32()));
         Assert.Throws<ArgumentOutOfRangeException>(() => _ = new XorShiftRng(0));
     }
+
+    private sealed class OverflowSelector : ITargetSelector
+    {
+        private readonly int _desired;
+
+        internal OverflowSelector(int desired) => _desired = desired;
+
+        public int Select(in SelectorContext ctx, Span<TargetId> results)
+        {
+            var written = _desired < results.Length ? _desired : results.Length;
+            for (var i = 0; i < written; i++) results[i] = new TargetId((ulong)(i + 1));
+            return _desired;
+        }
+    }
+
+    [Test]
+    public void Selector_returning_more_than_the_buffer_increments_the_truncation_counter()
+    {
+        var kit = EffectTestKit.Create();
+        kit.RegisterSelector("selector.everyone", new OverflowSelector(desired: 40));
+
+        var source = EffectTestKit.MinimalInstant("source");
+        var edge = EffectTestKit.Edge(ChainTrigger.OnApplication, "chained");
+        edge.SelectorTag = "selector.everyone";
+        source.Chains.Add(edge);
+        kit.AddSpec(source);
+        kit.AddSpec(EffectTestKit.MinimalInstant("chained"));
+        var pipeline = kit.BuildPipeline();
+
+        pipeline.EnqueueApply(kit.SpecId("source"), kit.Attacker.Id, kit.Defender.Id);
+        pipeline.Tick();
+
+        Assert.That(pipeline.SelectorTruncationCount, Is.EqualTo(1));
+    }
+
+    [Test]
+    public void Selector_within_the_buffer_does_not_increment_the_truncation_counter()
+    {
+        var kit = EffectTestKit.Create();
+        kit.RegisterSelector("selector.everyone", new OverflowSelector(desired: 2));
+
+        var source = EffectTestKit.MinimalInstant("source");
+        var edge = EffectTestKit.Edge(ChainTrigger.OnApplication, "chained");
+        edge.SelectorTag = "selector.everyone";
+        source.Chains.Add(edge);
+        kit.AddSpec(source);
+        kit.AddSpec(EffectTestKit.MinimalInstant("chained"));
+        var pipeline = kit.BuildPipeline();
+
+        pipeline.EnqueueApply(kit.SpecId("source"), kit.Attacker.Id, kit.Defender.Id);
+        pipeline.Tick();
+
+        Assert.That(pipeline.SelectorTruncationCount, Is.Zero);
+    }
 }

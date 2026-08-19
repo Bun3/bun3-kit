@@ -52,6 +52,9 @@ namespace Bun3.Gameplay.Effects
         /// <summary>Number of apply requests silently dropped by DR immunity (stage-multiplier duration of 0 ticks or less).</summary>
         internal long DrImmuneDropCount { get; private set; }
 
+        /// <summary>Number of selector calls whose result exceeded the fixed selection buffer.</summary>
+        internal long SelectorTruncationCount { get; private set; }
+
         // Deterministic [0,1) roll scale: 2^32, the range of _rng.NextUInt32(), so probability
         // comparison stays integer-only BigNum arithmetic (no floating point; 0/1 boundaries fall out naturally).
         private static readonly BigNum RngRollRange = (BigNum)4_294_967_296L;
@@ -563,7 +566,14 @@ namespace Bun3.Gameplay.Effects
                 // ponytail: target counts are authoring-spec scale, so a 32-slot stack buffer suffices — on overflow only the first 32 are applied.
                 Span<TargetId> targets = stackalloc TargetId[32];
                 var selectorCtx = new SelectorContext(source, chain.SelectorParams, _rng);
-                var count = chain.Selector.Select(in selectorCtx, targets);
+                var selected = chain.Selector.Select(in selectorCtx, targets);
+                var count = selected;
+                if (count > targets.Length)
+                {
+                    SelectorTruncationCount++;
+                    count = targets.Length;
+                }
+
                 for (var k = 0; k < count; k++)
                 {
                     EnqueueApply(chain.EffectId, source, targets[k], chainLevel);

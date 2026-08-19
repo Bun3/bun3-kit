@@ -28,8 +28,10 @@ namespace Bun3.Gameplay.Seams
     {
         /// <summary>Selects targets for the given context.</summary>
         /// <param name="ctx">Context to select with.</param>
-        /// <param name="results">Span receiving the selected target ids.</param>
-        /// <returns>Number of selected targets.</returns>
+        /// <param name="results">Span receiving the selected target ids. At most
+        /// <c>results.Length</c> entries may be written.</param>
+        /// <returns>Total number of targets selected. A value greater than <c>results.Length</c>
+        /// reports truncation — the caller uses only the written entries and counts the event.</returns>
         int Select(in SelectorContext ctx, System.Span<TargetId> results);
     }
 
