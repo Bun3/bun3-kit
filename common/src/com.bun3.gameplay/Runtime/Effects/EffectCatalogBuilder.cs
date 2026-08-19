@@ -70,10 +70,10 @@ namespace Bun3.Gameplay.Effects
             ValidateDurationScaleFields(spec);
             ValidateDrFields(spec);
 
-            var grantedTags = MagnitudeCompiler.ResolveTags(spec.GrantedTags, spec.Name, tags, "granted");
-            var assetTags = MagnitudeCompiler.ResolveTags(spec.AssetTags, spec.Name, tags, "asset");
-            var immunityTags = MagnitudeCompiler.ResolveTags(spec.ImmunityTags, spec.Name, tags, "immunity");
-            var removeOnApplyTags = MagnitudeCompiler.ResolveTags(spec.RemoveOnApplyTags, spec.Name, tags, "RemoveOnApply");
+            var grantedTags = MagnitudeCompiler.ResolveTags(spec.GrantedTags, $"Effect '{spec.Name}'", tags, "granted");
+            var assetTags = MagnitudeCompiler.ResolveTags(spec.AssetTags, $"Effect '{spec.Name}'", tags, "asset");
+            var immunityTags = MagnitudeCompiler.ResolveTags(spec.ImmunityTags, $"Effect '{spec.Name}'", tags, "immunity");
+            var removeOnApplyTags = MagnitudeCompiler.ResolveTags(spec.RemoveOnApplyTags, $"Effect '{spec.Name}'", tags, "RemoveOnApply");
 
             var modifiers = new CompiledModifier[spec.Modifiers.Count];
             for (var i = 0; i < spec.Modifiers.Count; i++)
@@ -86,7 +86,7 @@ namespace Bun3.Gameplay.Effects
                 }
 
                 var (magBase, perLevel, calc, byLevel, tail, increment) =
-                    MagnitudeCompiler.Resolve(m.Magnitude, spec.Name, spec.MaxLevel, tags, seams, attributes);
+                    MagnitudeCompiler.Resolve(m.Magnitude, $"Effect '{spec.Name}'", spec.MaxLevel, tags, seams, attributes);
                 modifiers[i] = new CompiledModifier(
                     m.AttributeId, m.Op, magBase, perLevel, calc, byLevel, tail, increment, m.ScaleWithStack);
             }
@@ -95,11 +95,11 @@ namespace Bun3.Gameplay.Effects
             for (var i = 0; i < spec.Executions.Count; i++)
             {
                 var e = spec.Executions[i];
-                var calc = MagnitudeCompiler.ResolveExecutionCalc(e.CalcTag, spec.Name, tags, seams);
+                var calc = MagnitudeCompiler.ResolveExecutionCalc(e.CalcTag, $"Effect '{spec.Name}'", tags, seams);
                 var inputs = new Operand[e.Inputs.Count];
                 for (var j = 0; j < e.Inputs.Count; j++)
                 {
-                    MagnitudeCompiler.ValidateOperandAttribute(e.Inputs[j], spec.Name, attributes);
+                    MagnitudeCompiler.ValidateOperandAttribute(e.Inputs[j], $"Effect '{spec.Name}'", attributes);
                     inputs[j] = e.Inputs[j];
                 }
 
@@ -107,9 +107,9 @@ namespace Bun3.Gameplay.Effects
             }
 
             var applicationConditions = ResolveConditions(
-                spec.ApplicationConditions, spec.Name, attributes, allowSourceAttribute: true);
+                spec.ApplicationConditions, $"Effect '{spec.Name}'", attributes, allowSourceAttribute: true);
             var ongoingConditions = ResolveConditions(
-                spec.OngoingConditions, spec.Name, attributes, allowSourceAttribute: false);
+                spec.OngoingConditions, $"Effect '{spec.Name}'", attributes, allowSourceAttribute: false);
 
             var chains = new CompiledChain[spec.Chains.Count];
             for (var i = 0; i < spec.Chains.Count; i++)
@@ -132,7 +132,7 @@ namespace Bun3.Gameplay.Effects
             if (spec.ChanceToApply != null)
             {
                 var (chanceBase, chancePerLevel, chanceCalc, chanceByLevel, chanceTail, chanceIncrement) =
-                    MagnitudeCompiler.Resolve(spec.ChanceToApply, spec.Name, spec.MaxLevel, tags, seams, attributes);
+                    MagnitudeCompiler.Resolve(spec.ChanceToApply, $"Effect '{spec.Name}'", spec.MaxLevel, tags, seams, attributes);
                 chanceToApply = new CompiledMagnitude(
                     chanceBase, chancePerLevel, chanceCalc, chanceByLevel, chanceTail, chanceIncrement);
             }
@@ -143,7 +143,7 @@ namespace Bun3.Gameplay.Effects
             if (spec.DurationScale != null)
             {
                 var (scaleBase, scalePerLevel, scaleCalc, scaleByLevel, scaleTail, scaleIncrement) =
-                    MagnitudeCompiler.Resolve(spec.DurationScale, spec.Name, spec.MaxLevel, tags, seams, attributes);
+                    MagnitudeCompiler.Resolve(spec.DurationScale, $"Effect '{spec.Name}'", spec.MaxLevel, tags, seams, attributes);
                 durationScale = new CompiledMagnitude(
                     scaleBase, scalePerLevel, scaleCalc, scaleByLevel, scaleTail, scaleIncrement);
             }
@@ -160,7 +160,7 @@ namespace Bun3.Gameplay.Effects
                 : Array.Empty<BigNum>();
 
             return new CompiledEffectSpec(
-                spec.Name, spec.DurationType, spec.DurationTicks, spec.PeriodTicks, spec.Stack,
+                spec.Name, spec.MaxLevel, spec.DurationType, spec.DurationTicks, spec.PeriodTicks, spec.Stack,
                 modifiers, executions, applicationConditions, ongoingConditions,
                 grantedTags, assetTags, immunityTags, chains, overflowEffectId,
                 removeOnApplyTags, chanceToApply, durationPerLevel, durationScale,
@@ -391,7 +391,7 @@ namespace Bun3.Gameplay.Effects
                     && (c.Left.Kind == OperandKind.SourceAttribute || c.Right.Kind == OperandKind.SourceAttribute))
                 {
                     throw new InvalidOperationException(
-                        $"Effect '{specName}': OngoingConditions cannot have SourceAttribute operands.");
+                        $"{specName}: OngoingConditions cannot have SourceAttribute operands.");
                 }
 
                 MagnitudeCompiler.ValidateOperandAttribute(c.Left, specName, attributes);
@@ -428,10 +428,10 @@ namespace Bun3.Gameplay.Effects
             ITargetSelector? selector = null;
             if (!string.IsNullOrEmpty(edge.SelectorTag))
             {
-                selector = MagnitudeCompiler.ResolveTargetSelector(edge.SelectorTag!, ownerSpec.Name, tags, seams);
+                selector = MagnitudeCompiler.ResolveTargetSelector(edge.SelectorTag!, $"Effect '{ownerSpec.Name}'", tags, seams);
             }
 
-            var conditions = ResolveConditions(edge.Conditions, ownerSpec.Name, attributes, allowSourceAttribute: true);
+            var conditions = ResolveConditions(edge.Conditions, $"Effect '{ownerSpec.Name}'", attributes, allowSourceAttribute: true);
             return new CompiledChain(
                 edge.Trigger, effectId, selector, edge.SelectorParams.ToArray(),
                 conditions, edge.LevelRule, edge.FixedLevel);

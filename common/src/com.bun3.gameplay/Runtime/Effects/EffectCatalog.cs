@@ -214,6 +214,7 @@ namespace Bun3.Gameplay.Effects
     {
         internal CompiledEffectSpec(
             string name,
+            int maxLevel,
             EffectDurationType durationType,
             int durationTicks,
             int periodTicks,
@@ -236,6 +237,7 @@ namespace Bun3.Gameplay.Effects
             BigNum[] drStageMultipliers)
         {
             Name = name;
+            MaxLevel = maxLevel;
             DurationType = durationType;
             DurationTicks = durationTicks;
             PeriodTicks = periodTicks;
@@ -260,6 +262,9 @@ namespace Bun3.Gameplay.Effects
 
         /// <summary>Effect name.</summary>
         internal string Name { get; }
+
+        /// <summary>Declared maximum level; 0 means undeclared.</summary>
+        internal int MaxLevel { get; }
 
         /// <summary>How the effect persists.</summary>
         internal EffectDurationType DurationType { get; }

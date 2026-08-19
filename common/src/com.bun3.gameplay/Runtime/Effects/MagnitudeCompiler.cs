@@ -32,14 +32,14 @@ namespace Bun3.Gameplay.Effects
             if (formCount != 1)
             {
                 throw new InvalidOperationException(
-                    $"Effect '{ownerName}': MagnitudeDef must have exactly one of Base(+PerLevel), "
+                    $"{ownerName}: MagnitudeDef must have exactly one of Base(+PerLevel), "
                     + "PerLevelValues, Formula, CurveKeys, or CalcTag.");
             }
 
             if (!hasBase && def.PerLevel.HasValue)
             {
                 throw new InvalidOperationException(
-                    $"Effect '{ownerName}': PerLevel can only be used together with Base.");
+                    $"{ownerName}: PerLevel can only be used together with Base.");
             }
 
             if (hasCalc)
@@ -62,7 +62,7 @@ namespace Bun3.Gameplay.Effects
             if (maxLevel < 1)
             {
                 throw new InvalidOperationException(
-                    $"Effect '{ownerName}': PerLevelValues/Formula/CurveKeys require MaxLevel >= 1 to be declared.");
+                    $"{ownerName}: PerLevelValues/Formula/CurveKeys require MaxLevel >= 1 to be declared.");
             }
 
             var byLevel = hasPerLevelValues
@@ -86,7 +86,7 @@ namespace Bun3.Gameplay.Effects
             if (values.Count != maxLevel)
             {
                 throw new InvalidOperationException(
-                    $"Effect '{ownerName}': PerLevelValues length ({values.Count}) must match MaxLevel ({maxLevel}).");
+                    $"{ownerName}: PerLevelValues length ({values.Count}) must match MaxLevel ({maxLevel}).");
             }
 
             return values.ToArray();
@@ -97,7 +97,7 @@ namespace Bun3.Gameplay.Effects
         {
             if (!BigNumFormula.TryCompile(formula, out var compiled, out var validationError))
             {
-                throw new InvalidOperationException($"Effect '{ownerName}': Formula is invalid — {validationError}");
+                throw new InvalidOperationException($"{ownerName}: Formula is invalid — {validationError}");
             }
 
             var byLevel = new BigNum[maxLevel];
@@ -106,7 +106,7 @@ namespace Bun3.Gameplay.Effects
                 if (!compiled!.TryEvaluate(level, out byLevel[level - 1]))
                 {
                     throw new InvalidOperationException(
-                        $"Effect '{ownerName}': Formula evaluation failed (level {level}): {formula}");
+                        $"{ownerName}: Formula evaluation failed (level {level}): {formula}");
                 }
             }
 
@@ -120,7 +120,7 @@ namespace Bun3.Gameplay.Effects
         {
             if (keys.Count == 0 || keys[0].Level != 1)
             {
-                throw new InvalidOperationException($"Effect '{ownerName}': the first CurveKeys key must be level 1.");
+                throw new InvalidOperationException($"{ownerName}: the first CurveKeys key must be level 1.");
             }
 
             for (var i = 1; i < keys.Count; i++)
@@ -128,14 +128,14 @@ namespace Bun3.Gameplay.Effects
                 if (keys[i].Level <= keys[i - 1].Level)
                 {
                     throw new InvalidOperationException(
-                        $"Effect '{ownerName}': CurveKeys must be in ascending level order without duplicates.");
+                        $"{ownerName}: CurveKeys must be in ascending level order without duplicates.");
                 }
             }
 
             if (keys[keys.Count - 1].Level > maxLevel)
             {
                 throw new InvalidOperationException(
-                    $"Effect '{ownerName}': the last CurveKeys key level ({keys[keys.Count - 1].Level}) "
+                    $"{ownerName}: the last CurveKeys key level ({keys[keys.Count - 1].Level}) "
                     + $"exceeds MaxLevel ({maxLevel}).");
             }
 
@@ -166,7 +166,7 @@ namespace Bun3.Gameplay.Effects
             if (!tags.TryGet(calcTag, out var tag) || !seams.TryGetMagnitudeCalc(tag, out var calc) || calc is null)
             {
                 throw new InvalidOperationException(
-                    $"Effect '{ownerName}': cannot resolve magnitude calc tag: {calcTag}");
+                    $"{ownerName}: cannot resolve magnitude calc tag: {calcTag}");
             }
 
             return calc;
@@ -178,7 +178,7 @@ namespace Bun3.Gameplay.Effects
             if (!tags.TryGet(calcTag, out var tag) || !seams.TryGetExecutionCalc(tag, out var calc) || calc is null)
             {
                 throw new InvalidOperationException(
-                    $"Effect '{ownerName}': cannot resolve execution calc tag: {calcTag}");
+                    $"{ownerName}: cannot resolve execution calc tag: {calcTag}");
             }
 
             return calc;
@@ -192,7 +192,7 @@ namespace Bun3.Gameplay.Effects
                 || selector is null)
             {
                 throw new InvalidOperationException(
-                    $"Effect '{ownerName}': cannot resolve target selector tag: {selectorTag}");
+                    $"{ownerName}: cannot resolve target selector tag: {selectorTag}");
             }
 
             return selector;
@@ -206,7 +206,7 @@ namespace Bun3.Gameplay.Effects
                 if (!tags.TryGet(paths[i], out result[i]))
                 {
                     throw new InvalidOperationException(
-                        $"Effect '{ownerName}': cannot resolve {what} tag: {paths[i]}");
+                        $"{ownerName}: cannot resolve {what} tag: {paths[i]}");
                 }
             }
 
@@ -219,7 +219,7 @@ namespace Bun3.Gameplay.Effects
             if (operand.Kind != OperandKind.Constant && !attributes.Contains(operand.AttributeId))
             {
                 throw new InvalidOperationException(
-                    $"Effect '{ownerName}': references unregistered attribute {operand.AttributeId}.");
+                    $"{ownerName}: references unregistered attribute {operand.AttributeId}.");
             }
         }
     }

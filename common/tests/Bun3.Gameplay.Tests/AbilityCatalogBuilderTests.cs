@@ -1,8 +1,10 @@
 #nullable enable
 using System;
+using System.Collections.Generic;
 using Bun3.Gameplay.Abilities;
 using Bun3.Gameplay.Attributes;
 using Bun3.Gameplay.Effects;
+using Bun3.Gameplay.Numerics;
 using NUnit.Framework;
 
 namespace Bun3.Gameplay.Tests;
@@ -11,6 +13,19 @@ namespace Bun3.Gameplay.Tests;
 public sealed class AbilityCatalogBuilderTests
 {
     private static AbilityDef Minimal(string name) => new AbilityDef { Name = name };
+
+    // Effect with a real leveled magnitude — MaxLevel 5, one PerLevelValues entry per level.
+    private static EffectSpec LeveledBolt(string name)
+    {
+        var spec = EffectTestKit.MinimalInstant(name);
+        spec.MaxLevel = 5;
+        spec.Modifiers.Add(new ModifierDef
+        {
+            AttributeId = EffectTestKit.Attack,
+            Magnitude = new MagnitudeDef { PerLevelValues = new List<BigNum> { 1, 2, 3, 4, 5 } },
+        });
+        return spec;
+    }
 
     [Test]
     public void Build_assigns_dense_ids_in_insertion_order()
@@ -99,15 +114,52 @@ public sealed class AbilityCatalogBuilderTests
     }
 
     [Test]
-    public void Fixed_level_rule_beyond_max_level_is_rejected()
+    public void Fixed_level_rule_beyond_the_effects_max_level_is_rejected()
+    {
+        var kit = EffectTestKit.Create();
+        kit.AddSpec(LeveledBolt("bolt"));
+        var ability = Minimal("caster");
+        // The ability's own MaxLevel is irrelevant here — the bound is the referenced effect's MaxLevel (5).
+        ability.MaxLevel = 30;
+        ability.Effects.Add(new AbilityEffectDef
+        {
+            EffectName = "bolt", LevelRule = ChainLevelRule.Fixed, FixedLevel = 9,
+        });
+        var builder = new AbilityCatalogBuilder();
+        builder.Add(ability);
+
+        Assert.That(
+            () => builder.Build(kit.TagCatalog, kit.Seams, kit.Attributes, kit.Catalog),
+            Throws.InvalidOperationException.With.Message.Contains("FixedLevel"));
+    }
+
+    [Test]
+    public void Fixed_level_rule_within_the_effects_max_level_is_accepted()
+    {
+        var kit = EffectTestKit.Create();
+        kit.AddSpec(LeveledBolt("bolt"));
+        var ability = Minimal("caster");
+        ability.Effects.Add(new AbilityEffectDef
+        {
+            EffectName = "bolt", LevelRule = ChainLevelRule.Fixed, FixedLevel = 5,
+        });
+        var builder = new AbilityCatalogBuilder();
+        builder.Add(ability);
+
+        var catalog = builder.Build(kit.TagCatalog, kit.Seams, kit.Attributes, kit.Catalog);
+
+        Assert.That(catalog.Count, Is.EqualTo(1));
+    }
+
+    [Test]
+    public void Fixed_level_rule_below_one_is_rejected()
     {
         var kit = EffectTestKit.Create();
         kit.AddSpec(EffectTestKit.MinimalInstant("bolt"));
         var ability = Minimal("caster");
-        ability.MaxLevel = 3;
         ability.Effects.Add(new AbilityEffectDef
         {
-            EffectName = "bolt", LevelRule = ChainLevelRule.Fixed, FixedLevel = 9,
+            EffectName = "bolt", LevelRule = ChainLevelRule.Fixed, FixedLevel = 0,
         });
         var builder = new AbilityCatalogBuilder();
         builder.Add(ability);
@@ -129,6 +181,6 @@ public sealed class AbilityCatalogBuilderTests
 
         Assert.That(
             () => builder.Build(kit.TagCatalog, kit.Seams, kit.Attributes, kit.Catalog),
-            Throws.InstanceOf<Exception>());
+            Throws.InvalidOperationException.With.Message.Contains("selector.nope"));
     }
 }

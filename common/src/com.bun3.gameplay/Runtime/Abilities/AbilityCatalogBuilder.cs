@@ -90,11 +90,21 @@ namespace Bun3.Gameplay.Abilities
                         $"{owner}: references unknown effect '{entry.EffectName}'.");
                 }
 
-                if (entry.LevelRule == ChainLevelRule.Fixed
-                    && (entry.FixedLevel < 1 || (def.MaxLevel > 0 && entry.FixedLevel > def.MaxLevel)))
+                if (entry.LevelRule == ChainLevelRule.Fixed)
                 {
-                    throw new InvalidOperationException(
-                        $"{owner}: FixedLevel {entry.FixedLevel} is outside 1..{def.MaxLevel}.");
+                    if (entry.FixedLevel < 1)
+                    {
+                        throw new InvalidOperationException(
+                            $"{owner}: FixedLevel {entry.FixedLevel} for effect '{entry.EffectName}' must be at least 1.");
+                    }
+
+                    var targetMaxLevel = effects.GetSpec(effectId).MaxLevel;
+                    if (targetMaxLevel > 0 && entry.FixedLevel > targetMaxLevel)
+                    {
+                        throw new InvalidOperationException(
+                            $"{owner}: FixedLevel ({entry.FixedLevel}) for effect '{entry.EffectName}' "
+                            + $"exceeds MaxLevel ({targetMaxLevel}).");
+                    }
                 }
 
                 var selector = string.IsNullOrEmpty(entry.SelectorTag)
