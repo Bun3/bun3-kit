@@ -474,7 +474,7 @@ namespace Bun3.Gameplay.Effects
         // Deterministic formula — pre-evaluated at Build time by substituting levels 1..MaxLevel for x.
         private static BigNum[] CompileFormula(string formula, EffectSpec spec)
         {
-            if (!BigNumFormula.TryValidate(formula, out var validationError))
+            if (!BigNumFormula.TryCompile(formula, out var compiled, out var validationError))
             {
                 throw new InvalidOperationException($"Effect '{spec.Name}': Formula is invalid — {validationError}");
             }
@@ -482,7 +482,7 @@ namespace Bun3.Gameplay.Effects
             var byLevel = new BigNum[spec.MaxLevel];
             for (var level = 1; level <= spec.MaxLevel; level++)
             {
-                if (!BigNumFormula.TryEvaluate(formula, level, out byLevel[level - 1]))
+                if (!compiled!.TryEvaluate(level, out byLevel[level - 1]))
                 {
                     throw new InvalidOperationException(
                         $"Effect '{spec.Name}': Formula evaluation failed (level {level}): {formula}");
