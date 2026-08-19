@@ -13,6 +13,9 @@ namespace Bun3.Server.Achievements
     /// The completion count is monotonic, so the same completion never fires twice.
     /// Repeatable achievements accumulate progress; claiming subtracts one target — while a claim
     /// is pending the UI shows min(Progress, Target)/Target as "10/10 [Claim]".
+    /// Failure reporting follows one rule across the outgame packages: domain failures the caller
+    /// must handle are returned (the claim bool, the completion count), while programmer errors and
+    /// save data corruption throw.
     /// </summary>
     /// <typeparam name="TDef">Game achievement definition type.</typeparam>
     public sealed partial class AchievementManager<TDef> where TDef : AchievementDefinition

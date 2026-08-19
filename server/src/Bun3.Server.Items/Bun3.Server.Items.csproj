@@ -6,11 +6,11 @@
     <Nullable>enable</Nullable>
     <RootNamespace>Bun3.Server.Items</RootNamespace>
     <PackageId>Bun3.Server.Items</PackageId>
-    <Version>0.1.0</Version>
+    <Version>0.2.0</Version>
     <Authors>Bun3</Authors>
     <RepositoryUrl>https://github.com/Bun3/bun3-kit</RepositoryUrl>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <Description>Server item framework — catalog (interning, indexes, regen metadata), unified stack/instance inventory (BigNum quantities, atomic transactions, change tracking), recipes, reward tables, regen, expiry, cross-inventory transfer, ActionLog ledger integration</Description>
+    <Description>Server item framework — catalog (interning, indexes, regen metadata), unified stack/instance inventory (BigNum quantities, atomic transactions, change tracking), recipes, reward tables, regen, expiry, cross-inventory transfer, ActionLog ledger integration, transaction rollback participation</Description>
   </PropertyGroup>
 
   <ItemGroup>

@@ -18,6 +18,11 @@ namespace Bun3.Server.Items
     /// File layout: this file (construction, queries) / Operations (grant, consume, transactions) /
     /// Crafting / Rewards / Regen / Transfer / Tracking (change tracking, load) /
     /// Transaction (session transaction participation, notification buffering).
+    /// Failure reporting follows one rule across the outgame packages: domain failures the caller
+    /// must handle are returned (<see cref="InventoryError"/>), while programmer errors and save
+    /// data corruption throw.
+    /// The transaction is in-memory only, so a database commit cannot take part in it — claim
+    /// idempotency across the in-memory and persisted boundaries is the game's responsibility.
     /// </summary>
     /// <typeparam name="TState">Game-defined instance state type.</typeparam>
     public sealed partial class ItemInventory<TState>
