@@ -25,8 +25,15 @@
 
 - 설계·구현 흐름: superpowers 브레인스토밍 → 스펙(`docs/superpowers/specs/`) →
   플랜(`docs/superpowers/plans/`) → SDD 실행. 스펙이 결정의 원본이다.
-- 패키지 코드: netstandard2.1 + C#9(블록 네임스페이스), 모든 public 멤버 한국어
+- 패키지 코드: netstandard2.1 + C#9(블록 네임스페이스), 모든 public 멤버 영어
   XML 문서, 빌드 경고 0, 라이브러리 await에는 `ConfigureAwait(false)`.
+- 주석·문서 언어 규칙 (`docs/` 제외 전부 — 코드, README, 패키지 메타데이터 등):
+  - **영어만 쓴다** — 코드 파일에 한글 금지(주석·XML 문서·문자열 리터럴의 개발자용
+    텍스트 포함). 한국어 설명이 필요한 내용은 `docs/`의 md가 정본이다.
+  - **레거시(idlez, growninja) 언급 금지, 타 패키지 참고 언급 금지** — 출처·근거·
+    설계 배경은 전부 `docs/`(스펙·플랜·research)에만 적는다.
+  - **최소화된 필요한 주석만** — 코드가 못 보여주는 제약·계약만 주석으로 남기고,
+    구현 경위·정당화·다음 줄 설명 주석은 쓰지 않는다.
 - 코드 구성 — **.NET 기조**(폴더=네임스페이스 + BCL 파일 실태,
   근거: `docs/research/2026-08-19-folder-organization-methodologies.md`):
   - **폴더 = 네임스페이스**(IDE0130·Unity 공식 권고). 하위 폴더는 서브네임스페이스를
