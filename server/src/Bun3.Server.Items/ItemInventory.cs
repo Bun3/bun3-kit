@@ -12,7 +12,8 @@ namespace Bun3.Server.Items
     /// 병합, 비스택형은 수량 1 인스턴스 N개. 수량은 <see cref="BigNum"/>(long 암시 변환).
     /// 모든 변경 연산은 원자적이며 실패 시 완전 무변경. 락 없음(세션 액터 단일 스레드 계약).
     /// 조회·열거·소모 경로는 무할당, 인스턴스 생성만 본질적 할당(저빈도).
-    /// 파일 구성: 이 파일(생성·조회) / Operations(지급·소모·트랜잭션) / Tracking(변경 추적·로드).
+    /// 파일 구성: 이 파일(생성·조회) / Operations(지급·소모·트랜잭션) / Crafting(제작) /
+    /// Rewards(보상 지급) / Regen(리젠 정산) / Transfer(인벤토리 간 이동) / Tracking(변경 추적·로드).
     /// </summary>
     /// <typeparam name="TState">게임이 정의하는 인스턴스 상태 타입.</typeparam>
     public sealed partial class ItemInventory<TState>

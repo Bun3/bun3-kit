@@ -1,3 +1,4 @@
+// PopupStack partial — 결과 대기 담당.
 using Cysharp.Threading.Tasks;
 using UnityEngine;
 

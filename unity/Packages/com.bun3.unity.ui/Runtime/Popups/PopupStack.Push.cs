@@ -1,3 +1,4 @@
+// PopupStack partial — 열기(push)·중복 정책 담당.
 using System;
 using Cysharp.Threading.Tasks;
 using UnityEngine;

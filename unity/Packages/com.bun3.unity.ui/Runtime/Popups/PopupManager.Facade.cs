@@ -1,3 +1,4 @@
+// PopupManager partial — 스택 동작 위임(파사드) 담당.
 using Cysharp.Threading.Tasks;
 
 namespace Bun3.Unity.UI.Popups

@@ -1,6 +1,6 @@
 {
   "name": "Bun3.Gameplay.Runtime.Tests",
-  "rootNamespace": "Bun3.Gameplay.Runtime.Tests",
+  "rootNamespace": "Bun3.Gameplay.Tests",
   "references": [
     "Bun3.Gameplay",
     "UnityEngine.TestRunner"

@@ -1,3 +1,4 @@
+// ItemInventory partial — 변경 추적(DrainChanges)·인스턴스 로드 담당.
 using System;
 using System.Collections.Generic;
 using Bun3.Gameplay.Numerics;

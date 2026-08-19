@@ -1,3 +1,4 @@
+// ItemInventory partial — 지급·소모·트랜잭션(원자 커밋) 담당.
 using System;
 using System.Collections.Generic;
 using Bun3.Gameplay.Numerics;

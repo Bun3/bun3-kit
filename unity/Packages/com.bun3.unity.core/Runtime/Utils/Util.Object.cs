@@ -1,3 +1,4 @@
+// Util partial — Object 수명(SafeDestroy 등) 헬퍼 담당.
 using UnityEngine;
 
 namespace Bun3.Unity.Core.Utils

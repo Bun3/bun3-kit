@@ -1,3 +1,4 @@
+// PopupStack partial — 닫기·back 처리 담당.
 using System;
 using Cysharp.Threading.Tasks;
 

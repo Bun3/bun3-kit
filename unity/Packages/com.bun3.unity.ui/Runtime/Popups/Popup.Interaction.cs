@@ -1,3 +1,4 @@
+// Popup partial — 입력 보호·딤 클릭 담당.
 using System;
 using System.Threading;
 using Bun3.Unity.Core.Utils;

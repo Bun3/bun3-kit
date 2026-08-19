@@ -1,3 +1,4 @@
+// TagCatalog partial — 빌드(태그 트리 구성·사전순 배치) 담당.
 #nullable enable
 using System;
 using System.Collections.Generic;

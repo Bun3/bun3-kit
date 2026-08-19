@@ -1,3 +1,4 @@
+// PopupStack partial — 순차 대기열 담당.
 using System.Collections.Generic;
 using Cysharp.Threading.Tasks;
 

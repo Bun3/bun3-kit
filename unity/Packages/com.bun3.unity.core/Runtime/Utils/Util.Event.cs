@@ -1,3 +1,4 @@
+// Util partial — UnityEvent/이벤트 헬퍼 담당.
 using UnityEngine;
 using UnityEngine.Events;
 

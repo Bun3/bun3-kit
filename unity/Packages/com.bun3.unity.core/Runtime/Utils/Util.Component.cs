@@ -1,3 +1,4 @@
+// Util partial — 컴포넌트 취득·부착 헬퍼 담당.
 using UnityEngine;
 
 namespace Bun3.Unity.Core.Utils

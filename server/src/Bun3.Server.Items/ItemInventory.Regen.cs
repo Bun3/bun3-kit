@@ -1,3 +1,4 @@
+// ItemInventory partial — 리젠 정산(SettleRegen)·기준시각 관리 담당.
 using System.Collections.Generic;
 
 namespace Bun3.Server.Items

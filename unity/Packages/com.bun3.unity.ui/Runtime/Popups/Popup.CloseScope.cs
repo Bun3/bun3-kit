@@ -1,3 +1,4 @@
+// Popup partial — 닫기 잠금(PopupCloseScope) 담당.
 using Cysharp.Threading.Tasks;
 
 namespace Bun3.Unity.UI.Popups

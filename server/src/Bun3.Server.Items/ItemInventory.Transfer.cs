@@ -1,3 +1,4 @@
+// ItemInventory partial — 인벤토리 간 이동 담당.
 using System;
 using System.Collections.Generic;
 using Bun3.Gameplay.Numerics;

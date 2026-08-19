@@ -7,6 +7,7 @@ namespace Bun3.Gameplay.Tags
     /// <summary>
     /// 검증된 입력에서 한 번 만들어진 뒤 변경되지 않는 게임플레이 태그 카탈로그입니다.
     /// </summary>
+    /// <remarks>partial 구성: 이 파일(질의·조회) / Build(빌드) / Fingerprint(지문 계산).</remarks>
     public sealed partial class TagCatalog
     {
         private readonly Dictionary<string, ushort> _byCanonicalName;

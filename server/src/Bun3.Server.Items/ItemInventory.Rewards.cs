@@ -1,3 +1,4 @@
+// ItemInventory partial — 보상 테이블 지급(TryGrant) 담당.
 using System.Collections.Generic;
 
 namespace Bun3.Server.Items

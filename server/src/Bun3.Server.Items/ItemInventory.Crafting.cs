@@ -1,3 +1,4 @@
+// ItemInventory partial — 레시피 제작(TryCraft) 담당.
 using System.Collections.Generic;
 using Bun3.Gameplay.Numerics;
 

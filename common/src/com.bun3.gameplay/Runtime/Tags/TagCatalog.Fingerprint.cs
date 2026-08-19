@@ -1,3 +1,4 @@
+// TagCatalog partial — 카탈로그 지문(해시) 계산 담당.
 #nullable enable
 using System;
 using System.Buffers.Binary;
