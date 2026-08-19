@@ -596,7 +596,8 @@ namespace Bun3.Gameplay.Effects
 
                 var hasSource = _resolver.TryResolve(source, out var sourceTarget) && sourceTarget is not null;
                 // Lifecycle chains (OnApplication/OnCompleteNormal/OnCompletePrematurely/OnStackOverflow)
-                // have no triggering event, so their own edge conditions never see an event magnitude.
+                // have no triggering event; Build also rejects EventMagnitude in a non-OnEvent edge's
+                // Conditions, so this value is provably unreachable here.
                 if (!EvaluateConditions(chain.Conditions, originTarget, sourceTarget, hasSource, BigNum.Zero)) continue;
 
                 var chainLevel = chain.LevelRule == ChainLevelRule.Inherit ? level : chain.FixedLevel;

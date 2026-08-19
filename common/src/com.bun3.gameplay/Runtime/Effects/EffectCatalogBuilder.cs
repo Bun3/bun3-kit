@@ -71,6 +71,7 @@ namespace Bun3.Gameplay.Effects
             ValidateDurationScaleFields(spec);
             ValidateDrFields(spec);
             ValidateOngoingConditionsNoEventMagnitude(spec);
+            ValidatePeriodicNoEventMagnitudeInModifiersOrExecutions(spec);
 
             var grantedTags = MagnitudeCompiler.ResolveTags(spec.GrantedTags, $"Effect '{spec.Name}'", tags, "granted");
             var assetTags = MagnitudeCompiler.ResolveTags(spec.AssetTags, $"Effect '{spec.Name}'", tags, "asset");
@@ -404,6 +405,38 @@ namespace Bun3.Gameplay.Effects
             }
         }
 
+        // A periodic spec's Modifiers/Executions run every period via FirePeriodic, which has no
+        // triggering event (the event magnitude is a per-application value, not persisted across
+        // periods) -- so EventMagnitude there would always resolve to zero. ChanceToApply and
+        // ApplicationConditions are evaluated once at application time and do see the real value, so
+        // they remain legal even on a periodic spec.
+        private static void ValidatePeriodicNoEventMagnitudeInModifiersOrExecutions(EffectSpec spec)
+        {
+            if (spec.PeriodTicks <= 0) return;
+
+            for (var i = 0; i < spec.Modifiers.Count; i++)
+            {
+                if (!MagnitudeUsesEventMagnitude(spec.Modifiers[i].Magnitude)) continue;
+                throw new InvalidOperationException(
+                    $"Effect '{spec.Name}': EventMagnitude cannot be used in a periodic effect's Modifiers -- "
+                    + "the event magnitude is a per-application value that does not persist across periodic "
+                    + "executions. ChanceToApply/ApplicationConditions may still use it.");
+            }
+
+            for (var i = 0; i < spec.Executions.Count; i++)
+            {
+                var inputs = spec.Executions[i].Inputs;
+                for (var k = 0; k < inputs.Count; k++)
+                {
+                    if (inputs[k].Kind != OperandKind.EventMagnitude) continue;
+                    throw new InvalidOperationException(
+                        $"Effect '{spec.Name}': EventMagnitude cannot be used in a periodic effect's Executions -- "
+                        + "the event magnitude is a per-application value that does not persist across periodic "
+                        + "executions. ChanceToApply/ApplicationConditions may still use it.");
+                }
+            }
+        }
+
         // EventMagnitude is only meaningful for an effect an OnEvent chain applies directly (one hop) —
         // a spec reached only transitively (via further OnApplication/etc. chains) always sees zero, so
         // using EventMagnitude there is never anything but a silent authoring bug. Reachability is
@@ -455,6 +488,8 @@ namespace Bun3.Gameplay.Effects
                     return true;
                 }
             }
+
+            if (spec.DurationScale != null && MagnitudeUsesEventMagnitude(spec.DurationScale)) return true;
 
             return spec.ChanceToApply != null && MagnitudeUsesEventMagnitude(spec.ChanceToApply);
         }
@@ -554,6 +589,21 @@ namespace Bun3.Gameplay.Effects
             }
 
             var conditions = ResolveConditions(edge.Conditions, $"Effect '{ownerSpec.Name}'", attributes, allowSourceAttribute: true);
+            if (edge.Trigger != ChainTrigger.OnEvent)
+            {
+                for (var i = 0; i < conditions.Length; i++)
+                {
+                    if (conditions[i].Left.Kind != OperandKind.EventMagnitude
+                        && conditions[i].Right.Kind != OperandKind.EventMagnitude)
+                    {
+                        continue;
+                    }
+
+                    throw new InvalidOperationException(
+                        $"Effect '{ownerSpec.Name}': EventMagnitude cannot be used in a non-OnEvent chain edge's Conditions.");
+                }
+            }
+
             return new CompiledChain(
                 edge.Trigger, effectId, selector, edge.SelectorParams.ToArray(),
                 conditions, edge.LevelRule, edge.FixedLevel, eventTag, edge.Listen);

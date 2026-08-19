@@ -337,13 +337,17 @@ public sealed class EffectEventChainTests
             target.Attributes.SetBase(EffectTestKit.Hp, 1000);
         }
 
+        // Defender has less HP than the incoming damage, so the clamped delta (-50) differs from the
+        // nominal one (-100) -- pins that the reflect reads the clamped Magnitude, not NominalMagnitude.
+        kit.Defender.Attributes.SetBase(EffectTestKit.Hp, 50);
+
         pipeline.EnqueueApply(kit.SpecId("thorns"), kit.Defender.Id, kit.Defender.Id);
         pipeline.Tick();
         pipeline.EnqueueApply(kit.SpecId("bolt"), kit.Attacker.Id, kit.Defender.Id);
         pipeline.Tick();
 
-        Assert.That(kit.Defender.Attributes.GetBase(EffectTestKit.Hp), Is.EqualTo((BigNum)900));
-        Assert.That(kit.Attacker.Attributes.GetBase(EffectTestKit.Hp), Is.EqualTo((BigNum)970));
+        Assert.That(kit.Defender.Attributes.GetBase(EffectTestKit.Hp), Is.EqualTo((BigNum)0));
+        Assert.That(kit.Attacker.Attributes.GetBase(EffectTestKit.Hp), Is.EqualTo((BigNum)985));
     }
 
     [Test]
@@ -472,9 +476,11 @@ public sealed class EffectEventChainTests
         thorns.Chains.Add(EventEdge("event.damage.taken", "first", ChainListen.AsTarget));
         kit.AddSpec(thorns);
 
+        // Tightened to the reachability rule's own phrase — "EventMagnitude" alone is also present in
+        // the (unrelated) OngoingConditions rejection message and would pass for the wrong reason.
         Assert.That(
             () => kit.BuildPipeline(),
-            Throws.InvalidOperationException.With.Message.Contains("EventMagnitude"));
+            Throws.InvalidOperationException.With.Message.Contains("no OnEvent chain applies it directly"));
     }
 
     [Test]
@@ -484,5 +490,128 @@ public sealed class EffectEventChainTests
         builder.Register(EffectTestKit.Hp, min: Operand.EventMagnitude((BigNum)1));
 
         Assert.That(() => builder.Build(), Throws.InvalidOperationException);
+    }
+
+    [Test]
+    public void Event_magnitude_used_only_in_duration_scale_of_an_unreachable_spec_is_a_build_error()
+    {
+        // DurationScale is a MagnitudeDef whose operands are evaluated with the real magnitude via
+        // ComputeScaledDuration, so the reachability scan must cover it too, not just Modifiers/Executions/
+        // ApplicationConditions/ChanceToApply.
+        var kit = EffectTestKit.Create();
+        var scaledDuration = EffectTestKit.MinimalDuration("scaledDuration", ticks: 10);
+        scaledDuration.DurationScale = new MagnitudeDef { Base = Operand.EventMagnitude() };
+        kit.AddSpec(scaledDuration);
+
+        Assert.That(
+            () => kit.BuildPipeline(),
+            Throws.InvalidOperationException.With.Message.Contains("EventMagnitude"));
+    }
+
+    [Test]
+    public void OnEvent_edge_condition_on_event_magnitude_gates_the_reaction()
+    {
+        var kit = EffectTestKit.Create();
+        kit.AddSpec(Damage("smallHit", 30, "event.damage.taken"));
+        kit.AddSpec(Damage("bigHit", 100, "event.damage.taken"));
+        kit.AddSpec(Damage("retaliate", 7, eventTag: null));
+
+        var thorns = EffectTestKit.MinimalInfinite("thorns");
+        var edge = EventEdge("event.damage.taken", "retaliate", ChainListen.AsTarget);
+        edge.SelectorTag = "selector.everyone";
+        // Damage magnitude is negative, so "exceeded 50" reads as "at or below -50".
+        edge.Conditions.Add(new ConditionDef
+        {
+            Left = Operand.EventMagnitude(),
+            Op = ComparisonOp.LessOrEqual,
+            Right = Operand.Constant(-50),
+        });
+        thorns.Chains.Add(edge);
+        kit.AddSpec(thorns);
+        kit.RegisterSelector("selector.everyone", new AttackerSelector());
+        var pipeline = kit.BuildPipeline();
+
+        foreach (var target in kit.AllTargets)
+        {
+            target.Attributes.SetBase(EffectTestKit.MaxHp, 1000);
+            target.Attributes.SetBase(EffectTestKit.Hp, 1000);
+        }
+
+        pipeline.EnqueueApply(kit.SpecId("thorns"), kit.Defender.Id, kit.Defender.Id);
+        pipeline.Tick();
+
+        // Below threshold: -30 does not satisfy <= -50, no retaliation.
+        pipeline.EnqueueApply(kit.SpecId("smallHit"), kit.Attacker.Id, kit.Defender.Id);
+        pipeline.Tick();
+        Assert.That(kit.Attacker.Attributes.GetBase(EffectTestKit.Hp), Is.EqualTo((BigNum)1000));
+
+        // Above threshold: -100 satisfies <= -50, retaliation fires.
+        pipeline.EnqueueApply(kit.SpecId("bigHit"), kit.Attacker.Id, kit.Defender.Id);
+        pipeline.Tick();
+        Assert.That(kit.Attacker.Attributes.GetBase(EffectTestKit.Hp), Is.EqualTo((BigNum)993));
+    }
+
+    [Test]
+    public void Event_magnitude_in_a_non_event_chain_edges_conditions_is_a_build_error()
+    {
+        var kit = EffectTestKit.Create();
+        var second = EffectTestKit.MinimalInstant("second");
+        kit.AddSpec(second);
+
+        var first = EffectTestKit.MinimalInstant("first");
+        var edge = EffectTestKit.Edge(ChainTrigger.OnApplication, "second");
+        edge.Conditions.Add(new ConditionDef
+        {
+            Left = Operand.EventMagnitude(),
+            Op = ComparisonOp.Greater,
+            Right = Operand.Constant(0),
+        });
+        first.Chains.Add(edge);
+        kit.AddSpec(first);
+
+        Assert.That(
+            () => kit.BuildPipeline(),
+            Throws.InvalidOperationException.With.Message.Contains("EventMagnitude"));
+    }
+
+    [Test]
+    public void Event_magnitude_in_a_periodic_specs_modifiers_is_a_build_error()
+    {
+        var kit = EffectTestKit.Create();
+        var periodic = EffectTestKit.MinimalDuration("periodicHeal", ticks: 30);
+        periodic.PeriodTicks = 5;
+        periodic.Modifiers.Add(new ModifierDef
+        {
+            AttributeId = EffectTestKit.Hp,
+            Op = AttributeModifierOp.Add,
+            Magnitude = new MagnitudeDef { Base = Operand.EventMagnitude() },
+        });
+        kit.AddSpec(periodic);
+
+        Assert.That(
+            () => kit.BuildPipeline(),
+            Throws.InvalidOperationException.With.Message.Contains("periodic"));
+    }
+
+    [Test]
+    public void Periodic_spec_using_event_magnitude_only_in_application_conditions_still_builds()
+    {
+        var kit = EffectTestKit.Create();
+        var periodic = EffectTestKit.MinimalDuration("periodicGuarded", ticks: 30);
+        periodic.PeriodTicks = 5;
+        periodic.ApplicationConditions.Add(new ConditionDef
+        {
+            Left = Operand.EventMagnitude(),
+            Op = ComparisonOp.LessOrEqual,
+            Right = Operand.Constant(0),
+        });
+        kit.AddSpec(periodic);
+
+        // Makes "periodicGuarded" a legal direct OnEvent target so reachability passes; never applied.
+        var watcher = EffectTestKit.MinimalInfinite("watcher");
+        watcher.Chains.Add(EventEdge("event.damage.taken", "periodicGuarded", ChainListen.AsTarget));
+        kit.AddSpec(watcher);
+
+        Assert.That(() => kit.BuildPipeline(), Throws.Nothing);
     }
 }

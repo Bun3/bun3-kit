@@ -55,9 +55,9 @@ namespace Bun3.Gameplay.Effects
         {
             var source = instance.Source;
             var hasSource = _resolver.TryResolve(source, out var sourceTarget) && sourceTarget is not null;
-            // The edge's own conditions decide whether to fire at all, before the magnitude reaches the
-            // applied effect — they never see an event magnitude either.
-            if (!EvaluateConditions(chain.Conditions, listener, sourceTarget, hasSource, BigNum.Zero)) return;
+            // An OnEvent edge's own conditions may reference EventMagnitude directly (Build rejects it on
+            // any non-OnEvent edge), so this is the one place the real, unclamped-to-zero value is used.
+            if (!EvaluateConditions(chain.Conditions, listener, sourceTarget, hasSource, evt.Magnitude)) return;
 
             var chainLevel = chain.LevelRule == ChainLevelRule.Inherit ? instance.Level : chain.FixedLevel;
             EventChainFireCount++;
