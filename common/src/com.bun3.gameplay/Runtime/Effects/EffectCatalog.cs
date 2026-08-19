@@ -57,7 +57,7 @@ namespace Bun3.Gameplay.Effects
     {
         internal CompiledModifier(
             ushort attributeId, AttributeModifierOp op,
-            Operand? @base, Operand? perLevel, IMagnitudeCalc? calc,
+            Operand? @base, Operand? perLevel, IMagnitudeCalc? calc, GameplayTag calcTag,
             BigNum[]? byLevel, LevelTail tail, BigNum increment, bool scaleWithStack)
         {
             AttributeId = attributeId;
@@ -65,6 +65,7 @@ namespace Bun3.Gameplay.Effects
             Base = @base;
             PerLevel = perLevel;
             Calc = calc;
+            CalcTag = calcTag;
             ByLevel = byLevel;
             Tail = tail;
             Increment = increment;
@@ -86,6 +87,10 @@ namespace Bun3.Gameplay.Effects
         /// <summary>Resolved magnitude-calc contract; null for constant/attribute/level-table magnitudes.</summary>
         internal IMagnitudeCalc? Calc { get; }
 
+        /// <summary>Tag <see cref="Calc"/> was resolved from; <see cref="GameplayTag.None"/> when Calc is null.
+        /// Kept so a compiled catalog can be persisted and the seam re-resolved on load.</summary>
+        internal GameplayTag CalcTag { get; }
+
         /// <summary>Level table (notations ②③④ compiled to a dense array); null when absent (notation ① or Calc).</summary>
         internal BigNum[]? ByLevel { get; }
 
@@ -105,12 +110,13 @@ namespace Bun3.Gameplay.Effects
     internal sealed class CompiledMagnitude
     {
         internal CompiledMagnitude(
-            Operand? @base, Operand? perLevel, IMagnitudeCalc? calc,
+            Operand? @base, Operand? perLevel, IMagnitudeCalc? calc, GameplayTag calcTag,
             BigNum[]? byLevel, LevelTail tail, BigNum increment)
         {
             Base = @base;
             PerLevel = perLevel;
             Calc = calc;
+            CalcTag = calcTag;
             ByLevel = byLevel;
             Tail = tail;
             Increment = increment;
@@ -125,6 +131,10 @@ namespace Bun3.Gameplay.Effects
         /// <summary>Resolved magnitude-calc contract; null for constant/attribute/level-table magnitudes.</summary>
         internal IMagnitudeCalc? Calc { get; }
 
+        /// <summary>Tag <see cref="Calc"/> was resolved from; <see cref="GameplayTag.None"/> when Calc is null.
+        /// Kept so a compiled catalog can be persisted and the seam re-resolved on load.</summary>
+        internal GameplayTag CalcTag { get; }
+
         /// <summary>Level table (notations ②③④ compiled to a dense array); null when absent (notation ① or Calc).</summary>
         internal BigNum[]? ByLevel { get; }
 
@@ -138,14 +148,19 @@ namespace Bun3.Gameplay.Effects
     /// <summary>Compiled effect execution.</summary>
     internal sealed class CompiledExecution
     {
-        internal CompiledExecution(IExecutionCalc calc, Operand[] inputs)
+        internal CompiledExecution(IExecutionCalc calc, GameplayTag calcTag, Operand[] inputs)
         {
             Calc = calc;
+            CalcTag = calcTag;
             Inputs = inputs;
         }
 
         /// <summary>Resolved execution contract.</summary>
         internal IExecutionCalc Calc { get; }
+
+        /// <summary>Tag <see cref="Calc"/> was resolved from. Kept so a compiled catalog can be
+        /// persisted and the seam re-resolved on load.</summary>
+        internal GameplayTag CalcTag { get; }
 
         /// <summary>Input operands passed to the execution.</summary>
         internal Operand[] Inputs { get; }
@@ -191,13 +206,14 @@ namespace Bun3.Gameplay.Effects
     internal sealed class CompiledChain
     {
         internal CompiledChain(
-            ChainTrigger trigger, int effectId, ITargetSelector? selector, BigNum[] selectorParams,
-            CompiledCondition[] conditions, ChainLevelRule levelRule, int fixedLevel,
-            GameplayTag eventTag, ChainListen listen)
+            ChainTrigger trigger, int effectId, ITargetSelector? selector, GameplayTag selectorTag,
+            BigNum[] selectorParams, CompiledCondition[] conditions, ChainLevelRule levelRule,
+            int fixedLevel, GameplayTag eventTag, ChainListen listen)
         {
             Trigger = trigger;
             EffectId = effectId;
             Selector = selector;
+            SelectorTag = selectorTag;
             SelectorParams = selectorParams;
             Conditions = conditions;
             LevelRule = levelRule;
@@ -214,6 +230,10 @@ namespace Bun3.Gameplay.Effects
 
         /// <summary>Resolved target-selector contract, or null (use the source target as is).</summary>
         internal ITargetSelector? Selector { get; }
+
+        /// <summary>Tag <see cref="Selector"/> was resolved from; <see cref="GameplayTag.None"/> when
+        /// Selector is null. Kept so a compiled catalog can be persisted and the seam re-resolved on load.</summary>
+        internal GameplayTag SelectorTag { get; }
 
         /// <summary>Parameters passed to target selection.</summary>
         internal BigNum[] SelectorParams { get; }

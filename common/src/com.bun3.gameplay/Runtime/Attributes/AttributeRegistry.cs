@@ -41,12 +41,21 @@ namespace Bun3.Gameplay.Attributes
         internal AttributeRegistry(
             Dictionary<ushort, AttributeDefinition> definitions,
             ushort[] evaluationOrder,
-            Dictionary<ushort, ushort[]> clampDependents)
+            Dictionary<ushort, ushort[]> clampDependents,
+            uint signature)
         {
             _definitions = definitions;
             _evaluationOrder = evaluationOrder;
             _clampDependents = clampDependents;
+            Signature = signature;
         }
+
+        /// <summary>
+        /// Stable hash of the registered attribute shape — ids, clamp bounds, and boundary policies in
+        /// evaluation order. A compiled catalog artifact is only valid against the same shape, because
+        /// its magnitudes and clamps were resolved against it.
+        /// </summary>
+        public uint Signature { get; }
 
         /// <summary>Number of registered attributes.</summary>
         public int Count => _definitions.Count;

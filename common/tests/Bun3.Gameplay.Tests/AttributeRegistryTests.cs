@@ -104,4 +104,40 @@ public sealed class AttributeRegistryTests
 
         Assert.That(registry.EvaluationOrder.ToArray(), Is.EqualTo(new ushort[] { 1, 5, 2 }));
     }
+
+    [Test]
+    public void Signature_depends_on_the_shape_not_on_registration_order()
+    {
+        static AttributeRegistry Build(bool reversed, bool differentBound, bool differentPolicy)
+        {
+            var builder = new AttributeRegistryBuilder();
+            void RegisterMax() => builder.Register(
+                2,
+                min: Operand.Constant(differentBound ? 1 : 0),
+                max: Operand.Constant(100));
+            void RegisterHp() => builder.Register(
+                1,
+                min: Operand.Constant(0),
+                max: Operand.Attribute(2),
+                onMaxIncrease: differentPolicy ? MaxIncreasePolicy.Follow : MaxIncreasePolicy.Stay);
+
+            if (reversed)
+            {
+                RegisterHp();
+                RegisterMax();
+            }
+            else
+            {
+                RegisterMax();
+                RegisterHp();
+            }
+
+            return builder.Build();
+        }
+
+        var baseline = Build(false, false, false).Signature;
+        Assert.That(Build(true, false, false).Signature, Is.EqualTo(baseline));
+        Assert.That(Build(false, true, false).Signature, Is.Not.EqualTo(baseline));
+        Assert.That(Build(false, false, true).Signature, Is.Not.EqualTo(baseline));
+    }
 }

@@ -96,17 +96,19 @@ namespace Bun3.Gameplay.Effects
                         $"Effect '{spec.Name}': references unregistered attribute {m.AttributeId}.");
                 }
 
-                var (magBase, perLevel, calc, byLevel, tail, increment) =
+                var (magBase, perLevel, calc, calcTag, byLevel, tail, increment) =
                     MagnitudeCompiler.Resolve(m.Magnitude, $"Effect '{spec.Name}'", spec.MaxLevel, tags, seams, attributes);
                 modifiers[i] = new CompiledModifier(
-                    m.AttributeId, m.Op, magBase, perLevel, calc, byLevel, tail, increment, m.ScaleWithStack);
+                    m.AttributeId, m.Op, magBase, perLevel, calc, calcTag, byLevel, tail, increment,
+                    m.ScaleWithStack);
             }
 
             var executions = new CompiledExecution[spec.Executions.Count];
             for (var i = 0; i < spec.Executions.Count; i++)
             {
                 var e = spec.Executions[i];
-                var calc = MagnitudeCompiler.ResolveExecutionCalc(e.CalcTag, $"Effect '{spec.Name}'", tags, seams);
+                var calc = MagnitudeCompiler.ResolveExecutionCalc(
+                    e.CalcTag, $"Effect '{spec.Name}'", tags, seams, out var calcTag);
                 var inputs = new Operand[e.Inputs.Count];
                 for (var j = 0; j < e.Inputs.Count; j++)
                 {
@@ -114,7 +116,7 @@ namespace Bun3.Gameplay.Effects
                     inputs[j] = e.Inputs[j];
                 }
 
-                executions[i] = new CompiledExecution(calc, inputs);
+                executions[i] = new CompiledExecution(calc, calcTag, inputs);
             }
 
             var applicationConditions = ResolveConditions(
@@ -142,10 +144,12 @@ namespace Bun3.Gameplay.Effects
             CompiledMagnitude? chanceToApply = null;
             if (spec.ChanceToApply != null)
             {
-                var (chanceBase, chancePerLevel, chanceCalc, chanceByLevel, chanceTail, chanceIncrement) =
+                var (chanceBase, chancePerLevel, chanceCalc, chanceCalcTag, chanceByLevel, chanceTail,
+                        chanceIncrement) =
                     MagnitudeCompiler.Resolve(spec.ChanceToApply, $"Effect '{spec.Name}'", spec.MaxLevel, tags, seams, attributes);
                 chanceToApply = new CompiledMagnitude(
-                    chanceBase, chancePerLevel, chanceCalc, chanceByLevel, chanceTail, chanceIncrement);
+                    chanceBase, chancePerLevel, chanceCalc, chanceCalcTag, chanceByLevel, chanceTail,
+                    chanceIncrement);
             }
 
             var durationPerLevel = spec.DurationPerLevel?.ToArray();
@@ -153,10 +157,12 @@ namespace Bun3.Gameplay.Effects
             CompiledMagnitude? durationScale = null;
             if (spec.DurationScale != null)
             {
-                var (scaleBase, scalePerLevel, scaleCalc, scaleByLevel, scaleTail, scaleIncrement) =
+                var (scaleBase, scalePerLevel, scaleCalc, scaleCalcTag, scaleByLevel, scaleTail,
+                        scaleIncrement) =
                     MagnitudeCompiler.Resolve(spec.DurationScale, $"Effect '{spec.Name}'", spec.MaxLevel, tags, seams, attributes);
                 durationScale = new CompiledMagnitude(
-                    scaleBase, scalePerLevel, scaleCalc, scaleByLevel, scaleTail, scaleIncrement);
+                    scaleBase, scalePerLevel, scaleCalc, scaleCalcTag, scaleByLevel, scaleTail,
+                    scaleIncrement);
             }
 
             var drCategory = GameplayTag.None;
@@ -580,9 +586,11 @@ namespace Bun3.Gameplay.Effects
             }
 
             ITargetSelector? selector = null;
+            var selectorTag = GameplayTag.None;
             if (!string.IsNullOrEmpty(edge.SelectorTag))
             {
-                selector = MagnitudeCompiler.ResolveTargetSelector(edge.SelectorTag!, $"Effect '{ownerSpec.Name}'", tags, seams);
+                selector = MagnitudeCompiler.ResolveTargetSelector(
+                    edge.SelectorTag!, $"Effect '{ownerSpec.Name}'", tags, seams, out selectorTag);
                 if (edge.Trigger != ChainTrigger.OnEvent
                     && (edge.SelectorTag == BuiltInSelectors.EventSourceTag || edge.SelectorTag == BuiltInSelectors.EventTargetTag))
                 {
@@ -626,7 +634,7 @@ namespace Bun3.Gameplay.Effects
             }
 
             return new CompiledChain(
-                edge.Trigger, effectId, selector, edge.SelectorParams.ToArray(),
+                edge.Trigger, effectId, selector, selectorTag, edge.SelectorParams.ToArray(),
                 conditions, edge.LevelRule, edge.FixedLevel, eventTag, edge.Listen);
         }
 

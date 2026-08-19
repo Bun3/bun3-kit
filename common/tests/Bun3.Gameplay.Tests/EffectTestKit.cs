@@ -55,9 +55,11 @@ internal sealed class EffectTestKit
     """;
 
     /// <summary>Loads a fresh copy of the shared tag catalog.</summary>
-    public static TagCatalog LoadCatalog()
+    public static TagCatalog LoadCatalog() => LoadCatalog(CatalogJson);
+
+    private static TagCatalog LoadCatalog(string catalogJson)
     {
-        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(CatalogJson));
+        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(catalogJson));
         return TagCatalogJson.Load(stream);
     }
 
@@ -122,9 +124,9 @@ internal sealed class EffectTestKit
     private SeamRegistry? _seams;
     private EffectCatalog? _catalog;
 
-    private EffectTestKit()
+    private EffectTestKit(string catalogJson)
     {
-        _tagCatalog = LoadCatalog();
+        _tagCatalog = LoadCatalog(catalogJson);
         _attributeRegistry = BuildAttributeRegistry();
         Attacker = CreateTarget(1);
         Defender = CreateTarget(2);
@@ -140,7 +142,16 @@ internal sealed class EffectTestKit
     public IReadOnlyList<EffectTarget> AllTargets => _targetIds.ConvertAll(id => _targetsById[id.Value]);
 
     /// <summary>Creates a kit wired with the catalog, the standard attribute registry, and the attacker/defender targets.</summary>
-    public static EffectTestKit Create() => new EffectTestKit();
+    public static EffectTestKit Create() => new EffectTestKit(CatalogJson);
+
+    /// <summary>Creates a kit whose tag catalog has one extra tag, so its fingerprint differs.</summary>
+    /// <param name="extraTagPath">Canonical path of the tag to append.</param>
+    public static EffectTestKit CreateWithExtraTag(string extraTagPath)
+    {
+        var json = CatalogJson.Replace(
+            "\"tags\": [", $"\"tags\": [\n        {{ \"name\": \"{extraTagPath}\" }},");
+        return new EffectTestKit(json);
+    }
 
     private EffectTarget CreateTarget(ulong id)
     {

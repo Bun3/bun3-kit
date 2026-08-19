@@ -73,11 +73,12 @@ namespace Bun3.Gameplay.Abilities
                         $"{owner}: cost references unregistered attribute {cost.AttributeId}.");
                 }
 
-                var (magBase, magPerLevel, magCalc, magByLevel, magTail, magIncrement) =
+                var (magBase, magPerLevel, magCalc, magCalcTag, magByLevel, magTail, magIncrement) =
                     MagnitudeCompiler.Resolve(cost.Magnitude, owner, def.MaxLevel, tags, seams, attributes);
                 costs[i] = new CompiledCost(
                     cost.AttributeId,
-                    new CompiledMagnitude(magBase, magPerLevel, magCalc, magByLevel, magTail, magIncrement));
+                    new CompiledMagnitude(
+                        magBase, magPerLevel, magCalc, magCalcTag, magByLevel, magTail, magIncrement));
             }
 
             var abilityEffects = new CompiledAbilityEffect[def.Effects.Count];
@@ -107,9 +108,14 @@ namespace Bun3.Gameplay.Abilities
                     }
                 }
 
-                var selector = string.IsNullOrEmpty(entry.SelectorTag)
-                    ? null
-                    : MagnitudeCompiler.ResolveTargetSelector(entry.SelectorTag!, owner, tags, seams);
+                ITargetSelector? selector = null;
+                var selectorTag = GameplayTag.None;
+                if (!string.IsNullOrEmpty(entry.SelectorTag))
+                {
+                    selector = MagnitudeCompiler.ResolveTargetSelector(
+                        entry.SelectorTag!, owner, tags, seams, out selectorTag);
+                }
+
                 if (entry.SelectorTag == BuiltInSelectors.EventSourceTag || entry.SelectorTag == BuiltInSelectors.EventTargetTag)
                 {
                     throw new InvalidOperationException(
@@ -118,7 +124,8 @@ namespace Bun3.Gameplay.Abilities
                 }
 
                 abilityEffects[i] = new CompiledAbilityEffect(
-                    effectId, selector, entry.SelectorParams.ToArray(), entry.LevelRule, entry.FixedLevel);
+                    effectId, selector, selectorTag, entry.SelectorParams.ToArray(), entry.LevelRule,
+                    entry.FixedLevel);
             }
 
             var cooldownEffectId = -1;

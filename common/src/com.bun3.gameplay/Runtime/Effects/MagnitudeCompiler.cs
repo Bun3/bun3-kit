@@ -18,7 +18,7 @@ namespace Bun3.Gameplay.Effects
         // Exactly one MagnitudeDef notation: Base(+PerLevel) | PerLevelValues | Formula | CurveKeys | CalcTag.
         // Level-table notations require maxLevel >= 1.
         internal static (
-            Operand? Base, Operand? PerLevel, IMagnitudeCalc? Calc,
+            Operand? Base, Operand? PerLevel, IMagnitudeCalc? Calc, GameplayTag CalcTagIndex,
             BigNum[]? ByLevel, LevelTail Tail, BigNum Increment) Resolve(
             MagnitudeDef def, string ownerName, int maxLevel, TagCatalog tags, SeamRegistry seams, AttributeRegistry attributes)
         {
@@ -44,8 +44,8 @@ namespace Bun3.Gameplay.Effects
 
             if (hasCalc)
             {
-                var calc = ResolveMagnitudeCalc(def.CalcTag!, ownerName, tags, seams);
-                return (null, null, calc, null, LevelTail.Clamp, BigNum.Zero);
+                var calc = ResolveMagnitudeCalc(def.CalcTag!, ownerName, tags, seams, out var calcTag);
+                return (null, null, calc, calcTag, null, LevelTail.Clamp, BigNum.Zero);
             }
 
             if (hasBase)
@@ -56,7 +56,7 @@ namespace Bun3.Gameplay.Effects
                     ValidateOperandAttribute(def.PerLevel.Value, ownerName, attributes);
                 }
 
-                return (def.Base, def.PerLevel, null, null, LevelTail.Clamp, BigNum.Zero);
+                return (def.Base, def.PerLevel, null, GameplayTag.None, null, LevelTail.Clamp, BigNum.Zero);
             }
 
             if (maxLevel < 1)
@@ -78,7 +78,7 @@ namespace Bun3.Gameplay.Effects
                 increment = byLevel[byLevel.Length - 1] - byLevel[byLevel.Length - 2];
             }
 
-            return (null, null, null, byLevel, tail, increment);
+            return (null, null, null, GameplayTag.None, byLevel, tail, increment);
         }
 
         private static BigNum[] CompilePerLevelValues(List<BigNum> values, string ownerName, int maxLevel)
@@ -161,9 +161,9 @@ namespace Bun3.Gameplay.Effects
         }
 
         internal static IMagnitudeCalc ResolveMagnitudeCalc(
-            string calcTag, string ownerName, TagCatalog tags, SeamRegistry seams)
+            string calcTag, string ownerName, TagCatalog tags, SeamRegistry seams, out GameplayTag tag)
         {
-            if (!tags.TryGet(calcTag, out var tag) || !seams.TryGetMagnitudeCalc(tag, out var calc) || calc is null)
+            if (!tags.TryGet(calcTag, out tag) || !seams.TryGetMagnitudeCalc(tag, out var calc) || calc is null)
             {
                 throw new InvalidOperationException(
                     $"{ownerName}: cannot resolve magnitude calc tag: {calcTag}");
@@ -173,9 +173,9 @@ namespace Bun3.Gameplay.Effects
         }
 
         internal static IExecutionCalc ResolveExecutionCalc(
-            string calcTag, string ownerName, TagCatalog tags, SeamRegistry seams)
+            string calcTag, string ownerName, TagCatalog tags, SeamRegistry seams, out GameplayTag tag)
         {
-            if (!tags.TryGet(calcTag, out var tag) || !seams.TryGetExecutionCalc(tag, out var calc) || calc is null)
+            if (!tags.TryGet(calcTag, out tag) || !seams.TryGetExecutionCalc(tag, out var calc) || calc is null)
             {
                 throw new InvalidOperationException(
                     $"{ownerName}: cannot resolve execution calc tag: {calcTag}");
@@ -185,9 +185,9 @@ namespace Bun3.Gameplay.Effects
         }
 
         internal static ITargetSelector ResolveTargetSelector(
-            string selectorTag, string ownerName, TagCatalog tags, SeamRegistry seams)
+            string selectorTag, string ownerName, TagCatalog tags, SeamRegistry seams, out GameplayTag tag)
         {
-            if (!tags.TryGet(selectorTag, out var tag)
+            if (!tags.TryGet(selectorTag, out tag)
                 || !seams.TryGetTargetSelector(tag, out var selector)
                 || selector is null)
             {

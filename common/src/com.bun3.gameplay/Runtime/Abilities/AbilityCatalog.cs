@@ -25,11 +25,12 @@ namespace Bun3.Gameplay.Abilities
     internal sealed class CompiledAbilityEffect
     {
         internal CompiledAbilityEffect(
-            int effectId, ITargetSelector? selector, BigNum[] selectorParams,
+            int effectId, ITargetSelector? selector, GameplayTag selectorTag, BigNum[] selectorParams,
             ChainLevelRule levelRule, int fixedLevel)
         {
             EffectId = effectId;
             Selector = selector;
+            SelectorTag = selectorTag;
             SelectorParams = selectorParams;
             LevelRule = levelRule;
             FixedLevel = fixedLevel;
@@ -38,6 +39,10 @@ namespace Bun3.Gameplay.Abilities
         internal int EffectId { get; }
 
         internal ITargetSelector? Selector { get; }
+
+        /// <summary>Tag <see cref="Selector"/> was resolved from; <see cref="GameplayTag.None"/> when
+        /// Selector is null. Kept so a compiled catalog can be persisted and the seam re-resolved on load.</summary>
+        internal GameplayTag SelectorTag { get; }
 
         internal BigNum[] SelectorParams { get; }
 
