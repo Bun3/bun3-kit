@@ -488,4 +488,113 @@ public sealed class EffectSpecJsonTests
         """;
         Assert.That(Load(json)[0].MaxLevel, Is.EqualTo(0));
     }
+
+    // ---- raiseEvents / grantedAbilities / OnEvent chain field round trip ----
+
+    [Test]
+    public void Raise_events_granted_abilities_and_event_chains_load()
+    {
+        var specs = Load("""
+        {
+          "schemaVersion": 1,
+          "specs": [
+            {
+              "name": "bolt", "duration": { "type": "Instant" },
+              "modifiers": [ { "attribute": "Hp", "op": "Add", "magnitude": { "constant": "-10" } } ],
+              "executions": [], "applicationConditions": [], "ongoingConditions": [],
+              "grantedTags": [], "assetTags": [], "immunityTags": [], "chains": [],
+              "raiseEvents": [ { "tag": "event.damage.taken", "attribute": "Hp" } ]
+            },
+            {
+              "name": "thorns", "duration": { "type": "Infinite" },
+              "modifiers": [], "executions": [], "applicationConditions": [], "ongoingConditions": [],
+              "grantedTags": [], "assetTags": [], "immunityTags": [],
+              "grantedAbilities": ["fireball"],
+              "chains": [
+                { "trigger": "OnEvent", "eventTag": "event.damage.taken", "listen": "AsTarget",
+                  "effect": "bolt", "selector": "selector.event.source", "level": "Inherit" }
+              ]
+            }
+          ]
+        }
+        """);
+
+        Assert.That(specs[0].RaiseEvents.Count, Is.EqualTo(1));
+        Assert.That(specs[0].RaiseEvents[0].Tag, Is.EqualTo("event.damage.taken"));
+        Assert.That(specs[0].RaiseEvents[0].AttributeId, Is.EqualTo(EffectTestKit.Hp));
+        Assert.That(specs[1].GrantedAbilities, Is.EqualTo(new[] { "fireball" }));
+        Assert.That(specs[1].Chains[0].Trigger, Is.EqualTo(ChainTrigger.OnEvent));
+        Assert.That(specs[1].Chains[0].EventTag, Is.EqualTo("event.damage.taken"));
+        Assert.That(specs[1].Chains[0].Listen, Is.EqualTo(ChainListen.AsTarget));
+    }
+
+    [Test]
+    public void Raise_events_granted_abilities_and_chain_event_fields_default_when_absent()
+    {
+        const string json = """
+        { "schemaVersion": 1, "specs": [ {
+          "name": "x", "duration": { "type": "Instant" },
+          "modifiers": [], "executions": [], "applicationConditions": [], "ongoingConditions": [],
+          "grantedTags": [], "assetTags": [], "immunityTags": [],
+          "chains": [ { "trigger": "OnStackOverflow", "effect": "x" } ] } ] }
+        """;
+        var spec = Load(json)[0];
+
+        Assert.That(spec.RaiseEvents, Is.Empty);
+        Assert.That(spec.GrantedAbilities, Is.Empty);
+        Assert.That(spec.Chains[0].EventTag, Is.Null);
+        Assert.That(spec.Chains[0].Listen, Is.EqualTo(ChainListen.AsTarget));
+    }
+
+    [Test]
+    public void Unknown_raiseEvents_key_throws_with_line_info()
+    {
+        const string json = """
+        { "schemaVersion": 1, "specs": [ {
+          "name": "x", "duration": { "type": "Instant" },
+          "modifiers": [], "executions": [], "applicationConditions": [], "ongoingConditions": [],
+          "grantedTags": [], "assetTags": [], "immunityTags": [], "chains": [],
+          "raiseEvents": [ { "tag": "event.damage.taken", "attribute": "Hp", "bogus": 1 } ] } ] }
+        """;
+        var ex = Assert.Throws<TagCatalogException>(() => Load(json));
+        Assert.That(ex!.LineNumber, Is.GreaterThan(0));
+        Assert.That(ex.Message, Does.Contain("bogus"));
+    }
+
+    // A thorns/bolt catalog authored with raiseEvents/grantedAbilities/OnEvent-chain JSON builds cleanly
+    // through EffectCatalogBuilder — proving the loaded graph, not just the parse, is buildable.
+    [Test]
+    public void Json_loaded_raiseEvents_and_OnEvent_chain_spec_builds_through_EffectCatalogBuilder()
+    {
+        const string json = """
+        {
+          "schemaVersion": 1,
+          "specs": [
+            {
+              "name": "bolt", "duration": { "type": "Instant" },
+              "modifiers": [ { "attribute": "Hp", "op": "Add", "magnitude": { "constant": "-10" } } ],
+              "executions": [], "applicationConditions": [], "ongoingConditions": [],
+              "grantedTags": [], "assetTags": [], "immunityTags": [], "chains": [],
+              "raiseEvents": [ { "tag": "event.damage.taken", "attribute": "Hp" } ]
+            },
+            {
+              "name": "thorns", "duration": { "type": "Infinite" },
+              "modifiers": [], "executions": [], "applicationConditions": [], "ongoingConditions": [],
+              "grantedTags": [], "assetTags": [], "immunityTags": [],
+              "grantedAbilities": ["fireball"],
+              "chains": [
+                { "trigger": "OnEvent", "eventTag": "event.damage.taken", "listen": "AsTarget",
+                  "effect": "bolt", "selector": "selector.event.source", "level": "Inherit" }
+              ]
+            }
+          ]
+        }
+        """;
+
+        var builder = new EffectCatalogBuilder();
+        foreach (var spec in Load(json)) builder.Add(spec);
+        var catalog = EffectTestKit.BuildCatalog(builder);
+
+        Assert.That(catalog.Count, Is.EqualTo(2));
+    }
 }

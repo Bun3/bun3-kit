@@ -113,7 +113,8 @@ namespace Bun3.Gameplay.Effects.Catalog
                 spec, "name", "maxLevel", "duration", "stack", "modifiers", "executions",
                 "applicationConditions", "ongoingConditions", "grantedTags", "assetTags",
                 "immunityTags", "chains", "removeOnApplyTags", "chanceToApply",
-                "durationPerLevel", "durationScale", "drCategory", "drWindowTicks", "drStageMultipliers");
+                "durationPerLevel", "durationScale", "drCategory", "drWindowTicks", "drStageMultipliers",
+                "raiseEvents", "grantedAbilities");
 
             var name = RequireString(spec, "name");
             var maxLevel = ReadOptionalInt(spec, "maxLevel", 0);
@@ -200,6 +201,19 @@ namespace Bun3.Gameplay.Effects.Catalog
                 }
             }
 
+            var raiseEvents = new List<RaiseEventDef>();
+            if (spec.Property("raiseEvents", StringComparison.Ordinal) != null)
+            {
+                foreach (var item in RequireArray(spec, "raiseEvents"))
+                {
+                    raiseEvents.Add(ReadRaiseEvent(AsObject(item, "raiseEvents items must be objects."), attributeNames));
+                }
+            }
+
+            var grantedAbilities = spec.Property("grantedAbilities", StringComparison.Ordinal) != null
+                ? ReadStringArray(RequireArray(spec, "grantedAbilities"))
+                : new List<string>();
+
             return new EffectSpec
             {
                 Name = name,
@@ -223,7 +237,17 @@ namespace Bun3.Gameplay.Effects.Catalog
                 DrCategory = drCategory,
                 DrWindowTicks = drWindowTicks,
                 DrStageMultipliers = drStageMultipliers,
+                RaiseEvents = raiseEvents,
+                GrantedAbilities = grantedAbilities,
             };
+        }
+
+        private static RaiseEventDef ReadRaiseEvent(JObject raiseEvent, IReadOnlyDictionary<string, ushort> attributeNames)
+        {
+            RequireAllowedProperties(raiseEvent, "tag", "attribute");
+            var tag = RequireString(raiseEvent, "tag");
+            var attributeId = ResolveAttributeId(raiseEvent, "attribute", attributeNames);
+            return new RaiseEventDef { Tag = tag, AttributeId = attributeId };
         }
 
         private static (EffectDurationType Type, int Ticks, int PeriodTicks) ReadDuration(JObject duration)
@@ -306,7 +330,8 @@ namespace Bun3.Gameplay.Effects.Catalog
         }
 
         // magnitude JSON is discriminated into one of three shapes: calc | base(+perLevel?) | bare operand.
-        private static MagnitudeDef ReadMagnitude(JObject magnitude, IReadOnlyDictionary<string, ushort> attributeNames)
+        // internal: shared with AbilityDefJson's CostDef.Magnitude parsing.
+        internal static MagnitudeDef ReadMagnitude(JObject magnitude, IReadOnlyDictionary<string, ushort> attributeNames)
         {
             if (magnitude.Property("calc", StringComparison.Ordinal) != null)
             {
@@ -392,7 +417,8 @@ namespace Bun3.Gameplay.Effects.Catalog
             return new ExecutionDef { CalcTag = calcTag, Inputs = inputs };
         }
 
-        private static ConditionDef ReadCondition(JObject condition, IReadOnlyDictionary<string, ushort> attributeNames)
+        // internal: shared with AbilityDefJson's ActivationConditions parsing.
+        internal static ConditionDef ReadCondition(JObject condition, IReadOnlyDictionary<string, ushort> attributeNames)
         {
             RequireAllowedProperties(condition, "left", "op", "right");
             var left = ReadOperand(RequireObject(condition, "left"), attributeNames);
@@ -403,7 +429,8 @@ namespace Bun3.Gameplay.Effects.Catalog
 
         private static ChainEdgeDef ReadChain(JObject chain, IReadOnlyDictionary<string, ushort> attributeNames)
         {
-            RequireAllowedProperties(chain, "trigger", "effect", "selector", "selectorParams", "conditions", "level");
+            RequireAllowedProperties(
+                chain, "trigger", "effect", "selector", "selectorParams", "conditions", "level", "eventTag", "listen");
             var trigger = RequireEnum<ChainTrigger>(chain, "trigger");
             var effectName = RequireString(chain, "effect");
 
@@ -413,14 +440,9 @@ namespace Bun3.Gameplay.Effects.Catalog
                 selectorTag = RequireString(chain, "selector");
             }
 
-            var selectorParams = new List<BigNum>();
-            if (chain.Property("selectorParams", StringComparison.Ordinal) is { } selectorParamsProperty)
-            {
-                foreach (var item in AsArray(selectorParamsProperty.Value, "selectorParams must be an array."))
-                {
-                    selectorParams.Add(RequireBigNumToken(item));
-                }
-            }
+            var selectorParams = chain.Property("selectorParams", StringComparison.Ordinal) is { } selectorParamsProperty
+                ? ReadBigNumArray(AsArray(selectorParamsProperty.Value, "selectorParams must be an array."))
+                : new List<BigNum>();
 
             var conditions = new List<ConditionDef>();
             if (chain.Property("conditions", StringComparison.Ordinal) is { } conditionsProperty)
@@ -438,6 +460,16 @@ namespace Bun3.Gameplay.Effects.Catalog
                 (levelRule, fixedLevel) = ReadChainLevel(levelProperty.Value);
             }
 
+            string? eventTag = null;
+            if (chain.Property("eventTag", StringComparison.Ordinal) != null)
+            {
+                eventTag = RequireString(chain, "eventTag");
+            }
+
+            var listen = chain.Property("listen", StringComparison.Ordinal) != null
+                ? RequireEnum<ChainListen>(chain, "listen")
+                : ChainListen.AsTarget;
+
             return new ChainEdgeDef
             {
                 Trigger = trigger,
@@ -447,6 +479,8 @@ namespace Bun3.Gameplay.Effects.Catalog
                 Conditions = conditions,
                 LevelRule = levelRule,
                 FixedLevel = fixedLevel,
+                EventTag = eventTag,
+                Listen = listen,
             };
         }
 
@@ -504,7 +538,8 @@ namespace Bun3.Gameplay.Effects.Catalog
             return Operand.SourceAttribute(sourceAttributeId, sourceCoefficient);
         }
 
-        private static ushort ResolveAttributeId(
+        // internal: shared with AbilityDefJson's CostDef.AttributeId / RaiseEventDef.AttributeId parsing.
+        internal static ushort ResolveAttributeId(
             JObject value, string propertyName, IReadOnlyDictionary<string, ushort> attributeNames)
         {
             var token = RequireProperty(value, propertyName);
@@ -517,12 +552,25 @@ namespace Bun3.Gameplay.Effects.Catalog
             return id;
         }
 
-        private static List<string> ReadStringArray(JArray array)
+        // internal: shared with AbilityDefJson's tag-array field parsing (assetTags/requiredTags/blockedTags).
+        internal static List<string> ReadStringArray(JArray array)
         {
             var result = new List<string>(array.Count);
             foreach (var item in array)
             {
                 result.Add(RequireStringValue(item, string.Empty));
+            }
+
+            return result;
+        }
+
+        // internal: shared with AbilityDefJson's AbilityEffectDef.SelectorParams parsing.
+        internal static List<BigNum> ReadBigNumArray(JArray array)
+        {
+            var result = new List<BigNum>(array.Count);
+            foreach (var item in array)
+            {
+                result.Add(RequireBigNumToken(item));
             }
 
             return result;
@@ -635,7 +683,8 @@ namespace Bun3.Gameplay.Effects.Catalog
                 ? RequireBigNum(value, propertyName)
                 : fallback;
 
-        private static T RequireEnum<T>(JObject value, string propertyName) where T : struct, Enum
+        // internal: shared with AbilityDefJson's AbilityEffectDef.LevelRule parsing.
+        internal static T RequireEnum<T>(JObject value, string propertyName) where T : struct, Enum
         {
             var token = RequireProperty(value, propertyName);
             var text = RequireStringValue(token, propertyName);
@@ -651,7 +700,8 @@ namespace Bun3.Gameplay.Effects.Catalog
 
         private static JArray AsArray(JToken token, string message) => token as JArray ?? throw Error(message, token);
 
-        private static TagCatalogException Error(string message, JToken token)
+        // internal: shared with AbilityDefJson's own line/position-carrying error construction.
+        internal static TagCatalogException Error(string message, JToken token)
         {
             var lineInfo = (IJsonLineInfo)token;
             return new TagCatalogException(
