@@ -9,14 +9,14 @@ namespace Bun3.Gameplay.Tests;
 [TestFixture]
 public sealed class WorldTests
 {
-    private static Unit MakeUnit(EffectTestKit kit, ulong id)
+    private static Unit MakeUnit(EffectTestKit kit, ulong id, ulong ownerId = 0)
     {
         ReadOnlySpan<ushort> attributes = stackalloc ushort[]
         {
             EffectTestKit.Hp, EffectTestKit.MaxHp, EffectTestKit.Mp,
             EffectTestKit.Attack, EffectTestKit.Resistance,
         };
-        return new Unit(new TargetId(id), EffectTestKit.BuildAttributeRegistry(), attributes, kit.TagCatalog);
+        return new Unit(new TargetId(id), EffectTestKit.BuildAttributeRegistry(), attributes, kit.TagCatalog, ownerId);
     }
 
     private static World MakeWorld(EffectTestKit kit)
@@ -184,5 +184,81 @@ public sealed class WorldTests
         world.Pipeline.EnqueueApply(kit.SpecId("noop"), new TargetId(1), new TargetId(1));
 
         Assert.That(() => world.CreateSnapshot(), Throws.InvalidOperationException);
+    }
+
+    [Test]
+    public void Snapshotting_with_pending_structural_changes_is_rejected()
+    {
+        var kit = EffectTestKit.Create();
+        kit.AddSpec(EffectTestKit.MinimalInstant("noop"));
+        var world = MakeWorld(kit);
+
+        world.Spawn(MakeUnit(kit, 1));
+
+        Assert.That(() => world.CreateSnapshot(), Throws.InvalidOperationException);
+    }
+
+    [Test]
+    public void A_same_frame_spawn_then_despawn_of_the_same_id_cancels_out()
+    {
+        var kit = EffectTestKit.Create();
+        kit.AddSpec(EffectTestKit.MinimalInstant("noop"));
+        var world = MakeWorld(kit);
+
+        world.Spawn(MakeUnit(kit, 5));
+        world.Despawn(new TargetId(5));
+        world.Tick();
+
+        Assert.That(world.TryGetUnit(new TargetId(5), out _), Is.False);
+    }
+
+    [Test]
+    public void A_same_frame_despawn_then_spawn_of_the_same_id_registers_the_new_unit()
+    {
+        var kit = EffectTestKit.Create();
+        kit.AddSpec(EffectTestKit.MinimalInstant("noop"));
+        var world = MakeWorld(kit);
+        world.Spawn(MakeUnit(kit, 5, ownerId: 1));
+        world.Tick();
+
+        world.Despawn(new TargetId(5));
+        world.Spawn(MakeUnit(kit, 5, ownerId: 2));
+        world.Tick();
+
+        Assert.That(world.TryGetUnit(new TargetId(5), out var unit), Is.True);
+        Assert.That(unit!.OwnerId, Is.EqualTo(2ul));
+    }
+
+    [Test]
+    public void Despawning_the_same_id_twice_in_one_frame_is_harmless()
+    {
+        var kit = EffectTestKit.Create();
+        kit.AddSpec(EffectTestKit.MinimalInstant("noop"));
+        var world = MakeWorld(kit);
+        world.Spawn(MakeUnit(kit, 5));
+        world.Tick();
+
+        world.Despawn(new TargetId(5));
+        world.Despawn(new TargetId(5));
+
+        Assert.That(() => world.Tick(), Throws.Nothing);
+        Assert.That(world.TryGetUnit(new TargetId(5), out _), Is.False);
+    }
+
+    [Test]
+    public void Flushing_the_structural_queue_is_atomic_on_a_mid_queue_duplicate()
+    {
+        var kit = EffectTestKit.Create();
+        kit.AddSpec(EffectTestKit.MinimalInstant("noop"));
+        var world = MakeWorld(kit);
+        world.Spawn(MakeUnit(kit, 1));
+        world.Tick();
+
+        world.Spawn(MakeUnit(kit, 2));
+        world.Spawn(MakeUnit(kit, 1));
+
+        Assert.That(() => world.Tick(), Throws.InvalidOperationException);
+        Assert.That(world.UnitCount, Is.EqualTo(1), "a failed flush must not partially apply the queue");
+        Assert.That(world.TryGetUnit(new TargetId(2), out _), Is.False);
     }
 }

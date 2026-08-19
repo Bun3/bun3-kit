@@ -10,15 +10,14 @@ namespace Bun3.Gameplay
     /// Unit registry and tick driver for one simulation. Implements
     /// <see cref="IEffectTargetResolver"/> for the pipeline it owns, so effects address units by
     /// <see cref="TargetId"/> without knowing about units at all. Structural changes (spawn,
-    /// despawn) are queued and applied only at a phase boundary — the registry must never mutate
-    /// while a tick iterates it. Composed of this file plus <c>World.Ability.cs</c>.
+    /// despawn) are queued in call order and applied only at a phase boundary — the registry must
+    /// never mutate while a tick iterates it. Composed of this file plus <c>World.Ability.cs</c>.
     /// </summary>
     public sealed partial class World : IEffectTargetResolver
     {
         private readonly List<Unit> _units = new List<Unit>();
         private readonly List<TargetId> _unitIds = new List<TargetId>();
-        private readonly List<Unit> _spawnQueue = new List<Unit>();
-        private readonly List<TargetId> _despawnQueue = new List<TargetId>();
+        private readonly List<(Unit? Unit, TargetId Id)> _pendingOps = new List<(Unit? Unit, TargetId Id)>();
         private readonly EffectCatalog _effects;
         private readonly AbilityCatalog _abilities;
         private readonly IRng _rng;
@@ -76,21 +75,22 @@ namespace Bun3.Gameplay
         }
 
         /// <summary>Queues a unit for registration. It becomes visible at the start of the next
-        /// <see cref="Tick"/>.</summary>
+        /// <see cref="Tick"/>, in the order this call takes relative to other queued spawns and
+        /// despawns.</summary>
         /// <param name="unit">Unit to register.</param>
         public void Spawn(Unit unit)
         {
             if (unit is null) throw new ArgumentNullException(nameof(unit));
-            _spawnQueue.Add(unit);
+            _pendingOps.Add((unit, unit.Id));
         }
 
-        /// <summary>Queues a unit for removal. It disappears at the start of the next <see cref="Tick"/>.</summary>
+        /// <summary>Queues a unit for removal. The removal takes effect at the start of the next
+        /// <see cref="Tick"/>, in the order this call takes relative to other queued spawns and
+        /// despawns — a despawn queued after a spawn of the same id cancels it out.</summary>
         /// <param name="id">Unit id to remove.</param>
-        /// <returns>True when a matching unit is currently registered.</returns>
-        public bool Despawn(TargetId id)
+        public void Despawn(TargetId id)
         {
-            _despawnQueue.Add(id);
-            return IndexOf(id) >= 0;
+            _pendingOps.Add((null, id));
         }
 
         /// <summary>Applies queued structural changes, then advances the pipeline by one tick.</summary>
@@ -102,12 +102,15 @@ namespace Bun3.Gameplay
 
         /// <summary>Creates a deep-copy snapshot of every registered unit plus the world counters.</summary>
         /// <returns>Snapshot of the whole world.</returns>
-        /// <exception cref="InvalidOperationException">Thrown when applications are still pending —
-        /// the queue is outside snapshot scope, so snapshotting mid-drain would silently lose work.</exception>
+        /// <exception cref="InvalidOperationException">Thrown when applications or structural changes
+        /// are still pending — both are outside snapshot scope, so snapshotting mid-drain would
+        /// silently lose work or omit not-yet-flushed units.</exception>
         public WorldSnapshot CreateSnapshot()
         {
             if (Pipeline.PendingApplyCount > 0)
                 throw new InvalidOperationException("Cannot snapshot a world with pending applications.");
+            if (_pendingOps.Count > 0)
+                throw new InvalidOperationException("Cannot snapshot a world with pending structural changes.");
 
             var units = new UnitSnapshot[_units.Count];
             for (var i = 0; i < _units.Count; i++) units[i] = _units[i].CreateSnapshot();
@@ -135,34 +138,56 @@ namespace Bun3.Gameplay
             Pipeline.NextInstanceId = snapshot.NextInstanceId;
         }
 
+        /// <summary>
+        /// Applies the pending queue in call order. Validates the whole queue against a scratch id
+        /// set first — spawning an id that is already present at that point in the sequence throws
+        /// without mutating the registry and without clearing the queue, so the caller can inspect
+        /// and retry. Only once validation passes is the queue replayed against the real registry.
+        /// </summary>
         private void FlushStructuralChanges()
         {
-            for (var i = 0; i < _despawnQueue.Count; i++)
-            {
-                var index = IndexOf(_despawnQueue[i]);
-                if (index < 0) continue;
-                _units.RemoveAt(index);
-                _unitIds.RemoveAt(index);
-            }
+            if (_pendingOps.Count == 0) return;
 
-            _despawnQueue.Clear();
+            ValidatePendingOps();
 
-            for (var i = 0; i < _spawnQueue.Count; i++)
+            for (var i = 0; i < _pendingOps.Count; i++)
             {
-                var unit = _spawnQueue[i];
-                var index = IndexOf(unit.Id);
-                if (index >= 0)
+                var op = _pendingOps[i];
+                if (op.Unit is null)
                 {
-                    _spawnQueue.Clear();
-                    throw new InvalidOperationException($"Unit id {unit.Id.Value} is already registered.");
+                    var index = IndexOf(op.Id);
+                    if (index < 0) continue;
+                    _units.RemoveAt(index);
+                    _unitIds.RemoveAt(index);
                 }
-
-                var position = InsertPosition(unit.Id);
-                _units.Insert(position, unit);
-                _unitIds.Insert(position, unit.Id);
+                else
+                {
+                    var position = InsertPosition(op.Unit.Id);
+                    _units.Insert(position, op.Unit);
+                    _unitIds.Insert(position, op.Unit.Id);
+                }
             }
 
-            _spawnQueue.Clear();
+            _pendingOps.Clear();
+        }
+
+        private void ValidatePendingOps()
+        {
+            var scratch = new HashSet<ulong>();
+            for (var i = 0; i < _unitIds.Count; i++) scratch.Add(_unitIds[i].Value);
+
+            for (var i = 0; i < _pendingOps.Count; i++)
+            {
+                var op = _pendingOps[i];
+                if (op.Unit is null)
+                {
+                    scratch.Remove(op.Id.Value);
+                }
+                else if (!scratch.Add(op.Unit.Id.Value))
+                {
+                    throw new InvalidOperationException($"Unit id {op.Unit.Id.Value} is already registered.");
+                }
+            }
         }
 
         private int IndexOf(TargetId id)
