@@ -99,17 +99,17 @@ public sealed class AbilityGrantSourceTests
     }
 
     [Test]
-    public void Unknown_granted_ability_name_fails_when_the_world_is_created()
+    public void Unknown_granted_ability_name_fails_at_ability_catalog_build()
     {
         var kit = EffectTestKit.Create();
         var granter = EffectTestKit.MinimalInfinite("granter");
         granter.GrantedAbilities.Add("nope");
         kit.AddSpec(granter);
-        var abilities = new AbilityCatalogBuilder().Build(kit.TagCatalog, kit.Seams, kit.Attributes, kit.Catalog);
 
         Assert.That(
-            () => new World(kit.Catalog, abilities, new XorShiftRng(1)),
-            Throws.InvalidOperationException.With.Message.Contains("nope"));
+            () => new AbilityCatalogBuilder().Build(kit.TagCatalog, kit.Seams, kit.Attributes, kit.Catalog),
+            Throws.InvalidOperationException.With.Message.Contains("granter")
+                .And.Message.Contains("nope"));
     }
 
     // ---- LevelFromStack: the granted ability's level must track instance.Level, not just its creation-time value ----

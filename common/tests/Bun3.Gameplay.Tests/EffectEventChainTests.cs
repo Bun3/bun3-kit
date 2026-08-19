@@ -119,6 +119,35 @@ public sealed class EffectEventChainTests
         pipeline.Tick();
 
         Assert.That(kit.Attacker.Attributes.GetBase(EffectTestKit.Hp), Is.EqualTo((BigNum)93));
+        Assert.That(pipeline.EventChainFireCount, Is.EqualTo(1));
+    }
+
+    // Matching is IsAncestorOrSelf(chain's declared tag, raised event tag) -- a chain declaring the
+    // parent catches descendant events (above), never the reverse. An inverted comparison would pass
+    // both this test and the one above, so both directions must be checked.
+    [Test]
+    public void Chain_event_tag_does_not_match_ancestor_event_tags()
+    {
+        var kit = BuildReflectKit(ChainListen.AsTarget, chainEventTag: "event.damage.taken");
+        // "bolt2" raises the ancestor tag "event.damage" -- the chain declares the descendant
+        // "event.damage.taken" and must not fire for it.
+        kit.AddSpec(Damage("bolt2", 40, "event.damage"));
+        kit.RegisterSelector("selector.everyone", new AttackerSelector());
+        var pipeline = kit.BuildPipeline();
+
+        foreach (var target in kit.AllTargets)
+        {
+            target.Attributes.SetBase(EffectTestKit.MaxHp, 100);
+            target.Attributes.SetBase(EffectTestKit.Hp, 100);
+        }
+
+        pipeline.EnqueueApply(kit.SpecId("thorns"), kit.Defender.Id, kit.Defender.Id);
+        pipeline.Tick();
+        pipeline.EnqueueApply(kit.SpecId("bolt2"), kit.Attacker.Id, kit.Defender.Id);
+        pipeline.Tick();
+
+        Assert.That(kit.Attacker.Attributes.GetBase(EffectTestKit.Hp), Is.EqualTo((BigNum)100));
+        Assert.That(pipeline.EventChainFireCount, Is.EqualTo(0));
     }
 
     [Test]

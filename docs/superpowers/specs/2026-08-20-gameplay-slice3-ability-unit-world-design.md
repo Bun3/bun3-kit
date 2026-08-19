@@ -388,7 +388,9 @@ TryActivateAbility(unitId, abilityId) → AbilityActivationResult
 4. `RequiredTags` 미충족 → `MissingTag`
 5. `BlockedTags` 보유 → `BlockedByTag` (쿨다운은 이 경로로 잡힌다)
 6. `ActivationConditions` 미충족 → `ConditionFailed`
-7. `Costs` 전부 `Current >= 비용` 검사 → 미달이면 `CostInsufficient`
+7. `Costs` 전부 `Base >= 비용` 검사 → 미달이면 `CostInsufficient`. **`Current`가 아니라 `Base`를
+   검사한다** — 자원은 `Base`에 산다(즉시 피해·회복은 `AddBase` 쓰기)는 점과, `Base` 검사라야
+   차감이 클램프로 깎이지 않고 정확하다는 점 때문이다.
 8. **코스트 즉시 차감** → `CooldownEffect` 적용 → `Effects` 각 항목을 셀렉터로 대상 선택 후
    `EnqueueApply` → `Success`
 

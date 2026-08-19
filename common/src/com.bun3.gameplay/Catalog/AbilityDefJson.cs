@@ -19,8 +19,9 @@ namespace Bun3.Gameplay.Abilities.Catalog
     /// but performs no semantic validation of tag, effect, or seam references — that is
     /// <see cref="AbilityCatalogBuilder.Build"/>'s job. Its only semantic step is resolving
     /// attribute name strings to ushort ids via <see cref="Load"/>'s attributeNames dictionary.
-    /// Operand, MagnitudeDef, and ConditionDef parsing reuse <see cref="EffectSpecJson"/>'s
-    /// internal parsers so the two loaders share one implementation of that shape.
+    /// Operand, MagnitudeDef, ConditionDef, and the "level" field (<c>"Inherit"</c> or a fixed
+    /// integer, compiling to <see cref="ChainLevelRule"/> + FixedLevel) reuse <see cref="EffectSpecJson"/>'s
+    /// internal parsers so the two loaders share one implementation of each shape.
     /// </summary>
     public static class AbilityDefJson
     {
@@ -184,7 +185,7 @@ namespace Bun3.Gameplay.Abilities.Catalog
 
         private static AbilityEffectDef ReadAbilityEffect(JObject entry)
         {
-            RequireAllowedProperties(entry, "effect", "selector", "selectorParams", "levelRule", "fixedLevel");
+            RequireAllowedProperties(entry, "effect", "selector", "selectorParams", "level");
 
             var effectName = RequireString(entry, "effect");
 
@@ -198,10 +199,12 @@ namespace Bun3.Gameplay.Abilities.Catalog
                 ? EffectSpecJson.ReadBigNumArray(AsArray(selectorParamsProperty.Value, "selectorParams must be an array."))
                 : new List<BigNum>();
 
-            var levelRule = entry.Property("levelRule", StringComparison.Ordinal) != null
-                ? EffectSpecJson.RequireEnum<ChainLevelRule>(entry, "levelRule")
-                : ChainLevelRule.Inherit;
-            var fixedLevel = ReadOptionalInt(entry, "fixedLevel", 0);
+            var levelRule = ChainLevelRule.Inherit;
+            var fixedLevel = 0;
+            if (entry.Property("level", StringComparison.Ordinal) is { } levelProperty)
+            {
+                (levelRule, fixedLevel) = EffectSpecJson.ReadChainLevel(levelProperty.Value);
+            }
 
             return new AbilityEffectDef
             {

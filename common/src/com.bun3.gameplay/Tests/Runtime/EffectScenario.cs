@@ -327,6 +327,11 @@ namespace Bun3.Gameplay.Tests
 
         private static readonly ushort[] ScenarioAttributeIds = { Hp, MaxHp, Attack, Mp };
 
+        /// <summary>Name -> id map for <see cref="ScenarioAttributeIds"/>, for JSON-authored variants
+        /// of the scenario catalogs (the binary-artifact equivalence test's JSON leg).</summary>
+        internal static readonly IReadOnlyDictionary<string, ushort> ScenarioAttributeNames =
+            new Dictionary<string, ushort> { ["Hp"] = Hp, ["MaxHp"] = MaxHp, ["Attack"] = Attack, ["Mp"] = Mp };
+
         private static TagCatalog BuildScenarioTagCatalog()
         {
             var names = new List<string> { EventHitTag, BuiltInSelectors.EventSourceTag, CooldownTag, ArmedTag };

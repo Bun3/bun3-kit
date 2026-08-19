@@ -485,7 +485,9 @@ namespace Bun3.Gameplay.Effects.Catalog
         }
 
         // level must be either the string "Inherit" or a JSON integer (fixed level).
-        private static (ChainLevelRule Rule, int Fixed) ReadChainLevel(JToken token)
+        // internal: shared with AbilityDefJson's AbilityEffectDef.level parsing -- one authoring
+        // shape for ChainLevelRule + FixedLevel across both loaders.
+        internal static (ChainLevelRule Rule, int Fixed) ReadChainLevel(JToken token)
         {
             if (token.Type == JTokenType.String)
             {

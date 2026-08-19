@@ -55,7 +55,29 @@ namespace Bun3.Gameplay.Abilities
                 compiled[i] = Compile(_defs[i], tags, seams, attributes, effects);
             }
 
+            ValidateGrantedAbilitiesResolve(effects, nameToId);
+
             return new AbilityCatalog(compiled, nameToId);
+        }
+
+        // Every EffectSpec.GrantedAbilities entry must name an ability in this catalog. Checked here
+        // (not at World construction) so the failure carries the same Build-time, name-based message
+        // shape as every other cross-reference in this library.
+        private static void ValidateGrantedAbilitiesResolve(EffectCatalog effects, Dictionary<string, int> nameToId)
+        {
+            for (var specId = 0; specId < effects.Count; specId++)
+            {
+                var spec = effects.GetSpec(specId);
+                var grantedNames = spec.GrantedAbilityNames;
+                for (var i = 0; i < grantedNames.Length; i++)
+                {
+                    if (!nameToId.ContainsKey(grantedNames[i]))
+                    {
+                        throw new InvalidOperationException(
+                            $"Effect '{spec.Name}': grants unknown ability '{grantedNames[i]}'.");
+                    }
+                }
+            }
         }
 
         private static CompiledAbility Compile(
@@ -72,6 +94,8 @@ namespace Bun3.Gameplay.Abilities
                     throw new InvalidOperationException(
                         $"{owner}: cost references unregistered attribute {cost.AttributeId}.");
                 }
+
+                RejectEventMagnitude(cost.Magnitude, owner, "a cost magnitude");
 
                 var (magBase, magPerLevel, magCalc, magCalcTag, magByLevel, magTail, magIncrement) =
                     MagnitudeCompiler.Resolve(cost.Magnitude, owner, def.MaxLevel, tags, seams, attributes);
@@ -142,6 +166,8 @@ namespace Bun3.Gameplay.Abilities
             for (var i = 0; i < def.ActivationConditions.Count; i++)
             {
                 var condition = def.ActivationConditions[i];
+                RejectEventMagnitude(condition.Left, owner, "ActivationConditions");
+                RejectEventMagnitude(condition.Right, owner, "ActivationConditions");
                 MagnitudeCompiler.ValidateOperandAttribute(condition.Left, owner, attributes);
                 MagnitudeCompiler.ValidateOperandAttribute(condition.Right, owner, attributes);
                 conditions[i] = new CompiledCondition(condition.Left, condition.Op, condition.Right);
@@ -157,6 +183,26 @@ namespace Bun3.Gameplay.Abilities
                 costs,
                 cooldownEffectId,
                 abilityEffects);
+        }
+
+        // An ability activation is never an event path -- there is no GameplayEvent to carry a
+        // magnitude, so EventMagnitude here would always resolve to BigNum.Zero and silently zero
+        // out whatever it authored (a cost of zero, a condition that always compares against zero).
+        private static void RejectEventMagnitude(MagnitudeDef magnitude, string owner, string where)
+        {
+            if ((magnitude.Base.HasValue && magnitude.Base.Value.Kind == OperandKind.EventMagnitude)
+                || (magnitude.PerLevel.HasValue && magnitude.PerLevel.Value.Kind == OperandKind.EventMagnitude))
+            {
+                throw new InvalidOperationException($"{owner}: EventMagnitude cannot be used in {where}.");
+            }
+        }
+
+        private static void RejectEventMagnitude(Operand operand, string owner, string where)
+        {
+            if (operand.Kind == OperandKind.EventMagnitude)
+            {
+                throw new InvalidOperationException($"{owner}: EventMagnitude cannot be used in {where}.");
+            }
         }
     }
 }

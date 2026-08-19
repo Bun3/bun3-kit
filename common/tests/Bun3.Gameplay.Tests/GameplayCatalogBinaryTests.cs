@@ -3,10 +3,13 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
+using System.Text;
 using Bun3.Gameplay.Abilities;
+using Bun3.Gameplay.Abilities.Catalog;
 using Bun3.Gameplay.Attributes;
 using Bun3.Gameplay.Catalog;
 using Bun3.Gameplay.Effects;
+using Bun3.Gameplay.Effects.Catalog;
 using Bun3.Gameplay.Numerics;
 using Bun3.Gameplay.Seams;
 using Bun3.Gameplay.Tags;
@@ -173,11 +176,113 @@ public sealed class GameplayCatalogBinaryTests
         var (loadedEffects, loadedAbilities) =
             GameplayCatalogBinary.Load(stream, kit.Tags, kit.Seams, kit.Attributes);
 
+        var effectBuilder = new EffectCatalogBuilder();
+        using (var effectStream = new MemoryStream(Encoding.UTF8.GetBytes(ScenarioEffectsJson)))
+        {
+            foreach (var spec in EffectSpecJson.Load(effectStream, EffectScenario.ScenarioAttributeNames))
+            {
+                effectBuilder.Add(spec);
+            }
+        }
+
+        var jsonEffects = effectBuilder.Build(kit.Tags, kit.Seams, kit.Attributes);
+
+        var abilityBuilder = new AbilityCatalogBuilder();
+        using (var abilityStream = new MemoryStream(Encoding.UTF8.GetBytes(ScenarioAbilitiesJson)))
+        {
+            foreach (var def in AbilityDefJson.Load(abilityStream, EffectScenario.ScenarioAttributeNames))
+            {
+                abilityBuilder.Add(def);
+            }
+        }
+
+        var jsonAbilities = abilityBuilder.Build(kit.Tags, kit.Seams, kit.Attributes, jsonEffects);
+
         var builderHash = EffectScenario.RunHash(kit.Effects, kit.Abilities, kit.Tags, seed: 20260820);
         var binaryHash = EffectScenario.RunHash(loadedEffects, loadedAbilities, kit.Tags, seed: 20260820);
+        var jsonHash = EffectScenario.RunHash(jsonEffects, jsonAbilities, kit.Tags, seed: 20260820);
 
         Assert.That(binaryHash, Is.EqualTo(builderHash));
+        Assert.That(jsonHash, Is.EqualTo(builderHash));
     }
+
+    // JSON mirror of EffectScenario's AddScenarioSpecs -- same names, same order (so ids line up),
+    // same fields.
+    private const string ScenarioEffectsJson = """
+    {
+      "schemaVersion": 1,
+      "specs": [
+        {
+          "name": "Strike", "duration": { "type": "Instant" },
+          "modifiers": [ { "attribute": "Hp", "op": "Add", "magnitude": { "constant": "-8" } } ],
+          "executions": [], "applicationConditions": [], "ongoingConditions": [],
+          "grantedTags": [], "assetTags": [], "immunityTags": [], "chains": [],
+          "raiseEvents": [ { "tag": "event.hit", "attribute": "Hp" } ]
+        },
+        {
+          "name": "StrikeBack", "duration": { "type": "Instant" },
+          "modifiers": [ { "attribute": "Hp", "op": "Add", "magnitude": { "constant": "-4" } } ],
+          "executions": [], "applicationConditions": [], "ongoingConditions": [],
+          "grantedTags": [], "assetTags": [], "immunityTags": [], "chains": []
+        },
+        {
+          "name": "Retaliate", "duration": { "type": "Infinite" },
+          "modifiers": [], "executions": [], "applicationConditions": [], "ongoingConditions": [],
+          "grantedTags": [], "assetTags": [], "immunityTags": [],
+          "chains": [ { "trigger": "OnEvent", "effect": "StrikeBack", "eventTag": "event.hit",
+                        "selector": "selector.event.source", "level": "Inherit" } ]
+        },
+        {
+          "name": "Cooldown", "duration": { "type": "Duration", "ticks": 15 },
+          "modifiers": [], "executions": [], "applicationConditions": [], "ongoingConditions": [],
+          "grantedTags": [ "cooldown.strike" ], "assetTags": [], "immunityTags": [], "chains": []
+        },
+        {
+          "name": "Regen", "duration": { "type": "Duration", "ticks": 40, "periodTicks": 4 },
+          "modifiers": [ { "attribute": "Hp", "op": "Add", "magnitude": { "constant": "3" } } ],
+          "executions": [], "applicationConditions": [], "ongoingConditions": [],
+          "grantedTags": [], "assetTags": [], "immunityTags": [], "chains": []
+        },
+        {
+          "name": "Buff", "duration": { "type": "Duration", "ticks": 25 },
+          "stack": { "maxStack": 4, "onReapply": "AddStack", "addStackCount": 1,
+                     "refreshDurationOnReapply": true, "onExpiration": "ClearAll", "onOverflow": "Deny" },
+          "modifiers": [ { "attribute": "Attack", "op": "Add", "magnitude": { "constant": "2" } } ],
+          "executions": [], "applicationConditions": [], "ongoingConditions": [],
+          "grantedTags": [], "assetTags": [], "immunityTags": [], "chains": []
+        },
+        {
+          "name": "Reflect", "duration": { "type": "Infinite" },
+          "modifiers": [ { "attribute": "Attack", "op": "Add", "magnitude": { "constant": "6" } } ],
+          "executions": [], "applicationConditions": [], "ongoingConditions": [],
+          "grantedTags": [], "assetTags": [], "immunityTags": [], "chains": []
+        },
+        {
+          "name": "Mark", "duration": { "type": "Infinite" },
+          "modifiers": [], "executions": [], "applicationConditions": [], "ongoingConditions": [],
+          "grantedTags": [], "assetTags": [], "immunityTags": [], "chains": [],
+          "grantedAbilities": [ "Ward" ]
+        }
+      ]
+    }
+    """;
+
+    // JSON mirror of EffectScenario's AddScenarioAbilities -- same names, same order.
+    private const string ScenarioAbilitiesJson = """
+    {
+      "schemaVersion": 1,
+      "abilities": [
+        {
+          "name": "Slash", "maxLevel": 1,
+          "requiredTags": [ "state.armed" ], "blockedTags": [ "cooldown.strike" ],
+          "costs": [ { "attribute": "Mp", "magnitude": { "base": { "constant": "5" } } } ],
+          "cooldownEffect": "Cooldown",
+          "effects": [ { "effect": "Strike" } ]
+        },
+        { "name": "Ward", "maxLevel": 1 }
+      ]
+    }
+    """;
 
     // A catalog exercising every compiled member: seam-backed magnitudes and executions, level tables,
     // every tag list, chains including OnEvent, stack overflow, DR, duration scaling, and raised events.

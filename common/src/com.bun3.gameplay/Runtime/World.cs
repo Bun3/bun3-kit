@@ -28,8 +28,6 @@ namespace Bun3.Gameplay
         /// <param name="abilities">Compiled ability catalog.</param>
         /// <param name="rng">Seeded random source; shared with the pipeline.</param>
         /// <param name="applyBudgetPerTick">Maximum effect applications drained per tick.</param>
-        /// <exception cref="InvalidOperationException">An effect spec's GrantedAbilities names an
-        /// ability that is not in <paramref name="abilities"/>.</exception>
         public World(EffectCatalog effects, AbilityCatalog abilities, IRng rng, int applyBudgetPerTick = 64)
         {
             _effects = effects ?? throw new ArgumentNullException(nameof(effects));
@@ -37,6 +35,8 @@ namespace Bun3.Gameplay
             _rng = rng ?? throw new ArgumentNullException(nameof(rng));
             Pipeline = new EffectPipeline(effects, this, rng, applyBudgetPerTick);
 
+            // AbilityCatalogBuilder.Build already proved every GrantedAbilityNames entry resolves
+            // against abilities, so this cache is built over references already known to be valid.
             _grantedAbilityIds = new int[effects.Count][];
             for (var specId = 0; specId < effects.Count; specId++)
             {
@@ -44,11 +44,7 @@ namespace Bun3.Gameplay
                 var ids = new int[names.Length];
                 for (var i = 0; i < names.Length; i++)
                 {
-                    if (!abilities.TryGetId(names[i], out ids[i]))
-                    {
-                        throw new InvalidOperationException(
-                            $"Effect spec {specId} grants unknown ability '{names[i]}'.");
-                    }
+                    ids[i] = abilities.GetRequiredId(names[i]);
                 }
 
                 _grantedAbilityIds[specId] = ids;
@@ -160,7 +156,8 @@ namespace Bun3.Gameplay
         /// <summary>Restores every unit and the world counters from a snapshot.</summary>
         /// <param name="snapshot">Snapshot to restore.</param>
         /// <exception cref="ArgumentException">Thrown when the snapshot's unit set does not match the
-        /// registry — spawn and despawn are not part of a snapshot.</exception>
+        /// registry — spawn and despawn are not part of a snapshot. Validated against every unit id
+        /// before any unit is restored, so a mismatch leaves the whole registry untouched.</exception>
         public void RestoreSnapshot(WorldSnapshot snapshot)
         {
             if (snapshot is null) throw new ArgumentNullException(nameof(snapshot));
@@ -168,6 +165,17 @@ namespace Bun3.Gameplay
             FlushStructuralChanges();
             if (snapshot.Units.Length != _units.Count)
                 throw new ArgumentException("Snapshot unit count does not match the registry.", nameof(snapshot));
+
+            for (var i = 0; i < _units.Count; i++)
+            {
+                if (snapshot.Units[i].UnitId != _units[i].Id)
+                {
+                    throw new ArgumentException(
+                        $"Snapshot unit at index {i} has id {snapshot.Units[i].UnitId.Value}, "
+                        + $"but the registry has id {_units[i].Id.Value} at that index.",
+                        nameof(snapshot));
+                }
+            }
 
             for (var i = 0; i < _units.Count; i++)
             {

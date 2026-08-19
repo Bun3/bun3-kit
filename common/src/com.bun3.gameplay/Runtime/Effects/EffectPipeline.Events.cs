@@ -68,6 +68,7 @@ namespace Bun3.Gameplay.Effects
                 return;
             }
 
+            // ponytail: target counts are authoring-spec scale, so a 32-slot stack buffer suffices -- on overflow only the first 32 are applied.
             Span<TargetId> targets = stackalloc TargetId[32];
             var selectorCtx = new SelectorContext(
                 source, listenerId, chain.SelectorParams, _rng, _resolver,

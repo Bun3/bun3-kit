@@ -74,6 +74,11 @@ namespace Bun3.Gameplay
 
         private void ApplyAbilityEffects(CompiledAbility ability, TargetId unitId, int level)
         {
+            // ponytail: target counts are authoring-spec scale, so a 32-slot stack buffer suffices -- on overflow only the first 32 are applied.
+            // Hoisted above the loop: stack memory is released at method exit, not per iteration, so
+            // an alloc per effect entry would grow the frame with the entry count instead of staying fixed.
+            Span<TargetId> targets = stackalloc TargetId[32];
+
             var effects = ability.Effects;
             for (var i = 0; i < effects.Length; i++)
             {
@@ -86,7 +91,6 @@ namespace Bun3.Gameplay
                     continue;
                 }
 
-                Span<TargetId> targets = stackalloc TargetId[32];
                 var ctx = new SelectorContext(
                     unitId, unitId, entry.SelectorParams, Pipeline.Rng, this,
                     eventSource: default, eventTarget: default,

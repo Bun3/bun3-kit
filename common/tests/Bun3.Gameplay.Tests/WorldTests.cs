@@ -173,6 +173,41 @@ public sealed class WorldTests
     }
 
     [Test]
+    public void Mismatched_unit_id_in_restore_snapshot_leaves_every_unit_untouched()
+    {
+        var kit = EffectTestKit.Create();
+        var world = MakeWorld(kit);
+        var unitA = MakeUnit(kit, 1);
+        var unitB = MakeUnit(kit, 2);
+        world.Spawn(unitA);
+        world.Spawn(unitB);
+        world.Tick();
+        unitA.Attributes.SetBase(EffectTestKit.MaxHp, 100);
+        unitA.Attributes.SetBase(EffectTestKit.Hp, 10);
+        unitB.Attributes.SetBase(EffectTestKit.MaxHp, 100);
+        unitB.Attributes.SetBase(EffectTestKit.Hp, 20);
+
+        var snapshot = world.CreateSnapshot();
+
+        // Mutate past the snapshot, then swap unit B out for a different id so the snapshot's
+        // second entry (id 2) no longer lines up with the registry's second entry.
+        unitA.Attributes.SetBase(EffectTestKit.Hp, 99);
+        world.Despawn(unitB.Id);
+        var unitC = MakeUnit(kit, 3);
+        unitC.Attributes.SetBase(EffectTestKit.MaxHp, 100);
+        unitC.Attributes.SetBase(EffectTestKit.Hp, 77);
+        world.Spawn(unitC);
+        world.Tick();
+
+        Assert.That(() => world.RestoreSnapshot(snapshot), Throws.ArgumentException);
+
+        // Unit A's id matched at its index, but the whole batch is validated before any unit is
+        // restored -- its post-snapshot mutation must survive the rejected restore.
+        Assert.That(unitA.Attributes.GetBase(EffectTestKit.Hp), Is.EqualTo((Bun3.Gameplay.Numerics.BigNum)99));
+        Assert.That(unitC.Attributes.GetBase(EffectTestKit.Hp), Is.EqualTo((Bun3.Gameplay.Numerics.BigNum)77));
+    }
+
+    [Test]
     public void Snapshotting_with_pending_applications_is_rejected()
     {
         var kit = EffectTestKit.Create();

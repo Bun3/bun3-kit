@@ -198,4 +198,44 @@ public sealed class AbilityCatalogBuilderTests
             () => builder.Build(kit.TagCatalog, kit.Seams, kit.Attributes, kit.Catalog),
             Throws.InvalidOperationException.With.Message.Contains("only meaningful on an OnEvent"));
     }
+
+    // Ability activation is never an event path -- there is no GameplayEvent to carry a magnitude, so
+    // EventMagnitude anywhere in an AbilityDef must be a build error, not a silent BigNum.Zero.
+
+    [Test]
+    public void Cost_magnitude_using_event_magnitude_is_a_build_error()
+    {
+        var kit = EffectTestKit.Create();
+        var ability = Minimal("caster");
+        ability.Costs.Add(new CostDef
+        {
+            AttributeId = EffectTestKit.Mp,
+            Magnitude = new MagnitudeDef { Base = Operand.EventMagnitude(BigNum.FromParts(3, -1)) },
+        });
+        var builder = new AbilityCatalogBuilder();
+        builder.Add(ability);
+
+        Assert.That(
+            () => builder.Build(kit.TagCatalog, kit.Seams, kit.Attributes, kit.Catalog),
+            Throws.InvalidOperationException.With.Message.Contains("EventMagnitude"));
+    }
+
+    [Test]
+    public void Activation_condition_using_event_magnitude_is_a_build_error()
+    {
+        var kit = EffectTestKit.Create();
+        var ability = Minimal("caster");
+        ability.ActivationConditions.Add(new ConditionDef
+        {
+            Left = Operand.EventMagnitude(),
+            Op = ComparisonOp.Greater,
+            Right = Operand.Constant(0),
+        });
+        var builder = new AbilityCatalogBuilder();
+        builder.Add(ability);
+
+        Assert.That(
+            () => builder.Build(kit.TagCatalog, kit.Seams, kit.Attributes, kit.Catalog),
+            Throws.InvalidOperationException.With.Message.Contains("EventMagnitude"));
+    }
 }

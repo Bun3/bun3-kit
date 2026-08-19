@@ -49,7 +49,7 @@ public sealed class AbilityDefJsonTests
               "cooldownEffect": "Cooldown.Fireball",
               "effects": [
                 { "effect": "FireBolt", "selector": "selector.event.source",
-                  "selectorParams": ["2"], "levelRule": "Fixed", "fixedLevel": 2 }
+                  "selectorParams": ["2"], "level": 2 }
               ]
             }
           ]
@@ -86,6 +86,18 @@ public sealed class AbilityDefJsonTests
         Assert.That(abilities[0].Costs, Is.Empty);
         Assert.That(abilities[0].CooldownEffect, Is.Null);
         Assert.That(abilities[0].Effects, Is.Empty);
+    }
+
+    // The ability effect's level rule shares EffectSpecJson's chain-edge "level" shape (Inherit or a
+    // fixed integer) rather than the old split levelRule/fixedLevel fields.
+    [Test]
+    public void Ability_effect_split_level_fields_are_rejected()
+    {
+        var ex = Assert.Throws<TagCatalogException>(() => Load("""
+            { "schemaVersion": 1, "abilities": [ { "name": "a",
+              "effects": [ { "effect": "FireBolt", "levelRule": "Fixed", "fixedLevel": 2 } ] } ] }
+            """));
+        Assert.That(ex!.Message, Does.Contain("levelRule"));
     }
 
     [Test]
@@ -136,7 +148,7 @@ public sealed class AbilityDefJsonTests
               ],
               "costs": [ { "attribute": "Mp", "magnitude": { "base": { "constant": "10" } } } ],
               "cooldownEffect": "Cooldown.Fireball",
-              "effects": [ { "effect": "FireBolt", "levelRule": "Inherit" } ]
+              "effects": [ { "effect": "FireBolt", "level": "Inherit" } ]
             }
           ]
         }
