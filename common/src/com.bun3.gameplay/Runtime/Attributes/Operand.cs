@@ -42,6 +42,14 @@ namespace Bun3.Gameplay.Attributes
         public static Operand SourceAttribute(ushort attributeId, BigNum coefficient) =>
             new Operand(OperandKind.SourceAttribute, coefficient, attributeId);
 
+        /// <summary>Creates a gameplay-event magnitude operand with coefficient 1.</summary>
+        public static Operand EventMagnitude() => EventMagnitude(BigNum.One);
+
+        /// <summary>Creates a gameplay-event magnitude × coefficient operand.</summary>
+        /// <param name="coefficient">Coefficient multiplied into the event magnitude.</param>
+        public static Operand EventMagnitude(BigNum coefficient) =>
+            new Operand(OperandKind.EventMagnitude, coefficient, 0);
+
         /// <summary>Value equality comparison.</summary>
         public bool Equals(Operand other) =>
             Kind == other.Kind && Value.Equals(other.Value) && AttributeId == other.AttributeId;

@@ -305,4 +305,145 @@ public sealed class EffectEventChainTests
         // caster's Attack — the vampiric owner (Attacker, 10), not the victim (Defender, 50).
         Assert.That(kit.Attacker.Attributes.GetBase(EffectTestKit.Hp), Is.EqualTo((BigNum)510));
     }
+
+    [Test]
+    public void Proportional_reflect_uses_the_clamped_event_magnitude()
+    {
+        var kit = EffectTestKit.Create();
+        kit.AddSpec(Damage("bolt", 100, "event.damage.taken"));
+
+        var retaliate = EffectTestKit.MinimalInstant("retaliate");
+        retaliate.Modifiers.Add(new ModifierDef
+        {
+            AttributeId = EffectTestKit.Hp,
+            Op = AttributeModifierOp.Add,
+            // BigNum has no decimal conversion operator — (BigNum)0.3m silently truncates through the
+            // decimal->long predefined conversion instead of the double one, so use FromParts.
+            Magnitude = new MagnitudeDef { Base = Operand.EventMagnitude(BigNum.FromParts(3, -1)) },
+        });
+        kit.AddSpec(retaliate);
+
+        var thorns = EffectTestKit.MinimalInfinite("thorns");
+        var edge = EventEdge("event.damage.taken", "retaliate", ChainListen.AsTarget);
+        edge.SelectorTag = "selector.everyone";
+        thorns.Chains.Add(edge);
+        kit.AddSpec(thorns);
+        kit.RegisterSelector("selector.everyone", new AttackerSelector());
+        var pipeline = kit.BuildPipeline();
+
+        foreach (var target in kit.AllTargets)
+        {
+            target.Attributes.SetBase(EffectTestKit.MaxHp, 1000);
+            target.Attributes.SetBase(EffectTestKit.Hp, 1000);
+        }
+
+        pipeline.EnqueueApply(kit.SpecId("thorns"), kit.Defender.Id, kit.Defender.Id);
+        pipeline.Tick();
+        pipeline.EnqueueApply(kit.SpecId("bolt"), kit.Attacker.Id, kit.Defender.Id);
+        pipeline.Tick();
+
+        Assert.That(kit.Defender.Attributes.GetBase(EffectTestKit.Hp), Is.EqualTo((BigNum)900));
+        Assert.That(kit.Attacker.Attributes.GetBase(EffectTestKit.Hp), Is.EqualTo((BigNum)970));
+    }
+
+    [Test]
+    public void Lifesteal_flips_sign_through_a_negative_coefficient()
+    {
+        var kit = EffectTestKit.Create();
+        kit.AddSpec(Damage("bolt", 100, "event.damage.taken"));
+
+        var leech = EffectTestKit.MinimalInstant("leech");
+        leech.Modifiers.Add(new ModifierDef
+        {
+            AttributeId = EffectTestKit.Hp,
+            Op = AttributeModifierOp.Add,
+            Magnitude = new MagnitudeDef { Base = Operand.EventMagnitude(BigNum.FromParts(-1, -1)) },
+        });
+        kit.AddSpec(leech);
+
+        var vampiric = EffectTestKit.MinimalInfinite("vampiric");
+        vampiric.Chains.Add(EventEdge("event.damage.taken", "leech", ChainListen.AsSource));
+        kit.AddSpec(vampiric);
+        var pipeline = kit.BuildPipeline();
+
+        foreach (var target in kit.AllTargets)
+        {
+            target.Attributes.SetBase(EffectTestKit.MaxHp, 1000);
+            target.Attributes.SetBase(EffectTestKit.Hp, 500);
+        }
+
+        pipeline.EnqueueApply(kit.SpecId("vampiric"), kit.Attacker.Id, kit.Attacker.Id);
+        pipeline.Tick();
+        pipeline.EnqueueApply(kit.SpecId("bolt"), kit.Attacker.Id, kit.Defender.Id);
+        pipeline.Tick();
+
+        Assert.That(kit.Attacker.Attributes.GetBase(EffectTestKit.Hp), Is.EqualTo((BigNum)510));
+    }
+
+    [Test]
+    public void Event_magnitude_does_not_propagate_past_the_first_hop()
+    {
+        var kit = EffectTestKit.Create();
+        kit.AddSpec(Damage("bolt", 100, "event.damage.taken"));
+
+        var second = EffectTestKit.MinimalInstant("second");
+        second.Modifiers.Add(new ModifierDef
+        {
+            AttributeId = EffectTestKit.Hp,
+            Op = AttributeModifierOp.Add,
+            Magnitude = new MagnitudeDef { Base = Operand.EventMagnitude((BigNum)1) },
+        });
+        kit.AddSpec(second);
+
+        var first = EffectTestKit.MinimalInstant("first");
+        first.Chains.Add(EffectTestKit.Edge(ChainTrigger.OnApplication, "second"));
+        kit.AddSpec(first);
+
+        var thorns = EffectTestKit.MinimalInfinite("thorns");
+        thorns.Chains.Add(EventEdge("event.damage.taken", "first", ChainListen.AsTarget));
+        kit.AddSpec(thorns);
+        var pipeline = kit.BuildPipeline();
+
+        foreach (var target in kit.AllTargets)
+        {
+            target.Attributes.SetBase(EffectTestKit.MaxHp, 1000);
+            target.Attributes.SetBase(EffectTestKit.Hp, 1000);
+        }
+
+        pipeline.EnqueueApply(kit.SpecId("thorns"), kit.Defender.Id, kit.Defender.Id);
+        pipeline.Tick();
+        pipeline.EnqueueApply(kit.SpecId("bolt"), kit.Attacker.Id, kit.Defender.Id);
+        pipeline.Tick();
+        pipeline.Tick();
+
+        // bolt −100 only; "second" resolves EventMagnitude to zero because it is two hops away.
+        Assert.That(kit.Defender.Attributes.GetBase(EffectTestKit.Hp), Is.EqualTo((BigNum)900));
+    }
+
+    [Test]
+    public void Event_magnitude_in_an_unreachable_spec_is_a_build_error()
+    {
+        var kit = EffectTestKit.Create();
+        var orphan = EffectTestKit.MinimalInstant("orphan");
+        orphan.Modifiers.Add(new ModifierDef
+        {
+            AttributeId = EffectTestKit.Hp,
+            Op = AttributeModifierOp.Add,
+            Magnitude = new MagnitudeDef { Base = Operand.EventMagnitude((BigNum)1) },
+        });
+        kit.AddSpec(orphan);
+
+        Assert.That(
+            () => kit.BuildPipeline(),
+            Throws.InvalidOperationException.With.Message.Contains("EventMagnitude"));
+    }
+
+    [Test]
+    public void Event_magnitude_in_a_clamp_bound_is_rejected()
+    {
+        var builder = new AttributeRegistryBuilder();
+        builder.Register(EffectTestKit.Hp, min: Operand.EventMagnitude((BigNum)1));
+
+        Assert.That(() => builder.Build(), Throws.InvalidOperationException);
+    }
 }

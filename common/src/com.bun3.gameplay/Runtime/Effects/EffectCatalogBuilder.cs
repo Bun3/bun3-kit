@@ -55,6 +55,7 @@ namespace Bun3.Gameplay.Effects
 
             var warnings = DetectChainCycles(compiled);
             DetectLevelFromStackScaleWithStackWarnings(_specs, warnings);
+            ValidateEventMagnitudeReachability(_specs, nameToId);
             return new EffectCatalog(nameToId, compiled, warnings);
         }
 
@@ -69,6 +70,7 @@ namespace Bun3.Gameplay.Effects
             ValidateStackVocabConsistency(spec);
             ValidateDurationScaleFields(spec);
             ValidateDrFields(spec);
+            ValidateOngoingConditionsNoEventMagnitude(spec);
 
             var grantedTags = MagnitudeCompiler.ResolveTags(spec.GrantedTags, $"Effect '{spec.Name}'", tags, "granted");
             var assetTags = MagnitudeCompiler.ResolveTags(spec.AssetTags, $"Effect '{spec.Name}'", tags, "asset");
@@ -386,6 +388,104 @@ namespace Bun3.Gameplay.Effects
                 }
             }
         }
+
+        // OngoingConditions are evaluated every tick with no triggering event, so EventMagnitude there
+        // could never resolve to anything meaningful — rejected unconditionally, independent of reachability.
+        private static void ValidateOngoingConditionsNoEventMagnitude(EffectSpec spec)
+        {
+            for (var i = 0; i < spec.OngoingConditions.Count; i++)
+            {
+                if (spec.OngoingConditions[i].Left.Kind == OperandKind.EventMagnitude
+                    || spec.OngoingConditions[i].Right.Kind == OperandKind.EventMagnitude)
+                {
+                    throw new InvalidOperationException(
+                        $"Effect '{spec.Name}': EventMagnitude cannot be used in OngoingConditions.");
+                }
+            }
+        }
+
+        // EventMagnitude is only meaningful for an effect an OnEvent chain applies directly (one hop).
+        // A spec chained (any trigger, any depth) under an OnEvent target may still legally reference
+        // EventMagnitude — the value itself only survives the one direct OnEvent hop and is zero from
+        // there on (EffectPipeline.FireChain always enqueues BigNum.Zero), but the reference is not dead
+        // code: the same spec could be the direct OnEvent target of a different chain elsewhere. Only a
+        // spec with no path at all from an OnEvent edge can never receive anything but zero and is rejected.
+        private static void ValidateEventMagnitudeReachability(List<EffectSpec> specs, Dictionary<string, int> nameToId)
+        {
+            var adjacency = new List<int>[specs.Count];
+            var reachable = new bool[specs.Count];
+            var worklist = new Queue<int>();
+
+            for (var i = 0; i < specs.Count; i++)
+            {
+                var targets = new List<int>();
+                var chains = specs[i].Chains;
+                for (var c = 0; c < chains.Count; c++)
+                {
+                    if (!nameToId.TryGetValue(chains[c].EffectName, out var id)) continue;
+                    targets.Add(id);
+                    if (chains[c].Trigger == ChainTrigger.OnEvent && !reachable[id])
+                    {
+                        reachable[id] = true;
+                        worklist.Enqueue(id);
+                    }
+                }
+
+                adjacency[i] = targets;
+            }
+
+            while (worklist.Count > 0)
+            {
+                var current = worklist.Dequeue();
+                var targets = adjacency[current];
+                for (var t = 0; t < targets.Count; t++)
+                {
+                    var next = targets[t];
+                    if (reachable[next]) continue;
+                    reachable[next] = true;
+                    worklist.Enqueue(next);
+                }
+            }
+
+            for (var i = 0; i < specs.Count; i++)
+            {
+                if (reachable[i] || !UsesEventMagnitude(specs[i])) continue;
+                throw new InvalidOperationException(
+                    $"Effect '{specs[i].Name}': uses EventMagnitude but is never chained under an OnEvent chain.");
+            }
+        }
+
+        private static bool UsesEventMagnitude(EffectSpec spec)
+        {
+            for (var i = 0; i < spec.Modifiers.Count; i++)
+            {
+                if (MagnitudeUsesEventMagnitude(spec.Modifiers[i].Magnitude)) return true;
+            }
+
+            for (var i = 0; i < spec.Executions.Count; i++)
+            {
+                var inputs = spec.Executions[i].Inputs;
+                for (var k = 0; k < inputs.Count; k++)
+                {
+                    if (inputs[k].Kind == OperandKind.EventMagnitude) return true;
+                }
+            }
+
+            for (var i = 0; i < spec.ApplicationConditions.Count; i++)
+            {
+                if (spec.ApplicationConditions[i].Left.Kind == OperandKind.EventMagnitude
+                    || spec.ApplicationConditions[i].Right.Kind == OperandKind.EventMagnitude)
+                {
+                    return true;
+                }
+            }
+
+            return spec.ChanceToApply != null && MagnitudeUsesEventMagnitude(spec.ChanceToApply);
+        }
+
+        private static bool MagnitudeUsesEventMagnitude(MagnitudeDef def) =>
+            (def.Base.HasValue && def.Base.Value.Kind == OperandKind.EventMagnitude)
+            || (def.PerLevel.HasValue && def.PerLevel.Value.Kind == OperandKind.EventMagnitude);
 
         // LevelFromStack combined with a ScaleWithStack=true modifier compounds level curve × stack
         // multiplier — not an error (may be intended content), but accumulated as a Build warning so the

@@ -62,6 +62,9 @@ namespace Bun3.Gameplay.Attributes
             if (bound.Value.Kind == OperandKind.SourceAttribute)
                 throw new InvalidOperationException($"Clamp bounds of attribute {owner} cannot reference a SourceAttribute.");
 
+            if (bound.Value.Kind == OperandKind.EventMagnitude)
+                throw new InvalidOperationException($"Clamp bounds of attribute {owner} cannot reference EventMagnitude.");
+
             if (!IsAttributeBound(bound)) return;
 
             var referenced = bound!.Value.AttributeId;

@@ -10,6 +10,9 @@ namespace Bun3.Gameplay.Attributes
         Attribute = 1,
         /// <summary>Source (caster) attribute Current × constant coefficient. Evaluates to 0 when the source is unresolved.</summary>
         SourceAttribute = 2,
+        /// <summary>Magnitude of the gameplay event that triggered this application × constant coefficient.
+        /// Valid only inside an effect applied directly by an OnEvent chain; zero elsewhere.</summary>
+        EventMagnitude = 3,
     }
 
     /// <summary>Modifier operation kind.</summary>

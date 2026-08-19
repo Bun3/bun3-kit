@@ -213,10 +213,11 @@ namespace Bun3.Gameplay.Effects
             return result;
         }
 
-        // Operand attribute reference validation; Constant is exempt.
+        // Operand attribute reference validation; Constant and EventMagnitude carry no attribute id and are exempt.
         internal static void ValidateOperandAttribute(Operand operand, string ownerName, AttributeRegistry attributes)
         {
-            if (operand.Kind != OperandKind.Constant && !attributes.Contains(operand.AttributeId))
+            if ((operand.Kind == OperandKind.Attribute || operand.Kind == OperandKind.SourceAttribute)
+                && !attributes.Contains(operand.AttributeId))
             {
                 throw new InvalidOperationException(
                     $"{ownerName}: references unregistered attribute {operand.AttributeId}.");

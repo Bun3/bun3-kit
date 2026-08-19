@@ -26,6 +26,7 @@ namespace Bun3.Gameplay.Effects
             internal TargetId Source;
             internal TargetId Target;
             internal int Level;
+            internal BigNum EventMagnitude;
         }
 
         private readonly EffectCatalog _catalog;
@@ -94,9 +95,15 @@ namespace Bun3.Gameplay.Effects
         /// <param name="source">Caster target identifier.</param>
         /// <param name="target">Receiving target identifier.</param>
         /// <param name="level">Effect level.</param>
-        public void EnqueueApply(int specId, TargetId source, TargetId target, int level = 1)
+        public void EnqueueApply(int specId, TargetId source, TargetId target, int level = 1) =>
+            EnqueueApply(specId, source, target, level, BigNum.Zero);
+
+        internal void EnqueueApply(int specId, TargetId source, TargetId target, int level, BigNum eventMagnitude)
         {
-            _queue.Enqueue(new PendingApply { SpecId = specId, Source = source, Target = target, Level = level });
+            _queue.Enqueue(new PendingApply
+            {
+                SpecId = specId, Source = source, Target = target, Level = level, EventMagnitude = eventMagnitude,
+            });
         }
 
         /// <summary>Processes one tick in the six-phase order documented on the class.</summary>
@@ -227,13 +234,13 @@ namespace Bun3.Gameplay.Effects
 
             var hasSource = _resolver.TryResolve(pending.Source, out var source) && source is not null;
 
-            if (!RollChance(spec, target, source, hasSource, pending.Level))
+            if (!RollChance(spec, target, source, hasSource, pending.Level, pending.EventMagnitude))
             {
                 ChanceDropCount++;
                 return;
             }
 
-            if (!EvaluateConditions(spec.ApplicationConditions, target, source, hasSource))
+            if (!EvaluateConditions(spec.ApplicationConditions, target, source, hasSource, pending.EventMagnitude))
             {
                 ConditionDropCount++;
                 return;
@@ -249,7 +256,7 @@ namespace Bun3.Gameplay.Effects
             if (spec.DurationType == EffectDurationType.Duration && spec.DrCategory.IsValid
                 && FindActiveBySpec(target, pending.SpecId) == null)
             {
-                var value = ComputeScaledDuration(spec, target, source, hasSource, pending.Level, stack: 1);
+                var value = ComputeScaledDuration(spec, target, source, hasSource, pending.Level, stack: 1, pending.EventMagnitude);
                 value *= ApplyDrHistory(target, spec);
                 var ticks = ToTicksFloor(value);
                 if (ticks <= 0)
@@ -265,7 +272,7 @@ namespace Bun3.Gameplay.Effects
 
             if (spec.DurationType == EffectDurationType.Instant)
             {
-                ApplyInstant(spec, target, source, hasSource, in pending);
+                ApplyInstant(spec, target, source, hasSource, in pending, pending.EventMagnitude);
             }
             else
             {
@@ -277,14 +284,15 @@ namespace Bun3.Gameplay.Effects
         // (×2^32) and compares against NextUInt32() as BigNum integers — no floating point; the
         // chance<=0 / chance>=1 boundaries fall out of the same comparison.
         private bool RollChance(
-            CompiledEffectSpec spec, EffectTarget target, EffectTarget? source, bool hasSource, int level)
+            CompiledEffectSpec spec, EffectTarget target, EffectTarget? source, bool hasSource, int level,
+            BigNum eventMagnitude)
         {
             var chance = spec.ChanceToApply;
             if (chance is null) return true;
 
             var probability = EvaluateMagnitudeCore(
                 chance.Base, chance.PerLevel, chance.Calc, chance.ByLevel, chance.Tail, chance.Increment,
-                target, source, hasSource, level, stack: 1);
+                target, source, hasSource, level, stack: 1, eventMagnitude);
             var roll = (BigNum)(long)_rng.NextUInt32();
             return roll < probability * RngRollRange;
         }
@@ -344,11 +352,12 @@ namespace Bun3.Gameplay.Effects
         }
 
         private static bool EvaluateConditions(
-            CompiledCondition[] conditions, EffectTarget target, EffectTarget? source, bool hasSource)
+            CompiledCondition[] conditions, EffectTarget target, EffectTarget? source, bool hasSource,
+            BigNum eventMagnitude)
         {
             for (var i = 0; i < conditions.Length; i++)
             {
-                if (!EvaluateCondition(conditions[i], target, source, hasSource))
+                if (!EvaluateCondition(conditions[i], target, source, hasSource, eventMagnitude))
                     return false;
             }
 
@@ -356,10 +365,11 @@ namespace Bun3.Gameplay.Effects
         }
 
         private static bool EvaluateCondition(
-            CompiledCondition condition, EffectTarget target, EffectTarget? source, bool hasSource)
+            CompiledCondition condition, EffectTarget target, EffectTarget? source, bool hasSource,
+            BigNum eventMagnitude)
         {
-            var left = EvaluateOperand(condition.Left, target, source, hasSource);
-            var right = EvaluateOperand(condition.Right, target, source, hasSource);
+            var left = EvaluateOperand(condition.Left, target, source, hasSource, eventMagnitude);
+            var right = EvaluateOperand(condition.Right, target, source, hasSource, eventMagnitude);
             var cmp = left.CompareTo(right);
             switch (condition.Op)
             {
@@ -372,8 +382,11 @@ namespace Bun3.Gameplay.Effects
             }
         }
 
-        // Constant → value; Attribute → target Current × factor; SourceAttribute → source Current × factor (0 when source unresolved).
-        private static BigNum EvaluateOperand(Operand operand, EffectTarget target, EffectTarget? source, bool hasSource)
+        // Constant → value; Attribute → target Current × factor; SourceAttribute → source Current × factor
+        // (0 when source unresolved); EventMagnitude → the triggering event's magnitude × factor (0 when
+        // there is no event context, e.g. outside the one-hop effect an OnEvent chain applies directly).
+        private static BigNum EvaluateOperand(
+            Operand operand, EffectTarget target, EffectTarget? source, bool hasSource, BigNum eventMagnitude)
         {
             switch (operand.Kind)
             {
@@ -381,20 +394,23 @@ namespace Bun3.Gameplay.Effects
                     return operand.Value;
                 case OperandKind.Attribute:
                     return target.Attributes.GetCurrent(operand.AttributeId) * operand.Value;
+                case OperandKind.EventMagnitude:
+                    return eventMagnitude * operand.Value;
                 default:   // SourceAttribute
                     return hasSource ? source!.Attributes.GetCurrent(operand.AttributeId) * operand.Value : BigNum.Zero;
             }
         }
 
         private BigNum EvaluateMagnitude(
-            CompiledModifier modifier, EffectTarget target, EffectTarget? source, bool hasSource, int level, int stack) =>
+            CompiledModifier modifier, EffectTarget target, EffectTarget? source, bool hasSource, int level, int stack,
+            BigNum eventMagnitude) =>
             EvaluateMagnitudeCore(
                 modifier.Base, modifier.PerLevel, modifier.Calc, modifier.ByLevel, modifier.Tail, modifier.Increment,
-                target, source, hasSource, level, stack);
+                target, source, hasSource, level, stack, eventMagnitude);
 
         private BigNum EvaluateMagnitudeCore(
             Operand? @base, Operand? perLevel, IMagnitudeCalc? calc, BigNum[]? byLevel, LevelTail tail, BigNum increment,
-            EffectTarget target, EffectTarget? source, bool hasSource, int level, int stack)
+            EffectTarget target, EffectTarget? source, bool hasSource, int level, int stack, BigNum eventMagnitude)
         {
             if (calc != null)
             {
@@ -407,10 +423,10 @@ namespace Bun3.Gameplay.Effects
                 return EvaluateByLevel(byLevel, tail, increment, level);
             }
 
-            var value = EvaluateOperand(@base!.Value, target, source, hasSource);
+            var value = EvaluateOperand(@base!.Value, target, source, hasSource, eventMagnitude);
             if (perLevel.HasValue)
             {
-                value += EvaluateOperand(perLevel.Value, target, source, hasSource) * (level - 1);
+                value += EvaluateOperand(perLevel.Value, target, source, hasSource, eventMagnitude) * (level - 1);
             }
 
             return value;
@@ -435,7 +451,8 @@ namespace Bun3.Gameplay.Effects
         // before truncation/clamping. Shared by CreateInstance (new instances) and MergeReapply's
         // Refresh/ExtendCapped (new-duration recomputation).
         private BigNum ComputeScaledDuration(
-            CompiledEffectSpec spec, EffectTarget target, EffectTarget? source, bool hasSource, int level, int stack)
+            CompiledEffectSpec spec, EffectTarget target, EffectTarget? source, bool hasSource, int level, int stack,
+            BigNum eventMagnitude)
         {
             var baseDuration = spec.DurationPerLevel != null
                 ? EvaluateByLevel(spec.DurationPerLevel, LevelTail.Clamp, BigNum.Zero, level)
@@ -446,16 +463,17 @@ namespace Bun3.Gameplay.Effects
             var scale = spec.DurationScale;
             var scaleValue = EvaluateMagnitudeCore(
                 scale.Base, scale.PerLevel, scale.Calc, scale.ByLevel, scale.Tail, scale.Increment,
-                target, source, hasSource, level, stack);
+                target, source, hasSource, level, stack, eventMagnitude);
             return baseDuration * scaleValue;
         }
 
         // "New duration" used by merges (Refresh/ExtendCapped) — DR applies only to the new-instance
         // path, so it is not composed here. Clamps to a minimum of 1 tick after truncation.
-        private int ComputeMergedDurationTicks(CompiledEffectSpec spec, EffectTarget target, EffectInstance instance)
+        private int ComputeMergedDurationTicks(
+            CompiledEffectSpec spec, EffectTarget target, EffectInstance instance, BigNum eventMagnitude)
         {
             var hasSource = _resolver.TryResolve(instance.Source, out var source) && source is not null;
-            var value = ComputeScaledDuration(spec, target, source, hasSource, instance.Level, instance.Stack);
+            var value = ComputeScaledDuration(spec, target, source, hasSource, instance.Level, instance.Stack, eventMagnitude);
             var ticks = ToTicksFloor(value);
             return ticks <= 0 ? 1 : ticks;
         }
@@ -486,7 +504,8 @@ namespace Bun3.Gameplay.Effects
         }
 
         private void ApplyInstant(
-            CompiledEffectSpec spec, EffectTarget target, EffectTarget? source, bool hasSource, in PendingApply pending)
+            CompiledEffectSpec spec, EffectTarget target, EffectTarget? source, bool hasSource, in PendingApply pending,
+            BigNum eventMagnitude)
         {
             var raises = spec.RaiseEvents;
             Span<BigNum> before = stackalloc BigNum[raises.Length];
@@ -501,7 +520,7 @@ namespace Bun3.Gameplay.Effects
             for (var i = 0; i < modifiers.Length; i++)
             {
                 var modifier = modifiers[i];
-                var magnitude = EvaluateMagnitude(modifier, target, source, hasSource, pending.Level, stack: 1);
+                var magnitude = EvaluateMagnitude(modifier, target, source, hasSource, pending.Level, stack: 1, eventMagnitude);
                 for (var r = 0; r < raises.Length; r++)
                 {
                     if (raises[r].AttributeId == modifier.AttributeId) nominal[r] += magnitude;
@@ -513,7 +532,9 @@ namespace Bun3.Gameplay.Effects
             var executions = spec.Executions;
             for (var i = 0; i < executions.Length; i++)
             {
-                RunExecution(executions[i], target, source, hasSource, pending.Source, pending.Target, pending.Level, stack: 1);
+                RunExecution(
+                    executions[i], target, source, hasSource, pending.Source, pending.Target, pending.Level, stack: 1,
+                    eventMagnitude);
             }
 
             for (var r = 0; r < raises.Length; r++)
@@ -544,13 +565,13 @@ namespace Bun3.Gameplay.Effects
 
         private void RunExecution(
             CompiledExecution execution, EffectTarget target, EffectTarget? source, bool hasSource,
-            TargetId sourceId, TargetId targetId, int level, int stack)
+            TargetId sourceId, TargetId targetId, int level, int stack, BigNum eventMagnitude)
         {
             // ponytail: input counts are authoring-spec scale, so stackalloc suffices — switch to a heap array if large inputs become a real need.
             Span<BigNum> inputs = stackalloc BigNum[execution.Inputs.Length];
             for (var i = 0; i < execution.Inputs.Length; i++)
             {
-                inputs[i] = EvaluateOperand(execution.Inputs[i], target, source, hasSource);
+                inputs[i] = EvaluateOperand(execution.Inputs[i], target, source, hasSource, eventMagnitude);
             }
 
             var ctx = new ExecutionContext(
@@ -574,7 +595,9 @@ namespace Bun3.Gameplay.Effects
                 if (chain.Trigger != trigger) continue;
 
                 var hasSource = _resolver.TryResolve(source, out var sourceTarget) && sourceTarget is not null;
-                if (!EvaluateConditions(chain.Conditions, originTarget, sourceTarget, hasSource)) continue;
+                // Lifecycle chains (OnApplication/OnCompleteNormal/OnCompletePrematurely/OnStackOverflow)
+                // have no triggering event, so their own edge conditions never see an event magnitude.
+                if (!EvaluateConditions(chain.Conditions, originTarget, sourceTarget, hasSource, BigNum.Zero)) continue;
 
                 var chainLevel = chain.LevelRule == ChainLevelRule.Inherit ? level : chain.FixedLevel;
 
@@ -621,11 +644,11 @@ namespace Bun3.Gameplay.Effects
             var existing = FindActiveBySpec(target, pending.SpecId);
             if (existing != null)
             {
-                MergeReapply(spec, target, existing);
+                MergeReapply(spec, target, existing, pending.EventMagnitude);
                 return;
             }
 
-            CreateInstance(spec, target, in pending, precomputedDurationTicks);
+            CreateInstance(spec, target, in pending, precomputedDurationTicks, pending.EventMagnitude);
         }
 
         private static EffectInstance? FindActiveBySpec(EffectTarget target, int specId)
@@ -642,7 +665,7 @@ namespace Bun3.Gameplay.Effects
         // Reapply merge: AddStack raises the stack and routes the overflow to HandleStackOverflow; both
         // Refresh and AddStack reset duration/period timers per policy. StackChanged is raised only when
         // the stack value actually changes. A merge is not a new application, so no OnApplication chain fires here.
-        private void MergeReapply(CompiledEffectSpec spec, EffectTarget target, EffectInstance instance)
+        private void MergeReapply(CompiledEffectSpec spec, EffectTarget target, EffectInstance instance, BigNum eventMagnitude)
         {
             var stackPolicy = spec.Stack;
             if (stackPolicy.OnReapply == StackReapply.AddStack)
@@ -651,7 +674,7 @@ namespace Bun3.Gameplay.Effects
                 var wouldBe = instance.Stack + stackPolicy.AddStackCount;
                 if (wouldBe > stackPolicy.MaxStack)
                 {
-                    HandleStackOverflow(spec, target, instance);
+                    HandleStackOverflow(spec, target, instance, eventMagnitude);
                 }
                 else if (wouldBe != instance.Stack)
                 {
@@ -659,14 +682,14 @@ namespace Bun3.Gameplay.Effects
                     target.RaiseEffectEvent(new EffectLifecycleEvent(
                         EffectLifecycleKind.StackChanged, instance.Id, instance.SpecId, instance.Stack));
                     MarkDirtyForModifiers(target, spec);
-                    SyncLevelFromStack(spec, target, instance);
+                    SyncLevelFromStack(spec, target, instance, eventMagnitude);
                 }
             }
             else if (stackPolicy.OnReapply == StackReapply.ExtendCapped)
             {
                 // Extends duration only, without touching the stack — cap = new duration × ExtendCapMultiplier.
                 // "New duration" includes DurationPerLevel/DurationScale (DR applies to new instances only).
-                var newDuration = ComputeMergedDurationTicks(spec, target, instance);
+                var newDuration = ComputeMergedDurationTicks(spec, target, instance, eventMagnitude);
                 var cap = ToTicksFloor((BigNum)newDuration * stackPolicy.ExtendCapMultiplier);
                 var extended = instance.RemainingTicks + newDuration;
                 instance.RemainingTicks = extended < cap ? extended : cap;
@@ -675,7 +698,7 @@ namespace Bun3.Gameplay.Effects
             if (stackPolicy.OnReapply != StackReapply.ExtendCapped
                 && stackPolicy.RefreshDurationOnReapply && spec.DurationType == EffectDurationType.Duration)
             {
-                instance.RemainingTicks = ComputeMergedDurationTicks(spec, target, instance);
+                instance.RemainingTicks = ComputeMergedDurationTicks(spec, target, instance, eventMagnitude);
             }
 
             if (stackPolicy.ResetPeriodOnReapply && spec.PeriodTicks > 0)
@@ -686,7 +709,7 @@ namespace Bun3.Gameplay.Effects
 
         // LevelFromStack — after Stack changes, syncs Level and re-evaluates/re-attaches the modifiers
         // that were snapshotted at apply time (periodic effects are excluded: they evaluate Level directly each period).
-        private void SyncLevelFromStack(CompiledEffectSpec spec, EffectTarget target, EffectInstance instance)
+        private void SyncLevelFromStack(CompiledEffectSpec spec, EffectTarget target, EffectInstance instance, BigNum eventMagnitude)
         {
             if (!spec.Stack.LevelFromStack || instance.Level == instance.Stack) return;
 
@@ -699,7 +722,7 @@ namespace Bun3.Gameplay.Effects
             for (var i = 0; i < modifiers.Length; i++)
             {
                 var modifier = modifiers[i];
-                var magnitude = EvaluateMagnitude(modifier, target, source, hasSource, instance.Level, instance.Stack);
+                var magnitude = EvaluateMagnitude(modifier, target, source, hasSource, instance.Level, instance.Stack, eventMagnitude);
                 target.Attributes.AttachModifier(instance, i, modifier.AttributeId, modifier.Op, magnitude, modifier.ScaleWithStack);
             }
         }
@@ -734,7 +757,7 @@ namespace Bun3.Gameplay.Effects
         // the policy is ApplyEffect (level always inherited from the instance). Afterward the stack resets
         // to 1 when ClearStacksOnOverflow (existing effect/modifiers kept, only stacks cleared), otherwise
         // clamps to MaxStack as before.
-        private void HandleStackOverflow(CompiledEffectSpec spec, EffectTarget target, EffectInstance instance)
+        private void HandleStackOverflow(CompiledEffectSpec spec, EffectTarget target, EffectInstance instance, BigNum eventMagnitude)
         {
             FireChain(spec.Chains, ChainTrigger.OnStackOverflow, instance.Source, instance.Level, target.Id, target);
 
@@ -750,7 +773,7 @@ namespace Bun3.Gameplay.Effects
                 target.RaiseEffectEvent(new EffectLifecycleEvent(
                     EffectLifecycleKind.StackChanged, instance.Id, instance.SpecId, instance.Stack));
                 MarkDirtyForModifiers(target, spec);
-                SyncLevelFromStack(spec, target, instance);
+                SyncLevelFromStack(spec, target, instance, eventMagnitude);
             }
         }
 
@@ -762,7 +785,8 @@ namespace Bun3.Gameplay.Effects
         // never calls ApplyDrHistory again (prevents double history mutation). Duration without DR is
         // computed here (clamped to a minimum of 1 tick).
         private void CreateInstance(
-            CompiledEffectSpec spec, EffectTarget target, in PendingApply pending, int precomputedDurationTicks)
+            CompiledEffectSpec spec, EffectTarget target, in PendingApply pending, int precomputedDurationTicks,
+            BigNum eventMagnitude)
         {
             var hasSource = _resolver.TryResolve(pending.Source, out var source) && source is not null;
 
@@ -777,7 +801,7 @@ namespace Bun3.Gameplay.Effects
                 }
                 else
                 {
-                    var value = ComputeScaledDuration(spec, target, source, hasSource, pending.Level, stack: 1);
+                    var value = ComputeScaledDuration(spec, target, source, hasSource, pending.Level, stack: 1, eventMagnitude);
                     var ticks = ToTicksFloor(value);
                     remainingTicks = ticks <= 0 ? 1 : ticks;   // minimum 1 tick.
                 }
@@ -795,7 +819,7 @@ namespace Bun3.Gameplay.Effects
                 for (var i = 0; i < modifiers.Length; i++)
                 {
                     var modifier = modifiers[i];
-                    var magnitude = EvaluateMagnitude(modifier, target, source, hasSource, pending.Level, instance.Stack);
+                    var magnitude = EvaluateMagnitude(modifier, target, source, hasSource, pending.Level, instance.Stack, eventMagnitude);
                     target.Attributes.AttachModifier(instance, i, modifier.AttributeId, modifier.Op, magnitude, modifier.ScaleWithStack);
                 }
             }
@@ -846,7 +870,8 @@ namespace Bun3.Gameplay.Effects
                         instance.PeriodCountdown--;
                         if (instance.PeriodCountdown == 0)
                         {
-                            FirePeriodic(spec, target, instance);
+                            // Period firing has no triggering event — always zero.
+                            FirePeriodic(spec, target, instance, BigNum.Zero);
                             instance.PeriodCountdown = spec.PeriodTicks;
                         }
                     }
@@ -869,7 +894,7 @@ namespace Bun3.Gameplay.Effects
         }
 
         // Period elapsed: same path as Instant — Modifiers adjust Base (Add-only, enforced at Build), Executions run.
-        private void FirePeriodic(CompiledEffectSpec spec, EffectTarget target, EffectInstance instance)
+        private void FirePeriodic(CompiledEffectSpec spec, EffectTarget target, EffectInstance instance, BigNum eventMagnitude)
         {
             var hasSource = _resolver.TryResolve(instance.Source, out var source) && source is not null;
 
@@ -886,7 +911,7 @@ namespace Bun3.Gameplay.Effects
             for (var i = 0; i < modifiers.Length; i++)
             {
                 var modifier = modifiers[i];
-                var magnitude = EvaluateMagnitude(modifier, target, source, hasSource, instance.Level, instance.Stack);
+                var magnitude = EvaluateMagnitude(modifier, target, source, hasSource, instance.Level, instance.Stack, eventMagnitude);
                 for (var r = 0; r < raises.Length; r++)
                 {
                     if (raises[r].AttributeId == modifier.AttributeId) nominal[r] += magnitude;
@@ -898,7 +923,9 @@ namespace Bun3.Gameplay.Effects
             var executions = spec.Executions;
             for (var i = 0; i < executions.Length; i++)
             {
-                RunExecution(executions[i], target, source, hasSource, instance.Source, target.Id, instance.Level, instance.Stack);
+                RunExecution(
+                    executions[i], target, source, hasSource, instance.Source, target.Id, instance.Level, instance.Stack,
+                    eventMagnitude);
             }
 
             for (var r = 0; r < raises.Length; r++)
@@ -994,7 +1021,9 @@ namespace Bun3.Gameplay.Effects
                     var spec = _catalog.GetSpec(instance.SpecId);
                     if (spec.OngoingConditions.Length == 0) continue;
 
-                    var satisfied = EvaluateConditions(spec.OngoingConditions, target, source: null, hasSource: false);
+                    // Ongoing evaluation runs every tick with no triggering event — always zero. Build
+                    // already rejects EventMagnitude in OngoingConditions, so this value is unreachable.
+                    var satisfied = EvaluateConditions(spec.OngoingConditions, target, source: null, hasSource: false, BigNum.Zero);
                     if (satisfied == instance.Enabled) continue;
 
                     instance.Enabled = satisfied;

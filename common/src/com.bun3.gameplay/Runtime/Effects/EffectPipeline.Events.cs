@@ -55,7 +55,9 @@ namespace Bun3.Gameplay.Effects
         {
             var source = instance.Source;
             var hasSource = _resolver.TryResolve(source, out var sourceTarget) && sourceTarget is not null;
-            if (!EvaluateConditions(chain.Conditions, listener, sourceTarget, hasSource)) return;
+            // The edge's own conditions decide whether to fire at all, before the magnitude reaches the
+            // applied effect — they never see an event magnitude either.
+            if (!EvaluateConditions(chain.Conditions, listener, sourceTarget, hasSource, BigNum.Zero)) return;
 
             var chainLevel = chain.LevelRule == ChainLevelRule.Inherit ? instance.Level : chain.FixedLevel;
             EventChainFireCount++;
@@ -78,10 +80,11 @@ namespace Bun3.Gameplay.Effects
             }
         }
 
-        // Task 10 widens the pending-apply record to carry the event magnitude; until then this is a
-        // thin pass-through that ignores it.
+        // The event magnitude travels exactly one hop: into the effect this OnEvent chain applies
+        // directly. Anything that effect's own chains apply in turn goes through FireChain, which always
+        // enqueues BigNum.Zero.
         private void EnqueueApplyWithEvent(
             int specId, TargetId source, TargetId target, int level, in GameplayEvent evt) =>
-            EnqueueApply(specId, source, target, level);
+            EnqueueApply(specId, source, target, level, evt.Magnitude);
     }
 }
