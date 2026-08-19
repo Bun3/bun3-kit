@@ -742,6 +742,7 @@ namespace Bun3.Gameplay.Effects
             if (!spec.Stack.LevelFromStack || instance.Level == instance.Stack) return;
 
             instance.Level = instance.Stack;
+            if (instance.Enabled) AbilityGrantHook?.Invoke(target, instance, true);
             if (spec.PeriodTicks > 0) return;
 
             target.Attributes.DetachModifiers(instance);
@@ -980,6 +981,7 @@ namespace Bun3.Gameplay.Effects
                 target.RaiseEffectEvent(new EffectLifecycleEvent(
                     EffectLifecycleKind.StackChanged, instance.Id, instance.SpecId, instance.Stack));
                 MarkDirtyForModifiers(target, spec);
+                SyncLevelFromStack(spec, target, instance, BigNum.Zero);
                 return;
             }
 

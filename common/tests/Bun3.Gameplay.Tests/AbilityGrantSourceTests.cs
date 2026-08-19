@@ -111,4 +111,87 @@ public sealed class AbilityGrantSourceTests
             () => new World(kit.Catalog, abilities, new XorShiftRng(1)),
             Throws.InvalidOperationException.With.Message.Contains("nope"));
     }
+
+    // ---- LevelFromStack: the granted ability's level must track instance.Level, not just its creation-time value ----
+
+    private static (World World, Unit Unit, int AbilityId, EffectTestKit Kit) BuildLevelFromStack(
+        StackPolicy stackPolicy, int durationTicks)
+    {
+        var kit = EffectTestKit.Create();
+        kit.AddSpec(EffectTestKit.MinimalInstant("bolt"));
+
+        var granter = EffectTestKit.MinimalDuration("granter", durationTicks);
+        granter.MaxLevel = 5;
+        granter.Stack = stackPolicy;
+        granter.GrantedAbilities.Add("fireball");
+        kit.AddSpec(granter);
+
+        var ability = new AbilityDef { Name = "fireball", MaxLevel = 5 };
+        ability.Effects.Add(new AbilityEffectDef { EffectName = "bolt" });
+        var abilityBuilder = new AbilityCatalogBuilder();
+        abilityBuilder.Add(ability);
+        var abilities = abilityBuilder.Build(kit.TagCatalog, kit.Seams, kit.Attributes, kit.Catalog);
+
+        var world = new World(kit.Catalog, abilities, new XorShiftRng(7));
+        var unit = MakeUnit(kit, 1);
+        world.Spawn(unit);
+        world.Tick();
+
+        return (world, unit, abilities.GetRequiredId("fireball"), kit);
+    }
+
+    [Test]
+    public void LevelFromStack_reapply_raises_the_granted_ability_level()
+    {
+        var (world, unit, abilityId, kit) = BuildLevelFromStack(
+            new StackPolicy { MaxStack = 5, OnReapply = StackReapply.AddStack, LevelFromStack = true },
+            durationTicks: 100);
+
+        world.Pipeline.EnqueueApply(kit.SpecId("granter"), unit.Id, unit.Id);
+        world.Tick();
+        Assert.That(unit.Abilities.GetLevel(abilityId), Is.EqualTo(1));
+
+        world.Pipeline.EnqueueApply(kit.SpecId("granter"), unit.Id, unit.Id);
+        world.Tick();
+        Assert.That(unit.Abilities.GetLevel(abilityId), Is.EqualTo(2));
+    }
+
+    [Test]
+    public void RemoveOneAndRefresh_stack_drop_lowers_the_granted_ability_level()
+    {
+        var (world, unit, abilityId, kit) = BuildLevelFromStack(
+            new StackPolicy
+            {
+                MaxStack = 5, OnReapply = StackReapply.AddStack, LevelFromStack = true,
+                OnExpiration = StackExpiration.RemoveOneAndRefresh,
+            },
+            durationTicks: 2);
+
+        world.Pipeline.EnqueueApply(kit.SpecId("granter"), unit.Id, unit.Id);
+        world.Tick();
+        world.Pipeline.EnqueueApply(kit.SpecId("granter"), unit.Id, unit.Id);
+        world.Tick();
+        Assert.That(unit.Abilities.GetLevel(abilityId), Is.EqualTo(2));
+
+        // No further reapply — the duration runs out and RemoveOneAndRefresh drops exactly one stack.
+        world.Tick();
+        Assert.That(unit.Abilities.GetLevel(abilityId), Is.EqualTo(1));
+    }
+
+    [Test]
+    public void LevelFromStack_reapply_does_not_create_duplicate_grant_rows()
+    {
+        var (world, unit, abilityId, kit) = BuildLevelFromStack(
+            new StackPolicy { MaxStack = 5, OnReapply = StackReapply.AddStack, LevelFromStack = true },
+            durationTicks: 100);
+
+        for (var i = 0; i < 4; i++)
+        {
+            world.Pipeline.EnqueueApply(kit.SpecId("granter"), unit.Id, unit.Id);
+            world.Tick();
+        }
+
+        Assert.That(unit.Abilities.GetLevel(abilityId), Is.EqualTo(4));
+        Assert.That(unit.Abilities.GrantCount, Is.EqualTo(1));
+    }
 }

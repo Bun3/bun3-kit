@@ -36,7 +36,6 @@ namespace Bun3.Gameplay
             _abilities = abilities ?? throw new ArgumentNullException(nameof(abilities));
             _rng = rng ?? throw new ArgumentNullException(nameof(rng));
             Pipeline = new EffectPipeline(effects, this, rng, applyBudgetPerTick);
-            Pipeline.AbilityGrantHook = OnEffectAbilityGrant;
 
             _grantedAbilityIds = new int[effects.Count][];
             for (var specId = 0; specId < effects.Count; specId++)
@@ -54,6 +53,8 @@ namespace Bun3.Gameplay
 
                 _grantedAbilityIds[specId] = ids;
             }
+
+            Pipeline.AbilityGrantHook = OnEffectAbilityGrant;
         }
 
         private void OnEffectAbilityGrant(EffectTarget target, EffectInstance instance, bool granting)
