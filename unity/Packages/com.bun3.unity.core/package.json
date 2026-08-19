@@ -1,7 +1,7 @@
 {
   "name": "com.bun3.unity.core",
   "displayName": "Bun3 Unity Core",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "unity": "6000.3",
   "unityRelease": "14f1",
   "description": "Bun3 shared toolkit for Unity. Includes ReadOnlyAttribute, UnifiedToggleGroup (N-preset toggle with extensible options and cascading groups), CancellationScope (structured cancellation-lifetime scope with UniTask helpers), and PlayerLoopSystemHelper (static per-frame callbacks via player-loop insertion).",

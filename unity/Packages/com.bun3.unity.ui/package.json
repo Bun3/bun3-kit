@@ -1,7 +1,7 @@
 {
   "name": "com.bun3.unity.ui",
   "displayName": "Bun3 Unity UI",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "unity": "6000.3",
   "unityRelease": "14f1",
   "description": "DEV kits for Unity UI.",

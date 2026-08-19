@@ -6,7 +6,7 @@
     <Nullable>enable</Nullable>
     <RootNamespace>Bun3.Server.Players</RootNamespace>
     <PackageId>Bun3.Server.Players</PackageId>
-    <Version>0.4.0</Version>
+    <Version>0.5.0</Version>
     <Authors>Bun3</Authors>
     <RepositoryUrl>https://github.com/Bun3/bun3-kit</RepositoryUrl>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>

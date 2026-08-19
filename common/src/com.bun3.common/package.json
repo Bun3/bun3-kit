@@ -1,7 +1,7 @@
 {
   "name": "com.bun3.common",
   "displayName": "Bun3 Common",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "unity": "2022.3",
   "description": "Platform-agnostic shared library for Bun3 packages. netstandard2.1; no UnityEngine dependency.",
   "dependencies": {
