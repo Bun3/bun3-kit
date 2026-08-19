@@ -39,6 +39,7 @@ namespace Bun3.Server.Items
                     // At or above the target (including holdings past it up to maxCount) —
                     // regen stops, accrual cleared. Compared without a long conversion
                     // (amounts past the target can exceed the long range).
+                    CaptureRegenBasis(item);
                     _regenBasis[item] = nowTicksUtc;
                     continue;
                 }
@@ -56,6 +57,7 @@ namespace Bun3.Server.Items
                 }
                 else
                 {
+                    CaptureRegenBasis(item);
                     _regenBasis[item] = basis;   // Also records initialization and full-state resets.
                 }
             }
@@ -72,6 +74,7 @@ namespace Bun3.Server.Items
 
             for (var i = 0; i < _regenScratchItems.Count; i++)
             {
+                CaptureRegenBasis(_regenScratchItems[i]);
                 _regenBasis[_regenScratchItems[i]] = _regenScratchBasis[i];
             }
 

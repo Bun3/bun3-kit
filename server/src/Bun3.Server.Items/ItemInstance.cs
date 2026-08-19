@@ -16,6 +16,7 @@ namespace Bun3.Server.Items
     {
         private uint _flags;
         private long _expiresAtTicksUtc;
+        private TState _state;
 
         internal ItemInstance(
             ItemInventory<TState> owner,
@@ -32,12 +33,14 @@ namespace Bun3.Server.Items
             Quantity = quantity;
             _flags = flags;
             _expiresAtTicksUtc = expiresAtTicksUtc;
-            State = state;
+            _state = state;
         }
 
         internal ItemInventory<TState>? _owner;
         internal bool IsNew;
         internal bool Changed;
+        internal int TxToken;
+        internal int TxSnapshotIndex = -1;
 
         /// <summary>Unique instance id — from the issuer seam or a loaded external authoritative id (DB, Steam).</summary>
         public long InstanceId { get; }
@@ -58,6 +61,7 @@ namespace Bun3.Server.Items
             {
                 if (_flags != value)
                 {
+                    _owner?.CaptureForRollback(this);
                     _flags = value;
                     MarkChanged();
                 }
@@ -76,6 +80,7 @@ namespace Bun3.Server.Items
             {
                 if (_expiresAtTicksUtc != value)
                 {
+                    _owner?.CaptureForRollback(this);
                     _expiresAtTicksUtc = value;
                     MarkChanged();
                 }
@@ -83,7 +88,7 @@ namespace Bun3.Server.Items
         }
 
         /// <summary>Game-owned state — the framework does not interpret it.</summary>
-        public TState State { get; }
+        public TState State => _state;
 
         /// <summary>Call after mutating <see cref="State"/> — feeds change tracking (Updated) and
         /// the inventory's onDirty (save cadence). Ignored after removal from the inventory.</summary>
@@ -91,6 +96,17 @@ namespace Bun3.Server.Items
         {
             Changed = true;
             _owner?.OnInstanceChanged();
+        }
+
+        /// <summary>Restores framework-tracked fields from a transaction snapshot on rollback.</summary>
+        internal void RestoreForRollback(BigNum quantity, uint flags, long expiresAt, bool isNew, bool changed, TState state)
+        {
+            Quantity = quantity;
+            _flags = flags;
+            _expiresAtTicksUtc = expiresAt;
+            IsNew = isNew;
+            Changed = changed;
+            _state = state;
         }
     }
 }

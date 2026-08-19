@@ -17,6 +17,7 @@ namespace Bun3.Server.Items
         /// instances move whole, preserving id, state, flags, and expiry. On failure both sides are
         /// unchanged. The target must share the catalog (a mismatch is a configuration error and
         /// throws) and the target's maxCount is checked.
+        /// Not available inside a transaction — a transfer cannot be rolled back.
         /// On success, onDirty and onApplied (source −, target +) fire once on each side.
         /// </summary>
         public InventoryError TryTransfer(ItemInventory<TState> target, ItemId item, BigNum amount)
@@ -25,6 +26,12 @@ namespace Bun3.Server.Items
             if (error != InventoryError.None)
             {
                 return error;
+            }
+
+            if (InTransaction || target.InTransaction)
+            {
+                throw new InvalidOperationException(
+                    "Transfer between inventories is not supported inside a transaction — it cannot be rolled back.");
             }
 
             if (!_catalog.Contains(item))
@@ -114,6 +121,7 @@ namespace Bun3.Server.Items
         /// Full-instance transfer — unstackable instances move preserving id and state; a stack
         /// singleton moves its full amount at definition level. Locked instances return
         /// <see cref="InventoryError.Locked"/>.
+        /// Not available inside a transaction — a transfer cannot be rolled back.
         /// </summary>
         public InventoryError TryTransferByInstance(ItemInventory<TState> target, long instanceId)
         {
@@ -121,6 +129,12 @@ namespace Bun3.Server.Items
             if (error != InventoryError.None)
             {
                 return error;
+            }
+
+            if (InTransaction || target.InTransaction)
+            {
+                throw new InvalidOperationException(
+                    "Transfer between inventories is not supported inside a transaction — it cannot be rolled back.");
             }
 
             if (!_instances.TryGetValue(instanceId, out var instance))
@@ -226,8 +240,8 @@ namespace Bun3.Server.Items
         {
             _hasChanges = true;
             target._hasChanges = true;
-            _onDirty?.Invoke();
-            target._onDirty?.Invoke();
+            NotifyDirty();
+            target.NotifyDirty();
             EmitTransferSide(item, -amount);
             target.EmitTransferSide(item, amount);
         }

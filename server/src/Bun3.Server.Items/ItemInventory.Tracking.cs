@@ -121,7 +121,7 @@ namespace Bun3.Server.Items
         internal void OnInstanceChanged()
         {
             _hasChanges = true;
-            _onDirty?.Invoke();
+            NotifyDirty();
         }
     }
 }

@@ -322,18 +322,21 @@ namespace Bun3.Server.Items
             }
 
             // Apply pass — applied in order, in a state where failure is impossible.
-            _appliedCount = 0;
+            if (!_txEnlisted)
+            {
+                _appliedCount = 0;
+            }
+
             for (var i = 0; i < ops.Count; i++)
             {
                 ApplyOp(ops[i], _txResolved[i], created);
             }
 
             _hasChanges = true;
-            _onDirty?.Invoke();
-            if (_appliedCount > 0)
+            NotifyDirty();
+            if (!_txEnlisted)
             {
-                _onApplied?.Invoke(new ReadOnlySpan<InventoryChange>(_applied, 0, _appliedCount));
-                LogAppliedChanges();
+                FlushApplied();
             }
 
             return InventoryError.None;
@@ -486,6 +489,7 @@ namespace Bun3.Server.Items
                     }
                     else
                     {
+                        Capture(target);
                         target.Quantity -= resolved;
                         MarkChangedNoNotify(target);
                     }
@@ -494,6 +498,20 @@ namespace Bun3.Server.Items
                     return;
                 }
             }
+        }
+
+        /// <summary>Delivers the accumulated applied changes to onApplied and the action log,
+        /// then resets the buffer. Deferred to commit while a transaction is active.</summary>
+        private void FlushApplied()
+        {
+            if (_appliedCount == 0)
+            {
+                return;
+            }
+
+            _onApplied?.Invoke(new ReadOnlySpan<InventoryChange>(_applied, 0, _appliedCount));
+            LogAppliedChanges();
+            _appliedCount = 0;
         }
 
         /// <summary>Attaches the applied-buffer changes to the action log — low-frequency audit path, boxing allowed.</summary>
@@ -542,6 +560,7 @@ namespace Bun3.Server.Items
 
             if (TryGetSingleton(item, out var singleton))
             {
+                Capture(singleton);
                 singleton.Quantity += amount;
                 MarkChangedNoNotify(singleton);
             }
@@ -562,6 +581,7 @@ namespace Bun3.Server.Items
                 }
                 else
                 {
+                    Capture(singleton);
                     singleton.Quantity -= amount;
                     MarkChangedNoNotify(singleton);
                 }
@@ -657,6 +677,7 @@ namespace Bun3.Server.Items
             };
             _instances.Add(instance.InstanceId, instance);
             Index(instance);
+            CaptureCreated(instance);
             return instance;
         }
 
@@ -681,6 +702,7 @@ namespace Bun3.Server.Items
 
         private void RemoveInstance(ItemInstance<TState> instance)
         {
+            CaptureRemoved(instance);
             _instances.Remove(instance.InstanceId);
             Unindex(instance);
 

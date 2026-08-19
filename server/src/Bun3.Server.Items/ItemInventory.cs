@@ -16,7 +16,8 @@ namespace Bun3.Server.Items
     /// Query, enumeration, and consume paths are allocation-free; only instance creation
     /// allocates (low frequency).
     /// File layout: this file (construction, queries) / Operations (grant, consume, transactions) /
-    /// Crafting / Rewards / Regen / Transfer / Tracking (change tracking, load).
+    /// Crafting / Rewards / Regen / Transfer / Tracking (change tracking, load) /
+    /// Transaction (session transaction participation, notification buffering).
     /// </summary>
     /// <typeparam name="TState">Game-defined instance state type.</typeparam>
     public sealed partial class ItemInventory<TState>
@@ -61,6 +62,9 @@ namespace Bun3.Server.Items
         private readonly ActionLog? _log;
         private readonly string? _logLabel;
 
+        // Session-wide transaction — when unset, no snapshotting or notification buffering happens.
+        private readonly Transaction? _transaction;
+
         /// <summary>Creates the inventory.</summary>
         /// <param name="catalog">Item catalog.</param>
         /// <param name="instanceIdIssuer">Instance id issuer — must be unique across sessions
@@ -79,6 +83,9 @@ namespace Bun3.Server.Items
         /// Multiple inventories may share one log to land in a single action tree.</param>
         /// <param name="logLabel">Label distinguishing the change source when inventories share a log
         /// (e.g. "bag"/"warehouse").</param>
+        /// <param name="transaction">Session-wide transaction (<see cref="Transaction"/>) — when
+        /// set, changes made while it is open are reversible and notifications are buffered until
+        /// commit. Nothing is snapshotted when no transaction is open.</param>
         public ItemInventory(
             ItemCatalog catalog,
             Func<long> instanceIdIssuer,
@@ -88,11 +95,13 @@ namespace Bun3.Server.Items
             uint removeBlockingFlags = 0,
             InventoryAppliedHandler? onApplied = null,
             ActionLog? log = null,
-            string? logLabel = null)
+            string? logLabel = null,
+            Transaction? transaction = null)
         {
             _onApplied = onApplied;
             _log = log;
             _logLabel = logLabel;
+            _transaction = transaction;
             _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
             _instanceIdIssuer = instanceIdIssuer ?? throw new ArgumentNullException(nameof(instanceIdIssuer));
             _stateFactory = stateFactory ?? throw new ArgumentNullException(nameof(stateFactory));
