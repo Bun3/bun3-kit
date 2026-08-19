@@ -158,6 +158,9 @@ public class InventoryTransactionTests
             tx.Commit(out _);
         }
 
-        Assert.That(GC.GetAllocatedBytesForCurrentThread() - before, Is.EqualTo(0));
+        // Compare outside NUnit: in Release the JIT can sink the counter read past
+        // Is.EqualTo's own constraint allocation, counting NUnit's 24-byte object.
+        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        if (allocated != 0) Assert.Fail($"allocated {allocated} bytes across 1000 commits");
     }
 }
