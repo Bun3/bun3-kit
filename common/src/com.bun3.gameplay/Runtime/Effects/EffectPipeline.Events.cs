@@ -45,38 +45,36 @@ namespace Bun3.Gameplay.Effects
             }
         }
 
-        // The "source" of an event-triggered chain is the other party of the event relative to the
-        // listener: a retaliation (AsTarget, listener = evt.Target) is sourced from the attacker
-        // (evt.Source); a leech reaction (AsSource, listener = evt.Source) is sourced from the victim
-        // (evt.Target). This is the counterpart used for both condition evaluation and the enqueued
-        // application's caster/selector source — the instance's own Source (who applied the listening
-        // effect itself) is not involved.
+        // An event chain preserves the listening instance's attribution — the enqueued application's
+        // caster (and the source side of condition evaluation) is instance.Source, exactly like
+        // FireChain. The event's two parties reach a selector separately, through
+        // SelectorContext.EventSource/EventTarget.
         private void FireEventChain(
             CompiledChain chain, EffectInstance instance, TargetId listenerId, EffectTarget listener,
             in GameplayEvent evt)
         {
-            var counterpart = chain.Listen == ChainListen.AsTarget ? evt.Source : evt.Target;
-            var hasCounterpart = _resolver.TryResolve(counterpart, out var counterpartTarget) && counterpartTarget is not null;
-            if (!EvaluateConditions(chain.Conditions, listener, counterpartTarget, hasCounterpart)) return;
+            var source = instance.Source;
+            var hasSource = _resolver.TryResolve(source, out var sourceTarget) && sourceTarget is not null;
+            if (!EvaluateConditions(chain.Conditions, listener, sourceTarget, hasSource)) return;
 
             var chainLevel = chain.LevelRule == ChainLevelRule.Inherit ? instance.Level : chain.FixedLevel;
             EventChainFireCount++;
 
             if (chain.Selector is null)
             {
-                EnqueueApplyWithEvent(chain.EffectId, counterpart, listenerId, chainLevel, in evt);
+                EnqueueApplyWithEvent(chain.EffectId, source, listenerId, chainLevel, in evt);
                 return;
             }
 
             Span<TargetId> targets = stackalloc TargetId[32];
             var selectorCtx = new SelectorContext(
-                counterpart, listenerId, chain.SelectorParams, _rng, _resolver,
+                source, listenerId, chain.SelectorParams, _rng, _resolver,
                 evt.Source, evt.Target, evt.Magnitude, evt.NominalMagnitude);
             var count = SelectTargets(chain.Selector, in selectorCtx, targets);
 
             for (var k = 0; k < count; k++)
             {
-                EnqueueApplyWithEvent(chain.EffectId, counterpart, targets[k], chainLevel, in evt);
+                EnqueueApplyWithEvent(chain.EffectId, source, targets[k], chainLevel, in evt);
             }
         }
 
