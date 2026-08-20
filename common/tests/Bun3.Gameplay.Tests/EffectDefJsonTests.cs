@@ -32,7 +32,7 @@ public sealed class EffectDefJsonTests
     private const string ChillSampleJson = """
     {
       "schemaVersion": 1,
-      "specs": [ {
+      "effects": [ {
         "name": "chill",
         "duration": { "type": "Duration", "ticks": 10, "periodTicks": 0 },
         "stack": { "maxStack": 3, "onReapply": "AddStack",
@@ -113,7 +113,7 @@ public sealed class EffectDefJsonTests
     public void Unknown_field_throws_with_line_info()
     {
         const string json = """
-        { "schemaVersion": 1, "specs": [ {
+        { "schemaVersion": 1, "effects": [ {
           "name": "x", "duration": { "type": "Instant" }, "modifiers": [], "executions": [],
           "applicationConditions": [], "ongoingConditions": [], "grantedTags": [], "assetTags": [],
           "immunityTags": [], "chains": [], "bogus": 1 } ] }
@@ -127,7 +127,7 @@ public sealed class EffectDefJsonTests
     public void BigNum_as_json_number_throws_with_line_info()
     {
         const string json = """
-        { "schemaVersion": 1, "specs": [ {
+        { "schemaVersion": 1, "effects": [ {
           "name": "x", "duration": { "type": "Instant" },
           "modifiers": [ { "attribute": "Hp", "op": "Add", "magnitude": { "constant": -5 } } ],
           "executions": [], "applicationConditions": [], "ongoingConditions": [], "grantedTags": [],
@@ -141,7 +141,7 @@ public sealed class EffectDefJsonTests
     public void Unknown_enum_name_throws_with_line_info()
     {
         const string json = """
-        { "schemaVersion": 1, "specs": [ {
+        { "schemaVersion": 1, "effects": [ {
           "name": "x", "duration": { "type": "Bogus" }, "modifiers": [], "executions": [],
           "applicationConditions": [], "ongoingConditions": [], "grantedTags": [], "assetTags": [],
           "immunityTags": [], "chains": [] } ] }
@@ -154,7 +154,7 @@ public sealed class EffectDefJsonTests
     public void Unknown_attribute_name_throws_with_line_info()
     {
         const string json = """
-        { "schemaVersion": 1, "specs": [ {
+        { "schemaVersion": 1, "effects": [ {
           "name": "x", "duration": { "type": "Instant" },
           "modifiers": [ { "attribute": "NoSuchAttribute", "op": "Add", "magnitude": { "constant": "-5" } } ],
           "executions": [], "applicationConditions": [], "ongoingConditions": [], "grantedTags": [],
@@ -168,7 +168,7 @@ public sealed class EffectDefJsonTests
     // ---- Two-path equivalence: chill/frozen/poison catalog built in code vs loaded from JSON ----
 
     private const string TrioJson = """
-    { "schemaVersion": 1, "specs": [
+    { "schemaVersion": 1, "effects": [
       { "name": "chill",
         "duration": { "type": "Duration", "ticks": 10, "periodTicks": 0 },
         "stack": { "maxStack": 3, "onReapply": "AddStack",
@@ -270,7 +270,7 @@ public sealed class EffectDefJsonTests
     public void PerLevelValues_form_round_trips()
     {
         const string json = """
-        { "schemaVersion": 1, "specs": [ {
+        { "schemaVersion": 1, "effects": [ {
           "name": "x", "maxLevel": 3, "duration": { "type": "Instant" },
           "modifiers": [ { "attribute": "Attack", "op": "Add",
                            "magnitude": { "perLevelValues": ["10", "25", "70"] } } ],
@@ -289,7 +289,7 @@ public sealed class EffectDefJsonTests
     public void Formula_form_round_trips_with_tail_and_increment()
     {
         const string json = """
-        { "schemaVersion": 1, "specs": [ {
+        { "schemaVersion": 1, "effects": [ {
           "name": "x", "maxLevel": 5, "duration": { "type": "Instant" },
           "modifiers": [ { "attribute": "Attack", "op": "Add",
                            "magnitude": { "formula": "x*x", "tail": "Extrapolate", "extrapolateIncrement": "9" } } ],
@@ -307,7 +307,7 @@ public sealed class EffectDefJsonTests
     public void CurveKeys_form_round_trips()
     {
         const string json = """
-        { "schemaVersion": 1, "specs": [ {
+        { "schemaVersion": 1, "effects": [ {
           "name": "x", "maxLevel": 50, "duration": { "type": "Instant" },
           "modifiers": [ { "attribute": "Attack", "op": "Add",
                            "magnitude": { "curveKeys": [
@@ -328,7 +328,7 @@ public sealed class EffectDefJsonTests
     public void Magnitude_with_both_base_and_formula_throws()
     {
         const string json = """
-        { "schemaVersion": 1, "specs": [ {
+        { "schemaVersion": 1, "effects": [ {
           "name": "x", "maxLevel": 3, "duration": { "type": "Instant" },
           "modifiers": [ { "attribute": "Attack", "op": "Add",
                            "magnitude": { "base": { "constant": "1" }, "formula": "x" } } ],
@@ -343,7 +343,7 @@ public sealed class EffectDefJsonTests
     public void Code_built_and_json_loaded_formula_effect_produce_identical_outcome()
     {
         const string json = """
-        { "schemaVersion": 1, "specs": [ {
+        { "schemaVersion": 1, "effects": [ {
           "name": "surge", "maxLevel": 5,
           "duration": { "type": "Duration", "ticks": 100, "periodTicks": 0 },
           "modifiers": [ { "attribute": "Attack", "op": "Add", "magnitude": { "formula": "x*x" } } ],
@@ -384,7 +384,7 @@ public sealed class EffectDefJsonTests
     public void T2_T3_new_fields_round_trip()
     {
         const string json = """
-        { "schemaVersion": 1, "specs": [ {
+        { "schemaVersion": 1, "effects": [ {
           "name": "kitchen_sink", "maxLevel": 3,
           "duration": { "type": "Duration", "ticks": 0, "periodTicks": 0 },
           "stack": { "maxStack": 3, "onReapply": "ExtendCapped", "onOverflow": "Deny",
@@ -417,7 +417,7 @@ public sealed class EffectDefJsonTests
     public void New_fields_absent_keep_model_defaults()
     {
         const string json = """
-        { "schemaVersion": 1, "specs": [ {
+        { "schemaVersion": 1, "effects": [ {
           "name": "x", "duration": { "type": "Instant" },
           "modifiers": [], "executions": [], "applicationConditions": [], "ongoingConditions": [],
           "grantedTags": [], "assetTags": [], "immunityTags": [], "chains": [] } ] }
@@ -438,7 +438,7 @@ public sealed class EffectDefJsonTests
     // ---- Two-path equivalence: DR def (G6) ----
 
     private const string DrJson = """
-    { "schemaVersion": 1, "specs": [ {
+    { "schemaVersion": 1, "effects": [ {
       "name": "cc", "duration": { "type": "Duration", "ticks": 10, "periodTicks": 0 },
       "modifiers": [], "executions": [], "applicationConditions": [], "ongoingConditions": [],
       "grantedTags": [], "assetTags": [], "immunityTags": [], "chains": [],
@@ -481,7 +481,7 @@ public sealed class EffectDefJsonTests
     public void MaxLevel_missing_at_root_defaults_to_zero()
     {
         const string json = """
-        { "schemaVersion": 1, "specs": [ {
+        { "schemaVersion": 1, "effects": [ {
           "name": "x", "duration": { "type": "Instant" },
           "modifiers": [], "executions": [], "applicationConditions": [], "ongoingConditions": [],
           "grantedTags": [], "assetTags": [], "immunityTags": [], "chains": [] } ] }
@@ -497,7 +497,7 @@ public sealed class EffectDefJsonTests
         var defs = Load("""
         {
           "schemaVersion": 1,
-          "specs": [
+          "effects": [
             {
               "name": "bolt", "duration": { "type": "Instant" },
               "modifiers": [ { "attribute": "Hp", "op": "Add", "magnitude": { "constant": "-10" } } ],
@@ -532,7 +532,7 @@ public sealed class EffectDefJsonTests
     public void Raise_events_granted_abilities_and_chain_event_fields_default_when_absent()
     {
         const string json = """
-        { "schemaVersion": 1, "specs": [ {
+        { "schemaVersion": 1, "effects": [ {
           "name": "x", "duration": { "type": "Instant" },
           "modifiers": [], "executions": [], "applicationConditions": [], "ongoingConditions": [],
           "grantedTags": [], "assetTags": [], "immunityTags": [],
@@ -550,7 +550,7 @@ public sealed class EffectDefJsonTests
     public void Unknown_raiseEvents_key_throws_with_line_info()
     {
         const string json = """
-        { "schemaVersion": 1, "specs": [ {
+        { "schemaVersion": 1, "effects": [ {
           "name": "x", "duration": { "type": "Instant" },
           "modifiers": [], "executions": [], "applicationConditions": [], "ongoingConditions": [],
           "grantedTags": [], "assetTags": [], "immunityTags": [], "chains": [],
@@ -569,7 +569,7 @@ public sealed class EffectDefJsonTests
         const string json = """
         {
           "schemaVersion": 1,
-          "specs": [
+          "effects": [
             {
               "name": "bolt", "duration": { "type": "Instant" },
               "modifiers": [ { "attribute": "Hp", "op": "Add", "magnitude": { "constant": "-10" } } ],

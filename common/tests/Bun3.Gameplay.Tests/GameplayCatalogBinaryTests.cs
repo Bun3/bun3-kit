@@ -211,7 +211,7 @@ public sealed class GameplayCatalogBinaryTests
     private const string ScenarioEffectsJson = """
     {
       "schemaVersion": 1,
-      "specs": [
+      "effects": [
         {
           "name": "Strike", "duration": { "type": "Instant" },
           "modifiers": [ { "attribute": "Hp", "op": "Add", "magnitude": { "constant": "-8" } } ],

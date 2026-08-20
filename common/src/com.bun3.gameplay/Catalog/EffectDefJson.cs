@@ -85,14 +85,14 @@ namespace Bun3.Gameplay.Effects.Catalog
 
         private static List<EffectDef> ReadRoot(JObject root, IReadOnlyDictionary<string, ushort> attributeNames)
         {
-            RequireAllowedProperties(root, "schemaVersion", "specs");
+            RequireAllowedProperties(root, "schemaVersion", "effects");
             RequireSchemaVersion(root);
 
-            var effectsArray = RequireArray(root, "specs");
+            var effectsArray = RequireArray(root, "effects");
             var result = new List<EffectDef>(effectsArray.Count);
             foreach (var item in effectsArray)
             {
-                result.Add(ReadEffect(AsObject(item, "specs items must be objects."), attributeNames));
+                result.Add(ReadEffect(AsObject(item, "effects items must be objects."), attributeNames));
             }
 
             return result;
