@@ -103,8 +103,8 @@ namespace Bun3.Gameplay.Tags.Catalog
                 }
 
                 var explicitTags = ReadTags(tags);
-                var redirectDefinitions = ReadRedirects(root.Property("redirects", StringComparison.Ordinal)?.Value);
-                return TagCatalog.Create(explicitTags, redirectDefinitions);
+                var parsedRedirects = ReadRedirects(root.Property("redirects", StringComparison.Ordinal)?.Value);
+                return TagCatalog.Create(explicitTags, parsedRedirects);
             }
 
             private static List<string> ReadTags(JArray tags)
@@ -146,15 +146,15 @@ namespace Bun3.Gameplay.Tags.Catalog
                 return explicitTags;
             }
 
-            private static List<TagCatalog.RedirectDefinition> ReadRedirects(JToken? redirects)
+            private static List<TagCatalog.ParsedRedirect> ReadRedirects(JToken? redirects)
             {
-                if (redirects is null) return new List<TagCatalog.RedirectDefinition>();
+                if (redirects is null) return new List<TagCatalog.ParsedRedirect>();
                 if (redirects is not JArray redirectArray)
                 {
                     throw Error("redirects must be an array.", redirects);
                 }
 
-                var definitions = new List<TagCatalog.RedirectDefinition>(redirectArray.Count);
+                var parsedRedirects = new List<TagCatalog.ParsedRedirect>(redirectArray.Count);
                 foreach (var token in redirectArray)
                 {
                     if (token is not JObject redirect)
@@ -167,7 +167,7 @@ namespace Bun3.Gameplay.Tags.Catalog
                     var to = RequireString(redirect, "to");
                     var canonicalFrom = TagName.ValidateAndFold(from.Value, from.Path, from.LineNumber, from.LinePosition);
                     var canonicalTo = TagName.ValidateAndFold(to.Value, to.Path, to.LineNumber, to.LinePosition);
-                    definitions.Add(new TagCatalog.RedirectDefinition(
+                    parsedRedirects.Add(new TagCatalog.ParsedRedirect(
                         canonicalFrom,
                         canonicalTo,
                         from.Path,
@@ -178,7 +178,7 @@ namespace Bun3.Gameplay.Tags.Catalog
                         to.LinePosition));
                 }
 
-                return definitions;
+                return parsedRedirects;
             }
 
             private static LocatedString RequireString(JObject value, string propertyName)

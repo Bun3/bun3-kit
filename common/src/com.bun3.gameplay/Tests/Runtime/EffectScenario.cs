@@ -39,7 +39,7 @@ namespace Bun3.Gameplay.Tests
         /// <summary>Assembles the world without advancing it — exposed so snapshot/restore round-trip tests can intervene midway.</summary>
         internal static ScenarioWorld BuildWorld(int seed)
         {
-            var tagCatalog = TagCatalog.Create(new List<string>(), new List<TagCatalog.RedirectDefinition>());
+            var tagCatalog = TagCatalog.Create(new List<string>(), new List<TagCatalog.ParsedRedirect>());
 
             var registryBuilder = new AttributeRegistryBuilder();
             registryBuilder.Register(MaxHp, min: Operand.Constant(BigNum.FromParts(1, 0)));
@@ -335,7 +335,7 @@ namespace Bun3.Gameplay.Tests
         private static TagCatalog BuildScenarioTagCatalog()
         {
             var names = new List<string> { EventHitTag, BuiltInSelectors.EventSourceTag, CooldownTag, ArmedTag };
-            return TagCatalog.Create(names, new List<TagCatalog.RedirectDefinition>());
+            return TagCatalog.Create(names, new List<TagCatalog.ParsedRedirect>());
         }
 
         private static AttributeRegistry BuildScenarioAttributeRegistry()
