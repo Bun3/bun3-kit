@@ -256,6 +256,71 @@ namespace Bun3.Gameplay.Effects
         internal ChainListen Listen { get; }
     }
 
+    /// <summary>Stack policy resolved by Build. Values are copied from the authoring
+    /// <see cref="StackPolicyDef"/> so the compiled catalog stays immutable even if the caller
+    /// keeps mutating the authoring object after Build.</summary>
+    internal sealed class CompiledStackPolicy
+    {
+        internal CompiledStackPolicy(
+            int maxStack,
+            StackReapply onReapply,
+            int addStackCount,
+            bool refreshDurationOnReapply,
+            bool resetPeriodOnReapply,
+            StackExpiration onExpiration,
+            StackOverflow onOverflow,
+            string? overflowEffectName,
+            bool clearStacksOnOverflow,
+            bool levelFromStack,
+            BigNum extendCapMultiplier)
+        {
+            MaxStack = maxStack;
+            OnReapply = onReapply;
+            AddStackCount = addStackCount;
+            RefreshDurationOnReapply = refreshDurationOnReapply;
+            ResetPeriodOnReapply = resetPeriodOnReapply;
+            OnExpiration = onExpiration;
+            OnOverflow = onOverflow;
+            OverflowEffectName = overflowEffectName;
+            ClearStacksOnOverflow = clearStacksOnOverflow;
+            LevelFromStack = levelFromStack;
+            ExtendCapMultiplier = extendCapMultiplier;
+        }
+
+        /// <summary>Maximum stack count; 0 means the effect does not stack.</summary>
+        internal int MaxStack { get; }
+
+        /// <summary>Behavior when a stackable effect is reapplied.</summary>
+        internal StackReapply OnReapply { get; }
+
+        /// <summary>Stacks added per reapplication.</summary>
+        internal int AddStackCount { get; }
+
+        /// <summary>Whether reapplication refreshes the duration.</summary>
+        internal bool RefreshDurationOnReapply { get; }
+
+        /// <summary>Whether reapplication resets the periodic execution timer.</summary>
+        internal bool ResetPeriodOnReapply { get; }
+
+        /// <summary>Behavior when a stack expires.</summary>
+        internal StackExpiration OnExpiration { get; }
+
+        /// <summary>Behavior when the maximum stack count is exceeded.</summary>
+        internal StackOverflow OnOverflow { get; }
+
+        /// <summary>Name of the effect to apply instead when <see cref="OnOverflow"/> is ApplyEffect.</summary>
+        internal string? OverflowEffectName { get; }
+
+        /// <summary>Whether an overflow application clears all existing stacks.</summary>
+        internal bool ClearStacksOnOverflow { get; }
+
+        /// <summary>If true, merging (reapplication) syncs the instance Level to the Stack value.</summary>
+        internal bool LevelFromStack { get; }
+
+        /// <summary>Multiplier that caps the duration for <see cref="StackReapply.ExtendCapped"/>.</summary>
+        internal BigNum ExtendCapMultiplier { get; }
+    }
+
     /// <summary>Effect fully validated and resolved by Build.</summary>
     internal sealed class CompiledEffect
     {
@@ -265,7 +330,7 @@ namespace Bun3.Gameplay.Effects
             EffectDurationType durationType,
             int durationTicks,
             int periodTicks,
-            StackPolicyDef stack,
+            CompiledStackPolicy stack,
             CompiledModifier[] modifiers,
             CompiledExecution[] executions,
             CompiledCondition[] applicationConditions,
@@ -335,7 +400,7 @@ namespace Bun3.Gameplay.Effects
         internal int PeriodTicks { get; }
 
         /// <summary>Stack policy.</summary>
-        internal StackPolicyDef Stack { get; }
+        internal CompiledStackPolicy Stack { get; }
 
         /// <summary>Compiled attribute modifiers.</summary>
         internal CompiledModifier[] Modifiers { get; }

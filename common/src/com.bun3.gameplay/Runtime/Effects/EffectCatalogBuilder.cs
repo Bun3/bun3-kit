@@ -205,8 +205,14 @@ namespace Bun3.Gameplay.Effects
                 raiseEvents[i] = new CompiledRaiseEvent(tags.GetRequired(raise.Tag), raise.AttributeId);
             }
 
+            var stack = new CompiledStackPolicy(
+                def.Stack.MaxStack, def.Stack.OnReapply, def.Stack.AddStackCount,
+                def.Stack.RefreshDurationOnReapply, def.Stack.ResetPeriodOnReapply, def.Stack.OnExpiration,
+                def.Stack.OnOverflow, def.Stack.OverflowEffectName, def.Stack.ClearStacksOnOverflow,
+                def.Stack.LevelFromStack, def.Stack.ExtendCapMultiplier);
+
             return new CompiledEffect(
-                def.Name, def.MaxLevel, def.DurationType, def.DurationTicks, def.PeriodTicks, def.Stack,
+                def.Name, def.MaxLevel, def.DurationType, def.DurationTicks, def.PeriodTicks, stack,
                 modifiers, executions, applicationConditions, ongoingConditions,
                 grantedTags, grantedAbilityNames, assetTags, immunityTags, chains, overflowEffectId,
                 removeOnApplyTags, chanceToApply, durationPerLevel, durationScale,

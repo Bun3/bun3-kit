@@ -300,20 +300,18 @@ namespace Bun3.Gameplay.Catalog
             var durationTicks = reader.ReadInt32("duration ticks");
             var periodTicks = reader.ReadInt32("period ticks");
 
-            var stack = new StackPolicyDef
-            {
-                MaxStack = reader.ReadInt32("max stack"),
-                OnReapply = (StackReapply)reader.ReadByte("stack reapply"),
-                AddStackCount = reader.ReadInt32("add stack count"),
-                RefreshDurationOnReapply = reader.ReadBool("refresh duration on reapply"),
-                ResetPeriodOnReapply = reader.ReadBool("reset period on reapply"),
-                OnExpiration = (StackExpiration)reader.ReadByte("stack expiration"),
-                OnOverflow = (StackOverflow)reader.ReadByte("stack overflow"),
-                OverflowEffectName = reader.ReadString("overflow effect name"),
-                ClearStacksOnOverflow = reader.ReadBool("clear stacks on overflow"),
-                LevelFromStack = reader.ReadBool("level from stack"),
-                ExtendCapMultiplier = reader.ReadBigNum("extend cap multiplier"),
-            };
+            var stack = new CompiledStackPolicy(
+                reader.ReadInt32("max stack"),
+                (StackReapply)reader.ReadByte("stack reapply"),
+                reader.ReadInt32("add stack count"),
+                reader.ReadBool("refresh duration on reapply"),
+                reader.ReadBool("reset period on reapply"),
+                (StackExpiration)reader.ReadByte("stack expiration"),
+                (StackOverflow)reader.ReadByte("stack overflow"),
+                reader.ReadString("overflow effect name"),
+                reader.ReadBool("clear stacks on overflow"),
+                reader.ReadBool("level from stack"),
+                reader.ReadBigNum("extend cap multiplier"));
 
             var modifiers = new CompiledModifier[reader.ReadLength("modifier count")];
             for (var i = 0; i < modifiers.Length; i++)

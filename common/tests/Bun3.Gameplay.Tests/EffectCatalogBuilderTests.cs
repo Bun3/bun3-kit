@@ -385,4 +385,27 @@ public sealed class EffectCatalogBuilderTests
         Assert.That(hastedEffect.Chains[0].EffectId, Is.EqualTo(boltId));
         Assert.That(catalog.BuildWarnings, Is.Empty);
     }
+
+    // The compiled catalog must copy StackPolicyDef's values at Build time rather than holding a
+    // reference to the mutable authoring object -- otherwise mutating the authoring def after Build
+    // silently mutates the "immutable" compiled catalog.
+    [Test]
+    public void Build_copies_the_authoring_stack_policy_so_later_mutation_does_not_leak_into_the_compiled_catalog()
+    {
+        var kit = EffectTestKit.Create();
+        var stackPolicy = new StackPolicyDef { MaxStack = 3, OnReapply = StackReapply.AddStack, LevelFromStack = true };
+        var def = EffectTestKit.MinimalDuration("leaky", 10);
+        def.Stack = stackPolicy;
+        kit.AddEffect(def);
+
+        var compiled = kit.Catalog.GetEffect(kit.EffectId("leaky"));
+
+        stackPolicy.MaxStack = 99;
+        stackPolicy.OnReapply = StackReapply.ExtendCapped;
+        stackPolicy.LevelFromStack = false;
+
+        Assert.That(compiled.Stack.MaxStack, Is.EqualTo(3));
+        Assert.That(compiled.Stack.OnReapply, Is.EqualTo(StackReapply.AddStack));
+        Assert.That(compiled.Stack.LevelFromStack, Is.True);
+    }
 }
