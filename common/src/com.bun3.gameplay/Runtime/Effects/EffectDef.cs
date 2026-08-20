@@ -76,7 +76,11 @@ namespace Bun3.Gameplay.Effects
         /// <summary>Tag path of the event to raise.</summary>
         public string Tag { get; set; } = string.Empty;
 
-        /// <summary>Attribute whose Base change becomes the event magnitude. Must be modified by this effect.</summary>
+        /// <summary>
+        /// Attribute whose Base change becomes the event magnitude. Must be targeted by a
+        /// <see cref="EffectDef.Modifiers"/> entry on this effect — an attribute touched only by an
+        /// <see cref="EffectDef.Executions"/> entry does not satisfy this and fails Build.
+        /// </summary>
         public ushort AttributeId { get; set; }
     }
 
@@ -247,7 +251,8 @@ namespace Bun3.Gameplay.Effects
         /// <summary>Whether an overflow application clears all existing stacks.</summary>
         public bool ClearStacksOnOverflow { get; set; }
 
-        /// <summary>If true, merging (reapplication) syncs the instance Level to the Stack value.
+        /// <summary>If true, the instance Level is synced to the Stack value on any stack change —
+        /// merging (reapplication) as well as a stack drop from <see cref="StackExpiration.RemoveOneAndRefresh"/>.
         /// Combine with a level table to express non-linear per-stack magnitudes. Rejected in Build
         /// when MaxStack is 0.</summary>
         public bool LevelFromStack { get; set; }

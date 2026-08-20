@@ -1,13 +1,14 @@
 #nullable enable
 using Bun3.Gameplay.Numerics;
+using Bun3.Gameplay.Seams;
 using Bun3.Gameplay.Tags;
 
 namespace Bun3.Gameplay.Effects
 {
     /// <summary>
-    /// One gameplay event raised by an effect application. <see cref="Magnitude"/> is the signed
-    /// Base change that actually landed after clamping; <see cref="NominalMagnitude"/> is the
-    /// amount before clamping. Damage reads as a negative magnitude, healing as positive.
+    /// One gameplay event raised by an effect application. <see cref="Magnitude"/> and
+    /// <see cref="NominalMagnitude"/> are measured differently and can disagree — see each
+    /// property's remarks. Damage reads as a negative magnitude, healing as positive.
     /// </summary>
     public readonly struct GameplayEvent
     {
@@ -15,8 +16,8 @@ namespace Bun3.Gameplay.Effects
         /// <param name="tag">Event tag.</param>
         /// <param name="source">Caster of the effect that raised the event.</param>
         /// <param name="target">Target the effect was applied to.</param>
-        /// <param name="magnitude">Signed Base change after clamping.</param>
-        /// <param name="nominalMagnitude">Signed Base change before clamping.</param>
+        /// <param name="magnitude">Signed Base change after clamping, across the whole application.</param>
+        /// <param name="nominalMagnitude">Signed sum of the modifier magnitudes targeting this attribute, before clamping.</param>
         public GameplayEvent(
             GameplayTag tag, TargetId source, TargetId target, BigNum magnitude, BigNum nominalMagnitude)
         {
@@ -36,10 +37,22 @@ namespace Bun3.Gameplay.Effects
         /// <summary>Target the effect was applied to.</summary>
         public TargetId Target { get; }
 
-        /// <summary>Signed Base change after clamping.</summary>
+        /// <summary>
+        /// Signed Base change that actually landed, after clamping, measured across the whole effect
+        /// application — the attribute's Base before minus its Base after. This includes any change made
+        /// by an <see cref="IExecutionCalc"/> execution, not only by <see cref="CompiledModifier"/>
+        /// modifiers. For an effect with both modifiers and executions touching the same attribute,
+        /// <see cref="Magnitude"/> reflects the combined effect and can differ from
+        /// <see cref="NominalMagnitude"/>, which counts modifiers only.
+        /// </summary>
         public BigNum Magnitude { get; }
 
-        /// <summary>Signed Base change before clamping.</summary>
+        /// <summary>
+        /// Signed sum of the modifier magnitudes targeting this attribute, before clamping. Unlike
+        /// <see cref="Magnitude"/>, this does not include any change made by an execution
+        /// (<see cref="IExecutionCalc"/>) — an effect whose modifiers evaluate to zero net magnitude
+        /// reports zero here even if an execution on the same effect changed the attribute's Base.
+        /// </summary>
         public BigNum NominalMagnitude { get; }
     }
 }

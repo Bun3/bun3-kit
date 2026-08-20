@@ -199,7 +199,10 @@ namespace Bun3.Gameplay.Effects
                 if (!modified)
                 {
                     throw new InvalidOperationException(
-                        $"Effect '{def.Name}': RaiseEvents attribute {raise.AttributeId} is not modified by this effect.");
+                        $"Effect '{def.Name}': RaiseEvents attribute {raise.AttributeId} is not modified by a " +
+                        "Modifiers entry on this effect. An Executions-only change to the attribute does not " +
+                        "count — add a Modifiers entry targeting it, even a zero-magnitude one, or drop the " +
+                        "RaiseEvents entry.");
                 }
 
                 raiseEvents[i] = new CompiledRaiseEvent(tags.GetRequired(raise.Tag), raise.AttributeId);

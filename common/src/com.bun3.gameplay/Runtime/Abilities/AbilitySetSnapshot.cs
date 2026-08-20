@@ -34,7 +34,7 @@ namespace Bun3.Gameplay.Abilities
 
         /// <summary>Renders the canonical grant order as text. Diagnostics and tests only.</summary>
         /// <returns>Space-separated <c>abilityId/Kind:Key</c> entries in stored order.</returns>
-        public string DebugOrder()
+        internal string DebugOrder()
         {
             var builder = new StringBuilder();
             for (var i = 0; i < Grants.Length; i++)
