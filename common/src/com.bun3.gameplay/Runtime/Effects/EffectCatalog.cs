@@ -11,19 +11,19 @@ namespace Bun3.Gameplay.Effects
     public sealed class EffectCatalog
     {
         private readonly Dictionary<string, int> _nameToId;
-        private readonly CompiledEffectSpec[] _specs;
+        private readonly CompiledEffect[] _effects;
         private readonly string[] _buildWarnings;
 
         internal EffectCatalog(
-            Dictionary<string, int> nameToId, CompiledEffectSpec[] specs, List<string> buildWarnings)
+            Dictionary<string, int> nameToId, CompiledEffect[] effects, List<string> buildWarnings)
         {
             _nameToId = nameToId;
-            _specs = specs;
+            _effects = effects;
             _buildWarnings = buildWarnings.ToArray();
         }
 
         /// <summary>Number of effects registered in the catalog.</summary>
-        public int Count => _specs.Length;
+        public int Count => _effects.Length;
 
         /// <summary>Looks up an effect id by name, throwing when absent.</summary>
         /// <param name="name">Effect name to look up.</param>
@@ -45,8 +45,8 @@ namespace Bun3.Gameplay.Effects
         /// <returns>True if the name is registered.</returns>
         public bool TryGetId(string name, out int id) => _nameToId.TryGetValue(name, out id);
 
-        /// <summary>Gets the compiled spec by id.</summary>
-        internal CompiledEffectSpec GetSpec(int id) => _specs[id];
+        /// <summary>Gets the compiled effect by id.</summary>
+        internal CompiledEffect GetEffect(int id) => _effects[id];
 
         /// <summary>Chain-cycle warnings found during Build. They accumulate here instead of throwing.</summary>
         public IReadOnlyList<string> BuildWarnings => _buildWarnings;
@@ -203,9 +203,9 @@ namespace Bun3.Gameplay.Effects
     }
 
     /// <summary>Compiled chain edge.</summary>
-    internal sealed class CompiledChain
+    internal sealed class CompiledChainEdge
     {
-        internal CompiledChain(
+        internal CompiledChainEdge(
             ChainTrigger trigger, int effectId, ITargetSelector? selector, GameplayTag selectorTag,
             BigNum[] selectorParams, CompiledCondition[] conditions, ChainLevelRule levelRule,
             int fixedLevel, GameplayTag eventTag, ChainListen listen)
@@ -256,16 +256,16 @@ namespace Bun3.Gameplay.Effects
         internal ChainListen Listen { get; }
     }
 
-    /// <summary>Effect spec fully validated and resolved by Build.</summary>
-    internal sealed class CompiledEffectSpec
+    /// <summary>Effect fully validated and resolved by Build.</summary>
+    internal sealed class CompiledEffect
     {
-        internal CompiledEffectSpec(
+        internal CompiledEffect(
             string name,
             int maxLevel,
             EffectDurationType durationType,
             int durationTicks,
             int periodTicks,
-            StackPolicy stack,
+            StackPolicyDef stack,
             CompiledModifier[] modifiers,
             CompiledExecution[] executions,
             CompiledCondition[] applicationConditions,
@@ -274,7 +274,7 @@ namespace Bun3.Gameplay.Effects
             string[] grantedAbilityNames,
             GameplayTag[] assetTags,
             GameplayTag[] immunityTags,
-            CompiledChain[] chains,
+            CompiledChainEdge[] chains,
             int overflowEffectId,
             GameplayTag[] removeOnApplyTags,
             CompiledMagnitude? chanceToApply,
@@ -335,7 +335,7 @@ namespace Bun3.Gameplay.Effects
         internal int PeriodTicks { get; }
 
         /// <summary>Stack policy.</summary>
-        internal StackPolicy Stack { get; }
+        internal StackPolicyDef Stack { get; }
 
         /// <summary>Compiled attribute modifiers.</summary>
         internal CompiledModifier[] Modifiers { get; }
@@ -365,7 +365,7 @@ namespace Bun3.Gameplay.Effects
         internal GameplayTag[] ImmunityTags { get; }
 
         /// <summary>Compiled chain edges.</summary>
-        internal CompiledChain[] Chains { get; }
+        internal CompiledChainEdge[] Chains { get; }
 
         /// <summary>Id of the effect applied instead on stack overflow; -1 when none.</summary>
         internal int OverflowEffectId { get; }
@@ -378,7 +378,7 @@ namespace Bun3.Gameplay.Effects
         internal CompiledMagnitude? ChanceToApply { get; }
 
         /// <summary>Per-level duration ticks (notation ② only); null when absent
-        /// (single <see cref="EffectSpec.DurationTicks"/> value is used).</summary>
+        /// (single <see cref="EffectDef.DurationTicks"/> value is used).</summary>
         internal BigNum[]? DurationPerLevel { get; }
 
         /// <summary>Duration multiplier evaluated once on application; null when absent (same as multiplier 1).</summary>
@@ -396,7 +396,7 @@ namespace Bun3.Gameplay.Effects
         /// <summary>Gameplay events raised when this effect applies instantly or executes periodically.</summary>
         internal CompiledRaiseEvent[] RaiseEvents { get; }
 
-        /// <summary>Whether any chain edge on this spec listens with <see cref="ChainTrigger.OnEvent"/>.
+        /// <summary>Whether any chain edge on this effect listens with <see cref="ChainTrigger.OnEvent"/>.
         /// Lets event dispatch skip the inner chain loop for the common case.</summary>
         internal bool HasEventChains { get; }
     }

@@ -40,11 +40,11 @@ public sealed class AbilityActivationTests
             Op = AttributeModifierOp.Add,
             Magnitude = new MagnitudeDef { Base = Operand.Constant(-25) },
         });
-        kit.AddSpec(bolt);
+        kit.AddEffect(bolt);
 
         var cooldown = EffectTestKit.MinimalDuration("cooldown.fireball", ticks: 5);
         cooldown.GrantedTags.Add("cooldown.fireball");
-        kit.AddSpec(cooldown);
+        kit.AddEffect(cooldown);
 
         var abilityBuilder = new AbilityCatalogBuilder();
         configure(kit, abilityBuilder);
@@ -180,7 +180,7 @@ public sealed class AbilityActivationTests
                 Op = AttributeModifierOp.Add,
                 Magnitude = new MagnitudeDef { Base = Operand.Constant(40) },
             });
-            kit.AddSpec(boost);
+            kit.AddEffect(boost);
 
             var ability = Fireball();
             ability.Costs.Add(new CostDef
@@ -193,7 +193,7 @@ public sealed class AbilityActivationTests
         var id = f.Abilities.GetRequiredId("fireball");
         f.Caster.Abilities.Grant(id, GrantSource.Archetype(), level: 1);
 
-        f.World.Pipeline.EnqueueApply(f.Kit.SpecId("mp.boost"), f.Caster.Id, f.Caster.Id);
+        f.World.Pipeline.EnqueueApply(f.Kit.EffectId("mp.boost"), f.Caster.Id, f.Caster.Id);
         f.World.Tick();
         Assert.That(f.Caster.Attributes.GetCurrent(EffectTestKit.Mp), Is.EqualTo((BigNum)90));
         Assert.That(f.Caster.Attributes.GetBase(EffectTestKit.Mp), Is.EqualTo((BigNum)50));
@@ -336,7 +336,7 @@ public sealed class AbilityActivationTests
                 PerLevelValues = new System.Collections.Generic.List<BigNum> { -10, -20, -30 },
             },
         });
-        kit.AddSpec(bolt);
+        kit.AddEffect(bolt);
 
         var ability = new AbilityDef { Name = "fireball", MaxLevel = 3 };
         ability.Effects.Add(new AbilityEffectDef { EffectName = "bolt", LevelRule = ChainLevelRule.Inherit });

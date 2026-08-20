@@ -110,7 +110,7 @@ namespace Bun3.Gameplay.Catalog
             writer.WriteZeroes(HashLength);
 
             writer.WriteInt32(effects.Count);
-            for (var id = 0; id < effects.Count; id++) WriteEffect(writer, effects.GetSpec(id));
+            for (var id = 0; id < effects.Count; id++) WriteEffect(writer, effects.GetEffect(id));
 
             var warnings = effects.BuildWarnings;
             writer.WriteInt32(warnings.Count);
@@ -178,12 +178,12 @@ namespace Bun3.Gameplay.Catalog
             }
 
             var reader = new PayloadReader(bytes, HeaderSize, checked((int)payloadLength));
-            var specs = new CompiledEffectSpec[reader.ReadLength("effect count")];
-            var effectNameToId = new Dictionary<string, int>(specs.Length, StringComparer.Ordinal);
-            for (var id = 0; id < specs.Length; id++)
+            var effects = new CompiledEffect[reader.ReadLength("effect count")];
+            var effectNameToId = new Dictionary<string, int>(effects.Length, StringComparer.Ordinal);
+            for (var id = 0; id < effects.Length; id++)
             {
-                specs[id] = ReadEffect(reader, seams);
-                if (!effectNameToId.TryAdd(specs[id].Name, id)) throw Format("Duplicate effect name.");
+                effects[id] = ReadEffect(reader, seams);
+                if (!effectNameToId.TryAdd(effects[id].Name, id)) throw Format("Duplicate effect name.");
             }
 
             var warningCount = reader.ReadLength("build warning count");
@@ -204,19 +204,19 @@ namespace Bun3.Gameplay.Catalog
             if (reader.Remaining != 0) throw Format("Unparsed bytes remain after the payload.");
 
             return (
-                new EffectCatalog(effectNameToId, specs, warnings),
+                new EffectCatalog(effectNameToId, effects, warnings),
                 new AbilityCatalog(abilities, abilityNameToId));
         }
 
-        private static void WriteEffect(BufferWriter writer, CompiledEffectSpec spec)
+        private static void WriteEffect(BufferWriter writer, CompiledEffect effect)
         {
-            writer.WriteString(spec.Name);
-            writer.WriteInt32(spec.MaxLevel);
-            writer.WriteByte((byte)spec.DurationType);
-            writer.WriteInt32(spec.DurationTicks);
-            writer.WriteInt32(spec.PeriodTicks);
+            writer.WriteString(effect.Name);
+            writer.WriteInt32(effect.MaxLevel);
+            writer.WriteByte((byte)effect.DurationType);
+            writer.WriteInt32(effect.DurationTicks);
+            writer.WriteInt32(effect.PeriodTicks);
 
-            var stack = spec.Stack;
+            var stack = effect.Stack;
             writer.WriteInt32(stack.MaxStack);
             writer.WriteByte((byte)stack.OnReapply);
             writer.WriteInt32(stack.AddStackCount);
@@ -229,8 +229,8 @@ namespace Bun3.Gameplay.Catalog
             writer.WriteBool(stack.LevelFromStack);
             writer.WriteBigNum(stack.ExtendCapMultiplier);
 
-            writer.WriteInt32(spec.Modifiers.Length);
-            foreach (var modifier in spec.Modifiers)
+            writer.WriteInt32(effect.Modifiers.Length);
+            foreach (var modifier in effect.Modifiers)
             {
                 writer.WriteUInt16(modifier.AttributeId);
                 writer.WriteByte((byte)modifier.Op);
@@ -243,26 +243,26 @@ namespace Bun3.Gameplay.Catalog
                 writer.WriteBool(modifier.ScaleWithStack);
             }
 
-            writer.WriteInt32(spec.Executions.Length);
-            foreach (var execution in spec.Executions)
+            writer.WriteInt32(effect.Executions.Length);
+            foreach (var execution in effect.Executions)
             {
                 writer.WriteTag(execution.CalcTag);
                 writer.WriteInt32(execution.Inputs.Length);
                 foreach (var input in execution.Inputs) writer.WriteOperand(input);
             }
 
-            WriteConditions(writer, spec.ApplicationConditions);
-            WriteConditions(writer, spec.OngoingConditions);
-            WriteTags(writer, spec.GrantedTags);
+            WriteConditions(writer, effect.ApplicationConditions);
+            WriteConditions(writer, effect.OngoingConditions);
+            WriteTags(writer, effect.GrantedTags);
 
-            writer.WriteInt32(spec.GrantedAbilityNames.Length);
-            foreach (var name in spec.GrantedAbilityNames) writer.WriteString(name);
+            writer.WriteInt32(effect.GrantedAbilityNames.Length);
+            foreach (var name in effect.GrantedAbilityNames) writer.WriteString(name);
 
-            WriteTags(writer, spec.AssetTags);
-            WriteTags(writer, spec.ImmunityTags);
+            WriteTags(writer, effect.AssetTags);
+            WriteTags(writer, effect.ImmunityTags);
 
-            writer.WriteInt32(spec.Chains.Length);
-            foreach (var chain in spec.Chains)
+            writer.WriteInt32(effect.Chains.Length);
+            foreach (var chain in effect.Chains)
             {
                 writer.WriteByte((byte)chain.Trigger);
                 writer.WriteInt32(chain.EffectId);
@@ -275,24 +275,24 @@ namespace Bun3.Gameplay.Catalog
                 writer.WriteByte((byte)chain.Listen);
             }
 
-            writer.WriteInt32(spec.OverflowEffectId);
-            WriteTags(writer, spec.RemoveOnApplyTags);
-            WriteMagnitude(writer, spec.ChanceToApply);
-            writer.WriteNullableBigNums(spec.DurationPerLevel);
-            WriteMagnitude(writer, spec.DurationScale);
-            writer.WriteTag(spec.DrCategory);
-            writer.WriteInt32(spec.DrWindowTicks);
-            writer.WriteBigNums(spec.DrStageMultipliers);
+            writer.WriteInt32(effect.OverflowEffectId);
+            WriteTags(writer, effect.RemoveOnApplyTags);
+            WriteMagnitude(writer, effect.ChanceToApply);
+            writer.WriteNullableBigNums(effect.DurationPerLevel);
+            WriteMagnitude(writer, effect.DurationScale);
+            writer.WriteTag(effect.DrCategory);
+            writer.WriteInt32(effect.DrWindowTicks);
+            writer.WriteBigNums(effect.DrStageMultipliers);
 
-            writer.WriteInt32(spec.RaiseEvents.Length);
-            foreach (var raise in spec.RaiseEvents)
+            writer.WriteInt32(effect.RaiseEvents.Length);
+            foreach (var raise in effect.RaiseEvents)
             {
                 writer.WriteTag(raise.Tag);
                 writer.WriteUInt16(raise.AttributeId);
             }
         }
 
-        private static CompiledEffectSpec ReadEffect(PayloadReader reader, SeamRegistry seams)
+        private static CompiledEffect ReadEffect(PayloadReader reader, SeamRegistry seams)
         {
             var name = reader.ReadString("effect name") ?? throw Format("Effect name must not be null.");
             var maxLevel = reader.ReadInt32("effect max level");
@@ -300,7 +300,7 @@ namespace Bun3.Gameplay.Catalog
             var durationTicks = reader.ReadInt32("duration ticks");
             var periodTicks = reader.ReadInt32("period ticks");
 
-            var stack = new StackPolicy
+            var stack = new StackPolicyDef
             {
                 MaxStack = reader.ReadInt32("max stack"),
                 OnReapply = (StackReapply)reader.ReadByte("stack reapply"),
@@ -355,7 +355,7 @@ namespace Bun3.Gameplay.Catalog
             var assetTags = ReadTags(reader, "asset tag");
             var immunityTags = ReadTags(reader, "immunity tag");
 
-            var chains = new CompiledChain[reader.ReadLength("chain count")];
+            var chains = new CompiledChainEdge[reader.ReadLength("chain count")];
             for (var i = 0; i < chains.Length; i++)
             {
                 var trigger = (ChainTrigger)reader.ReadByte("chain trigger");
@@ -367,7 +367,7 @@ namespace Bun3.Gameplay.Catalog
                 var fixedLevel = reader.ReadInt32("chain fixed level");
                 var eventTag = reader.ReadTag("chain event tag");
                 var listen = (ChainListen)reader.ReadByte("chain listen");
-                chains[i] = new CompiledChain(
+                chains[i] = new CompiledChainEdge(
                     trigger, effectId, TargetSelector(seams, selectorTag), selectorTag, selectorParams,
                     conditions, levelRule, fixedLevel, eventTag, listen);
             }
@@ -388,7 +388,7 @@ namespace Bun3.Gameplay.Catalog
                     reader.ReadTag("raise event tag"), reader.ReadUInt16("raise event attribute id"));
             }
 
-            return new CompiledEffectSpec(
+            return new CompiledEffect(
                 name, maxLevel, durationType, durationTicks, periodTicks, stack,
                 modifiers, executions, applicationConditions, ongoingConditions,
                 grantedTags, grantedAbilityNames, assetTags, immunityTags, chains, overflowEffectId,

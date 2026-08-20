@@ -36,15 +36,15 @@ public sealed class EffectCatalogBuilderTests
         Assert.That(ex!.Message, Does.Contain("dup"));
     }
 
-    // Rule 2: Instant specs must leave Duration-only fields empty.
+    // Rule 2: Instant effects must leave Duration-only fields empty.
 
     [Test]
     public void Build_rejects_instant_with_duration_only_fields()
     {
-        var spec = EffectTestKit.MinimalInstant("bad");
-        spec.GrantedTags.Add("state.dead");
+        var def = EffectTestKit.MinimalInstant("bad");
+        def.GrantedTags.Add("state.dead");
         var builder = new EffectCatalogBuilder();
-        builder.Add(spec);
+        builder.Add(def);
         var ex = Assert.Throws<InvalidOperationException>(() => EffectTestKit.BuildCatalog(builder));
         Assert.That(ex!.Message, Does.Contain("bad"));
     }
@@ -63,10 +63,10 @@ public sealed class EffectCatalogBuilderTests
     [Test]
     public void Build_rejects_infinite_type_with_nonzero_ticks()
     {
-        var spec = EffectTestKit.MinimalInfinite("i");
-        spec.DurationTicks = 5;
+        var def = EffectTestKit.MinimalInfinite("i");
+        def.DurationTicks = 5;
         var builder = new EffectCatalogBuilder();
-        builder.Add(spec);
+        builder.Add(def);
         var ex = Assert.Throws<InvalidOperationException>(() => EffectTestKit.BuildCatalog(builder));
         Assert.That(ex!.Message, Does.Contain("i"));
     }
@@ -76,10 +76,10 @@ public sealed class EffectCatalogBuilderTests
     [Test]
     public void Build_rejects_executions_on_duration_without_period()
     {
-        var spec = EffectTestKit.MinimalDuration("d", 10);
-        spec.Executions.Add(new ExecutionDef { CalcTag = "calc.execution.dmg" });
+        var def = EffectTestKit.MinimalDuration("d", 10);
+        def.Executions.Add(new ExecutionDef { CalcTag = "calc.execution.dmg" });
         var builder = new EffectCatalogBuilder();
-        builder.Add(spec);
+        builder.Add(def);
         var ex = Assert.Throws<InvalidOperationException>(() => EffectTestKit.BuildCatalog(builder));
         Assert.That(ex!.Message, Does.Contain("d"));
     }
@@ -89,10 +89,10 @@ public sealed class EffectCatalogBuilderTests
     [Test]
     public void Build_rejects_add_stack_reapply_without_max_stack()
     {
-        var spec = EffectTestKit.MinimalDuration("s", 10);
-        spec.Stack.OnReapply = StackReapply.AddStack;
+        var def = EffectTestKit.MinimalDuration("s", 10);
+        def.Stack.OnReapply = StackReapply.AddStack;
         var builder = new EffectCatalogBuilder();
-        builder.Add(spec);
+        builder.Add(def);
         var ex = Assert.Throws<InvalidOperationException>(() => EffectTestKit.BuildCatalog(builder));
         Assert.That(ex!.Message, Does.Contain("s"));
     }
@@ -100,29 +100,29 @@ public sealed class EffectCatalogBuilderTests
     [Test]
     public void Build_rejects_apply_effect_overflow_without_max_stack()
     {
-        var spec = EffectTestKit.MinimalDuration("s2", 10);
-        spec.Stack.OnOverflow = StackOverflow.ApplyEffect;
-        spec.Stack.OverflowEffectName = "s2";
+        var def = EffectTestKit.MinimalDuration("s2", 10);
+        def.Stack.OnOverflow = StackOverflow.ApplyEffect;
+        def.Stack.OverflowEffectName = "s2";
         var builder = new EffectCatalogBuilder();
-        builder.Add(spec);
+        builder.Add(def);
         var ex = Assert.Throws<InvalidOperationException>(() => EffectTestKit.BuildCatalog(builder));
         Assert.That(ex!.Message, Does.Contain("s2"));
     }
 
-    // Rule: modifiers on Instant/periodic specs allow Add only.
+    // Rule: modifiers on Instant/periodic effects allow Add only.
 
     [Test]
     public void Build_rejects_instant_modifier_with_multiply_op()
     {
-        var spec = EffectTestKit.MinimalInstant("mul");
-        spec.Modifiers.Add(new ModifierDef
+        var def = EffectTestKit.MinimalInstant("mul");
+        def.Modifiers.Add(new ModifierDef
         {
             AttributeId = EffectTestKit.Hp,
             Op = AttributeModifierOp.Multiply,
             Magnitude = new MagnitudeDef { Base = Operand.Constant(BigNum.FromParts(-3, -1)) },
         });
         var builder = new EffectCatalogBuilder();
-        builder.Add(spec);
+        builder.Add(def);
         var ex = Assert.Throws<InvalidOperationException>(() => EffectTestKit.BuildCatalog(builder));
         Assert.That(ex!.Message, Does.Contain("mul"));
     }
@@ -130,16 +130,16 @@ public sealed class EffectCatalogBuilderTests
     [Test]
     public void Build_rejects_periodic_duration_modifier_with_override_op()
     {
-        var spec = EffectTestKit.MinimalDuration("periodic", 100);
-        spec.PeriodTicks = 10;
-        spec.Modifiers.Add(new ModifierDef
+        var def = EffectTestKit.MinimalDuration("periodic", 100);
+        def.PeriodTicks = 10;
+        def.Modifiers.Add(new ModifierDef
         {
             AttributeId = EffectTestKit.Hp,
             Op = AttributeModifierOp.Override,
             Magnitude = new MagnitudeDef { Base = Operand.Constant(0) },
         });
         var builder = new EffectCatalogBuilder();
-        builder.Add(spec);
+        builder.Add(def);
         var ex = Assert.Throws<InvalidOperationException>(() => EffectTestKit.BuildCatalog(builder));
         Assert.That(ex!.Message, Does.Contain("periodic"));
     }
@@ -147,15 +147,15 @@ public sealed class EffectCatalogBuilderTests
     [Test]
     public void Build_allows_multiply_op_on_non_periodic_duration_modifier()
     {
-        var spec = EffectTestKit.MinimalDuration("buff", 100);
-        spec.Modifiers.Add(new ModifierDef
+        var def = EffectTestKit.MinimalDuration("buff", 100);
+        def.Modifiers.Add(new ModifierDef
         {
             AttributeId = EffectTestKit.Hp,
             Op = AttributeModifierOp.Multiply,
             Magnitude = new MagnitudeDef { Base = Operand.Constant(BigNum.FromParts(2, -1)) },
         });
         var builder = new EffectCatalogBuilder();
-        builder.Add(spec);
+        builder.Add(def);
         Assert.DoesNotThrow(() => EffectTestKit.BuildCatalog(builder));
     }
 
@@ -164,10 +164,10 @@ public sealed class EffectCatalogBuilderTests
     [Test]
     public void Build_rejects_unresolved_granted_tag()
     {
-        var spec = EffectTestKit.MinimalDuration("d", 5);
-        spec.GrantedTags.Add("no.such.tag");
+        var def = EffectTestKit.MinimalDuration("d", 5);
+        def.GrantedTags.Add("no.such.tag");
         var builder = new EffectCatalogBuilder();
-        builder.Add(spec);
+        builder.Add(def);
         var ex = Assert.Throws<InvalidOperationException>(() => EffectTestKit.BuildCatalog(builder));
         Assert.That(ex!.Message, Does.Contain("d"));
     }
@@ -176,15 +176,15 @@ public sealed class EffectCatalogBuilderTests
     public void Build_rejects_unresolved_magnitude_calc_tag()
     {
         // "calc.magnitude.x" exists in the shared catalog, but EffectTestKit.BuildCatalog's SeamRegistry is empty.
-        var spec = EffectTestKit.MinimalInstant("i");
-        spec.Modifiers.Add(new ModifierDef
+        var def = EffectTestKit.MinimalInstant("i");
+        def.Modifiers.Add(new ModifierDef
         {
             AttributeId = EffectTestKit.Hp,
             Op = AttributeModifierOp.Add,
             Magnitude = new MagnitudeDef { CalcTag = "calc.magnitude.x" },
         });
         var builder = new EffectCatalogBuilder();
-        builder.Add(spec);
+        builder.Add(def);
         var ex = Assert.Throws<InvalidOperationException>(() => EffectTestKit.BuildCatalog(builder));
         Assert.That(ex!.Message, Does.Contain("i"));
     }
@@ -207,15 +207,15 @@ public sealed class EffectCatalogBuilderTests
     [Test]
     public void Build_rejects_operand_referencing_unregistered_attribute()
     {
-        var spec = EffectTestKit.MinimalInstant("i");
-        spec.Modifiers.Add(new ModifierDef
+        var def = EffectTestKit.MinimalInstant("i");
+        def.Modifiers.Add(new ModifierDef
         {
             AttributeId = EffectTestKit.Hp,
             Op = AttributeModifierOp.Add,
             Magnitude = new MagnitudeDef { Base = Operand.Attribute(999) },
         });
         var builder = new EffectCatalogBuilder();
-        builder.Add(spec);
+        builder.Add(def);
         var ex = Assert.Throws<InvalidOperationException>(() => EffectTestKit.BuildCatalog(builder));
         Assert.That(ex!.Message, Does.Contain("i"));
     }
@@ -223,15 +223,15 @@ public sealed class EffectCatalogBuilderTests
     [Test]
     public void Build_rejects_source_attribute_operand_in_ongoing_conditions()
     {
-        var spec = EffectTestKit.MinimalDuration("d", 5);
-        spec.OngoingConditions.Add(new ConditionDef
+        var def = EffectTestKit.MinimalDuration("d", 5);
+        def.OngoingConditions.Add(new ConditionDef
         {
             Left = Operand.SourceAttribute(EffectTestKit.Hp),
             Op = ComparisonOp.Greater,
             Right = Operand.Constant(0),
         });
         var builder = new EffectCatalogBuilder();
-        builder.Add(spec);
+        builder.Add(def);
         var ex = Assert.Throws<InvalidOperationException>(() => EffectTestKit.BuildCatalog(builder));
         Assert.That(ex!.Message, Does.Contain("d"));
     }
@@ -254,15 +254,15 @@ public sealed class EffectCatalogBuilderTests
     [Test]
     public void Build_rejects_magnitude_with_both_calctag_and_base()
     {
-        var spec = EffectTestKit.MinimalInstant("i");
-        spec.Modifiers.Add(new ModifierDef
+        var def = EffectTestKit.MinimalInstant("i");
+        def.Modifiers.Add(new ModifierDef
         {
             AttributeId = EffectTestKit.Hp,
             Op = AttributeModifierOp.Add,
             Magnitude = new MagnitudeDef { CalcTag = "calc.magnitude.x", Base = Operand.Constant(1) },
         });
         var builder = new EffectCatalogBuilder();
-        builder.Add(spec);
+        builder.Add(def);
         var ex = Assert.Throws<InvalidOperationException>(() => EffectTestKit.BuildCatalog(builder));
         Assert.That(ex!.Message, Does.Contain("i"));
     }
@@ -270,15 +270,15 @@ public sealed class EffectCatalogBuilderTests
     [Test]
     public void Build_rejects_magnitude_with_neither_calctag_nor_base()
     {
-        var spec = EffectTestKit.MinimalInstant("i");
-        spec.Modifiers.Add(new ModifierDef
+        var def = EffectTestKit.MinimalInstant("i");
+        def.Modifiers.Add(new ModifierDef
         {
             AttributeId = EffectTestKit.Hp,
             Op = AttributeModifierOp.Add,
             Magnitude = new MagnitudeDef(),
         });
         var builder = new EffectCatalogBuilder();
-        builder.Add(spec);
+        builder.Add(def);
         var ex = Assert.Throws<InvalidOperationException>(() => EffectTestKit.BuildCatalog(builder));
         Assert.That(ex!.Message, Does.Contain("i"));
     }
@@ -286,15 +286,15 @@ public sealed class EffectCatalogBuilderTests
     [Test]
     public void Build_rejects_perlevel_without_base()
     {
-        var spec = EffectTestKit.MinimalInstant("i");
-        spec.Modifiers.Add(new ModifierDef
+        var def = EffectTestKit.MinimalInstant("i");
+        def.Modifiers.Add(new ModifierDef
         {
             AttributeId = EffectTestKit.Hp,
             Op = AttributeModifierOp.Add,
             Magnitude = new MagnitudeDef { CalcTag = "calc.magnitude.x", PerLevel = Operand.Constant(1) },
         });
         var builder = new EffectCatalogBuilder();
-        builder.Add(spec);
+        builder.Add(def);
         var ex = Assert.Throws<InvalidOperationException>(() => EffectTestKit.BuildCatalog(builder));
         Assert.That(ex!.Message, Does.Contain("i"));
     }
@@ -316,7 +316,7 @@ public sealed class EffectCatalogBuilderTests
     }
 
     [Test]
-    public void Cycle_through_duration_spec_is_a_low_warning()
+    public void Cycle_through_duration_effect_is_a_low_warning()
     {
         var a = EffectTestKit.MinimalDuration("a", 10);
         a.Chains.Add(EffectTestKit.Edge(ChainTrigger.OnApplication, "b"));
@@ -375,14 +375,14 @@ public sealed class EffectCatalogBuilderTests
         Assert.That(catalog.Count, Is.EqualTo(2));
 
         var boltId = catalog.GetRequiredId("bolt");
-        var boltSpec = catalog.GetSpec(boltId);
-        Assert.That(boltSpec.Modifiers[0].Calc, Is.SameAs(magCalc));
-        Assert.That(boltSpec.Modifiers[0].AttributeId, Is.EqualTo(EffectTestKit.Hp));
+        var boltEffect = catalog.GetEffect(boltId);
+        Assert.That(boltEffect.Modifiers[0].Calc, Is.SameAs(magCalc));
+        Assert.That(boltEffect.Modifiers[0].AttributeId, Is.EqualTo(EffectTestKit.Hp));
 
         var hastedId = catalog.GetRequiredId("hasted");
-        var hastedSpec = catalog.GetSpec(hastedId);
-        Assert.That(hastedSpec.GrantedTags[0], Is.EqualTo(tags.GetRequired("state.hasted")));
-        Assert.That(hastedSpec.Chains[0].EffectId, Is.EqualTo(boltId));
+        var hastedEffect = catalog.GetEffect(hastedId);
+        Assert.That(hastedEffect.GrantedTags[0], Is.EqualTo(tags.GetRequired("state.hasted")));
+        Assert.That(hastedEffect.Chains[0].EffectId, Is.EqualTo(boltId));
         Assert.That(catalog.BuildWarnings, Is.Empty);
     }
 }

@@ -29,7 +29,7 @@ public sealed class WorldTests
     public void Spawn_is_visible_only_after_the_next_tick()
     {
         var kit = EffectTestKit.Create();
-        kit.AddSpec(EffectTestKit.MinimalInstant("noop"));
+        kit.AddEffect(EffectTestKit.MinimalInstant("noop"));
         var world = MakeWorld(kit);
 
         world.Spawn(MakeUnit(kit, 1));
@@ -44,7 +44,7 @@ public sealed class WorldTests
     public void Registry_and_target_ids_stay_in_ascending_order()
     {
         var kit = EffectTestKit.Create();
-        kit.AddSpec(EffectTestKit.MinimalInstant("noop"));
+        kit.AddEffect(EffectTestKit.MinimalInstant("noop"));
         var world = MakeWorld(kit);
 
         world.Spawn(MakeUnit(kit, 30));
@@ -63,7 +63,7 @@ public sealed class WorldTests
     public void Despawn_is_visible_only_after_the_next_tick()
     {
         var kit = EffectTestKit.Create();
-        kit.AddSpec(EffectTestKit.MinimalInstant("noop"));
+        kit.AddEffect(EffectTestKit.MinimalInstant("noop"));
         var world = MakeWorld(kit);
         world.Spawn(MakeUnit(kit, 1));
         world.Tick();
@@ -80,7 +80,7 @@ public sealed class WorldTests
     public void Resolver_returns_the_units_effect_target()
     {
         var kit = EffectTestKit.Create();
-        kit.AddSpec(EffectTestKit.MinimalInstant("noop"));
+        kit.AddEffect(EffectTestKit.MinimalInstant("noop"));
         var world = MakeWorld(kit);
         var unit = MakeUnit(kit, 1);
         world.Spawn(unit);
@@ -94,7 +94,7 @@ public sealed class WorldTests
     public void Spawning_a_duplicate_id_is_rejected()
     {
         var kit = EffectTestKit.Create();
-        kit.AddSpec(EffectTestKit.MinimalInstant("noop"));
+        kit.AddEffect(EffectTestKit.MinimalInstant("noop"));
         var world = MakeWorld(kit);
         world.Spawn(MakeUnit(kit, 1));
         world.Tick();
@@ -108,7 +108,7 @@ public sealed class WorldTests
     public void World_tick_advances_the_pipeline_tick_counter_once()
     {
         var kit = EffectTestKit.Create();
-        kit.AddSpec(EffectTestKit.MinimalInstant("noop"));
+        kit.AddEffect(EffectTestKit.MinimalInstant("noop"));
         var world = MakeWorld(kit);
 
         Assert.That(world.CurrentTick, Is.Zero);
@@ -129,7 +129,7 @@ public sealed class WorldTests
             Op = Bun3.Gameplay.Attributes.AttributeModifierOp.Add,
             Magnitude = new MagnitudeDef { Base = Bun3.Gameplay.Attributes.Operand.Constant(-30) },
         });
-        kit.AddSpec(damage);
+        kit.AddEffect(damage);
         var world = MakeWorld(kit);
 
         var unit = MakeUnit(kit, 1);
@@ -138,7 +138,7 @@ public sealed class WorldTests
 
         unit.Attributes.SetBase(EffectTestKit.MaxHp, 100);
         unit.Attributes.SetBase(EffectTestKit.Hp, 100);
-        world.Pipeline.EnqueueApply(kit.SpecId("hit"), new TargetId(0), unit.Id);
+        world.Pipeline.EnqueueApply(kit.EffectId("hit"), new TargetId(0), unit.Id);
         world.Tick();
 
         Assert.That(unit.Attributes.GetBase(EffectTestKit.Hp), Is.EqualTo((Bun3.Gameplay.Numerics.BigNum)70));
@@ -148,7 +148,7 @@ public sealed class WorldTests
     public void World_snapshot_round_trip_restores_units_and_counters()
     {
         var kit = EffectTestKit.Create();
-        kit.AddSpec(EffectTestKit.MinimalInfinite("aura"));
+        kit.AddEffect(EffectTestKit.MinimalInfinite("aura"));
         var world = MakeWorld(kit);
         var unit = MakeUnit(kit, 1);
         world.Spawn(unit);
@@ -156,7 +156,7 @@ public sealed class WorldTests
         unit.Attributes.SetBase(EffectTestKit.MaxHp, 100);
         unit.Attributes.SetBase(EffectTestKit.Hp, 80);
 
-        world.Pipeline.EnqueueApply(kit.SpecId("aura"), unit.Id, unit.Id);
+        world.Pipeline.EnqueueApply(kit.EffectId("aura"), unit.Id, unit.Id);
         world.Tick();
         var snapshot = world.CreateSnapshot();
         var tickAtSnapshot = world.CurrentTick;
@@ -211,12 +211,12 @@ public sealed class WorldTests
     public void Snapshotting_with_pending_applications_is_rejected()
     {
         var kit = EffectTestKit.Create();
-        kit.AddSpec(EffectTestKit.MinimalInstant("noop"));
+        kit.AddEffect(EffectTestKit.MinimalInstant("noop"));
         var world = MakeWorld(kit);
         world.Spawn(MakeUnit(kit, 1));
         world.Tick();
 
-        world.Pipeline.EnqueueApply(kit.SpecId("noop"), new TargetId(1), new TargetId(1));
+        world.Pipeline.EnqueueApply(kit.EffectId("noop"), new TargetId(1), new TargetId(1));
 
         Assert.That(() => world.CreateSnapshot(), Throws.InvalidOperationException);
     }
@@ -225,7 +225,7 @@ public sealed class WorldTests
     public void Snapshotting_with_pending_structural_changes_is_rejected()
     {
         var kit = EffectTestKit.Create();
-        kit.AddSpec(EffectTestKit.MinimalInstant("noop"));
+        kit.AddEffect(EffectTestKit.MinimalInstant("noop"));
         var world = MakeWorld(kit);
 
         world.Spawn(MakeUnit(kit, 1));
@@ -237,7 +237,7 @@ public sealed class WorldTests
     public void A_same_frame_spawn_then_despawn_of_the_same_id_cancels_out()
     {
         var kit = EffectTestKit.Create();
-        kit.AddSpec(EffectTestKit.MinimalInstant("noop"));
+        kit.AddEffect(EffectTestKit.MinimalInstant("noop"));
         var world = MakeWorld(kit);
 
         world.Spawn(MakeUnit(kit, 5));
@@ -251,7 +251,7 @@ public sealed class WorldTests
     public void A_same_frame_despawn_then_spawn_of_the_same_id_registers_the_new_unit()
     {
         var kit = EffectTestKit.Create();
-        kit.AddSpec(EffectTestKit.MinimalInstant("noop"));
+        kit.AddEffect(EffectTestKit.MinimalInstant("noop"));
         var world = MakeWorld(kit);
         world.Spawn(MakeUnit(kit, 5, ownerId: 1));
         world.Tick();
@@ -268,7 +268,7 @@ public sealed class WorldTests
     public void Despawning_the_same_id_twice_in_one_frame_is_harmless()
     {
         var kit = EffectTestKit.Create();
-        kit.AddSpec(EffectTestKit.MinimalInstant("noop"));
+        kit.AddEffect(EffectTestKit.MinimalInstant("noop"));
         var world = MakeWorld(kit);
         world.Spawn(MakeUnit(kit, 5));
         world.Tick();
@@ -284,7 +284,7 @@ public sealed class WorldTests
     public void Flushing_the_structural_queue_is_atomic_on_a_mid_queue_duplicate()
     {
         var kit = EffectTestKit.Create();
-        kit.AddSpec(EffectTestKit.MinimalInstant("noop"));
+        kit.AddEffect(EffectTestKit.MinimalInstant("noop"));
         var world = MakeWorld(kit);
         world.Spawn(MakeUnit(kit, 1));
         world.Tick();

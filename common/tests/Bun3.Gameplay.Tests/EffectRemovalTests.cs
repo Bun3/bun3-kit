@@ -19,25 +19,25 @@ public sealed class EffectRemovalTests
             AttributeId = EffectTestKit.Hp, Op = AttributeModifierOp.Add,
             Magnitude = new MagnitudeDef { Base = Operand.Constant(-40) },
         });
-        kit.AddSpec(backlash);
+        kit.AddEffect(backlash);
         var reward = EffectTestKit.MinimalInstant("reward");
         reward.Modifiers.Add(new ModifierDef
         {
             AttributeId = EffectTestKit.Hp, Op = AttributeModifierOp.Add,
             Magnitude = new MagnitudeDef { Base = Operand.Constant(+40) },
         });
-        kit.AddSpec(reward);
+        kit.AddEffect(reward);
 
         var curse = EffectTestKit.MinimalDuration("curse", ticks: 100);
         curse.AssetTags.Add("effect.magic.curse");
         curse.Chains.Add(EffectTestKit.Edge(ChainTrigger.OnCompletePrematurely, "backlash"));
         curse.Chains.Add(EffectTestKit.Edge(ChainTrigger.OnCompleteNormal, "reward"));
-        kit.AddSpec(curse);
+        kit.AddEffect(curse);
         var pipeline = kit.BuildPipeline();
         kit.Defender.Attributes.SetBase(EffectTestKit.MaxHp, 100);
         kit.Defender.Attributes.SetBase(EffectTestKit.Hp, 100);
 
-        pipeline.EnqueueApply(kit.SpecId("curse"), kit.Attacker.Id, kit.Defender.Id);
+        pipeline.EnqueueApply(kit.EffectId("curse"), kit.Attacker.Id, kit.Defender.Id);
         pipeline.Tick();
 
         var dispel = kit.TagCatalog.CreateContainer();
@@ -54,10 +54,10 @@ public sealed class EffectRemovalTests
     {
         var kit = EffectTestKit.Create();
         var buff = EffectTestKit.MinimalDuration("buff", ticks: 100);
-        kit.AddSpec(buff);
+        kit.AddEffect(buff);
         var pipeline = kit.BuildPipeline();
 
-        pipeline.EnqueueApply(kit.SpecId("buff"), kit.Attacker.Id, kit.Defender.Id);
+        pipeline.EnqueueApply(kit.EffectId("buff"), kit.Attacker.Id, kit.Defender.Id);
         pipeline.Tick();
         Assert.That(kit.Defender.ActiveEffectCount, Is.EqualTo(1));
 
@@ -71,10 +71,10 @@ public sealed class EffectRemovalTests
     {
         var kit = EffectTestKit.Create();
         var buff = EffectTestKit.MinimalDuration("buff", ticks: 100);
-        kit.AddSpec(buff);
+        kit.AddEffect(buff);
         var pipeline = kit.BuildPipeline();
 
-        pipeline.EnqueueApply(kit.SpecId("buff"), kit.Attacker.Id, kit.Defender.Id);
+        pipeline.EnqueueApply(kit.EffectId("buff"), kit.Attacker.Id, kit.Defender.Id);
         pipeline.Tick();
 
         Assert.That(pipeline.RemoveById(kit.Defender.Id, instanceId: 9999), Is.False);
@@ -87,10 +87,10 @@ public sealed class EffectRemovalTests
         var kit = EffectTestKit.Create();
         var curse = EffectTestKit.MinimalDuration("curse", ticks: 100);
         curse.AssetTags.Add("effect.magic.curse");
-        kit.AddSpec(curse);
+        kit.AddEffect(curse);
         var pipeline = kit.BuildPipeline();
 
-        pipeline.EnqueueApply(kit.SpecId("curse"), kit.Attacker.Id, kit.Defender.Id);
+        pipeline.EnqueueApply(kit.EffectId("curse"), kit.Attacker.Id, kit.Defender.Id);
         pipeline.Tick();
 
         var query = kit.TagCatalog.CreateContainer();

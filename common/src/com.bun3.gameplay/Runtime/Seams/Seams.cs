@@ -154,8 +154,8 @@ namespace Bun3.Gameplay.Seams
         public void WriteTarget(ushort attributeId, BigNum value) => _target.Attributes.SetBase(attributeId, value);
 
         /// <summary>Enqueues another effect with the same source, target, and level. Direct re-entrant application is forbidden.</summary>
-        /// <param name="specId">Effect spec id to apply.</param>
-        public void ApplyToTarget(int specId) => _pipeline.EnqueueApply(specId, _sourceId, _targetId, Level);
+        /// <param name="effectId">Effect id to apply.</param>
+        public void ApplyToTarget(int effectId) => _pipeline.EnqueueApply(effectId, _sourceId, _targetId, Level);
     }
 
     /// <summary>Context for target selection. Candidates are the resolver's target ids in ascending

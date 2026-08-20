@@ -134,7 +134,7 @@ namespace Bun3.Gameplay.Effects
                 }
 
                 instances[i] = new EffectTargetSnapshot.InstanceRow(
-                    instance.Id, instance.SpecId, instance.Source, instance.Level, instance.Stack,
+                    instance.Id, instance.EffectId, instance.Source, instance.Level, instance.Stack,
                     instance.RemainingTicks, instance.PeriodCountdown, instance.Enabled, instance.CreatedTick,
                     modifiers);
             }
@@ -175,7 +175,7 @@ namespace Bun3.Gameplay.Effects
                 Attributes.DetachModifiers(instance);
                 if (instance.Enabled)   // Disabled instances hold no tags — removing would double-decrement.
                 {
-                    var grantedTags = catalog.GetSpec(instance.SpecId).GrantedTags;
+                    var grantedTags = catalog.GetEffect(instance.EffectId).GrantedTags;
                     for (var g = 0; g < grantedTags.Length; g++) Tags.Remove(grantedTags[g]);
                 }
 
@@ -192,7 +192,7 @@ namespace Bun3.Gameplay.Effects
             {
                 var row = rows[i];
                 var instance = EffectInstance.Rent(
-                    row.Id, row.SpecId, row.Source, row.Level, row.Stack,
+                    row.Id, row.EffectId, row.Source, row.Level, row.Stack,
                     row.RemainingTicks, row.PeriodCountdown, row.CreatedTick);
                 instance.Enabled = row.Enabled;
                 InsertActive(instance);
@@ -208,7 +208,7 @@ namespace Bun3.Gameplay.Effects
 
                 if (row.Enabled)   // Disabled instances grant no tags — adding would leak permanently.
                 {
-                    var grantedTags = catalog.GetSpec(row.SpecId).GrantedTags;
+                    var grantedTags = catalog.GetEffect(row.EffectId).GrantedTags;
                     for (var g = 0; g < grantedTags.Length; g++) Tags.Add(grantedTags[g]);
                 }
             }

@@ -172,7 +172,7 @@ public class AllocationSmokeTests
     [Test]
     public void Raising_events_on_a_settled_world_allocates_nothing()
     {
-        var (world, damageSpecId, attackerId, defenderId) = BuildWorldWithEventListeners();
+        var (world, damageEffectId, attackerId, defenderId) = BuildWorldWithEventListeners();
 
         // Settle by pumping the exact operation under measurement (apply -> event -> OnEvent chain
         // -> counter-application) 10 times first. Every buffer this path touches — the pipeline's
@@ -182,7 +182,7 @@ public class AllocationSmokeTests
         // is exactly what keeps the measurement itself from tripping on a one-time list resize.
         for (var i = 0; i < 10; i++)
         {
-            world.Pipeline.EnqueueApply(damageSpecId, attackerId, defenderId);
+            world.Pipeline.EnqueueApply(damageEffectId, attackerId, defenderId);
             world.Tick();
             ClearWorldBuffers(world, attackerId, defenderId);
         }
@@ -190,7 +190,7 @@ public class AllocationSmokeTests
         var before = GC.GetAllocatedBytesForCurrentThread();
         for (var i = 0; i < 100; i++)
         {
-            world.Pipeline.EnqueueApply(damageSpecId, attackerId, defenderId);
+            world.Pipeline.EnqueueApply(damageEffectId, attackerId, defenderId);
             world.Tick();
             ClearWorldBuffers(world, attackerId, defenderId);
         }
@@ -204,14 +204,14 @@ public class AllocationSmokeTests
     // applying Damage to either raises event.damage.taken and fires a counter-application (Echo)
     // back onto the attacker via the built-in EventSource selector — real event dispatch, not a
     // no-op catalog.
-    private static (World World, int DamageSpecId, TargetId AttackerId, TargetId DefenderId) BuildWorldWithEventListeners()
+    private static (World World, int DamageEffectId, TargetId AttackerId, TargetId DefenderId) BuildWorldWithEventListeners()
     {
         var tags = EffectTestKit.LoadCatalog();
         var attributes = EffectTestKit.BuildAttributeRegistry();
         var seams = new SeamRegistryBuilder().Build(tags);
 
         var effectBuilder = new EffectCatalogBuilder();
-        effectBuilder.Add(new EffectSpec
+        effectBuilder.Add(new EffectDef
         {
             Name = "Damage",
             DurationType = EffectDurationType.Instant,
@@ -225,7 +225,7 @@ public class AllocationSmokeTests
             },
             RaiseEvents = { new RaiseEventDef { Tag = "event.damage.taken", AttributeId = EffectTestKit.Hp } },
         });
-        effectBuilder.Add(new EffectSpec
+        effectBuilder.Add(new EffectDef
         {
             Name = "Echo",
             DurationType = EffectDurationType.Instant,
@@ -238,7 +238,7 @@ public class AllocationSmokeTests
                 },
             },
         });
-        effectBuilder.Add(new EffectSpec
+        effectBuilder.Add(new EffectDef
         {
             Name = "Listener",
             DurationType = EffectDurationType.Infinite,
@@ -273,9 +273,9 @@ public class AllocationSmokeTests
         world.Spawn(defender);
         world.Tick();
 
-        var listenerSpecId = effects.GetRequiredId("Listener");
-        world.Pipeline.EnqueueApply(listenerSpecId, attacker.Id, attacker.Id);
-        world.Pipeline.EnqueueApply(listenerSpecId, defender.Id, defender.Id);
+        var listenerEffectId = effects.GetRequiredId("Listener");
+        world.Pipeline.EnqueueApply(listenerEffectId, attacker.Id, attacker.Id);
+        world.Pipeline.EnqueueApply(listenerEffectId, defender.Id, defender.Id);
         world.Tick();
 
         return (world, effects.GetRequiredId("Damage"), attacker.Id, defender.Id);

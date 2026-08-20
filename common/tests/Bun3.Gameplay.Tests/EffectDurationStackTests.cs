@@ -20,12 +20,12 @@ public sealed class EffectDurationStackTests
             Magnitude = new MagnitudeDef { Base = Operand.Constant(BigNum.FromParts(2, -1)) },  // +20%
         });
         haste.GrantedTags.Add("state.hasted");
-        kit.AddSpec(haste);
+        kit.AddEffect(haste);
         var pipeline = kit.BuildPipeline();
         kit.Defender.Attributes.SetBase(EffectTestKit.Attack, 100);
         var before = kit.Defender.Attributes.GetCurrent(EffectTestKit.Attack);
 
-        pipeline.EnqueueApply(kit.SpecId("haste"), kit.Attacker.Id, kit.Defender.Id);
+        pipeline.EnqueueApply(kit.EffectId("haste"), kit.Attacker.Id, kit.Defender.Id);
         pipeline.Tick();
         Assert.That(kit.Defender.Attributes.GetCurrent(EffectTestKit.Attack), Is.EqualTo((BigNum)120));
         Assert.That(kit.Defender.Tags.Has(kit.Tag("state.hasted")), Is.True);
@@ -41,19 +41,19 @@ public sealed class EffectDurationStackTests
     {
         var kit = EffectTestKit.Create();
         var chill = EffectTestKit.MinimalDuration("chill", ticks: 10);
-        chill.Stack = new StackPolicy { MaxStack = 3, OnReapply = StackReapply.AddStack };
+        chill.Stack = new StackPolicyDef { MaxStack = 3, OnReapply = StackReapply.AddStack };
         chill.Modifiers.Add(new ModifierDef
         {
             AttributeId = EffectTestKit.Attack, Op = AttributeModifierOp.Add,
             Magnitude = new MagnitudeDef { Base = Operand.Constant(-5) },   // -5 per stack (scales with stack by default)
         });
-        kit.AddSpec(chill);
+        kit.AddEffect(chill);
         var pipeline = kit.BuildPipeline();
         kit.Defender.Attributes.SetBase(EffectTestKit.Attack, 100);
 
         for (var i = 0; i < 5; i++)
         {
-            pipeline.EnqueueApply(kit.SpecId("chill"), kit.Attacker.Id, kit.Defender.Id);
+            pipeline.EnqueueApply(kit.EffectId("chill"), kit.Attacker.Id, kit.Defender.Id);
             pipeline.Tick();
         }
 
@@ -72,12 +72,12 @@ public sealed class EffectDurationStackTests
             AttributeId = EffectTestKit.Hp, Op = AttributeModifierOp.Add,
             Magnitude = new MagnitudeDef { Base = Operand.Constant(-10) },
         });
-        kit.AddSpec(poison);
+        kit.AddEffect(poison);
         var pipeline = kit.BuildPipeline();
         kit.Defender.Attributes.SetBase(EffectTestKit.MaxHp, 100);
         kit.Defender.Attributes.SetBase(EffectTestKit.Hp, 100);
 
-        pipeline.EnqueueApply(kit.SpecId("poison"), kit.Attacker.Id, kit.Defender.Id);
+        pipeline.EnqueueApply(kit.EffectId("poison"), kit.Attacker.Id, kit.Defender.Id);
         pipeline.Tick();                                        // apply tick — no fire (first period not elapsed)
         Assert.That(kit.Defender.Attributes.GetBase(EffectTestKit.Hp), Is.EqualTo((BigNum)100));
 

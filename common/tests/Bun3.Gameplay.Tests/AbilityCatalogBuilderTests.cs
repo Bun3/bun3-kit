@@ -15,16 +15,16 @@ public sealed class AbilityCatalogBuilderTests
     private static AbilityDef Minimal(string name) => new AbilityDef { Name = name };
 
     // Effect with a real leveled magnitude — MaxLevel 5, one PerLevelValues entry per level.
-    private static EffectSpec LeveledBolt(string name)
+    private static EffectDef LeveledBolt(string name)
     {
-        var spec = EffectTestKit.MinimalInstant(name);
-        spec.MaxLevel = 5;
-        spec.Modifiers.Add(new ModifierDef
+        var def = EffectTestKit.MinimalInstant(name);
+        def.MaxLevel = 5;
+        def.Modifiers.Add(new ModifierDef
         {
             AttributeId = EffectTestKit.Attack,
             Magnitude = new MagnitudeDef { PerLevelValues = new List<BigNum> { 1, 2, 3, 4, 5 } },
         });
-        return spec;
+        return def;
     }
 
     [Test]
@@ -117,7 +117,7 @@ public sealed class AbilityCatalogBuilderTests
     public void Fixed_level_rule_beyond_the_effects_max_level_is_rejected()
     {
         var kit = EffectTestKit.Create();
-        kit.AddSpec(LeveledBolt("bolt"));
+        kit.AddEffect(LeveledBolt("bolt"));
         var ability = Minimal("caster");
         // The ability's own MaxLevel is irrelevant here — the bound is the referenced effect's MaxLevel (5).
         ability.MaxLevel = 30;
@@ -137,7 +137,7 @@ public sealed class AbilityCatalogBuilderTests
     public void Fixed_level_rule_within_the_effects_max_level_is_accepted()
     {
         var kit = EffectTestKit.Create();
-        kit.AddSpec(LeveledBolt("bolt"));
+        kit.AddEffect(LeveledBolt("bolt"));
         var ability = Minimal("caster");
         ability.Effects.Add(new AbilityEffectDef
         {
@@ -155,7 +155,7 @@ public sealed class AbilityCatalogBuilderTests
     public void Fixed_level_rule_below_one_is_rejected()
     {
         var kit = EffectTestKit.Create();
-        kit.AddSpec(EffectTestKit.MinimalInstant("bolt"));
+        kit.AddEffect(EffectTestKit.MinimalInstant("bolt"));
         var ability = Minimal("caster");
         ability.Effects.Add(new AbilityEffectDef
         {
@@ -173,7 +173,7 @@ public sealed class AbilityCatalogBuilderTests
     public void Unknown_selector_tag_is_rejected()
     {
         var kit = EffectTestKit.Create();
-        kit.AddSpec(EffectTestKit.MinimalInstant("bolt"));
+        kit.AddEffect(EffectTestKit.MinimalInstant("bolt"));
         var ability = Minimal("caster");
         ability.Effects.Add(new AbilityEffectDef { EffectName = "bolt", SelectorTag = "selector.nope" });
         var builder = new AbilityCatalogBuilder();
@@ -188,7 +188,7 @@ public sealed class AbilityCatalogBuilderTests
     public void Event_selector_on_an_ability_effect_is_rejected()
     {
         var kit = EffectTestKit.Create();
-        kit.AddSpec(EffectTestKit.MinimalInstant("bolt"));
+        kit.AddEffect(EffectTestKit.MinimalInstant("bolt"));
         var ability = Minimal("caster");
         ability.Effects.Add(new AbilityEffectDef { EffectName = "bolt", SelectorTag = BuiltInSelectors.EventSourceTag });
         var builder = new AbilityCatalogBuilder();

@@ -38,16 +38,16 @@ namespace Bun3.Gameplay
             // AbilityCatalogBuilder.Build already proved every GrantedAbilityNames entry resolves
             // against abilities, so this cache is built over references already known to be valid.
             _grantedAbilityIds = new int[effects.Count][];
-            for (var specId = 0; specId < effects.Count; specId++)
+            for (var effectId = 0; effectId < effects.Count; effectId++)
             {
-                var names = effects.GetSpec(specId).GrantedAbilityNames;
+                var names = effects.GetEffect(effectId).GrantedAbilityNames;
                 var ids = new int[names.Length];
                 for (var i = 0; i < names.Length; i++)
                 {
                     ids[i] = abilities.GetRequiredId(names[i]);
                 }
 
-                _grantedAbilityIds[specId] = ids;
+                _grantedAbilityIds[effectId] = ids;
             }
 
             Pipeline.AbilityGrantHook = OnEffectAbilityGrant;
@@ -64,7 +64,7 @@ namespace Bun3.Gameplay
                 return;
             }
 
-            var ids = _grantedAbilityIds[instance.SpecId];
+            var ids = _grantedAbilityIds[instance.EffectId];
             for (var i = 0; i < ids.Length; i++)
             {
                 unit.Abilities.Grant(ids[i], source, instance.Level);

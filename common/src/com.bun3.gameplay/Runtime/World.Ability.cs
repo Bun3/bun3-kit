@@ -74,7 +74,7 @@ namespace Bun3.Gameplay
 
         private void ApplyAbilityEffects(CompiledAbility ability, TargetId unitId, int level)
         {
-            // ponytail: target counts are authoring-spec scale, so a 32-slot stack buffer suffices -- on overflow only the first 32 are applied.
+            // ponytail: target counts are authoring-effect scale, so a 32-slot stack buffer suffices -- on overflow only the first 32 are applied.
             // Hoisted above the loop: stack memory is released at method exit, not per iteration, so
             // an alloc per effect entry would grow the frame with the entry count instead of staying fixed.
             Span<TargetId> targets = stackalloc TargetId[32];

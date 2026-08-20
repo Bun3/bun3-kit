@@ -22,7 +22,7 @@ namespace Bun3.Gameplay.Effects
     {
         private struct PendingApply
         {
-            internal int SpecId;
+            internal int EffectId;
             internal TargetId Source;
             internal TargetId Target;
             internal int Level;
@@ -80,7 +80,7 @@ namespace Bun3.Gameplay.Effects
         public int PendingApplyCount => _queue.Count;
 
         /// <summary>Creates a pipeline from an effect catalog, target resolver, RNG, and per-tick apply budget.</summary>
-        /// <param name="catalog">Effect catalog for spec lookup.</param>
+        /// <param name="catalog">Effect catalog for effect lookup.</param>
         /// <param name="resolver">Resolver mapping TargetId to EffectTarget.</param>
         /// <param name="rng">RNG passed to execution calcs and target selection.</param>
         /// <param name="applyBudgetPerTick">Maximum apply requests drained per tick.</param>
@@ -95,18 +95,18 @@ namespace Bun3.Gameplay.Effects
         }
 
         /// <summary>Enqueues an effect apply request. Actual application happens on the next <see cref="Tick"/>.</summary>
-        /// <param name="specId">Effect spec id to apply.</param>
+        /// <param name="effectId">Effect id to apply.</param>
         /// <param name="source">Caster target identifier.</param>
         /// <param name="target">Receiving target identifier.</param>
         /// <param name="level">Effect level.</param>
-        public void EnqueueApply(int specId, TargetId source, TargetId target, int level = 1) =>
-            EnqueueApply(specId, source, target, level, BigNum.Zero);
+        public void EnqueueApply(int effectId, TargetId source, TargetId target, int level = 1) =>
+            EnqueueApply(effectId, source, target, level, BigNum.Zero);
 
-        internal void EnqueueApply(int specId, TargetId source, TargetId target, int level, BigNum eventMagnitude)
+        internal void EnqueueApply(int effectId, TargetId source, TargetId target, int level, BigNum eventMagnitude)
         {
             _queue.Enqueue(new PendingApply
             {
-                SpecId = specId, Source = source, Target = target, Level = level, EventMagnitude = eventMagnitude,
+                EffectId = effectId, Source = source, Target = target, Level = level, EventMagnitude = eventMagnitude,
             });
         }
 
@@ -127,10 +127,10 @@ namespace Bun3.Gameplay.Effects
 
         // Applies one effect outside the drain loop. Must not be called from inside Tick — the drain
         // loop owns the queue while it runs, and re-entering it would break the per-tick budget.
-        internal void ApplyImmediate(int specId, TargetId source, TargetId target, int level) =>
+        internal void ApplyImmediate(int effectId, TargetId source, TargetId target, int level) =>
             ProcessPendingApply(new PendingApply
             {
-                SpecId = specId, Source = source, Target = target, Level = level, EventMagnitude = BigNum.Zero,
+                EffectId = effectId, Source = source, Target = target, Level = level, EventMagnitude = BigNum.Zero,
             });
 
         /// <summary>Processes one tick in the six-phase order documented on the class.</summary>
@@ -149,7 +149,7 @@ namespace Bun3.Gameplay.Effects
         }
 
         /// <summary>
-        /// Removes every active instance on the target whose spec asset tags have any query tag as
+        /// Removes every active instance on the target whose effect asset tags have any query tag as
         /// self-or-ancestor (in ascending Id order). Modifier detachment, GrantedTags reclamation, and
         /// removal from the active list happen immediately in this call, but the resulting attribute
         /// Current values are not recomputed until the next tick's rebuild phase. Removal takes the same
@@ -174,7 +174,7 @@ namespace Bun3.Gameplay.Effects
             for (var i = 0; i < active.Count; i++)
             {
                 var instance = active[i];
-                if (MatchesDispelQuery(_catalog.GetSpec(instance.SpecId).AssetTags, queryTags, tagCatalog))
+                if (MatchesDispelQuery(_catalog.GetEffect(instance.EffectId).AssetTags, queryTags, tagCatalog))
                     _removalScratch.Add(instance);
             }
 
@@ -210,7 +210,7 @@ namespace Bun3.Gameplay.Effects
             return false;
         }
 
-        // Matches when any explicit query tag is self-or-ancestor of any spec asset tag.
+        // Matches when any explicit query tag is self-or-ancestor of any effect asset tag.
         private static bool MatchesDispelQuery(GameplayTag[] assetTags, ReadOnlySpan<GameplayTag> queryTags, TagCatalog tagCatalog)
         {
             for (var q = 0; q < queryTags.Length; q++)
@@ -226,7 +226,7 @@ namespace Bun3.Gameplay.Effects
 
         private void RemoveInstancePrematurely(EffectTarget target, EffectInstance instance) =>
             RemoveInstanceCompletely(
-                target, instance, _catalog.GetSpec(instance.SpecId),
+                target, instance, _catalog.GetEffect(instance.EffectId),
                 EffectLifecycleKind.RemovedPrematurely, ChainTrigger.OnCompletePrematurely);
 
         // Phase 1: drain the apply queue up to the per-tick budget. Requests newly enqueued this tick by
@@ -251,9 +251,9 @@ namespace Bun3.Gameplay.Effects
                 return;
             }
 
-            var spec = _catalog.GetSpec(pending.SpecId);
+            var effect = _catalog.GetEffect(pending.EffectId);
 
-            if (IsImmune(target, spec))
+            if (IsImmune(target, effect))
             {
                 ImmuneDropCount++;
                 return;
@@ -261,13 +261,13 @@ namespace Bun3.Gameplay.Effects
 
             var hasSource = _resolver.TryResolve(pending.Source, out var source) && source is not null;
 
-            if (!RollChance(spec, target, source, hasSource, pending.Level, pending.EventMagnitude))
+            if (!RollChance(effect, target, source, hasSource, pending.Level, pending.EventMagnitude))
             {
                 ChanceDropCount++;
                 return;
             }
 
-            if (!EvaluateConditions(spec.ApplicationConditions, target, source, hasSource, pending.EventMagnitude))
+            if (!EvaluateConditions(effect.ApplicationConditions, target, source, hasSource, pending.EventMagnitude))
             {
                 ConditionDropCount++;
                 return;
@@ -276,15 +276,15 @@ namespace Bun3.Gameplay.Effects
             // DR immunity must be decided before the RemoveOnApply side effect — otherwise an immune
             // application would observably dispel the target's existing effects first (every other drop
             // path — Immune/Chance/Condition — also short-circuits before side effects). DR applies only
-            // to the new-instance path, so when an active instance of the same spec exists (merge target)
+            // to the new-instance path, so when an active instance of the same effect exists (merge target)
             // we skip it and keep the existing merge behavior. ApplyDrHistory mutates history, so it is
             // called exactly once — the ticks computed here are passed through to CreateInstance.
             var precomputedDurationTicks = -1;
-            if (spec.DurationType == EffectDurationType.Duration && spec.DrCategory.IsValid
-                && FindActiveBySpec(target, pending.SpecId) == null)
+            if (effect.DurationType == EffectDurationType.Duration && effect.DrCategory.IsValid
+                && FindActiveByEffectId(target, pending.EffectId) == null)
             {
-                var value = ComputeScaledDuration(spec, target, source, hasSource, pending.Level, stack: 1, pending.EventMagnitude);
-                value *= ApplyDrHistory(target, spec);
+                var value = ComputeScaledDuration(effect, target, source, hasSource, pending.Level, stack: 1, pending.EventMagnitude);
+                value *= ApplyDrHistory(target, effect);
                 var ticks = ToTicksFloor(value);
                 if (ticks <= 0)
                 {
@@ -295,15 +295,15 @@ namespace Bun3.Gameplay.Effects
                 precomputedDurationTicks = ticks;
             }
 
-            RemoveOnApply(target, spec, pending.SpecId);
+            RemoveOnApply(target, effect, pending.EffectId);
 
-            if (spec.DurationType == EffectDurationType.Instant)
+            if (effect.DurationType == EffectDurationType.Instant)
             {
-                ApplyInstant(spec, target, source, hasSource, in pending, pending.EventMagnitude);
+                ApplyInstant(effect, target, source, hasSource, in pending, pending.EventMagnitude);
             }
             else
             {
-                ApplyDurationOrInfinite(spec, target, in pending, precomputedDurationTicks);
+                ApplyDurationOrInfinite(effect, target, in pending, precomputedDurationTicks);
             }
         }
 
@@ -311,10 +311,10 @@ namespace Bun3.Gameplay.Effects
         // (×2^32) and compares against NextUInt32() as BigNum integers — no floating point; the
         // chance<=0 / chance>=1 boundaries fall out of the same comparison.
         private bool RollChance(
-            CompiledEffectSpec spec, EffectTarget target, EffectTarget? source, bool hasSource, int level,
+            CompiledEffect effect, EffectTarget target, EffectTarget? source, bool hasSource, int level,
             BigNum eventMagnitude)
         {
-            var chance = spec.ChanceToApply;
+            var chance = effect.ChanceToApply;
             if (chance is null) return true;
 
             var probability = EvaluateMagnitudeCore(
@@ -324,11 +324,11 @@ namespace Bun3.Gameplay.Effects
             return roll < probability * RngRollRange;
         }
 
-        // RemoveOnApplyTags — just before applying, prematurely removes every active instance whose spec
-        // AssetTags hierarchically match these tags. The same spec (about to merge) is excluded.
-        private void RemoveOnApply(EffectTarget target, CompiledEffectSpec spec, int incomingSpecId)
+        // RemoveOnApplyTags — just before applying, prematurely removes every active instance whose effect
+        // AssetTags hierarchically match these tags. The same effect (about to merge) is excluded.
+        private void RemoveOnApply(EffectTarget target, CompiledEffect effect, int incomingEffectId)
         {
-            if (spec.RemoveOnApplyTags.Length == 0) return;
+            if (effect.RemoveOnApplyTags.Length == 0) return;
             var active = target.ActiveEffects;
             if (active.Count == 0) return;
 
@@ -337,9 +337,9 @@ namespace Bun3.Gameplay.Effects
             for (var i = 0; i < active.Count; i++)
             {
                 var instance = active[i];
-                if (instance.SpecId == incomingSpecId) continue;   // merge takes precedence — exclude
-                var otherAssetTags = _catalog.GetSpec(instance.SpecId).AssetTags;
-                if (MatchesDispelQuery(otherAssetTags, spec.RemoveOnApplyTags, tagCatalog))
+                if (instance.EffectId == incomingEffectId) continue;   // merge takes precedence — exclude
+                var otherAssetTags = _catalog.GetEffect(instance.EffectId).AssetTags;
+                if (MatchesDispelQuery(otherAssetTags, effect.RemoveOnApplyTags, tagCatalog))
                     _removalScratch.Add(instance);
             }
 
@@ -352,10 +352,10 @@ namespace Bun3.Gameplay.Effects
         }
 
         // Checks whether any immunity tag of the target's active instances is self-or-ancestor of any
-        // asset tag on the incoming spec.
-        private bool IsImmune(EffectTarget target, CompiledEffectSpec incomingSpec)
+        // asset tag on the incoming effect.
+        private bool IsImmune(EffectTarget target, CompiledEffect incomingEffect)
         {
-            if (incomingSpec.AssetTags.Length == 0) return false;
+            if (incomingEffect.AssetTags.Length == 0) return false;
             var active = target.ActiveEffects;
             if (active.Count == 0) return false;
 
@@ -364,12 +364,12 @@ namespace Bun3.Gameplay.Effects
             {
                 var instance = active[i];
                 if (!instance.Enabled) continue;
-                var immunityTags = _catalog.GetSpec(instance.SpecId).ImmunityTags;
+                var immunityTags = _catalog.GetEffect(instance.EffectId).ImmunityTags;
                 for (var j = 0; j < immunityTags.Length; j++)
                 {
-                    for (var k = 0; k < incomingSpec.AssetTags.Length; k++)
+                    for (var k = 0; k < incomingEffect.AssetTags.Length; k++)
                     {
-                        if (tagCatalog.IsAncestorOrSelf(immunityTags[j], incomingSpec.AssetTags[k]))
+                        if (tagCatalog.IsAncestorOrSelf(immunityTags[j], incomingEffect.AssetTags[k]))
                             return true;
                     }
                 }
@@ -478,16 +478,16 @@ namespace Bun3.Gameplay.Effects
         // before truncation/clamping. Shared by CreateInstance (new instances) and MergeReapply's
         // Refresh/ExtendCapped (new-duration recomputation).
         private BigNum ComputeScaledDuration(
-            CompiledEffectSpec spec, EffectTarget target, EffectTarget? source, bool hasSource, int level, int stack,
+            CompiledEffect effect, EffectTarget target, EffectTarget? source, bool hasSource, int level, int stack,
             BigNum eventMagnitude)
         {
-            var baseDuration = spec.DurationPerLevel != null
-                ? EvaluateByLevel(spec.DurationPerLevel, LevelTail.Clamp, BigNum.Zero, level)
-                : (BigNum)spec.DurationTicks;
+            var baseDuration = effect.DurationPerLevel != null
+                ? EvaluateByLevel(effect.DurationPerLevel, LevelTail.Clamp, BigNum.Zero, level)
+                : (BigNum)effect.DurationTicks;
 
-            if (spec.DurationScale == null) return baseDuration;
+            if (effect.DurationScale == null) return baseDuration;
 
-            var scale = spec.DurationScale;
+            var scale = effect.DurationScale;
             var scaleValue = EvaluateMagnitudeCore(
                 scale.Base, scale.PerLevel, scale.Calc, scale.ByLevel, scale.Tail, scale.Increment,
                 target, source, hasSource, level, stack, eventMagnitude);
@@ -497,10 +497,10 @@ namespace Bun3.Gameplay.Effects
         // "New duration" used by merges (Refresh/ExtendCapped) — DR applies only to the new-instance
         // path, so it is not composed here. Clamps to a minimum of 1 tick after truncation.
         private int ComputeMergedDurationTicks(
-            CompiledEffectSpec spec, EffectTarget target, EffectInstance instance, BigNum eventMagnitude)
+            CompiledEffect effect, EffectTarget target, EffectInstance instance, BigNum eventMagnitude)
         {
             var hasSource = _resolver.TryResolve(instance.Source, out var source) && source is not null;
-            var value = ComputeScaledDuration(spec, target, source, hasSource, instance.Level, instance.Stack, eventMagnitude);
+            var value = ComputeScaledDuration(effect, target, source, hasSource, instance.Level, instance.Stack, eventMagnitude);
             var ticks = ToTicksFloor(value);
             return ticks <= 0 ? 1 : ticks;
         }
@@ -510,12 +510,12 @@ namespace Bun3.Gameplay.Effects
         // (count 0) gets multiplier 1, the nth (n>=1) gets DrStageMultipliers[min(n-1, length-1)].
         // Regardless of whether the application succeeds or fizzles, the count is always incremented and
         // lastAppliedTick refreshed (an immune application also extends the window).
-        private BigNum ApplyDrHistory(EffectTarget target, CompiledEffectSpec spec)
+        private BigNum ApplyDrHistory(EffectTarget target, CompiledEffect effect)
         {
-            var index = target.FindOrCreateDrHistory(spec.DrCategory.Index);
+            var index = target.FindOrCreateDrHistory(effect.DrCategory.Index);
             ref var entry = ref target.DrHistoryAt(index);
 
-            if (entry.LastAppliedTick + spec.DrWindowTicks < CurrentTick)
+            if (entry.LastAppliedTick + effect.DrWindowTicks < CurrentTick)
             {
                 entry.AppliedCount = 0;
             }
@@ -523,7 +523,7 @@ namespace Bun3.Gameplay.Effects
             var stage = entry.AppliedCount;
             var multiplier = stage == 0
                 ? BigNum.One
-                : spec.DrStageMultipliers[Math.Min(stage - 1, spec.DrStageMultipliers.Length - 1)];
+                : effect.DrStageMultipliers[Math.Min(stage - 1, effect.DrStageMultipliers.Length - 1)];
 
             entry.AppliedCount++;
             entry.LastAppliedTick = CurrentTick;
@@ -531,10 +531,10 @@ namespace Bun3.Gameplay.Effects
         }
 
         private void ApplyInstant(
-            CompiledEffectSpec spec, EffectTarget target, EffectTarget? source, bool hasSource, in PendingApply pending,
+            CompiledEffect effect, EffectTarget target, EffectTarget? source, bool hasSource, in PendingApply pending,
             BigNum eventMagnitude)
         {
-            var raises = spec.RaiseEvents;
+            var raises = effect.RaiseEvents;
             Span<BigNum> before = stackalloc BigNum[raises.Length];
             Span<BigNum> nominal = stackalloc BigNum[raises.Length];
             for (var r = 0; r < raises.Length; r++)
@@ -543,7 +543,7 @@ namespace Bun3.Gameplay.Effects
                 nominal[r] = BigNum.Zero;
             }
 
-            var modifiers = spec.Modifiers;
+            var modifiers = effect.Modifiers;
             for (var i = 0; i < modifiers.Length; i++)
             {
                 var modifier = modifiers[i];
@@ -556,7 +556,7 @@ namespace Bun3.Gameplay.Effects
                 ApplyModifierToBase(target, modifier, magnitude);
             }
 
-            var executions = spec.Executions;
+            var executions = effect.Executions;
             for (var i = 0; i < executions.Length; i++)
             {
                 RunExecution(
@@ -571,7 +571,7 @@ namespace Bun3.Gameplay.Effects
                 RaiseGameplayEvent(in evt);
             }
 
-            FireChain(spec.Chains, ChainTrigger.OnApplication, pending.Source, pending.Level, pending.Target, target);
+            FireChain(effect.Chains, ChainTrigger.OnApplication, pending.Source, pending.Level, pending.Target, target);
         }
 
         // Instant has no instance, so its modifiers are permanent changes applied straight to Base.
@@ -585,7 +585,7 @@ namespace Bun3.Gameplay.Effects
                     target.Attributes.AddBase(modifier.AttributeId, magnitude);
                     break;
                 default:
-                    // Unreachable: EffectCatalogBuilder forces Op to Add for Instant/periodic specs.
+                    // Unreachable: EffectCatalogBuilder forces Op to Add for Instant/periodic effects.
                     throw new InvalidOperationException($"Instant modifiers only allow Add: {modifier.Op}");
             }
         }
@@ -594,7 +594,7 @@ namespace Bun3.Gameplay.Effects
             CompiledExecution execution, EffectTarget target, EffectTarget? source, bool hasSource,
             TargetId sourceId, TargetId targetId, int level, int stack, BigNum eventMagnitude)
         {
-            // ponytail: input counts are authoring-spec scale, so stackalloc suffices — switch to a heap array if large inputs become a real need.
+            // ponytail: input counts are authoring-effect scale, so stackalloc suffices — switch to a heap array if large inputs become a real need.
             Span<BigNum> inputs = stackalloc BigNum[execution.Inputs.Length];
             for (var i = 0; i < execution.Inputs.Length; i++)
             {
@@ -613,7 +613,7 @@ namespace Bun3.Gameplay.Effects
         // instance's Source) → EnqueueApply for each target (source inherited; level is the firing level
         // when LevelRule is Inherit, or the edge's FixedLevel when Fixed).
         private void FireChain(
-            CompiledChain[] chains, ChainTrigger trigger, TargetId source, int level,
+            CompiledChainEdge[] chains, ChainTrigger trigger, TargetId source, int level,
             TargetId originTargetId, EffectTarget originTarget)
         {
             for (var i = 0; i < chains.Length; i++)
@@ -635,7 +635,7 @@ namespace Bun3.Gameplay.Effects
                     continue;
                 }
 
-                // ponytail: target counts are authoring-spec scale, so a 32-slot stack buffer suffices — on overflow only the first 32 are applied.
+                // ponytail: target counts are authoring-effect scale, so a 32-slot stack buffer suffices — on overflow only the first 32 are applied.
                 Span<TargetId> targets = stackalloc TargetId[32];
                 var selectorCtx = new SelectorContext(
                     source, originTargetId, chain.SelectorParams, _rng, _resolver,
@@ -661,30 +661,30 @@ namespace Bun3.Gameplay.Effects
             return results.Length;
         }
 
-        // Duration/Infinite: if the target has an active instance with the same SpecId, merge via the
+        // Duration/Infinite: if the target has an active instance with the same EffectId, merge via the
         // stack policy; otherwise create a new instance, attach modifiers, and grant tags.
         // precomputedDurationTicks is the duration (with DR composed) that ProcessPendingApply computed
         // before RemoveOnApply (-1 when DR is unused or a merge target exists) and CreateInstance uses it
         // as-is — prevents a duplicate ApplyDrHistory call.
         private void ApplyDurationOrInfinite(
-            CompiledEffectSpec spec, EffectTarget target, in PendingApply pending, int precomputedDurationTicks)
+            CompiledEffect effect, EffectTarget target, in PendingApply pending, int precomputedDurationTicks)
         {
-            var existing = FindActiveBySpec(target, pending.SpecId);
+            var existing = FindActiveByEffectId(target, pending.EffectId);
             if (existing != null)
             {
-                MergeReapply(spec, target, existing, pending.EventMagnitude);
+                MergeReapply(effect, target, existing, pending.EventMagnitude);
                 return;
             }
 
-            CreateInstance(spec, target, in pending, precomputedDurationTicks, pending.EventMagnitude);
+            CreateInstance(effect, target, in pending, precomputedDurationTicks, pending.EventMagnitude);
         }
 
-        private static EffectInstance? FindActiveBySpec(EffectTarget target, int specId)
+        private static EffectInstance? FindActiveByEffectId(EffectTarget target, int effectId)
         {
             var active = target.ActiveEffects;
             for (var i = 0; i < active.Count; i++)
             {
-                if (active[i].SpecId == specId) return active[i];
+                if (active[i].EffectId == effectId) return active[i];
             }
 
             return null;
@@ -693,61 +693,61 @@ namespace Bun3.Gameplay.Effects
         // Reapply merge: AddStack raises the stack and routes the overflow to HandleStackOverflow; both
         // Refresh and AddStack reset duration/period timers per policy. StackChanged is raised only when
         // the stack value actually changes. A merge is not a new application, so no OnApplication chain fires here.
-        private void MergeReapply(CompiledEffectSpec spec, EffectTarget target, EffectInstance instance, BigNum eventMagnitude)
+        private void MergeReapply(CompiledEffect effect, EffectTarget target, EffectInstance instance, BigNum eventMagnitude)
         {
-            var stackPolicy = spec.Stack;
+            var stackPolicy = effect.Stack;
             if (stackPolicy.OnReapply == StackReapply.AddStack)
             {
                 // Build guarantees MaxStack > 0 for the AddStack policy.
                 var wouldBe = instance.Stack + stackPolicy.AddStackCount;
                 if (wouldBe > stackPolicy.MaxStack)
                 {
-                    HandleStackOverflow(spec, target, instance, eventMagnitude);
+                    HandleStackOverflow(effect, target, instance, eventMagnitude);
                 }
                 else if (wouldBe != instance.Stack)
                 {
                     instance.Stack = wouldBe;
                     target.RaiseEffectEvent(new EffectLifecycleEvent(
-                        EffectLifecycleKind.StackChanged, instance.Id, instance.SpecId, instance.Stack));
-                    MarkDirtyForModifiers(target, spec);
-                    SyncLevelFromStack(spec, target, instance, eventMagnitude);
+                        EffectLifecycleKind.StackChanged, instance.Id, instance.EffectId, instance.Stack));
+                    MarkDirtyForModifiers(target, effect);
+                    SyncLevelFromStack(effect, target, instance, eventMagnitude);
                 }
             }
             else if (stackPolicy.OnReapply == StackReapply.ExtendCapped)
             {
                 // Extends duration only, without touching the stack — cap = new duration × ExtendCapMultiplier.
                 // "New duration" includes DurationPerLevel/DurationScale (DR applies to new instances only).
-                var newDuration = ComputeMergedDurationTicks(spec, target, instance, eventMagnitude);
+                var newDuration = ComputeMergedDurationTicks(effect, target, instance, eventMagnitude);
                 var cap = ToTicksFloor((BigNum)newDuration * stackPolicy.ExtendCapMultiplier);
                 var extended = instance.RemainingTicks + newDuration;
                 instance.RemainingTicks = extended < cap ? extended : cap;
             }
 
             if (stackPolicy.OnReapply != StackReapply.ExtendCapped
-                && stackPolicy.RefreshDurationOnReapply && spec.DurationType == EffectDurationType.Duration)
+                && stackPolicy.RefreshDurationOnReapply && effect.DurationType == EffectDurationType.Duration)
             {
-                instance.RemainingTicks = ComputeMergedDurationTicks(spec, target, instance, eventMagnitude);
+                instance.RemainingTicks = ComputeMergedDurationTicks(effect, target, instance, eventMagnitude);
             }
 
-            if (stackPolicy.ResetPeriodOnReapply && spec.PeriodTicks > 0)
+            if (stackPolicy.ResetPeriodOnReapply && effect.PeriodTicks > 0)
             {
-                instance.PeriodCountdown = spec.PeriodTicks;
+                instance.PeriodCountdown = effect.PeriodTicks;
             }
         }
 
         // LevelFromStack — after Stack changes, syncs Level and re-evaluates/re-attaches the modifiers
         // that were snapshotted at apply time (periodic effects are excluded: they evaluate Level directly each period).
-        private void SyncLevelFromStack(CompiledEffectSpec spec, EffectTarget target, EffectInstance instance, BigNum eventMagnitude)
+        private void SyncLevelFromStack(CompiledEffect effect, EffectTarget target, EffectInstance instance, BigNum eventMagnitude)
         {
-            if (!spec.Stack.LevelFromStack || instance.Level == instance.Stack) return;
+            if (!effect.Stack.LevelFromStack || instance.Level == instance.Stack) return;
 
             instance.Level = instance.Stack;
             if (instance.Enabled) AbilityGrantHook?.Invoke(target, instance, true);
-            if (spec.PeriodTicks > 0) return;
+            if (effect.PeriodTicks > 0) return;
 
             target.Attributes.DetachModifiers(instance);
             var hasSource = _resolver.TryResolve(instance.Source, out var source) && source is not null;
-            var modifiers = spec.Modifiers;
+            var modifiers = effect.Modifiers;
             for (var i = 0; i < modifiers.Length; i++)
             {
                 var modifier = modifiers[i];
@@ -786,43 +786,43 @@ namespace Bun3.Gameplay.Effects
         // the policy is ApplyEffect (level always inherited from the instance). Afterward the stack resets
         // to 1 when ClearStacksOnOverflow (existing effect/modifiers kept, only stacks cleared), otherwise
         // clamps to MaxStack as before.
-        private void HandleStackOverflow(CompiledEffectSpec spec, EffectTarget target, EffectInstance instance, BigNum eventMagnitude)
+        private void HandleStackOverflow(CompiledEffect effect, EffectTarget target, EffectInstance instance, BigNum eventMagnitude)
         {
-            FireChain(spec.Chains, ChainTrigger.OnStackOverflow, instance.Source, instance.Level, target.Id, target);
+            FireChain(effect.Chains, ChainTrigger.OnStackOverflow, instance.Source, instance.Level, target.Id, target);
 
-            if (spec.Stack.OnOverflow == StackOverflow.ApplyEffect)
+            if (effect.Stack.OnOverflow == StackOverflow.ApplyEffect)
             {
-                EnqueueApply(spec.OverflowEffectId, instance.Source, target.Id, instance.Level);
+                EnqueueApply(effect.OverflowEffectId, instance.Source, target.Id, instance.Level);
             }
 
-            var newStack = spec.Stack.ClearStacksOnOverflow ? 1 : spec.Stack.MaxStack;
+            var newStack = effect.Stack.ClearStacksOnOverflow ? 1 : effect.Stack.MaxStack;
             if (newStack != instance.Stack)
             {
                 instance.Stack = newStack;
                 target.RaiseEffectEvent(new EffectLifecycleEvent(
-                    EffectLifecycleKind.StackChanged, instance.Id, instance.SpecId, instance.Stack));
-                MarkDirtyForModifiers(target, spec);
-                SyncLevelFromStack(spec, target, instance, eventMagnitude);
+                    EffectLifecycleKind.StackChanged, instance.Id, instance.EffectId, instance.Stack));
+                MarkDirtyForModifiers(target, effect);
+                SyncLevelFromStack(effect, target, instance, eventMagnitude);
             }
         }
 
         // New instance: rent → insert in ascending Id order → attach modifiers (unless periodic) → grant
         // GrantedTags → Applied event → fire OnApplication chains. Periodic effects (PeriodTicks > 0) only
         // adjust Base each period via the same path as Instant and never attach modifiers persistently.
-        // For Duration specs with DR, ProcessPendingApply computed the duration (and immunity) before
+        // For Duration effects with DR, ProcessPendingApply computed the duration (and immunity) before
         // RemoveOnApply and passed it as precomputedDurationTicks — this method uses that value as-is and
         // never calls ApplyDrHistory again (prevents double history mutation). Duration without DR is
         // computed here (clamped to a minimum of 1 tick).
         private void CreateInstance(
-            CompiledEffectSpec spec, EffectTarget target, in PendingApply pending, int precomputedDurationTicks,
+            CompiledEffect effect, EffectTarget target, in PendingApply pending, int precomputedDurationTicks,
             BigNum eventMagnitude)
         {
             var hasSource = _resolver.TryResolve(pending.Source, out var source) && source is not null;
 
             var remainingTicks = -1;
-            if (spec.DurationType == EffectDurationType.Duration)
+            if (effect.DurationType == EffectDurationType.Duration)
             {
-                if (spec.DrCategory.IsValid)
+                if (effect.DrCategory.IsValid)
                 {
                     // If DR-immune (0 ticks or less), ProcessPendingApply already dropped silently and
                     // returned, so reaching this path guarantees precomputedDurationTicks > 0.
@@ -830,21 +830,21 @@ namespace Bun3.Gameplay.Effects
                 }
                 else
                 {
-                    var value = ComputeScaledDuration(spec, target, source, hasSource, pending.Level, stack: 1, eventMagnitude);
+                    var value = ComputeScaledDuration(effect, target, source, hasSource, pending.Level, stack: 1, eventMagnitude);
                     var ticks = ToTicksFloor(value);
                     remainingTicks = ticks <= 0 ? 1 : ticks;   // minimum 1 tick.
                 }
             }
 
-            var periodCountdown = spec.PeriodTicks > 0 ? spec.PeriodTicks : -1;
+            var periodCountdown = effect.PeriodTicks > 0 ? effect.PeriodTicks : -1;
             var instance = EffectInstance.Rent(
-                _nextInstanceId++, pending.SpecId, pending.Source, pending.Level, stack: 1,
+                _nextInstanceId++, pending.EffectId, pending.Source, pending.Level, stack: 1,
                 remainingTicks, periodCountdown, CurrentTick);
             target.InsertActive(instance);
 
-            if (spec.PeriodTicks == 0)
+            if (effect.PeriodTicks == 0)
             {
-                var modifiers = spec.Modifiers;
+                var modifiers = effect.Modifiers;
                 for (var i = 0; i < modifiers.Length; i++)
                 {
                     var modifier = modifiers[i];
@@ -853,7 +853,7 @@ namespace Bun3.Gameplay.Effects
                 }
             }
 
-            var grantedTags = spec.GrantedTags;
+            var grantedTags = effect.GrantedTags;
             for (var i = 0; i < grantedTags.Length; i++)
             {
                 target.Tags.Add(grantedTags[i]);
@@ -861,14 +861,14 @@ namespace Bun3.Gameplay.Effects
 
             AbilityGrantHook?.Invoke(target, instance, true);
 
-            target.RaiseEffectEvent(new EffectLifecycleEvent(EffectLifecycleKind.Applied, instance.Id, pending.SpecId, instance.Stack));
+            target.RaiseEffectEvent(new EffectLifecycleEvent(EffectLifecycleKind.Applied, instance.Id, pending.EffectId, instance.Stack));
 
-            FireChain(spec.Chains, ChainTrigger.OnApplication, pending.Source, pending.Level, target.Id, target);
+            FireChain(effect.Chains, ChainTrigger.OnApplication, pending.Source, pending.Level, target.Id, target);
         }
 
-        private static void MarkDirtyForModifiers(EffectTarget target, CompiledEffectSpec spec)
+        private static void MarkDirtyForModifiers(EffectTarget target, CompiledEffect effect)
         {
-            var modifiers = spec.Modifiers;
+            var modifiers = effect.Modifiers;
             for (var i = 0; i < modifiers.Length; i++)
             {
                 target.Attributes.MarkDirty(modifiers[i].AttributeId);
@@ -894,20 +894,20 @@ namespace Bun3.Gameplay.Effects
                     var instance = active[i];
                     if (instance.CreatedTick == CurrentTick) continue;   // created this tick; starts advancing next tick
 
-                    var spec = _catalog.GetSpec(instance.SpecId);
+                    var effect = _catalog.GetEffect(instance.EffectId);
 
-                    if (spec.PeriodTicks > 0)
+                    if (effect.PeriodTicks > 0)
                     {
                         instance.PeriodCountdown--;
                         if (instance.PeriodCountdown == 0)
                         {
                             // Period firing has no triggering event — always zero.
-                            FirePeriodic(spec, target, instance, BigNum.Zero);
-                            instance.PeriodCountdown = spec.PeriodTicks;
+                            FirePeriodic(effect, target, instance, BigNum.Zero);
+                            instance.PeriodCountdown = effect.PeriodTicks;
                         }
                     }
 
-                    if (spec.DurationType == EffectDurationType.Duration)
+                    if (effect.DurationType == EffectDurationType.Duration)
                     {
                         instance.RemainingTicks--;
                         if (instance.RemainingTicks <= 0)
@@ -925,11 +925,11 @@ namespace Bun3.Gameplay.Effects
         }
 
         // Period elapsed: same path as Instant — Modifiers adjust Base (Add-only, enforced at Build), Executions run.
-        private void FirePeriodic(CompiledEffectSpec spec, EffectTarget target, EffectInstance instance, BigNum eventMagnitude)
+        private void FirePeriodic(CompiledEffect effect, EffectTarget target, EffectInstance instance, BigNum eventMagnitude)
         {
             var hasSource = _resolver.TryResolve(instance.Source, out var source) && source is not null;
 
-            var raises = spec.RaiseEvents;
+            var raises = effect.RaiseEvents;
             Span<BigNum> before = stackalloc BigNum[raises.Length];
             Span<BigNum> nominal = stackalloc BigNum[raises.Length];
             for (var r = 0; r < raises.Length; r++)
@@ -938,7 +938,7 @@ namespace Bun3.Gameplay.Effects
                 nominal[r] = BigNum.Zero;
             }
 
-            var modifiers = spec.Modifiers;
+            var modifiers = effect.Modifiers;
             for (var i = 0; i < modifiers.Length; i++)
             {
                 var modifier = modifiers[i];
@@ -951,7 +951,7 @@ namespace Bun3.Gameplay.Effects
                 ApplyModifierToBase(target, modifier, magnitude);
             }
 
-            var executions = spec.Executions;
+            var executions = effect.Executions;
             for (var i = 0; i < executions.Length; i++)
             {
                 RunExecution(
@@ -973,19 +973,19 @@ namespace Bun3.Gameplay.Effects
         // RemoveByTags/RemoveById takes the same helper with OnCompletePrematurely (RemoveInstancePrematurely).
         private void ExpireInstance(EffectTarget target, EffectInstance instance)
         {
-            var spec = _catalog.GetSpec(instance.SpecId);
-            if (spec.Stack.OnExpiration == StackExpiration.RemoveOneAndRefresh && instance.Stack > 1)
+            var effect = _catalog.GetEffect(instance.EffectId);
+            if (effect.Stack.OnExpiration == StackExpiration.RemoveOneAndRefresh && instance.Stack > 1)
             {
                 instance.Stack--;
-                instance.RemainingTicks = spec.DurationTicks;
+                instance.RemainingTicks = effect.DurationTicks;
                 target.RaiseEffectEvent(new EffectLifecycleEvent(
-                    EffectLifecycleKind.StackChanged, instance.Id, instance.SpecId, instance.Stack));
-                MarkDirtyForModifiers(target, spec);
-                SyncLevelFromStack(spec, target, instance, BigNum.Zero);
+                    EffectLifecycleKind.StackChanged, instance.Id, instance.EffectId, instance.Stack));
+                MarkDirtyForModifiers(target, effect);
+                SyncLevelFromStack(effect, target, instance, BigNum.Zero);
                 return;
             }
 
-            RemoveInstanceCompletely(target, instance, spec, EffectLifecycleKind.Expired, ChainTrigger.OnCompleteNormal);
+            RemoveInstanceCompletely(target, instance, effect, EffectLifecycleKind.Expired, ChainTrigger.OnCompleteNormal);
         }
 
         // Shared complete-removal path — used by normal expiry (ExpireInstance) and premature removal
@@ -993,14 +993,14 @@ namespace Bun3.Gameplay.Effects
         // list, returns the instance to the pool, then raises the eventKind lifecycle event and fires the
         // chainTrigger chains. The firing instance's Source and Level are inherited as-is.
         private void RemoveInstanceCompletely(
-            EffectTarget target, EffectInstance instance, CompiledEffectSpec spec,
+            EffectTarget target, EffectInstance instance, CompiledEffect effect,
             EffectLifecycleKind eventKind, ChainTrigger chainTrigger)
         {
             var source = instance.Source;
             var level = instance.Level;
 
             target.Attributes.DetachModifiers(instance);
-            var grantedTags = spec.GrantedTags;
+            var grantedTags = effect.GrantedTags;
             for (var i = 0; i < grantedTags.Length; i++)
             {
                 target.Tags.Remove(grantedTags[i]);
@@ -1009,10 +1009,10 @@ namespace Bun3.Gameplay.Effects
             AbilityGrantHook?.Invoke(target, instance, false);
 
             target.RemoveActive(instance);
-            target.RaiseEffectEvent(new EffectLifecycleEvent(eventKind, instance.Id, instance.SpecId, instance.Stack));
+            target.RaiseEffectEvent(new EffectLifecycleEvent(eventKind, instance.Id, instance.EffectId, instance.Stack));
             EffectInstance.Return(instance);
 
-            FireChain(spec.Chains, chainTrigger, source, level, target.Id, target);
+            FireChain(effect.Chains, chainTrigger, source, level, target.Id, target);
         }
 
         // Phase 3: first rebuild — re-aggregates only the dirty slots marked by phases 1-2.
@@ -1052,16 +1052,16 @@ namespace Bun3.Gameplay.Effects
                 for (var i = 0; i < active.Count; i++)
                 {
                     var instance = active[i];
-                    var spec = _catalog.GetSpec(instance.SpecId);
-                    if (spec.OngoingConditions.Length == 0) continue;
+                    var effect = _catalog.GetEffect(instance.EffectId);
+                    if (effect.OngoingConditions.Length == 0) continue;
 
                     // Ongoing evaluation runs every tick with no triggering event — always zero. Build
                     // already rejects EventMagnitude in OngoingConditions, so this value is unreachable.
-                    var satisfied = EvaluateConditions(spec.OngoingConditions, target, source: null, hasSource: false, BigNum.Zero);
+                    var satisfied = EvaluateConditions(effect.OngoingConditions, target, source: null, hasSource: false, BigNum.Zero);
                     if (satisfied == instance.Enabled) continue;
 
                     instance.Enabled = satisfied;
-                    var grantedTags = spec.GrantedTags;
+                    var grantedTags = effect.GrantedTags;
                     if (satisfied)
                     {
                         for (var g = 0; g < grantedTags.Length; g++) target.Tags.Add(grantedTags[g]);
@@ -1073,7 +1073,7 @@ namespace Bun3.Gameplay.Effects
 
                     AbilityGrantHook?.Invoke(target, instance, satisfied);
 
-                    MarkDirtyForModifiers(target, spec);
+                    MarkDirtyForModifiers(target, effect);
                 }
             }
         }

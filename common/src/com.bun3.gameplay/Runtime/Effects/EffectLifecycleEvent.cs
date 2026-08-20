@@ -20,13 +20,13 @@ namespace Bun3.Gameplay.Effects
         /// <summary>Creates an event.</summary>
         /// <param name="kind">Event kind.</param>
         /// <param name="instanceId">Id of the affected effect instance.</param>
-        /// <param name="specId">Effect spec id.</param>
+        /// <param name="effectId">Effect id.</param>
         /// <param name="stack">Stack count at the time of the event.</param>
-        public EffectLifecycleEvent(EffectLifecycleKind kind, ulong instanceId, int specId, int stack)
+        public EffectLifecycleEvent(EffectLifecycleKind kind, ulong instanceId, int effectId, int stack)
         {
             Kind = kind;
             InstanceId = instanceId;
-            SpecId = specId;
+            EffectId = effectId;
             Stack = stack;
         }
 
@@ -36,8 +36,8 @@ namespace Bun3.Gameplay.Effects
         /// <summary>Id of the affected effect instance.</summary>
         public ulong InstanceId { get; }
 
-        /// <summary>Effect spec id.</summary>
-        public int SpecId { get; }
+        /// <summary>Effect id.</summary>
+        public int EffectId { get; }
 
         /// <summary>Stack count at the time of the event.</summary>
         public int Stack { get; }

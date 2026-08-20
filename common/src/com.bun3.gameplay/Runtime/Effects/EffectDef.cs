@@ -24,7 +24,7 @@ namespace Bun3.Gameplay.Effects
         /// <summary>Adds one stack.</summary>
         AddStack = 1,
         /// <summary>Keeps the stack and adds the new duration to the remaining duration, truncated at a
-        /// cap (new duration × <see cref="StackPolicy.ExtendCapMultiplier"/>).</summary>
+        /// cap (new duration × <see cref="StackPolicyDef.ExtendCapMultiplier"/>).</summary>
         ExtendCapped = 2,
     }
 
@@ -99,7 +99,7 @@ namespace Bun3.Gameplay.Effects
     }
 
     /// <summary>One key of a sparse level curve (level, value).</summary>
-    public sealed class LevelKey
+    public sealed class LevelKeyDef
     {
         /// <summary>Level.</summary>
         public int Level { get; set; }
@@ -122,7 +122,7 @@ namespace Bun3.Gameplay.Effects
         /// <summary>Additional magnitude per level (notation ①). Only usable when <see cref="Base"/> is set.</summary>
         public Operand? PerLevel { get; set; }
 
-        /// <summary>Explicit per-level values (notation ②). The length must equal <see cref="EffectSpec.MaxLevel"/>.</summary>
+        /// <summary>Explicit per-level values (notation ②). The length must equal <see cref="EffectDef.MaxLevel"/>.</summary>
         public List<BigNum>? PerLevelValues { get; set; }
 
         /// <summary>Deterministic formula (notation ③). Follows <see cref="Numerics.BigNumFormula"/> syntax
@@ -131,7 +131,7 @@ namespace Bun3.Gameplay.Effects
 
         /// <summary>Sparse level keys (notation ④). Ascending levels, no duplicates, first key must be
         /// level 1. Linear interpolation between keys; past the last key the <see cref="Tail"/> policy applies.</summary>
-        public List<LevelKey>? CurveKeys { get; set; }
+        public List<LevelKeyDef>? CurveKeys { get; set; }
 
         /// <summary>Magnitude-calc tag registered in SeamRegistry. Exclusive with the other notations.</summary>
         public string? CalcTag { get; set; }
@@ -218,7 +218,7 @@ namespace Bun3.Gameplay.Effects
     }
 
     /// <summary>Stack policy.</summary>
-    public sealed class StackPolicy
+    public sealed class StackPolicyDef
     {
         /// <summary>Maximum stack count; 0 means the effect does not stack.</summary>
         public int MaxStack { get; set; }
@@ -258,10 +258,10 @@ namespace Bun3.Gameplay.Effects
     }
 
     /// <summary>
-    /// Authoring spec for one effect. A property bag filled by a loader, then validated and
+    /// Authoring definition for one effect. A property bag filled by a loader, then validated and
     /// compiled by <see cref="Effects.EffectCatalogBuilder"/>.
     /// </summary>
-    public sealed class EffectSpec
+    public sealed class EffectDef
     {
         /// <summary>Effect name; must be unique within the catalog.</summary>
         public string Name { get; set; } = string.Empty;
@@ -279,7 +279,7 @@ namespace Bun3.Gameplay.Effects
         public int PeriodTicks { get; set; }
 
         /// <summary>Stack policy.</summary>
-        public StackPolicy Stack { get; set; } = new StackPolicy();
+        public StackPolicyDef Stack { get; set; } = new StackPolicyDef();
 
         /// <summary>Attribute modifiers.</summary>
         public List<ModifierDef> Modifiers { get; set; } = new List<ModifierDef>();
@@ -313,7 +313,7 @@ namespace Bun3.Gameplay.Effects
 
         /// <summary>When this effect applies successfully, immediately removes (right before
         /// application) the target's active effects whose AssetTags are descendants-or-self of these
-        /// tags (e.g. a higher tier replacing a lower one). The merge target (same spec) is excluded.</summary>
+        /// tags (e.g. a higher tier replacing a lower one). The merge target (same effect) is excluded.</summary>
         public List<string> RemoveOnApplyTags { get; set; } = new List<string>();
 
         /// <summary>Magnitude definition of the application chance. Null means it always applies. The

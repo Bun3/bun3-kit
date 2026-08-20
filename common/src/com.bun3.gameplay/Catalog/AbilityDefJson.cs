@@ -14,13 +14,13 @@ using Newtonsoft.Json.Linq;
 namespace Bun3.Gameplay.Abilities.Catalog
 {
     /// <summary>
-    /// Authoring JSON loader for ability specs. Strictly validates syntax and shape (rejects
+    /// Authoring JSON loader for ability definitions. Strictly validates syntax and shape (rejects
     /// duplicate keys, unknown fields, unknown enum values; BigNum literals are always strings)
     /// but performs no semantic validation of tag, effect, or seam references — that is
     /// <see cref="AbilityCatalogBuilder.Build"/>'s job. Its only semantic step is resolving
     /// attribute name strings to ushort ids via <see cref="Load"/>'s attributeNames dictionary.
     /// Operand, MagnitudeDef, ConditionDef, and the "level" field (<c>"Inherit"</c> or a fixed
-    /// integer, compiling to <see cref="ChainLevelRule"/> + FixedLevel) reuse <see cref="EffectSpecJson"/>'s
+    /// integer, compiling to <see cref="ChainLevelRule"/> + FixedLevel) reuse <see cref="EffectDefJson"/>'s
     /// internal parsers so the two loaders share one implementation of each shape.
     /// </summary>
     public static class AbilityDefJson
@@ -33,7 +33,7 @@ namespace Bun3.Gameplay.Abilities.Catalog
         /// <paramref name="utf8Json"/> or <paramref name="attributeNames"/> is null.
         /// </exception>
         /// <exception cref="ArgumentException">The stream is not readable.</exception>
-        /// <exception cref="TagCatalogException">The JSON syntax or spec shape is invalid.</exception>
+        /// <exception cref="TagCatalogException">The JSON syntax or ability shape is invalid.</exception>
         public static List<AbilityDef> Load(Stream utf8Json, IReadOnlyDictionary<string, ushort> attributeNames)
         {
             if (utf8Json is null) throw new ArgumentNullException(nameof(utf8Json));
@@ -120,13 +120,13 @@ namespace Bun3.Gameplay.Abilities.Catalog
             var maxLevel = ReadOptionalInt(ability, "maxLevel", 0);
 
             var assetTags = ability.Property("assetTags", StringComparison.Ordinal) != null
-                ? EffectSpecJson.ReadStringArray(RequireArray(ability, "assetTags"))
+                ? EffectDefJson.ReadStringArray(RequireArray(ability, "assetTags"))
                 : new List<string>();
             var requiredTags = ability.Property("requiredTags", StringComparison.Ordinal) != null
-                ? EffectSpecJson.ReadStringArray(RequireArray(ability, "requiredTags"))
+                ? EffectDefJson.ReadStringArray(RequireArray(ability, "requiredTags"))
                 : new List<string>();
             var blockedTags = ability.Property("blockedTags", StringComparison.Ordinal) != null
-                ? EffectSpecJson.ReadStringArray(RequireArray(ability, "blockedTags"))
+                ? EffectDefJson.ReadStringArray(RequireArray(ability, "blockedTags"))
                 : new List<string>();
 
             var activationConditions = new List<ConditionDef>();
@@ -134,7 +134,7 @@ namespace Bun3.Gameplay.Abilities.Catalog
             {
                 foreach (var item in RequireArray(ability, "activationConditions"))
                 {
-                    activationConditions.Add(EffectSpecJson.ReadCondition(
+                    activationConditions.Add(EffectDefJson.ReadCondition(
                         AsObject(item, "activationConditions items must be objects."), attributeNames));
                 }
             }
@@ -178,8 +178,8 @@ namespace Bun3.Gameplay.Abilities.Catalog
         private static CostDef ReadCost(JObject cost, IReadOnlyDictionary<string, ushort> attributeNames)
         {
             RequireAllowedProperties(cost, "attribute", "magnitude");
-            var attributeId = EffectSpecJson.ResolveAttributeId(cost, "attribute", attributeNames);
-            var magnitude = EffectSpecJson.ReadMagnitude(RequireObject(cost, "magnitude"), attributeNames);
+            var attributeId = EffectDefJson.ResolveAttributeId(cost, "attribute", attributeNames);
+            var magnitude = EffectDefJson.ReadMagnitude(RequireObject(cost, "magnitude"), attributeNames);
             return new CostDef { AttributeId = attributeId, Magnitude = magnitude };
         }
 
@@ -196,14 +196,14 @@ namespace Bun3.Gameplay.Abilities.Catalog
             }
 
             var selectorParams = entry.Property("selectorParams", StringComparison.Ordinal) is { } selectorParamsProperty
-                ? EffectSpecJson.ReadBigNumArray(AsArray(selectorParamsProperty.Value, "selectorParams must be an array."))
+                ? EffectDefJson.ReadBigNumArray(AsArray(selectorParamsProperty.Value, "selectorParams must be an array."))
                 : new List<BigNum>();
 
             var levelRule = ChainLevelRule.Inherit;
             var fixedLevel = 0;
             if (entry.Property("level", StringComparison.Ordinal) is { } levelProperty)
             {
-                (levelRule, fixedLevel) = EffectSpecJson.ReadChainLevel(levelProperty.Value);
+                (levelRule, fixedLevel) = EffectDefJson.ReadChainLevel(levelProperty.Value);
             }
 
             return new AbilityEffectDef
@@ -216,7 +216,7 @@ namespace Bun3.Gameplay.Abilities.Catalog
             };
         }
 
-        // ---- Primitive field readers (same pattern as EffectSpecJson/TagCatalogJson/TagSourceJson) ----
+        // ---- Primitive field readers (same pattern as EffectDefJson/TagCatalogJson/TagSourceJson) ----
 
         private static JToken RequireProperty(JObject value, string propertyName)
         {
@@ -288,6 +288,6 @@ namespace Bun3.Gameplay.Abilities.Catalog
 
         private static JArray AsArray(JToken token, string message) => token as JArray ?? throw Error(message, token);
 
-        private static TagCatalogException Error(string message, JToken token) => EffectSpecJson.Error(message, token);
+        private static TagCatalogException Error(string message, JToken token) => EffectDefJson.Error(message, token);
     }
 }

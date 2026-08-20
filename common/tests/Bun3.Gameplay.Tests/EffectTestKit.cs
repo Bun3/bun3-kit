@@ -12,9 +12,9 @@ using Bun3.Gameplay.Tags.Catalog;
 namespace Bun3.Gameplay.Tests;
 
 /// <summary>
-/// Shared tag catalog, attribute registry, and minimal-spec helpers for EffectCatalogBuilder /
-/// EffectPipeline tests. Static helpers cover catalog and spec skeletons; the instance side
-/// (Create/Attacker/Defender/AddSpec/BuildPipeline) serves tests that need pipeline assembly.
+/// Shared tag catalog, attribute registry, and minimal-def helpers for EffectCatalogBuilder /
+/// EffectPipeline tests. Static helpers cover catalog and def skeletons; the instance side
+/// (Create/Attacker/Defender/AddEffect/BuildPipeline) serves tests that need pipeline assembly.
 /// </summary>
 internal sealed class EffectTestKit
 {
@@ -75,23 +75,23 @@ internal sealed class EffectTestKit
         return builder.Build();
     }
 
-    /// <summary>Creates a minimal Instant spec with all fields at defaults.</summary>
-    public static EffectSpec MinimalInstant(string name) => new EffectSpec
+    /// <summary>Creates a minimal Instant def with all fields at defaults.</summary>
+    public static EffectDef MinimalInstant(string name) => new EffectDef
     {
         Name = name,
         DurationType = EffectDurationType.Instant,
     };
 
-    /// <summary>Creates a minimal Duration spec lasting the given number of ticks.</summary>
-    public static EffectSpec MinimalDuration(string name, int ticks) => new EffectSpec
+    /// <summary>Creates a minimal Duration def lasting the given number of ticks.</summary>
+    public static EffectDef MinimalDuration(string name, int ticks) => new EffectDef
     {
         Name = name,
         DurationType = EffectDurationType.Duration,
         DurationTicks = ticks,
     };
 
-    /// <summary>Creates a minimal Infinite spec with all fields at defaults.</summary>
-    public static EffectSpec MinimalInfinite(string name) => new EffectSpec
+    /// <summary>Creates a minimal Infinite def with all fields at defaults.</summary>
+    public static EffectDef MinimalInfinite(string name) => new EffectDef
     {
         Name = name,
         DurationType = EffectDurationType.Infinite,
@@ -162,8 +162,8 @@ internal sealed class EffectTestKit
         return target;
     }
 
-    /// <summary>Registers an effect spec with the catalog builder. Call before BuildPipeline.</summary>
-    public void AddSpec(EffectSpec spec) => _effectCatalogBuilder.Add(spec);
+    /// <summary>Registers an effect def with the catalog builder. Call before BuildPipeline.</summary>
+    public void AddEffect(EffectDef def) => _effectCatalogBuilder.Add(def);
 
     /// <summary>Registers an execution calc under a tag. Call before BuildPipeline.</summary>
     public void RegisterExecutionCalc(string calcTag, IExecutionCalc calc) =>
@@ -194,7 +194,7 @@ internal sealed class EffectTestKit
     public AttributeRegistry Attributes => BuiltAttributes;
 
     /// <summary>Gets the catalog id of a registered effect name. Call after BuildPipeline.</summary>
-    public int SpecId(string name) => BuiltCatalog.GetRequiredId(name);
+    public int EffectId(string name) => BuiltCatalog.GetRequiredId(name);
 
     /// <summary>The built effect catalog (for calls needing it, e.g. RestoreSnapshot). Call after BuildPipeline.</summary>
     public EffectCatalog Catalog => BuiltCatalog;

@@ -88,7 +88,7 @@ public sealed class AbilityDefJsonTests
         Assert.That(abilities[0].Effects, Is.Empty);
     }
 
-    // The ability effect's level rule shares EffectSpecJson's chain-edge "level" shape (Inherit or a
+    // The ability effect's level rule shares EffectDefJson's chain-edge "level" shape (Inherit or a
     // fixed integer) rather than the old split levelRule/fixedLevel fields.
     [Test]
     public void Ability_effect_split_level_fields_are_rejected()
@@ -155,8 +155,8 @@ public sealed class AbilityDefJsonTests
         """);
 
         var kit = EffectTestKit.Create();
-        kit.AddSpec(EffectTestKit.MinimalInstant("Cooldown.Fireball"));
-        kit.AddSpec(EffectTestKit.MinimalInstant("FireBolt"));
+        kit.AddEffect(EffectTestKit.MinimalInstant("Cooldown.Fireball"));
+        kit.AddEffect(EffectTestKit.MinimalInstant("FireBolt"));
 
         var builder = new AbilityCatalogBuilder();
         foreach (var ability in abilities) builder.Add(ability);

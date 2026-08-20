@@ -30,10 +30,10 @@ namespace Bun3.Gameplay.Effects
                 var instance = active[i];
                 if (!instance.Enabled) continue;
 
-                var spec = _catalog.GetSpec(instance.SpecId);
-                if (!spec.HasEventChains) continue;
+                var effect = _catalog.GetEffect(instance.EffectId);
+                if (!effect.HasEventChains) continue;
 
-                var chains = spec.Chains;
+                var chains = effect.Chains;
                 for (var c = 0; c < chains.Length; c++)
                 {
                     var chain = chains[c];
@@ -50,7 +50,7 @@ namespace Bun3.Gameplay.Effects
         // FireChain. The event's two parties reach a selector separately, through
         // SelectorContext.EventSource/EventTarget.
         private void FireEventChain(
-            CompiledChain chain, EffectInstance instance, TargetId listenerId, EffectTarget listener,
+            CompiledChainEdge chain, EffectInstance instance, TargetId listenerId, EffectTarget listener,
             in GameplayEvent evt)
         {
             var source = instance.Source;
@@ -68,7 +68,7 @@ namespace Bun3.Gameplay.Effects
                 return;
             }
 
-            // ponytail: target counts are authoring-spec scale, so a 32-slot stack buffer suffices -- on overflow only the first 32 are applied.
+            // ponytail: target counts are authoring-effect scale, so a 32-slot stack buffer suffices -- on overflow only the first 32 are applied.
             Span<TargetId> targets = stackalloc TargetId[32];
             var selectorCtx = new SelectorContext(
                 source, listenerId, chain.SelectorParams, _rng, _resolver,
@@ -85,7 +85,7 @@ namespace Bun3.Gameplay.Effects
         // directly. Anything that effect's own chains apply in turn goes through FireChain, which always
         // enqueues BigNum.Zero.
         private void EnqueueApplyWithEvent(
-            int specId, TargetId source, TargetId target, int level, in GameplayEvent evt) =>
-            EnqueueApply(specId, source, target, level, evt.Magnitude);
+            int effectId, TargetId source, TargetId target, int level, in GameplayEvent evt) =>
+            EnqueueApply(effectId, source, target, level, evt.Magnitude);
     }
 }

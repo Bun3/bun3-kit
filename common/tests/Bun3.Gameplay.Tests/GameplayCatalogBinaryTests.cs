@@ -23,8 +23,8 @@ public sealed class GameplayCatalogBinaryTests
     private static (EffectTestKit Kit, AbilityCatalog Abilities) BuildSource()
     {
         var kit = EffectTestKit.Create();
-        kit.AddSpec(EffectTestKit.MinimalInstant("bolt"));
-        kit.AddSpec(EffectTestKit.MinimalDuration("burn", ticks: 4));
+        kit.AddEffect(EffectTestKit.MinimalInstant("bolt"));
+        kit.AddEffect(EffectTestKit.MinimalDuration("burn", ticks: 4));
 
         var ability = new AbilityDef { Name = "fireball", MaxLevel = 2 };
         ability.Effects.Add(new AbilityEffectDef { EffectName = "bolt" });
@@ -136,7 +136,7 @@ public sealed class GameplayCatalogBinaryTests
         for (var id = 0; id < kit.Catalog.Count; id++)
         {
             AssertDeepEqual(
-                typeof(object), GetSpec(kit.Catalog, id), GetSpec(loadedEffects, id), $"effect[{id}]");
+                typeof(object), GetEffect(kit.Catalog, id), GetEffect(loadedEffects, id), $"effect[{id}]");
         }
 
         Assert.That(loadedAbilities.Count, Is.EqualTo(abilities.Count));
@@ -179,9 +179,9 @@ public sealed class GameplayCatalogBinaryTests
         var effectBuilder = new EffectCatalogBuilder();
         using (var effectStream = new MemoryStream(Encoding.UTF8.GetBytes(ScenarioEffectsJson)))
         {
-            foreach (var spec in EffectSpecJson.Load(effectStream, EffectScenario.ScenarioAttributeNames))
+            foreach (var def in EffectDefJson.Load(effectStream, EffectScenario.ScenarioAttributeNames))
             {
-                effectBuilder.Add(spec);
+                effectBuilder.Add(def);
             }
         }
 
@@ -206,7 +206,7 @@ public sealed class GameplayCatalogBinaryTests
         Assert.That(jsonHash, Is.EqualTo(builderHash));
     }
 
-    // JSON mirror of EffectScenario's AddScenarioSpecs -- same names, same order (so ids line up),
+    // JSON mirror of EffectScenario's AddScenarioEffects -- same names, same order (so ids line up),
     // same fields.
     private const string ScenarioEffectsJson = """
     {
@@ -311,7 +311,7 @@ public sealed class GameplayCatalogBinaryTests
         });
         bolt.AssetTags.Add("effect.fire.bolt");
         bolt.RaiseEvents.Add(new RaiseEventDef { Tag = "event.damage", AttributeId = EffectTestKit.Hp });
-        kit.AddSpec(bolt);
+        kit.AddEffect(bolt);
 
         var cooldown = EffectTestKit.MinimalDuration("cooldown", ticks: 30);
         cooldown.GrantedTags.Add("cooldown.fireball");
@@ -327,9 +327,9 @@ public sealed class GameplayCatalogBinaryTests
             Op = AttributeModifierOp.Override,
             Magnitude = new MagnitudeDef { Base = Operand.Constant(0) },
         });
-        kit.AddSpec(cooldown);
+        kit.AddEffect(cooldown);
 
-        var burn = new EffectSpec
+        var burn = new EffectDef
         {
             Name = "burn",
             MaxLevel = 3,
@@ -433,7 +433,7 @@ public sealed class GameplayCatalogBinaryTests
                 },
             },
         });
-        kit.AddSpec(burn);
+        kit.AddEffect(burn);
 
         var fireball = new AbilityDef { Name = "fireball", MaxLevel = 2, CooldownEffect = "cooldown" };
         fireball.AssetTags.Add("effect.fire.bolt");
@@ -470,8 +470,8 @@ public sealed class GameplayCatalogBinaryTests
         return (kit, builder.Build(kit.TagCatalog, kit.Seams, kit.Attributes, kit.Catalog));
     }
 
-    private static object GetSpec(EffectCatalog catalog, int id) =>
-        Invoke(catalog, "GetSpec", id);
+    private static object GetEffect(EffectCatalog catalog, int id) =>
+        Invoke(catalog, "GetEffect", id);
 
     private static object GetAbility(AbilityCatalog catalog, int id) =>
         Invoke(catalog, "GetAbility", id);

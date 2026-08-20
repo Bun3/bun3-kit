@@ -9,10 +9,10 @@ namespace Bun3.Gameplay.Tests;
 [TestFixture]
 public sealed class EffectEventChainTests
 {
-    private static EffectSpec Damage(string name, int amount, string? eventTag)
+    private static EffectDef Damage(string name, int amount, string? eventTag)
     {
-        var spec = EffectTestKit.MinimalInstant(name);
-        spec.Modifiers.Add(new ModifierDef
+        var def = EffectTestKit.MinimalInstant(name);
+        def.Modifiers.Add(new ModifierDef
         {
             AttributeId = EffectTestKit.Hp,
             Op = AttributeModifierOp.Add,
@@ -20,10 +20,10 @@ public sealed class EffectEventChainTests
         });
         if (eventTag != null)
         {
-            spec.RaiseEvents.Add(new RaiseEventDef { Tag = eventTag, AttributeId = EffectTestKit.Hp });
+            def.RaiseEvents.Add(new RaiseEventDef { Tag = eventTag, AttributeId = EffectTestKit.Hp });
         }
 
-        return spec;
+        return def;
     }
 
     private static ChainEdgeDef EventEdge(string eventTag, string effectName, ChainListen listen)
@@ -37,14 +37,14 @@ public sealed class EffectEventChainTests
     private static EffectTestKit BuildReflectKit(ChainListen listen, string chainEventTag = "event.damage.taken")
     {
         var kit = EffectTestKit.Create();
-        kit.AddSpec(Damage("bolt", 40, "event.damage.taken"));
-        kit.AddSpec(Damage("retaliate", 7, eventTag: null));
+        kit.AddEffect(Damage("bolt", 40, "event.damage.taken"));
+        kit.AddEffect(Damage("retaliate", 7, eventTag: null));
 
         var thorns = EffectTestKit.MinimalInfinite("thorns");
         var edge = EventEdge(chainEventTag, "retaliate", listen);
         edge.SelectorTag = "selector.everyone";
         thorns.Chains.Add(edge);
-        kit.AddSpec(thorns);
+        kit.AddEffect(thorns);
         return kit;
     }
 
@@ -70,9 +70,9 @@ public sealed class EffectEventChainTests
             target.Attributes.SetBase(EffectTestKit.Hp, 100);
         }
 
-        pipeline.EnqueueApply(kit.SpecId("thorns"), kit.Defender.Id, kit.Defender.Id);
+        pipeline.EnqueueApply(kit.EffectId("thorns"), kit.Defender.Id, kit.Defender.Id);
         pipeline.Tick();
-        pipeline.EnqueueApply(kit.SpecId("bolt"), kit.Attacker.Id, kit.Defender.Id);
+        pipeline.EnqueueApply(kit.EffectId("bolt"), kit.Attacker.Id, kit.Defender.Id);
         pipeline.Tick();
 
         Assert.That(kit.Defender.Attributes.GetBase(EffectTestKit.Hp), Is.EqualTo((BigNum)60));
@@ -92,9 +92,9 @@ public sealed class EffectEventChainTests
             target.Attributes.SetBase(EffectTestKit.Hp, 100);
         }
 
-        pipeline.EnqueueApply(kit.SpecId("thorns"), kit.Defender.Id, kit.Defender.Id);
+        pipeline.EnqueueApply(kit.EffectId("thorns"), kit.Defender.Id, kit.Defender.Id);
         pipeline.Tick();
-        pipeline.EnqueueApply(kit.SpecId("bolt"), kit.Attacker.Id, kit.Defender.Id);
+        pipeline.EnqueueApply(kit.EffectId("bolt"), kit.Attacker.Id, kit.Defender.Id);
         pipeline.Tick();
 
         Assert.That(kit.Attacker.Attributes.GetBase(EffectTestKit.Hp), Is.EqualTo((BigNum)100));
@@ -113,9 +113,9 @@ public sealed class EffectEventChainTests
             target.Attributes.SetBase(EffectTestKit.Hp, 100);
         }
 
-        pipeline.EnqueueApply(kit.SpecId("thorns"), kit.Defender.Id, kit.Defender.Id);
+        pipeline.EnqueueApply(kit.EffectId("thorns"), kit.Defender.Id, kit.Defender.Id);
         pipeline.Tick();
-        pipeline.EnqueueApply(kit.SpecId("bolt"), kit.Attacker.Id, kit.Defender.Id);
+        pipeline.EnqueueApply(kit.EffectId("bolt"), kit.Attacker.Id, kit.Defender.Id);
         pipeline.Tick();
 
         Assert.That(kit.Attacker.Attributes.GetBase(EffectTestKit.Hp), Is.EqualTo((BigNum)93));
@@ -131,7 +131,7 @@ public sealed class EffectEventChainTests
         var kit = BuildReflectKit(ChainListen.AsTarget, chainEventTag: "event.damage.taken");
         // "bolt2" raises the ancestor tag "event.damage" -- the chain declares the descendant
         // "event.damage.taken" and must not fire for it.
-        kit.AddSpec(Damage("bolt2", 40, "event.damage"));
+        kit.AddEffect(Damage("bolt2", 40, "event.damage"));
         kit.RegisterSelector("selector.everyone", new AttackerSelector());
         var pipeline = kit.BuildPipeline();
 
@@ -141,9 +141,9 @@ public sealed class EffectEventChainTests
             target.Attributes.SetBase(EffectTestKit.Hp, 100);
         }
 
-        pipeline.EnqueueApply(kit.SpecId("thorns"), kit.Defender.Id, kit.Defender.Id);
+        pipeline.EnqueueApply(kit.EffectId("thorns"), kit.Defender.Id, kit.Defender.Id);
         pipeline.Tick();
-        pipeline.EnqueueApply(kit.SpecId("bolt2"), kit.Attacker.Id, kit.Defender.Id);
+        pipeline.EnqueueApply(kit.EffectId("bolt2"), kit.Attacker.Id, kit.Defender.Id);
         pipeline.Tick();
 
         Assert.That(kit.Attacker.Attributes.GetBase(EffectTestKit.Hp), Is.EqualTo((BigNum)100));
@@ -154,8 +154,8 @@ public sealed class EffectEventChainTests
     public void Disabled_listener_does_not_receive_events()
     {
         var kit = EffectTestKit.Create();
-        kit.AddSpec(Damage("bolt", 40, "event.damage.taken"));
-        kit.AddSpec(Damage("retaliate", 7, eventTag: null));
+        kit.AddEffect(Damage("bolt", 40, "event.damage.taken"));
+        kit.AddEffect(Damage("retaliate", 7, eventTag: null));
 
         var thorns = EffectTestKit.MinimalInfinite("thorns");
         var edge = EventEdge("event.damage.taken", "retaliate", ChainListen.AsTarget);
@@ -167,7 +167,7 @@ public sealed class EffectEventChainTests
             Op = ComparisonOp.Greater,
             Right = Operand.Constant(0),
         });
-        kit.AddSpec(thorns);
+        kit.AddEffect(thorns);
         kit.RegisterSelector("selector.everyone", new AttackerSelector());
         var pipeline = kit.BuildPipeline();
 
@@ -178,9 +178,9 @@ public sealed class EffectEventChainTests
         }
 
         kit.Defender.Attributes.SetBase(EffectTestKit.Mp, 0);   // ongoing condition breaks → disabled
-        pipeline.EnqueueApply(kit.SpecId("thorns"), kit.Defender.Id, kit.Defender.Id);
+        pipeline.EnqueueApply(kit.EffectId("thorns"), kit.Defender.Id, kit.Defender.Id);
         pipeline.Tick();
-        pipeline.EnqueueApply(kit.SpecId("bolt"), kit.Attacker.Id, kit.Defender.Id);
+        pipeline.EnqueueApply(kit.EffectId("bolt"), kit.Attacker.Id, kit.Defender.Id);
         pipeline.Tick();
 
         Assert.That(kit.Attacker.Attributes.GetBase(EffectTestKit.Hp), Is.EqualTo((BigNum)100));
@@ -190,7 +190,7 @@ public sealed class EffectEventChainTests
     public void Event_magnitude_is_the_clamped_delta_not_the_nominal_amount()
     {
         var kit = EffectTestKit.Create();
-        kit.AddSpec(Damage("overkill", 500, "event.damage.taken"));
+        kit.AddEffect(Damage("overkill", 500, "event.damage.taken"));
         var probe = new MagnitudeProbe();
         kit.RegisterSelector("selector.everyone", probe);
 
@@ -198,14 +198,14 @@ public sealed class EffectEventChainTests
         var edge = EventEdge("event.damage.taken", "watcher", ChainListen.AsTarget);
         edge.SelectorTag = "selector.everyone";
         watcher.Chains.Add(edge);
-        kit.AddSpec(watcher);
+        kit.AddEffect(watcher);
         var pipeline = kit.BuildPipeline();
 
         kit.Defender.Attributes.SetBase(EffectTestKit.MaxHp, 100);
         kit.Defender.Attributes.SetBase(EffectTestKit.Hp, 30);
-        pipeline.EnqueueApply(kit.SpecId("watcher"), kit.Defender.Id, kit.Defender.Id);
+        pipeline.EnqueueApply(kit.EffectId("watcher"), kit.Defender.Id, kit.Defender.Id);
         pipeline.Tick();
-        pipeline.EnqueueApply(kit.SpecId("overkill"), kit.Attacker.Id, kit.Defender.Id);
+        pipeline.EnqueueApply(kit.EffectId("overkill"), kit.Attacker.Id, kit.Defender.Id);
         pipeline.Tick();
 
         Assert.That(probe.LastMagnitude, Is.EqualTo((BigNum)(-30)));
@@ -229,13 +229,13 @@ public sealed class EffectEventChainTests
     public void Mutual_reflection_is_bounded_by_the_apply_budget()
     {
         var kit = EffectTestKit.Create();
-        kit.AddSpec(Damage("bolt", 1, "event.damage.taken"));
+        kit.AddEffect(Damage("bolt", 1, "event.damage.taken"));
 
         var thorns = EffectTestKit.MinimalInfinite("thorns");
         var edge = EventEdge("event.damage.taken", "bolt", ChainListen.AsTarget);
         edge.SelectorTag = "selector.everyone";
         thorns.Chains.Add(edge);
-        kit.AddSpec(thorns);
+        kit.AddEffect(thorns);
         kit.RegisterSelector("selector.everyone", new AttackerSelector());
         var pipeline = kit.BuildPipeline(applyBudgetPerTick: 8);
 
@@ -245,11 +245,11 @@ public sealed class EffectEventChainTests
             target.Attributes.SetBase(EffectTestKit.Hp, 1000);
         }
 
-        pipeline.EnqueueApply(kit.SpecId("thorns"), kit.Attacker.Id, kit.Attacker.Id);
-        pipeline.EnqueueApply(kit.SpecId("thorns"), kit.Defender.Id, kit.Defender.Id);
+        pipeline.EnqueueApply(kit.EffectId("thorns"), kit.Attacker.Id, kit.Attacker.Id);
+        pipeline.EnqueueApply(kit.EffectId("thorns"), kit.Defender.Id, kit.Defender.Id);
         pipeline.Tick();
 
-        pipeline.EnqueueApply(kit.SpecId("bolt"), kit.Attacker.Id, kit.Defender.Id);
+        pipeline.EnqueueApply(kit.EffectId("bolt"), kit.Attacker.Id, kit.Defender.Id);
         Assert.That(() => pipeline.Tick(), Throws.Nothing);   // budget must stop the loop, not a stack overflow
         Assert.That(pipeline.PendingApplyCount, Is.GreaterThan(0));
     }
@@ -258,7 +258,7 @@ public sealed class EffectEventChainTests
     public void Retaliation_is_attributed_to_the_listening_instances_source_not_the_event_source()
     {
         var kit = EffectTestKit.Create();
-        kit.AddSpec(Damage("bolt", 1, "event.damage.taken"));
+        kit.AddEffect(Damage("bolt", 1, "event.damage.taken"));
 
         var retaliate = EffectTestKit.MinimalInstant("attributed_retaliate");
         retaliate.Modifiers.Add(new ModifierDef
@@ -267,13 +267,13 @@ public sealed class EffectEventChainTests
             Op = AttributeModifierOp.Add,
             Magnitude = new MagnitudeDef { Base = Operand.SourceAttribute(EffectTestKit.Attack, (BigNum)(-1)) },
         });
-        kit.AddSpec(retaliate);
+        kit.AddEffect(retaliate);
 
         var thorns = EffectTestKit.MinimalInfinite("thorns2");
         var edge = EventEdge("event.damage.taken", "attributed_retaliate", ChainListen.AsTarget);
         edge.SelectorTag = "selector.everyone";
         thorns.Chains.Add(edge);
-        kit.AddSpec(thorns);
+        kit.AddEffect(thorns);
         kit.RegisterSelector("selector.everyone", new AttackerSelector());
         var pipeline = kit.BuildPipeline();
 
@@ -286,9 +286,9 @@ public sealed class EffectEventChainTests
         kit.Attacker.Attributes.SetBase(EffectTestKit.Attack, 10);
         kit.Defender.Attributes.SetBase(EffectTestKit.Attack, 50);
 
-        pipeline.EnqueueApply(kit.SpecId("thorns2"), kit.Defender.Id, kit.Defender.Id);
+        pipeline.EnqueueApply(kit.EffectId("thorns2"), kit.Defender.Id, kit.Defender.Id);
         pipeline.Tick();
-        pipeline.EnqueueApply(kit.SpecId("bolt"), kit.Attacker.Id, kit.Defender.Id);
+        pipeline.EnqueueApply(kit.EffectId("bolt"), kit.Attacker.Id, kit.Defender.Id);
         pipeline.Tick();
 
         // Retaliation reads its caster's Attack (Defender, 50), not the attacker's (10) — proves the
@@ -300,7 +300,7 @@ public sealed class EffectEventChainTests
     public void Leech_reaction_is_attributed_to_the_vampiric_owner_when_it_has_no_selector()
     {
         var kit = EffectTestKit.Create();
-        kit.AddSpec(Damage("bolt", 1, "event.damage.taken"));
+        kit.AddEffect(Damage("bolt", 1, "event.damage.taken"));
 
         var leechHeal = EffectTestKit.MinimalInstant("leech_heal");
         leechHeal.Modifiers.Add(new ModifierDef
@@ -309,11 +309,11 @@ public sealed class EffectEventChainTests
             Op = AttributeModifierOp.Add,
             Magnitude = new MagnitudeDef { Base = Operand.SourceAttribute(EffectTestKit.Attack) },
         });
-        kit.AddSpec(leechHeal);
+        kit.AddEffect(leechHeal);
 
         var vampiric = EffectTestKit.MinimalInfinite("vampiric");
         vampiric.Chains.Add(EventEdge("event.damage.taken", "leech_heal", ChainListen.AsSource));
-        kit.AddSpec(vampiric);
+        kit.AddEffect(vampiric);
         var pipeline = kit.BuildPipeline();
 
         foreach (var target in kit.AllTargets)
@@ -325,9 +325,9 @@ public sealed class EffectEventChainTests
         kit.Attacker.Attributes.SetBase(EffectTestKit.Attack, 10);
         kit.Defender.Attributes.SetBase(EffectTestKit.Attack, 50);
 
-        pipeline.EnqueueApply(kit.SpecId("vampiric"), kit.Attacker.Id, kit.Attacker.Id);
+        pipeline.EnqueueApply(kit.EffectId("vampiric"), kit.Attacker.Id, kit.Attacker.Id);
         pipeline.Tick();
-        pipeline.EnqueueApply(kit.SpecId("bolt"), kit.Attacker.Id, kit.Defender.Id);
+        pipeline.EnqueueApply(kit.EffectId("bolt"), kit.Attacker.Id, kit.Defender.Id);
         pipeline.Tick();
 
         // The leech heal (no selector, so it applies to the AsSource listener itself) reads its
@@ -339,7 +339,7 @@ public sealed class EffectEventChainTests
     public void Proportional_reflect_uses_the_clamped_event_magnitude()
     {
         var kit = EffectTestKit.Create();
-        kit.AddSpec(Damage("bolt", 100, "event.damage.taken"));
+        kit.AddEffect(Damage("bolt", 100, "event.damage.taken"));
 
         var retaliate = EffectTestKit.MinimalInstant("retaliate");
         retaliate.Modifiers.Add(new ModifierDef
@@ -350,13 +350,13 @@ public sealed class EffectEventChainTests
             // decimal->long predefined conversion instead of the double one, so use FromParts.
             Magnitude = new MagnitudeDef { Base = Operand.EventMagnitude(BigNum.FromParts(3, -1)) },
         });
-        kit.AddSpec(retaliate);
+        kit.AddEffect(retaliate);
 
         var thorns = EffectTestKit.MinimalInfinite("thorns");
         var edge = EventEdge("event.damage.taken", "retaliate", ChainListen.AsTarget);
         edge.SelectorTag = "selector.everyone";
         thorns.Chains.Add(edge);
-        kit.AddSpec(thorns);
+        kit.AddEffect(thorns);
         kit.RegisterSelector("selector.everyone", new AttackerSelector());
         var pipeline = kit.BuildPipeline();
 
@@ -370,9 +370,9 @@ public sealed class EffectEventChainTests
         // nominal one (-100) -- pins that the reflect reads the clamped Magnitude, not NominalMagnitude.
         kit.Defender.Attributes.SetBase(EffectTestKit.Hp, 50);
 
-        pipeline.EnqueueApply(kit.SpecId("thorns"), kit.Defender.Id, kit.Defender.Id);
+        pipeline.EnqueueApply(kit.EffectId("thorns"), kit.Defender.Id, kit.Defender.Id);
         pipeline.Tick();
-        pipeline.EnqueueApply(kit.SpecId("bolt"), kit.Attacker.Id, kit.Defender.Id);
+        pipeline.EnqueueApply(kit.EffectId("bolt"), kit.Attacker.Id, kit.Defender.Id);
         pipeline.Tick();
 
         Assert.That(kit.Defender.Attributes.GetBase(EffectTestKit.Hp), Is.EqualTo((BigNum)0));
@@ -383,7 +383,7 @@ public sealed class EffectEventChainTests
     public void Lifesteal_flips_sign_through_a_negative_coefficient()
     {
         var kit = EffectTestKit.Create();
-        kit.AddSpec(Damage("bolt", 100, "event.damage.taken"));
+        kit.AddEffect(Damage("bolt", 100, "event.damage.taken"));
 
         var leech = EffectTestKit.MinimalInstant("leech");
         leech.Modifiers.Add(new ModifierDef
@@ -392,11 +392,11 @@ public sealed class EffectEventChainTests
             Op = AttributeModifierOp.Add,
             Magnitude = new MagnitudeDef { Base = Operand.EventMagnitude(BigNum.FromParts(-1, -1)) },
         });
-        kit.AddSpec(leech);
+        kit.AddEffect(leech);
 
         var vampiric = EffectTestKit.MinimalInfinite("vampiric");
         vampiric.Chains.Add(EventEdge("event.damage.taken", "leech", ChainListen.AsSource));
-        kit.AddSpec(vampiric);
+        kit.AddEffect(vampiric);
         var pipeline = kit.BuildPipeline();
 
         foreach (var target in kit.AllTargets)
@@ -405,9 +405,9 @@ public sealed class EffectEventChainTests
             target.Attributes.SetBase(EffectTestKit.Hp, 500);
         }
 
-        pipeline.EnqueueApply(kit.SpecId("vampiric"), kit.Attacker.Id, kit.Attacker.Id);
+        pipeline.EnqueueApply(kit.EffectId("vampiric"), kit.Attacker.Id, kit.Attacker.Id);
         pipeline.Tick();
-        pipeline.EnqueueApply(kit.SpecId("bolt"), kit.Attacker.Id, kit.Defender.Id);
+        pipeline.EnqueueApply(kit.EffectId("bolt"), kit.Attacker.Id, kit.Defender.Id);
         pipeline.Tick();
 
         Assert.That(kit.Attacker.Attributes.GetBase(EffectTestKit.Hp), Is.EqualTo((BigNum)510));
@@ -417,7 +417,7 @@ public sealed class EffectEventChainTests
     public void Event_magnitude_does_not_propagate_past_the_first_hop()
     {
         var kit = EffectTestKit.Create();
-        kit.AddSpec(Damage("bolt", 100, "event.damage.taken"));
+        kit.AddEffect(Damage("bolt", 100, "event.damage.taken"));
 
         var second = EffectTestKit.MinimalInstant("second");
         second.Modifiers.Add(new ModifierDef
@@ -426,23 +426,23 @@ public sealed class EffectEventChainTests
             Op = AttributeModifierOp.Add,
             Magnitude = new MagnitudeDef { Base = Operand.EventMagnitude((BigNum)1) },
         });
-        kit.AddSpec(second);
+        kit.AddEffect(second);
 
         var first = EffectTestKit.MinimalInstant("first");
         first.Chains.Add(EffectTestKit.Edge(ChainTrigger.OnApplication, "second"));
-        kit.AddSpec(first);
+        kit.AddEffect(first);
 
         var thorns = EffectTestKit.MinimalInfinite("thorns");
         thorns.Chains.Add(EventEdge("event.damage.taken", "first", ChainListen.AsTarget));
-        kit.AddSpec(thorns);
+        kit.AddEffect(thorns);
 
         // Reachability requires a direct OnEvent target — "second" is only reached transitively
-        // (thorns -> first -> second) in the path this test actually exercises. This spec exists solely
+        // (thorns -> first -> second) in the path this test actually exercises. This effect exists solely
         // to make "second" a legal direct OnEvent target for Build; it is registered but never applied to
         // any target, so the only path exercised below remains the two-hop one.
         var unusedWatcher = EffectTestKit.MinimalInfinite("unusedWatcher");
         unusedWatcher.Chains.Add(EventEdge("event.damage.taken", "second", ChainListen.AsTarget));
-        kit.AddSpec(unusedWatcher);
+        kit.AddEffect(unusedWatcher);
 
         var pipeline = kit.BuildPipeline();
 
@@ -452,9 +452,9 @@ public sealed class EffectEventChainTests
             target.Attributes.SetBase(EffectTestKit.Hp, 1000);
         }
 
-        pipeline.EnqueueApply(kit.SpecId("thorns"), kit.Defender.Id, kit.Defender.Id);
+        pipeline.EnqueueApply(kit.EffectId("thorns"), kit.Defender.Id, kit.Defender.Id);
         pipeline.Tick();
-        pipeline.EnqueueApply(kit.SpecId("bolt"), kit.Attacker.Id, kit.Defender.Id);
+        pipeline.EnqueueApply(kit.EffectId("bolt"), kit.Attacker.Id, kit.Defender.Id);
         pipeline.Tick();
         pipeline.Tick();
 
@@ -463,7 +463,7 @@ public sealed class EffectEventChainTests
     }
 
     [Test]
-    public void Event_magnitude_in_an_unreachable_spec_is_a_build_error()
+    public void Event_magnitude_in_an_unreachable_effect_is_a_build_error()
     {
         var kit = EffectTestKit.Create();
         var orphan = EffectTestKit.MinimalInstant("orphan");
@@ -473,7 +473,7 @@ public sealed class EffectEventChainTests
             Op = AttributeModifierOp.Add,
             Magnitude = new MagnitudeDef { Base = Operand.EventMagnitude((BigNum)1) },
         });
-        kit.AddSpec(orphan);
+        kit.AddEffect(orphan);
 
         Assert.That(
             () => kit.BuildPipeline(),
@@ -486,7 +486,7 @@ public sealed class EffectEventChainTests
         // "second" is reachable only via first's OnApplication chain, never as the direct target of any
         // OnEvent edge — it would always see zero, so Build must reject it even though it is chain-reachable.
         var kit = EffectTestKit.Create();
-        kit.AddSpec(Damage("bolt", 100, "event.damage.taken"));
+        kit.AddEffect(Damage("bolt", 100, "event.damage.taken"));
 
         var second = EffectTestKit.MinimalInstant("second");
         second.Modifiers.Add(new ModifierDef
@@ -495,15 +495,15 @@ public sealed class EffectEventChainTests
             Op = AttributeModifierOp.Add,
             Magnitude = new MagnitudeDef { Base = Operand.EventMagnitude((BigNum)1) },
         });
-        kit.AddSpec(second);
+        kit.AddEffect(second);
 
         var first = EffectTestKit.MinimalInstant("first");
         first.Chains.Add(EffectTestKit.Edge(ChainTrigger.OnApplication, "second"));
-        kit.AddSpec(first);
+        kit.AddEffect(first);
 
         var thorns = EffectTestKit.MinimalInfinite("thorns");
         thorns.Chains.Add(EventEdge("event.damage.taken", "first", ChainListen.AsTarget));
-        kit.AddSpec(thorns);
+        kit.AddEffect(thorns);
 
         // Tightened to the reachability rule's own phrase — "EventMagnitude" alone is also present in
         // the (unrelated) OngoingConditions rejection message and would pass for the wrong reason.
@@ -522,7 +522,7 @@ public sealed class EffectEventChainTests
     }
 
     [Test]
-    public void Event_magnitude_used_only_in_duration_scale_of_an_unreachable_spec_is_a_build_error()
+    public void Event_magnitude_used_only_in_duration_scale_of_an_unreachable_effect_is_a_build_error()
     {
         // DurationScale is a MagnitudeDef whose operands are evaluated with the real magnitude via
         // ComputeScaledDuration, so the reachability scan must cover it too, not just Modifiers/Executions/
@@ -530,7 +530,7 @@ public sealed class EffectEventChainTests
         var kit = EffectTestKit.Create();
         var scaledDuration = EffectTestKit.MinimalDuration("scaledDuration", ticks: 10);
         scaledDuration.DurationScale = new MagnitudeDef { Base = Operand.EventMagnitude() };
-        kit.AddSpec(scaledDuration);
+        kit.AddEffect(scaledDuration);
 
         Assert.That(
             () => kit.BuildPipeline(),
@@ -541,9 +541,9 @@ public sealed class EffectEventChainTests
     public void OnEvent_edge_condition_on_event_magnitude_gates_the_reaction()
     {
         var kit = EffectTestKit.Create();
-        kit.AddSpec(Damage("smallHit", 30, "event.damage.taken"));
-        kit.AddSpec(Damage("bigHit", 100, "event.damage.taken"));
-        kit.AddSpec(Damage("retaliate", 7, eventTag: null));
+        kit.AddEffect(Damage("smallHit", 30, "event.damage.taken"));
+        kit.AddEffect(Damage("bigHit", 100, "event.damage.taken"));
+        kit.AddEffect(Damage("retaliate", 7, eventTag: null));
 
         var thorns = EffectTestKit.MinimalInfinite("thorns");
         var edge = EventEdge("event.damage.taken", "retaliate", ChainListen.AsTarget);
@@ -556,7 +556,7 @@ public sealed class EffectEventChainTests
             Right = Operand.Constant(-50),
         });
         thorns.Chains.Add(edge);
-        kit.AddSpec(thorns);
+        kit.AddEffect(thorns);
         kit.RegisterSelector("selector.everyone", new AttackerSelector());
         var pipeline = kit.BuildPipeline();
 
@@ -566,16 +566,16 @@ public sealed class EffectEventChainTests
             target.Attributes.SetBase(EffectTestKit.Hp, 1000);
         }
 
-        pipeline.EnqueueApply(kit.SpecId("thorns"), kit.Defender.Id, kit.Defender.Id);
+        pipeline.EnqueueApply(kit.EffectId("thorns"), kit.Defender.Id, kit.Defender.Id);
         pipeline.Tick();
 
         // Below threshold: -30 does not satisfy <= -50, no retaliation.
-        pipeline.EnqueueApply(kit.SpecId("smallHit"), kit.Attacker.Id, kit.Defender.Id);
+        pipeline.EnqueueApply(kit.EffectId("smallHit"), kit.Attacker.Id, kit.Defender.Id);
         pipeline.Tick();
         Assert.That(kit.Attacker.Attributes.GetBase(EffectTestKit.Hp), Is.EqualTo((BigNum)1000));
 
         // Above threshold: -100 satisfies <= -50, retaliation fires.
-        pipeline.EnqueueApply(kit.SpecId("bigHit"), kit.Attacker.Id, kit.Defender.Id);
+        pipeline.EnqueueApply(kit.EffectId("bigHit"), kit.Attacker.Id, kit.Defender.Id);
         pipeline.Tick();
         Assert.That(kit.Attacker.Attributes.GetBase(EffectTestKit.Hp), Is.EqualTo((BigNum)993));
     }
@@ -585,7 +585,7 @@ public sealed class EffectEventChainTests
     {
         var kit = EffectTestKit.Create();
         var second = EffectTestKit.MinimalInstant("second");
-        kit.AddSpec(second);
+        kit.AddEffect(second);
 
         var first = EffectTestKit.MinimalInstant("first");
         var edge = EffectTestKit.Edge(ChainTrigger.OnApplication, "second");
@@ -596,7 +596,7 @@ public sealed class EffectEventChainTests
             Right = Operand.Constant(0),
         });
         first.Chains.Add(edge);
-        kit.AddSpec(first);
+        kit.AddEffect(first);
 
         Assert.That(
             () => kit.BuildPipeline(),
@@ -604,7 +604,7 @@ public sealed class EffectEventChainTests
     }
 
     [Test]
-    public void Event_magnitude_in_a_periodic_specs_modifiers_is_a_build_error()
+    public void Event_magnitude_in_a_periodic_effects_modifiers_is_a_build_error()
     {
         var kit = EffectTestKit.Create();
         var periodic = EffectTestKit.MinimalDuration("periodicHeal", ticks: 30);
@@ -615,7 +615,7 @@ public sealed class EffectEventChainTests
             Op = AttributeModifierOp.Add,
             Magnitude = new MagnitudeDef { Base = Operand.EventMagnitude() },
         });
-        kit.AddSpec(periodic);
+        kit.AddEffect(periodic);
 
         Assert.That(
             () => kit.BuildPipeline(),
@@ -623,7 +623,7 @@ public sealed class EffectEventChainTests
     }
 
     [Test]
-    public void Periodic_spec_using_event_magnitude_only_in_application_conditions_still_builds()
+    public void Periodic_effect_using_event_magnitude_only_in_application_conditions_still_builds()
     {
         var kit = EffectTestKit.Create();
         var periodic = EffectTestKit.MinimalDuration("periodicGuarded", ticks: 30);
@@ -634,12 +634,12 @@ public sealed class EffectEventChainTests
             Op = ComparisonOp.LessOrEqual,
             Right = Operand.Constant(0),
         });
-        kit.AddSpec(periodic);
+        kit.AddEffect(periodic);
 
         // Makes "periodicGuarded" a legal direct OnEvent target so reachability passes; never applied.
         var watcher = EffectTestKit.MinimalInfinite("watcher");
         watcher.Chains.Add(EventEdge("event.damage.taken", "periodicGuarded", ChainListen.AsTarget));
-        kit.AddSpec(watcher);
+        kit.AddEffect(watcher);
 
         Assert.That(() => kit.BuildPipeline(), Throws.Nothing);
     }
@@ -648,14 +648,14 @@ public sealed class EffectEventChainTests
     public void Built_in_event_source_selector_targets_the_attacker()
     {
         var kit = EffectTestKit.Create();
-        kit.AddSpec(Damage("bolt", 40, "event.damage.taken"));
-        kit.AddSpec(Damage("retaliate", 7, eventTag: null));
+        kit.AddEffect(Damage("bolt", 40, "event.damage.taken"));
+        kit.AddEffect(Damage("retaliate", 7, eventTag: null));
 
         var thorns = EffectTestKit.MinimalInfinite("thorns");
         var edge = EventEdge("event.damage.taken", "retaliate", ChainListen.AsTarget);
         edge.SelectorTag = "selector.event.source";
         thorns.Chains.Add(edge);
-        kit.AddSpec(thorns);
+        kit.AddEffect(thorns);
         var pipeline = kit.BuildPipeline();
 
         foreach (var target in kit.AllTargets)
@@ -664,9 +664,9 @@ public sealed class EffectEventChainTests
             target.Attributes.SetBase(EffectTestKit.Hp, 100);
         }
 
-        pipeline.EnqueueApply(kit.SpecId("thorns"), kit.Defender.Id, kit.Defender.Id);
+        pipeline.EnqueueApply(kit.EffectId("thorns"), kit.Defender.Id, kit.Defender.Id);
         pipeline.Tick();
-        pipeline.EnqueueApply(kit.SpecId("bolt"), kit.Attacker.Id, kit.Defender.Id);
+        pipeline.EnqueueApply(kit.EffectId("bolt"), kit.Attacker.Id, kit.Defender.Id);
         pipeline.Tick();
 
         Assert.That(kit.Attacker.Attributes.GetBase(EffectTestKit.Hp), Is.EqualTo((BigNum)93));
@@ -676,14 +676,14 @@ public sealed class EffectEventChainTests
     public void Built_in_event_target_selector_targets_the_victim()
     {
         var kit = EffectTestKit.Create();
-        kit.AddSpec(Damage("bolt", 40, "event.damage.taken"));
-        kit.AddSpec(Damage("followup", 5, eventTag: null));
+        kit.AddEffect(Damage("bolt", 40, "event.damage.taken"));
+        kit.AddEffect(Damage("followup", 5, eventTag: null));
 
         var vampiric = EffectTestKit.MinimalInfinite("vampiric");
         var edge = EventEdge("event.damage.taken", "followup", ChainListen.AsSource);
         edge.SelectorTag = "selector.event.target";
         vampiric.Chains.Add(edge);
-        kit.AddSpec(vampiric);
+        kit.AddEffect(vampiric);
         var pipeline = kit.BuildPipeline();
 
         foreach (var target in kit.AllTargets)
@@ -692,9 +692,9 @@ public sealed class EffectEventChainTests
             target.Attributes.SetBase(EffectTestKit.Hp, 100);
         }
 
-        pipeline.EnqueueApply(kit.SpecId("vampiric"), kit.Attacker.Id, kit.Attacker.Id);
+        pipeline.EnqueueApply(kit.EffectId("vampiric"), kit.Attacker.Id, kit.Attacker.Id);
         pipeline.Tick();
-        pipeline.EnqueueApply(kit.SpecId("bolt"), kit.Attacker.Id, kit.Defender.Id);
+        pipeline.EnqueueApply(kit.EffectId("bolt"), kit.Attacker.Id, kit.Defender.Id);
         pipeline.Tick();
 
         Assert.That(kit.Defender.Attributes.GetBase(EffectTestKit.Hp), Is.EqualTo((BigNum)55));
@@ -706,13 +706,13 @@ public sealed class EffectEventChainTests
     {
         var kit = EffectTestKit.Create();
         var second = EffectTestKit.MinimalInstant("second");
-        kit.AddSpec(second);
+        kit.AddEffect(second);
 
         var first = EffectTestKit.MinimalInstant("first");
         var edge = EffectTestKit.Edge(ChainTrigger.OnApplication, "second");
         edge.SelectorTag = BuiltInSelectors.EventSourceTag;
         first.Chains.Add(edge);
-        kit.AddSpec(first);
+        kit.AddEffect(first);
 
         Assert.That(
             () => kit.BuildPipeline(),
@@ -723,14 +723,14 @@ public sealed class EffectEventChainTests
     public void Event_selector_on_an_OnEvent_chain_edge_still_builds()
     {
         var kit = EffectTestKit.Create();
-        kit.AddSpec(Damage("bolt", 1, "event.damage.taken"));
-        kit.AddSpec(Damage("retaliate", 1, eventTag: null));
+        kit.AddEffect(Damage("bolt", 1, "event.damage.taken"));
+        kit.AddEffect(Damage("retaliate", 1, eventTag: null));
 
         var thorns = EffectTestKit.MinimalInfinite("thorns");
         var edge = EventEdge("event.damage.taken", "retaliate", ChainListen.AsTarget);
         edge.SelectorTag = BuiltInSelectors.EventSourceTag;
         thorns.Chains.Add(edge);
-        kit.AddSpec(thorns);
+        kit.AddEffect(thorns);
 
         Assert.That(() => kit.BuildPipeline(), Throws.Nothing);
     }

@@ -23,8 +23,8 @@ namespace Bun3.Gameplay.Effects
         /// <summary>Monotonically increasing id issued by World.</summary>
         public ulong Id { get; private set; }
 
-        /// <summary>Effect spec id.</summary>
-        public int SpecId { get; private set; }
+        /// <summary>Effect id.</summary>
+        public int EffectId { get; private set; }
 
         /// <summary>Remaining ticks of a Duration effect. Meaningless for Infinite/Instant.</summary>
         public int RemainingTicks { get; internal set; }
@@ -53,12 +53,12 @@ namespace Bun3.Gameplay.Effects
 
         /// <summary>Rents an instance from the pool and initializes its fields.</summary>
         internal static EffectInstance Rent(
-            ulong id, int specId, TargetId source, int level, int stack,
+            ulong id, int effectId, TargetId source, int level, int stack,
             int remainingTicks, int periodCountdown, long createdTick)
         {
             var instance = Pool.Count > 0 ? Pool.Pop() : new EffectInstance();
             instance.Id = id;
-            instance.SpecId = specId;
+            instance.EffectId = effectId;
             instance.Source = source;
             instance.Level = level;
             instance.Stack = stack;

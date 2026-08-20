@@ -116,7 +116,7 @@ namespace Bun3.Gameplay.Effects
         // Sparse keys + linear interpolation — keys in ascending level order, no duplicates, first key at
         // level 1. Values between keys interpolate linearly; beyond the last key the last value holds
         // (the Tail policy past MaxLevel is handled by the runtime evaluation helper).
-        private static BigNum[] CompileCurveKeys(List<LevelKey> keys, string ownerName, int maxLevel)
+        private static BigNum[] CompileCurveKeys(List<LevelKeyDef> keys, string ownerName, int maxLevel)
         {
             if (keys.Count == 0 || keys[0].Level != 1)
             {

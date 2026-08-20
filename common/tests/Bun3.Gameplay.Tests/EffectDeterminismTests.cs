@@ -65,18 +65,18 @@ public sealed class EffectDeterminismTests
     public void Apply_remove_roundtrip_leaves_no_trace()
     {
         var kit = EffectTestKit.Create();
-        const int specCount = 20;
-        for (var i = 0; i < specCount; i++)
+        const int effectCount = 20;
+        for (var i = 0; i < effectCount; i++)
         {
-            var spec = EffectTestKit.MinimalDuration($"buff{i}", ticks: 5 + i % 15);
+            var def = EffectTestKit.MinimalDuration($"buff{i}", ticks: 5 + i % 15);
             var attributeId = i % 2 == 0 ? EffectTestKit.Attack : EffectTestKit.Hp;
-            spec.Modifiers.Add(new ModifierDef
+            def.Modifiers.Add(new ModifierDef
             {
                 AttributeId = attributeId,
                 Op = i % 3 == 0 ? AttributeModifierOp.Multiply : AttributeModifierOp.Add,
                 Magnitude = new MagnitudeDef { Base = Operand.Constant(i % 5 + 1) },
             });
-            kit.AddSpec(spec);
+            kit.AddEffect(def);
         }
 
         var pipeline = kit.BuildPipeline();
@@ -97,8 +97,8 @@ public sealed class EffectDeterminismTests
             var roll = rng.NextUInt32() % 3;
             if (roll != 1 || target.ActiveEffectCount == 0)
             {
-                var specId = kit.SpecId($"buff{rng.NextUInt32() % specCount}");
-                pipeline.EnqueueApply(specId, kit.Attacker.Id, target.Id);
+                var effectId = kit.EffectId($"buff{rng.NextUInt32() % effectCount}");
+                pipeline.EnqueueApply(effectId, kit.Attacker.Id, target.Id);
             }
             else
             {
@@ -126,7 +126,7 @@ public sealed class EffectDeterminismTests
         var kit = EffectTestKit.Create();
         var hastedTag = kit.Tag("state.hasted");
 
-        // Ongoing spec that toggles off immediately when its condition (Mp<50) is false — grants the tag but disabled.
+        // Ongoing effect that toggles off immediately when its condition (Mp<50) is false — grants the tag but disabled.
         var ongoingHaste = EffectTestKit.MinimalInfinite("ongoingHaste");
         ongoingHaste.OngoingConditions.Add(new ConditionDef
         {
@@ -135,27 +135,27 @@ public sealed class EffectDeterminismTests
             Right = Operand.Constant(50),
         });
         ongoingHaste.GrantedTags.Add("state.hasted");
-        kit.AddSpec(ongoingHaste);
+        kit.AddEffect(ongoingHaste);
 
         // Separate unconditional effect granting the same tag — the "other active instance" on Defender.
         var permaHaste = EffectTestKit.MinimalInfinite("permaHaste");
         permaHaste.GrantedTags.Add("state.hasted");
-        kit.AddSpec(permaHaste);
+        kit.AddEffect(permaHaste);
 
         var pipeline = kit.BuildPipeline();
         kit.Attacker.Attributes.SetBase(EffectTestKit.Mp, 100);
         kit.Defender.Attributes.SetBase(EffectTestKit.Mp, 100);
 
         // Attacker: ongoingHaste alone — toggled off, so no tag should remain.
-        pipeline.EnqueueApply(kit.SpecId("ongoingHaste"), kit.Attacker.Id, kit.Attacker.Id);
+        pipeline.EnqueueApply(kit.EffectId("ongoingHaste"), kit.Attacker.Id, kit.Attacker.Id);
         pipeline.Tick();
         Assert.That(kit.Attacker.ActiveEffects[0].Enabled, Is.False);   // precondition: toggled off
         Assert.That(kit.Attacker.Tags.Has(hastedTag), Is.False);
 
         // Defender: ongoingHaste (disabled) + permaHaste (active) both grant the same tag.
-        pipeline.EnqueueApply(kit.SpecId("ongoingHaste"), kit.Attacker.Id, kit.Defender.Id);
+        pipeline.EnqueueApply(kit.EffectId("ongoingHaste"), kit.Attacker.Id, kit.Defender.Id);
         pipeline.Tick();
-        pipeline.EnqueueApply(kit.SpecId("permaHaste"), kit.Attacker.Id, kit.Defender.Id);
+        pipeline.EnqueueApply(kit.EffectId("permaHaste"), kit.Attacker.Id, kit.Defender.Id);
         pipeline.Tick();
         Assert.That(kit.Defender.Tags.Count(hastedTag), Is.EqualTo(1));   // precondition: only permaHaste contributes
 
@@ -227,7 +227,7 @@ public sealed class EffectDeterminismTests
             AttributeId = EffectTestKit.Attack, Op = AttributeModifierOp.Add,
             Magnitude = new MagnitudeDef { Base = Operand.Constant(5) },
         });
-        kit.AddSpec(buff);
+        kit.AddEffect(buff);
 
         var poison = EffectTestKit.MinimalDuration("poison", ticks: 2000);
         poison.PeriodTicks = 1;
@@ -236,14 +236,14 @@ public sealed class EffectDeterminismTests
             AttributeId = EffectTestKit.Hp, Op = AttributeModifierOp.Add,
             Magnitude = new MagnitudeDef { Base = Operand.Constant(-1) },
         });
-        kit.AddSpec(poison);
+        kit.AddEffect(poison);
 
         var pipeline = kit.BuildPipeline();
         kit.Defender.Attributes.SetBase(EffectTestKit.MaxHp, 50);
         kit.Defender.Attributes.SetBase(EffectTestKit.Hp, 50);
 
-        pipeline.EnqueueApply(kit.SpecId("buff"), kit.Attacker.Id, kit.Defender.Id);
-        pipeline.EnqueueApply(kit.SpecId("poison"), kit.Attacker.Id, kit.Defender.Id);
+        pipeline.EnqueueApply(kit.EffectId("buff"), kit.Attacker.Id, kit.Defender.Id);
+        pipeline.EnqueueApply(kit.EffectId("poison"), kit.Attacker.Id, kit.Defender.Id);
 
         // Warm-up — tick until Hp bottoms out at 0 and Current no longer changes,
         // growing event/change buffers to their peak capacity along the way.

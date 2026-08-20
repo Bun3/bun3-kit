@@ -35,7 +35,7 @@ namespace Bun3.Gameplay.Abilities
     }
 
     /// <summary>
-    /// Authoring spec for one ability. A property bag filled by a loader, then validated and
+    /// Authoring definition for one ability. A property bag filled by a loader, then validated and
     /// compiled by <see cref="AbilityCatalogBuilder"/>. Abilities carry no logic — activation
     /// applies effects, and anything beyond that belongs in an effect execution seam.
     /// </summary>

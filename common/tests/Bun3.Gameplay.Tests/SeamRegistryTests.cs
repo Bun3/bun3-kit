@@ -102,11 +102,11 @@ public sealed class SeamRegistryTests
         var edge = EffectTestKit.Edge(ChainTrigger.OnApplication, "chained");
         edge.SelectorTag = "selector.everyone";
         source.Chains.Add(edge);
-        kit.AddSpec(source);
-        kit.AddSpec(EffectTestKit.MinimalInstant("chained"));
+        kit.AddEffect(source);
+        kit.AddEffect(EffectTestKit.MinimalInstant("chained"));
         var pipeline = kit.BuildPipeline();
 
-        pipeline.EnqueueApply(kit.SpecId("source"), kit.Attacker.Id, kit.Defender.Id);
+        pipeline.EnqueueApply(kit.EffectId("source"), kit.Attacker.Id, kit.Defender.Id);
         pipeline.Tick();
 
         Assert.That(pipeline.SelectorTruncationCount, Is.EqualTo(1));
@@ -122,11 +122,11 @@ public sealed class SeamRegistryTests
         var edge = EffectTestKit.Edge(ChainTrigger.OnApplication, "chained");
         edge.SelectorTag = "selector.everyone";
         source.Chains.Add(edge);
-        kit.AddSpec(source);
-        kit.AddSpec(EffectTestKit.MinimalInstant("chained"));
+        kit.AddEffect(source);
+        kit.AddEffect(EffectTestKit.MinimalInstant("chained"));
         var pipeline = kit.BuildPipeline();
 
-        pipeline.EnqueueApply(kit.SpecId("source"), kit.Attacker.Id, kit.Defender.Id);
+        pipeline.EnqueueApply(kit.EffectId("source"), kit.Attacker.Id, kit.Defender.Id);
         pipeline.Tick();
 
         Assert.That(pipeline.SelectorTruncationCount, Is.Zero);

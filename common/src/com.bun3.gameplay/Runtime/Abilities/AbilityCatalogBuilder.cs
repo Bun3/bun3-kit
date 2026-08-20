@@ -60,21 +60,21 @@ namespace Bun3.Gameplay.Abilities
             return new AbilityCatalog(compiled, nameToId);
         }
 
-        // Every EffectSpec.GrantedAbilities entry must name an ability in this catalog. Checked here
+        // Every EffectDef.GrantedAbilities entry must name an ability in this catalog. Checked here
         // (not at World construction) so the failure carries the same Build-time, name-based message
         // shape as every other cross-reference in this library.
         private static void ValidateGrantedAbilitiesResolve(EffectCatalog effects, Dictionary<string, int> nameToId)
         {
-            for (var specId = 0; specId < effects.Count; specId++)
+            for (var effectId = 0; effectId < effects.Count; effectId++)
             {
-                var spec = effects.GetSpec(specId);
-                var grantedNames = spec.GrantedAbilityNames;
+                var effect = effects.GetEffect(effectId);
+                var grantedNames = effect.GrantedAbilityNames;
                 for (var i = 0; i < grantedNames.Length; i++)
                 {
                     if (!nameToId.ContainsKey(grantedNames[i]))
                     {
                         throw new InvalidOperationException(
-                            $"Effect '{spec.Name}': grants unknown ability '{grantedNames[i]}'.");
+                            $"Effect '{effect.Name}': grants unknown ability '{grantedNames[i]}'.");
                     }
                 }
             }
@@ -123,7 +123,7 @@ namespace Bun3.Gameplay.Abilities
                             $"{owner}: FixedLevel {entry.FixedLevel} for effect '{entry.EffectName}' must be at least 1.");
                     }
 
-                    var targetMaxLevel = effects.GetSpec(effectId).MaxLevel;
+                    var targetMaxLevel = effects.GetEffect(effectId).MaxLevel;
                     if (targetMaxLevel > 0 && entry.FixedLevel > targetMaxLevel)
                     {
                         throw new InvalidOperationException(

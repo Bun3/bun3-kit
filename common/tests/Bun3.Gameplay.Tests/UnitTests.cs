@@ -44,7 +44,7 @@ public sealed class UnitTests
     public void Snapshot_round_trip_restores_attributes_abilities_and_owner()
     {
         var kit = EffectTestKit.Create();
-        kit.AddSpec(EffectTestKit.MinimalInstant("noop"));
+        kit.AddEffect(EffectTestKit.MinimalInstant("noop"));
         var catalog = kit.Catalog;
 
         var unit = CreateUnit(kit, 1, ownerId: 7);
@@ -69,7 +69,7 @@ public sealed class UnitTests
     public void Restoring_a_snapshot_from_another_unit_is_rejected()
     {
         var kit = EffectTestKit.Create();
-        kit.AddSpec(EffectTestKit.MinimalInstant("noop"));
+        kit.AddEffect(EffectTestKit.MinimalInstant("noop"));
         var catalog = kit.Catalog;
 
         var snapshot = CreateUnit(kit, 1).CreateSnapshot();

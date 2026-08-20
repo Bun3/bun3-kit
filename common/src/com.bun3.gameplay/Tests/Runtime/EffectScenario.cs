@@ -48,7 +48,7 @@ namespace Bun3.Gameplay.Tests
             var registry = registryBuilder.Build();
 
             var catalogBuilder = new EffectCatalogBuilder();
-            AddSpecs(catalogBuilder);
+            AddEffects(catalogBuilder);
             var seams = new SeamRegistryBuilder().Build(tagCatalog);
             var catalog = catalogBuilder.Build(tagCatalog, seams, registry);
 
@@ -105,7 +105,7 @@ namespace Bun3.Gameplay.Tests
                 for (var k = 0; k < active.Count; k++)
                 {
                     var instance = active[k];
-                    hash = Fold(hash, instance.SpecId);
+                    hash = Fold(hash, instance.EffectId);
                     hash = Fold(hash, instance.RemainingTicks);
                     hash = Fold(hash, instance.PeriodCountdown);
                     hash = Fold(hash, instance.Stack);
@@ -122,11 +122,11 @@ namespace Bun3.Gameplay.Tests
             var roll = world.DriverRng.NextUInt32() % 4;
             if (roll == 0)
             {
-                var specId = world.DriverRng.NextUInt32() % (uint)world.Catalog.Count;
+                var effectId = world.DriverRng.NextUInt32() % (uint)world.Catalog.Count;
                 var source = world.Targets[world.DriverRng.NextUInt32() % TargetCount];
                 var target = world.Targets[world.DriverRng.NextUInt32() % TargetCount];
                 var level = 1 + (int)(world.DriverRng.NextUInt32() % 3);
-                world.Pipeline.EnqueueApply((int)specId, source.Id, target.Id, level);
+                world.Pipeline.EnqueueApply((int)effectId, source.Id, target.Id, level);
             }
             else if (roll == 1)
             {
@@ -195,7 +195,7 @@ namespace Bun3.Gameplay.Tests
             var seams = new SeamRegistryBuilder().Build(tags);
 
             var effectBuilder = new EffectCatalogBuilder();
-            AddScenarioSpecs(effectBuilder);
+            AddScenarioEffects(effectBuilder);
             var effects = effectBuilder.Build(tags, seams, attributes);
 
             var abilityBuilder = new AbilityCatalogBuilder();
@@ -284,8 +284,8 @@ namespace Bun3.Gameplay.Tests
             var pipeline = kit.World.Pipeline;
             var a = kit.UnitIds[0];
             var b = kit.UnitIds[1];
-            pipeline.EnqueueApply(kit.ReflectSpecId, a, b);
-            pipeline.EnqueueApply(kit.ReflectSpecId, b, a);
+            pipeline.EnqueueApply(kit.ReflectEffectId, a, b);
+            pipeline.EnqueueApply(kit.ReflectEffectId, b, a);
 
             for (var i = 0; i < ticks; i++) kit.World.Tick();
         }
@@ -312,14 +312,14 @@ namespace Bun3.Gameplay.Tests
             var pipeline = kit.World.Pipeline;
             var target = kit.UnitIds[2];
 
-            pipeline.EnqueueApply(kit.MarkSpecId, target, target);
+            pipeline.EnqueueApply(kit.MarkEffectId, target, target);
             kit.World.Tick();
 
             kit.World.TryGetUnit(target, out var unit);
             var active = unit!.Effects.ActiveEffects;
             for (var i = 0; i < active.Count; i++)
             {
-                if (active[i].SpecId != kit.MarkSpecId) continue;
+                if (active[i].EffectId != kit.MarkEffectId) continue;
                 pipeline.RemoveById(target, active[i].Id);
                 break;
             }
@@ -352,9 +352,9 @@ namespace Bun3.Gameplay.Tests
         // OnEvent chain → application); Cooldown/Buff/Regen exercise duration ticking, stacking, and
         // periodic Base changes; Reflect is modifier-only (Duration/Infinite never touch Base) for the
         // no-residue oracle; Mark grants an ability through an effect instance.
-        private static void AddScenarioSpecs(EffectCatalogBuilder builder)
+        private static void AddScenarioEffects(EffectCatalogBuilder builder)
         {
-            builder.Add(new EffectSpec
+            builder.Add(new EffectDef
             {
                 Name = "Strike",
                 DurationType = EffectDurationType.Instant,
@@ -362,14 +362,14 @@ namespace Bun3.Gameplay.Tests
                 RaiseEvents = { new RaiseEventDef { Tag = EventHitTag, AttributeId = Hp } },
             });
 
-            builder.Add(new EffectSpec
+            builder.Add(new EffectDef
             {
                 Name = "StrikeBack",
                 DurationType = EffectDurationType.Instant,
                 Modifiers = { AddModifier(Hp, Constant(-4)) },
             });
 
-            builder.Add(new EffectSpec
+            builder.Add(new EffectDef
             {
                 Name = "Retaliate",
                 DurationType = EffectDurationType.Infinite,
@@ -387,7 +387,7 @@ namespace Bun3.Gameplay.Tests
                 },
             });
 
-            builder.Add(new EffectSpec
+            builder.Add(new EffectDef
             {
                 Name = "Cooldown",
                 DurationType = EffectDurationType.Duration,
@@ -395,7 +395,7 @@ namespace Bun3.Gameplay.Tests
                 GrantedTags = { CooldownTag },
             });
 
-            builder.Add(new EffectSpec
+            builder.Add(new EffectDef
             {
                 Name = "Regen",
                 DurationType = EffectDurationType.Duration,
@@ -404,12 +404,12 @@ namespace Bun3.Gameplay.Tests
                 Modifiers = { AddModifier(Hp, Constant(3)) },
             });
 
-            builder.Add(new EffectSpec
+            builder.Add(new EffectDef
             {
                 Name = "Buff",
                 DurationType = EffectDurationType.Duration,
                 DurationTicks = 25,
-                Stack = new StackPolicy
+                Stack = new StackPolicyDef
                 {
                     MaxStack = 4,
                     OnReapply = StackReapply.AddStack,
@@ -421,14 +421,14 @@ namespace Bun3.Gameplay.Tests
                 Modifiers = { AddModifier(Attack, Constant(2)) },
             });
 
-            builder.Add(new EffectSpec
+            builder.Add(new EffectDef
             {
                 Name = "Reflect",
                 DurationType = EffectDurationType.Infinite,
                 Modifiers = { AddModifier(Attack, Constant(6)) },
             });
 
-            builder.Add(new EffectSpec
+            builder.Add(new EffectDef
             {
                 Name = "Mark",
                 DurationType = EffectDurationType.Infinite,
@@ -482,7 +482,7 @@ namespace Bun3.Gameplay.Tests
         }
 
         private static void DriveOneWorldTick(
-            World world, XorShiftRng rng, TargetId[] unitIds, int slashAbilityId, int specCount)
+            World world, XorShiftRng rng, TargetId[] unitIds, int slashAbilityId, int effectCount)
         {
             var unitCount = (uint)unitIds.Length;
             var roll = rng.NextUInt32() % 4;
@@ -492,11 +492,11 @@ namespace Bun3.Gameplay.Tests
             }
             else if (roll == 1)
             {
-                var specId = (int)(rng.NextUInt32() % (uint)specCount);
+                var effectId = (int)(rng.NextUInt32() % (uint)effectCount);
                 var source = unitIds[rng.NextUInt32() % unitCount];
                 var target = unitIds[rng.NextUInt32() % unitCount];
                 var level = 1 + (int)(rng.NextUInt32() % 2);
-                world.Pipeline.EnqueueApply(specId, source, target, level);
+                world.Pipeline.EnqueueApply(effectId, source, target, level);
             }
             else if (roll == 2)
             {
@@ -548,7 +548,7 @@ namespace Bun3.Gameplay.Tests
                 {
                     var instance = active[k];
                     hash = Fold(hash, unchecked((long)instance.Id));
-                    hash = Fold(hash, instance.SpecId);
+                    hash = Fold(hash, instance.EffectId);
                     hash = Fold(hash, instance.Level);
                     hash = Fold(hash, instance.Stack);
                     hash = Fold(hash, instance.RemainingTicks);
@@ -566,13 +566,13 @@ namespace Bun3.Gameplay.Tests
         }
 
         /// <summary>Assembled World-based scenario — catalogs, seams, attribute registry, the world
-        /// driving them, and the unit/spec/ability ids the oracles above operate on.</summary>
+        /// driving them, and the unit/effect/ability ids the oracles above operate on.</summary>
         internal sealed class Kit
         {
             internal Kit(
                 World world, EffectCatalog effects, AbilityCatalog abilities, TagCatalog tags,
                 AttributeRegistry attributes, SeamRegistry seams, TargetId[] unitIds, int slashAbilityId,
-                int markSpecId, int reflectSpecId)
+                int markEffectId, int reflectEffectId)
             {
                 World = world;
                 Effects = effects;
@@ -582,8 +582,8 @@ namespace Bun3.Gameplay.Tests
                 Seams = seams;
                 UnitIds = unitIds;
                 SlashAbilityId = slashAbilityId;
-                MarkSpecId = markSpecId;
-                ReflectSpecId = reflectSpecId;
+                MarkEffectId = markEffectId;
+                ReflectEffectId = reflectEffectId;
             }
 
             internal World World { get; }
@@ -594,29 +594,29 @@ namespace Bun3.Gameplay.Tests
             internal SeamRegistry Seams { get; }
             internal TargetId[] UnitIds { get; }
             internal int SlashAbilityId { get; }
-            internal int MarkSpecId { get; }
-            internal int ReflectSpecId { get; }
+            internal int MarkEffectId { get; }
+            internal int ReflectEffectId { get; }
         }
 
-        // Six kinds (chains use trigger + follower specs) — instant damage, duration buff with
+        // Six kinds (chains use trigger + follower effects) — instant damage, duration buff with
         // stacks, poison (duration + period), on-apply chain (follower fires on apply), ongoing
         // condition (attack bonus only at low health), chain bomb (explosion damage on duration
         // expiry). All tagless — GrantedTags/AssetTags/ImmunityTags are empty lists.
-        private static void AddSpecs(EffectCatalogBuilder builder)
+        private static void AddEffects(EffectCatalogBuilder builder)
         {
-            builder.Add(new EffectSpec
+            builder.Add(new EffectDef
             {
                 Name = "InstantDamage",
                 DurationType = EffectDurationType.Instant,
                 Modifiers = { AddModifier(Hp, Constant(-30)) },
             });
 
-            builder.Add(new EffectSpec
+            builder.Add(new EffectDef
             {
                 Name = "Buff",
                 DurationType = EffectDurationType.Duration,
                 DurationTicks = 20,
-                Stack = new StackPolicy
+                Stack = new StackPolicyDef
                 {
                     MaxStack = 5,
                     OnReapply = StackReapply.AddStack,
@@ -628,7 +628,7 @@ namespace Bun3.Gameplay.Tests
                 Modifiers = { AddModifier(Attack, Constant(5)) },
             });
 
-            builder.Add(new EffectSpec
+            builder.Add(new EffectDef
             {
                 Name = "Poison",
                 DurationType = EffectDurationType.Duration,
@@ -637,7 +637,7 @@ namespace Bun3.Gameplay.Tests
                 Modifiers = { AddModifier(Hp, Constant(-3)) },
             });
 
-            builder.Add(new EffectSpec
+            builder.Add(new EffectDef
             {
                 Name = "ChainTrigger",
                 DurationType = EffectDurationType.Instant,
@@ -652,14 +652,14 @@ namespace Bun3.Gameplay.Tests
                 },
             });
 
-            builder.Add(new EffectSpec
+            builder.Add(new EffectDef
             {
                 Name = "ChainFollow",
                 DurationType = EffectDurationType.Instant,
                 Modifiers = { AddModifier(Hp, Constant(-5)) },
             });
 
-            builder.Add(new EffectSpec
+            builder.Add(new EffectDef
             {
                 Name = "OngoingBuff",
                 DurationType = EffectDurationType.Infinite,
@@ -675,7 +675,7 @@ namespace Bun3.Gameplay.Tests
                 Modifiers = { AddModifier(Attack, Constant(10)) },
             });
 
-            builder.Add(new EffectSpec
+            builder.Add(new EffectDef
             {
                 Name = "Bomb",
                 DurationType = EffectDurationType.Duration,
@@ -691,7 +691,7 @@ namespace Bun3.Gameplay.Tests
                 },
             });
 
-            builder.Add(new EffectSpec
+            builder.Add(new EffectDef
             {
                 Name = "BombBlast",
                 DurationType = EffectDurationType.Instant,
