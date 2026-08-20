@@ -232,6 +232,9 @@ namespace Bun3.Server.Items
             instance._owner = target;
             instance.IsNew = true;
             instance.Changed = false;
+            // Per-inventory token numbering must not travel across inventories.
+            instance.TxToken = 0;
+            instance.TxSnapshotIndex = -1;
             target._instances.Add(instance.InstanceId, instance);
             target.Index(instance);
         }
