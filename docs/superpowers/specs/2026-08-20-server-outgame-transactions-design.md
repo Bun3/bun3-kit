@@ -104,6 +104,30 @@ public readonly struct TransactionScope : IDisposable
 기존 `ItemInventory.BeginTransaction()`(인벤토리 내부 배치)은 **연산 1건의 원자성**이고
 이 트랜잭션은 **연산 여러 건의 원자성**이다. 층이 달라 그대로 공존한다.
 
+### 1.4.1 Items 스냅샷 단순화 (2026-08-20 — 구현 후 외부 대조로 개정)
+
+업계 대조(System.Transactions 볼래틸 리소스의 그림자 복사, InnoDB 언두 로그) 결과,
+초기 구현이 생성/제거/수정을 세 버퍼(`_txCreated`/`_txRemoved`/`_txSnapshots`)로 쪼갠 것은
+언두 로그를 컬렉션에 항목 단위로 적용한 우발적 복잡도였다 — "같은 트랜잭션 내 생성 후
+제거" 부활 버그와 센티넬 마커, 롤백 5루프 순서 계약이 전부 그 대가였다.
+
+개정: **컨테이너는 통째 스냅샷, 인스턴스 필드는 언두 로그.**
+
+- enlist 시 `_instances`와 `_regenBasis`를 재사용 스크래치로 **얕은 복사**(참조만).
+  롤백은 통째 복원 + `_instancesByItem` 색인은 복원된 `_instances`에서 재구축.
+  생성 인스턴스는 복원본에 없고 제거 인스턴스는 있으므로, 멤버십 버그(부활 등)가
+  구조적으로 불가능해진다. `_txCreated`/`_txRemoved`/센티넬/리젠 항목별 캡처 삭제.
+- 인스턴스는 공유 가변 객체라 필드 변경(`Quantity`/`Flags`/`ExpiresAt`/TState)은
+  기존 `_txSnapshots` 언두 로그 유지 — 이 부분은 그림자 복사로 대체 불가(본질 복잡도).
+- 소유자 복원 규칙: 롤백 후 스냅샷된 각 인스턴스의 `_owner`는 "복원된 `_instances`에
+  존재하면 this, 아니면 null" — 생성(팬텀)·제거(복귀)·수정(불변)을 한 규칙으로 커버.
+- 비용: 트랜잭션당 딕셔너리 얕은 복사 1회(수백 항목 = 참조 복사). 구매·보상은
+  저빈도 경로이고 스크래치 재사용으로 정상 상태 할당 0. 트랜잭션 밖 핫패스는 불변.
+- `System.Transactions` 채택은 재검토 후 재기각: 가용성(netstandard2.1 빌드 확인됨)이
+  아니라 TM 스레드의 타임아웃 abort가 단일 세션 액터(락 없음) 계약과 상충하고,
+  `Prepare` 프로토콜이 즉시 적용 의미론과 반대라서다. `TransactionScope` 타입명은
+  `System.Transactions`와 충돌하나 개명하지 않는다(사용자 결정).
+
 ### 1.5 두 레인 — 무엇이 참가자이고 무엇이 아닌가
 
 | 레인 | 대상 | 근거 |
