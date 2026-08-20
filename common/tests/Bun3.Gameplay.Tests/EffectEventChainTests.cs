@@ -250,8 +250,13 @@ public sealed class EffectEventChainTests
         pipeline.Tick();
 
         pipeline.EnqueueApply(kit.EffectId("bolt"), kit.Attacker.Id, kit.Defender.Id);
-        Assert.That(() => pipeline.Tick(), Throws.Nothing);   // budget must stop the loop, not a stack overflow
-        Assert.That(pipeline.PendingApplyCount, Is.GreaterThan(0));
+        // Unbounded recursion is impossible by construction (events are dispatched through the queue,
+        // never by direct re-entrant calls) — the real failure mode guarded here is a drain loop that
+        // never terminates. Each processed bolt raises exactly one retaliation that re-enqueues exactly
+        // one new bolt, so the queue never empties on its own; with budget 8 and one seed application,
+        // draining stops after 8 applications with exactly 1 left pending.
+        Assert.That(() => pipeline.Tick(), Throws.Nothing);
+        Assert.That(pipeline.PendingApplyCount, Is.EqualTo(1));
     }
 
     [Test]
