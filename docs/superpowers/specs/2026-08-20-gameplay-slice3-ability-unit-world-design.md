@@ -21,7 +21,7 @@
 
 함께 처리하는 백로그 3종: 수식 파싱 1회화, 출하 컴파일 아티팩트, 셀렉터 절단 카운터.
 
-**비목표(명시적 이연)**: §13 참조. 특히 시전 인스턴스(타임라인 액터)는 위치·공간 수치에
+**비목표(명시적 이연)**: §14 참조. 특히 시전 인스턴스(타임라인 액터)는 위치·공간 수치에
 의존하므로 이동 스펙 이후다.
 
 ## 2. 결정 요약
@@ -95,7 +95,7 @@ Buff_UseSkillWhenDamaged_AttackedPost            피격 시 스킬
 growninja 쪽 대조군: `Buffs.xml`의 `ReactBuff` 60건 전부가 `RemoveBuffID`(37)·`AddBuff`(17)·
 `MinStack`(22)이고 Type은 `REPLACE` 20 / `FUSION` 3이다. 파서에 선언된
 `addDamages`·`selfAddBuffs`·`addShield`는 출하 데이터에서 사용 0건 — 능력을 미리 뚫어두면
-안 쓰인다는 증거로 §13의 이연 판단에 반영했다.
+안 쓰인다는 증거로 §14의 이연 판단에 반영했다.
 
 ### 3.3 피해 수정 훅은 불필요하다
 
@@ -139,7 +139,7 @@ idlez의 반응 훅은 Buff에 달려 쿨다운 개념이 없고, 발동 제어�
 
 셋으로 갈린다: `ResourceSkill`(정의) / `GameUnit.cooldowns_`(유닛이 소유한 쿨다운) /
 `GameSkill`(시전 개체). 본 슬라이스의 `AbilityDef` + `AbilitySet`은 앞의 둘에 대응하고,
-`GameSkill`에 해당하는 것은 만들지 않는다(§13).
+`GameSkill`에 해당하는 것은 만들지 않는다(§14).
 
 `GameSkill`에는 AttributeSet도 버프 목록도 없다 — **시전 개체는 이펙트 타깃이 아니다.**
 이 사실이 §4의 합성 결정을 뒷받침한다.
@@ -566,7 +566,46 @@ Build했을 때 시나리오 해시가 일치.
 **무할당 스모크**: 정착 상태 틱 반복 + 이벤트 발행 경로에서
 `GC.GetAllocatedBytesForCurrentThread` == 0. 발동·스폰 순간은 풀 왕복만 허용.
 
-## 13. 이연 목록
+## 13. 명명 컨벤션
+
+Effect 도메인 명명 정리(`EffectSpec`→`EffectDef` 등)와 남은 세 건의 리네임을 거치며 굳은
+규칙을 여기 확정한다. 각 계층은 데이터가 **어느 단계에 있는가**로 접미사·접두사가 정해지고,
+타입이 속한 도메인 이름은 그대로 유지된다.
+
+| 계층 | 규칙 | 실례 |
+|---|---|---|
+| authoring 루트 | `<Domain>Def` | `EffectDef`, `AbilityDef` |
+| authoring 노드 | `<Role>Def` | `ModifierDef`, `CostDef`, `StackPolicyDef` |
+| 파싱 중간 산출물 | `Parsed<Domain>` — 로더가 만들고, 소스 위치를 실어 `Build`로 넘긴 뒤 버린다 | `ParsedRedirect`(`TagCatalog.cs`) |
+| 컴파일된 형태 | `Compiled<Domain>` — authoring 접미사를 뗀다 | `CompiledEffect`, `CompiledAttribute`, `CompiledRedirect` |
+| 런타임 인스턴스 | `<Domain>Instance` | `EffectInstance` |
+| 개체 소유 상태 집합 | `<Domain>Set` | `AttributeSet`, `AbilitySet` |
+| 범용 재사용 컨테이너 | `<Domain>Container` | `TagContainer`, `TagCountContainer` |
+| 스냅샷 | `<Aggregate>Snapshot` | `UnitSnapshot`, `AbilitySetSnapshot`, `EffectTargetSnapshot` |
+| 컨테이너 출처 | authoring에서 컴파일 → `Catalog` / 게임 코드가 등록 → `Registry` | `TagCatalog`(JSON·소스 컴파일) vs `AttributeRegistry`(`Register()` 호출로 채움) |
+
+**예외처럼 보이지만 아닌 두 규칙**:
+
+- **`<Domain>Container`(태그 계열)는 `<Domain>Set`이 아니다** — `Set`은 특정 개체 하나가
+  소유한 상태(그 개체가 사라지면 같이 사라진다)인 반면, `TagContainer`/`TagCountContainer`는
+  소유 개체가 없는 범용 재사용 컬렉션이다. 태그는 인게임·아웃게임을 가리지 않고 프레임워크
+  전역에서 쓰이므로 컨테이너다.
+- **`Catalog` 대 `Registry`는 담긴 내용이 아니라 출처로 가른다** — 둘 다 "id → 컴파일된 데이터"
+  룩업이라는 점은 같다. authoring 데이터(JSON·소스 문서)를 컴파일해서 채워지면 `Catalog`
+  (`TagCatalog`), 게임 코드가 `Register()` 같은 API를 직접 호출해 채우면 `Registry`
+  (`AttributeRegistry`)다.
+
+**이번 리팩터가 남긴 미결 질문 둘**:
+
+1. `Bun3.Server.Items`가 이미 `ItemCatalog`·`ItemInstance`를 쓰고 있다. 슬라이스 4에서
+   게임플레이 아이템 계층을 붙이면 이름이 충돌한다 — 슬라이스 4가 뭔가 이름 짓기 전에
+   먼저 정리해야 한다.
+2. `Parsed<Domain>` 계층이 태그 파이프라인 밖에서도 일반화되는 패턴인지, 아니면 태그
+   파이프라인(줄·컬럼 진단을 한 번에 모아 보고하기 위한 장치)에 국한된 특이 사례인지
+   아직 모른다. `EffectDefJson`·`AbilityDefJson`은 이런 중간 구조 없이 `JToken`을 즉시
+   검증해 던지므로, 현재로선 후보가 태그 파이프라인 하나뿐이다.
+
+## 14. 이연 목록
 
 | 항목 | 어디로 |
 |---|---|
@@ -582,8 +621,10 @@ Build했을 때 시나리오 해시가 일치.
 | `World.PostAsync` 액터 래퍼 | `Bun3.Server.Gameplay`, 슬라이스 5 |
 | 피해 파이프라인 1급화(치명타·방어구 순서 고정) | 채택 안 함 — §3.3. 게임이 MagnitudeCalc로 정한다 |
 | `IAbilityBehavior` 시섬 | 실수요 시 — §7.1 |
+| `Bun3.Server.Items`의 `ItemCatalog`/`ItemInstance`와 게임플레이 아이템 계층 이름 충돌 | §13 참조 — 슬라이스 4 착수 전 결정 |
+| `Parsed<Domain>` 계층의 일반화 여부 | §13 참조 |
 
-## 14. 버전
+## 15. 버전
 
 기능 추가(파괴 없음): `Bun3.Gameplay` 0.13.0 → **0.14.0**, UPM 동반.
 슬라이스 2 §7.2의 체인 값 전달 규칙 개정은 문서 개정이며 기존 4종 트리거의 동작은 불변이다.
