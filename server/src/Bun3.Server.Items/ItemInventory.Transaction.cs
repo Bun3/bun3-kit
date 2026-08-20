@@ -1,4 +1,6 @@
 // ItemInventory partial — transaction participation (snapshot, rollback) and notification buffering.
+// Containers (_instances, _regenBasis) are snapshotted wholesale at first touch; instance fields,
+// shared mutable objects present in both copies, keep a per-instance undo log.
 using System;
 using System.Collections.Generic;
 using Bun3.Gameplay.Numerics;
@@ -42,17 +44,10 @@ namespace Bun3.Server.Items
                 new InstanceSnapshot(Instance, Quantity, Flags, ExpiresAt, IsNew, Changed, state, true);
         }
 
-        private readonly List<ItemInstance<TState>> _txCreated = new List<ItemInstance<TState>>();
-        private readonly List<ItemInstance<TState>> _txRemoved = new List<ItemInstance<TState>>();
         private readonly List<InstanceSnapshot> _txSnapshots = new List<InstanceSnapshot>();
-        private readonly List<ItemId> _txRegenItems = new List<ItemId>();
-        private readonly List<long> _txRegenBasis = new List<long>();
-        private readonly List<bool> _txRegenExisted = new List<bool>();
-        /// <summary><see cref="ItemInstance{TState}.TxSnapshotIndex"/> value marking an instance
-        /// created within the current transaction — <see cref="CaptureRemoved"/> skips such an
-        /// instance, since <see cref="_txCreated"/> already drops it wholesale on rollback and
-        /// re-adding it via <see cref="_txRemoved"/> would resurrect it.</summary>
-        private const int CreatedThisTransactionMarker = -2;
+        private readonly Dictionary<long, ItemInstance<TState>> _txInstances =
+            new Dictionary<long, ItemInstance<TState>>();
+        private readonly Dictionary<ItemId, long> _txRegenBasis = new Dictionary<ItemId, long>();
 
         private int _txSnapshotToken;
         private int _txRemovedMark;
@@ -63,7 +58,8 @@ namespace Bun3.Server.Items
         /// <summary>Whether this inventory is currently taking part in a transaction.</summary>
         private bool InTransaction => _transaction != null && _transaction.IsActive;
 
-        /// <summary>Enlists on the first change of a transaction and marks the snapshot baseline.</summary>
+        /// <summary>Enlists on the first change of a transaction and takes the container snapshot.
+        /// Every path must call it before its first mutation of the instance or regen-basis map.</summary>
         private void EnsureEnlisted()
         {
             if (_txEnlisted || !InTransaction)
@@ -74,15 +70,22 @@ namespace Bun3.Server.Items
             _transaction!.Enlist(this);
             _txEnlisted = true;
             _txSnapshotToken++;
-            _txCreated.Clear();
-            _txRemoved.Clear();
             _txSnapshots.Clear();
-            _txRegenItems.Clear();
-            _txRegenBasis.Clear();
-            _txRegenExisted.Clear();
             _txRemovedMark = _removed.Count;
             _txHasChangesMark = _hasChanges;
             _txDirtyPending = false;
+
+            _txInstances.Clear();
+            foreach (var entry in _instances)
+            {
+                _txInstances.Add(entry.Key, entry.Value);
+            }
+
+            _txRegenBasis.Clear();
+            foreach (var entry in _regenBasis)
+            {
+                _txRegenBasis.Add(entry.Key, entry.Value);
+            }
         }
 
         /// <summary>Snapshots an instance before its first change in the current transaction.</summary>
@@ -121,19 +124,14 @@ namespace Bun3.Server.Items
             }
 
             Capture(instance);
-            var index = instance.TxSnapshotIndex;
-            if (index < 0)
-            {
-                return;   // Created within this transaction — rollback drops it wholesale.
-            }
 
             // Promote only when the instance still holds the exact object the snapshot captured —
             // value-equality (an overridden Equals) must not be mistaken for identity here.
-            var snapshot = _txSnapshots[index];
+            var snapshot = _txSnapshots[instance.TxSnapshotIndex];
             if (!snapshot.StateSnapshotted
                 && (typeof(TState).IsValueType || ReferenceEquals(snapshot.State, instance.State)))
             {
-                _txSnapshots[index] = snapshot.WithState(_snapshotState(instance.State));
+                _txSnapshots[instance.TxSnapshotIndex] = snapshot.WithState(_snapshotState(instance.State));
             }
         }
 
@@ -146,61 +144,6 @@ namespace Bun3.Server.Items
                 throw new InvalidOperationException(
                     "MarkChanged is not available inside a transaction — assign State or use BeginStateChange so the change can be rolled back.");
             }
-        }
-
-        /// <summary>Records a newly created instance so a rollback can drop it.</summary>
-        private void CaptureCreated(ItemInstance<TState> instance)
-        {
-            EnsureEnlisted();
-            if (!_txEnlisted)
-            {
-                return;
-            }
-
-            instance.TxToken = _txSnapshotToken;   // Created instances are dropped wholesale, never restored.
-            instance.TxSnapshotIndex = CreatedThisTransactionMarker;
-            _txCreated.Add(instance);
-        }
-
-        /// <summary>Records a removed instance so a rollback can re-index it. An instance created
-        /// earlier in the same transaction is skipped — <see cref="_txCreated"/> already drops it.</summary>
-        private void CaptureRemoved(ItemInstance<TState> instance)
-        {
-            EnsureEnlisted();
-            if (!_txEnlisted)
-            {
-                return;
-            }
-
-            if (instance.TxToken == _txSnapshotToken && instance.TxSnapshotIndex == CreatedThisTransactionMarker)
-            {
-                return;
-            }
-
-            _txRemoved.Add(instance);
-        }
-
-        /// <summary>Snapshots a regen basis entry before it changes.</summary>
-        private void CaptureRegenBasis(ItemId item)
-        {
-            EnsureEnlisted();
-            if (!_txEnlisted)
-            {
-                return;
-            }
-
-            for (var i = 0; i < _txRegenItems.Count; i++)
-            {
-                if (_txRegenItems[i] == item)
-                {
-                    return;
-                }
-            }
-
-            var existed = _regenBasis.TryGetValue(item, out var basis);
-            _txRegenItems.Add(item);
-            _txRegenBasis.Add(basis);
-            _txRegenExisted.Add(existed);
         }
 
         /// <summary>Raises onDirty, or buffers it until commit while a transaction is active.</summary>
@@ -236,13 +179,28 @@ namespace Bun3.Server.Items
             _txDirtyPending = false;
             _appliedCount = 0;
 
-            for (var i = _txCreated.Count - 1; i >= 0; i--)
+            _instances.Clear();
+            foreach (var entry in _txInstances)
             {
-                var created = _txCreated[i];
-                _instances.Remove(created.InstanceId);
-                Unindex(created);
-                created._owner = null;
-                created.TxSnapshotIndex = -1;
+                _instances.Add(entry.Key, entry.Value);
+            }
+
+            // Rebuilt from the restored membership. The lists are reused rather than dropped —
+            // an empty list means "not held" — and order within a definition is unspecified.
+            foreach (var entry in _instancesByItem)
+            {
+                entry.Value.Clear();
+            }
+
+            foreach (var entry in _instances)
+            {
+                Index(entry.Value);
+            }
+
+            _regenBasis.Clear();
+            foreach (var entry in _txRegenBasis)
+            {
+                _regenBasis.Add(entry.Key, entry.Value);
             }
 
             for (var i = _txSnapshots.Count - 1; i >= 0; i--)
@@ -253,26 +211,10 @@ namespace Bun3.Server.Items
                     snapshot.Quantity, snapshot.Flags, snapshot.ExpiresAt,
                     snapshot.IsNew, snapshot.Changed, snapshot.State);
                 instance.TxSnapshotIndex = -1;
-            }
 
-            for (var i = _txRemoved.Count - 1; i >= 0; i--)
-            {
-                var removed = _txRemoved[i];
-                removed._owner = this;
-                _instances[removed.InstanceId] = removed;
-                Index(removed);
-            }
-
-            for (var i = 0; i < _txRegenItems.Count; i++)
-            {
-                if (_txRegenExisted[i])
-                {
-                    _regenBasis[_txRegenItems[i]] = _txRegenBasis[i];
-                }
-                else
-                {
-                    _regenBasis.Remove(_txRegenItems[i]);
-                }
+                // Absent from the restored membership means the transaction created it — the
+                // phantom is detached, so a stray MarkChanged on it is ignored.
+                instance._owner = _instances.ContainsKey(instance.InstanceId) ? this : null;
             }
 
             if (_removed.Count > _txRemovedMark)
@@ -288,12 +230,9 @@ namespace Bun3.Server.Items
         /// so both commit and rollback drop them rather than waiting for the next transaction.</summary>
         private void ClearSnapshots()
         {
-            _txCreated.Clear();
-            _txRemoved.Clear();
             _txSnapshots.Clear();
-            _txRegenItems.Clear();
+            _txInstances.Clear();
             _txRegenBasis.Clear();
-            _txRegenExisted.Clear();
         }
     }
 }

@@ -347,4 +347,63 @@ public class ItemInventoryTransactionTests
 
         Assert.That(_inventory.GetRegenBasis(_ticket), Is.EqualTo(1234));
     }
+
+    [Test]
+    public void Rollback_restores_owner_of_a_removed_instance()
+    {
+        var created = new List<ItemInstance<ItemState>>();
+        _inventory.TryAdd(_sword, 1, created);
+        var instance = created[0];
+        var drained = new List<ItemChange<ItemState>>();
+        _inventory.DrainChanges(drained);
+        drained.Clear();
+
+        using (_transaction.Begin())
+        {
+            _inventory.TryRemoveByInstance(instance.InstanceId, 1);
+        }
+
+        instance.Flags = 8;
+
+        _inventory.DrainChanges(drained);
+        Assert.That(drained.Count, Is.EqualTo(1));
+        Assert.That(drained[0].Kind, Is.EqualTo(ItemChangeKind.Updated));
+        Assert.That(drained[0].InstanceId, Is.EqualTo(instance.InstanceId));
+    }
+
+    [Test]
+    public void Rollback_detaches_a_created_instance()
+    {
+        var created = new List<ItemInstance<ItemState>>();
+
+        using (_transaction.Begin())
+        {
+            _inventory.TryAdd(_sword, 1, created);
+        }
+
+        var phantom = created[0];
+        _dirty = 0;
+        phantom.MarkChanged();
+
+        Assert.That(_inventory.HasChanges, Is.False);
+        Assert.That(_dirty, Is.Zero);
+    }
+
+    [Test]
+    public void Regen_basis_only_reset_rolls_back()
+    {
+        var start = TimeSpan.TicksPerMinute * 100;
+        _inventory.TryAdd(_ticket, 5);       // at the regen target — settling only resets the basis
+        _inventory.SettleRegen(start);
+        var basisBefore = _inventory.GetRegenBasis(_ticket);
+        Assert.That(basisBefore, Is.EqualTo(start));
+
+        using (_transaction.Begin())
+        {
+            _inventory.SettleRegen(start + TimeSpan.TicksPerMinute * 30);
+            Assert.That(_inventory.GetRegenBasis(_ticket), Is.Not.EqualTo(basisBefore));
+        }
+
+        Assert.That(_inventory.GetRegenBasis(_ticket), Is.EqualTo(basisBefore));
+    }
 }

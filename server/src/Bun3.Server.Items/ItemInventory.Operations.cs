@@ -675,9 +675,9 @@ namespace Bun3.Server.Items
             {
                 IsNew = true,
             };
+            Capture(instance);   // Before the first container mutation — snapshots the membership.
             _instances.Add(instance.InstanceId, instance);
             Index(instance);
-            CaptureCreated(instance);
             return instance;
         }
 
@@ -702,7 +702,7 @@ namespace Bun3.Server.Items
 
         private void RemoveInstance(ItemInstance<TState> instance)
         {
-            CaptureRemoved(instance);
+            Capture(instance);
             _instances.Remove(instance.InstanceId);
             Unindex(instance);
 
