@@ -329,6 +329,84 @@ public sealed class EffectCatalogBuilderTests
         Assert.That(catalog.BuildWarnings, Has.Some.Contains("low"));
     }
 
+    // Rule 10b: an OnEvent chain that closes back to a RaiseEvents tag is also a warning (extends the
+    // OnApplication cycle detection above using the same IsAncestorOrSelf rule DispatchEvent uses).
+
+    private static EffectDef InstantThatRaises(string name, string eventTag, int hpDelta = -1)
+    {
+        var def = EffectTestKit.MinimalInstant(name);
+        def.Modifiers.Add(new ModifierDef
+        {
+            AttributeId = EffectTestKit.Hp,
+            Op = AttributeModifierOp.Add,
+            Magnitude = new MagnitudeDef { Base = Operand.Constant(hpDelta) },
+        });
+        def.RaiseEvents.Add(new RaiseEventDef { Tag = eventTag, AttributeId = EffectTestKit.Hp });
+        return def;
+    }
+
+    private static ChainEdgeDef EventEdge(string eventTag, string effectName)
+    {
+        var edge = EffectTestKit.Edge(ChainTrigger.OnEvent, effectName);
+        edge.EventTag = eventTag;
+        edge.Listen = ChainListen.AsTarget;
+        return edge;
+    }
+
+    [Test]
+    public void OnEvent_cycle_closing_on_the_same_effect_is_a_warning()
+    {
+        var a = InstantThatRaises("a", "event.damage.taken");
+        a.Chains.Add(EventEdge("event.damage.taken", "a"));
+
+        var builder = new EffectCatalogBuilder();
+        builder.Add(a);
+        var catalog = EffectTestKit.BuildCatalog(builder);
+        Assert.That(catalog.BuildWarnings, Has.Some.Contains("OnEvent chain cycle"));
+    }
+
+    [Test]
+    public void OnEvent_cycle_across_two_effects_is_a_warning()
+    {
+        var a = InstantThatRaises("a", "event.damage.taken", hpDelta: -1);
+        a.Chains.Add(EventEdge("event.heal.taken", "b"));
+
+        var b = InstantThatRaises("b", "event.heal.taken", hpDelta: 1);
+        b.Chains.Add(EventEdge("event.damage.taken", "a"));
+
+        var builder = new EffectCatalogBuilder();
+        builder.Add(a);
+        builder.Add(b);
+        var catalog = EffectTestKit.BuildCatalog(builder);
+        Assert.That(catalog.BuildWarnings, Has.Some.Contains("OnEvent chain cycle"));
+    }
+
+    [Test]
+    public void OnEvent_cycle_closing_only_through_tag_hierarchy_is_a_warning()
+    {
+        var a = InstantThatRaises("a", "event.damage.taken");
+        // "event.damage" is an ancestor of "event.damage.taken" -- an exact-tag comparison would miss this.
+        a.Chains.Add(EventEdge("event.damage", "a"));
+
+        var builder = new EffectCatalogBuilder();
+        builder.Add(a);
+        var catalog = EffectTestKit.BuildCatalog(builder);
+        Assert.That(catalog.BuildWarnings, Has.Some.Contains("OnEvent chain cycle"));
+    }
+
+    [Test]
+    public void OnEvent_listener_with_a_more_specific_tag_than_the_raise_does_not_warn()
+    {
+        var a = InstantThatRaises("a", "event.damage");
+        // "event.damage.taken" is a descendant of the raised tag, not an ancestor -- must not match.
+        a.Chains.Add(EventEdge("event.damage.taken", "a"));
+
+        var builder = new EffectCatalogBuilder();
+        builder.Add(a);
+        var catalog = EffectTestKit.BuildCatalog(builder);
+        Assert.That(catalog.BuildWarnings, Has.None.Contains("OnEvent chain cycle"));
+    }
+
     // Misc: name lookup and happy-path compile results.
 
     [Test]

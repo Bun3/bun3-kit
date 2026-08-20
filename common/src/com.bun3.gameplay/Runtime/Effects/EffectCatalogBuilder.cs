@@ -54,6 +54,7 @@ namespace Bun3.Gameplay.Effects
             }
 
             var warnings = DetectChainCycles(compiled);
+            warnings.AddRange(DetectEventChainCycles(compiled, tags));
             DetectLevelFromStackScaleWithStackWarnings(_defs, warnings);
             ValidateEventMagnitudeReachability(_defs, nameToId);
             return new EffectCatalog(nameToId, compiled, warnings);
@@ -689,6 +690,106 @@ namespace Bun3.Gameplay.Effects
                     else if (color[next] == 0)
                     {
                         Visit(next);
+                    }
+                }
+
+                stack.RemoveAt(stack.Count - 1);
+                color[node] = 2;
+            }
+
+            for (var i = 0; i < compiled.Length; i++)
+            {
+                if (color[i] == 0)
+                {
+                    Visit(i);
+                }
+            }
+
+            return warnings;
+        }
+
+        // Cycle detection for OnEvent closures, extending DetectChainCycles above. An OnEvent chain
+        // edge "closes" whenever its declared EventTag is an ancestor-or-self of a tag some effect
+        // raises via RaiseEvents -- the same IsAncestorOrSelf rule DispatchEvent uses at runtime, so a
+        // parent-tag listener catching a descendant-tag raise counts. The edge's host effect does not
+        // matter (any active instance can react, same conservative assumption DetectChainCycles already
+        // makes for OnApplication edges); only the raised tag and the edge's applied effect do. Combined
+        // with the OnApplication edges, a discovered cycle is reported here only if at least one of its
+        // edges is such a closure -- a cycle built entirely from OnApplication edges is already reported
+        // by DetectChainCycles, so this never duplicates that warning.
+        private static List<string> DetectEventChainCycles(CompiledEffect[] compiled, TagCatalog tags)
+        {
+            var warnings = new List<string>();
+
+            var eventEdges = new List<(GameplayTag Tag, int EffectId)>();
+            for (var i = 0; i < compiled.Length; i++)
+            {
+                foreach (var chain in compiled[i].Chains)
+                {
+                    if (chain.Trigger == ChainTrigger.OnEvent)
+                    {
+                        eventEdges.Add((chain.EventTag, chain.EffectId));
+                    }
+                }
+            }
+
+            var adjacency = new List<(int Target, bool ViaEvent)>[compiled.Length];
+            for (var i = 0; i < compiled.Length; i++)
+            {
+                var list = new List<(int, bool)>();
+                foreach (var chain in compiled[i].Chains)
+                {
+                    if (chain.Trigger == ChainTrigger.OnApplication)
+                    {
+                        list.Add((chain.EffectId, false));
+                    }
+                }
+
+                foreach (var raise in compiled[i].RaiseEvents)
+                {
+                    foreach (var edge in eventEdges)
+                    {
+                        if (tags.IsAncestorOrSelf(edge.Tag, raise.Tag))
+                        {
+                            list.Add((edge.EffectId, true));
+                        }
+                    }
+                }
+
+                adjacency[i] = list;
+            }
+
+            var color = new byte[compiled.Length];   // 0=white, 1=gray (on stack), 2=black (done)
+            var stack = new List<int>();
+            var incomingViaEvent = new List<bool>(); // incomingViaEvent[k]: edge stack[k] -> stack[k+1]
+
+            void Visit(int node)
+            {
+                color[node] = 1;
+                stack.Add(node);
+                foreach (var (next, viaEvent) in adjacency[node])
+                {
+                    if (color[next] == 1)
+                    {
+                        var startIndex = stack.IndexOf(next);
+                        var cycleHasEventEdge = viaEvent;
+                        for (var k = startIndex; k < stack.Count - 1 && !cycleHasEventEdge; k++)
+                        {
+                            cycleHasEventEdge = incomingViaEvent[k];
+                        }
+
+                        if (cycleHasEventEdge)
+                        {
+                            var cycleNodes = stack.GetRange(startIndex, stack.Count - startIndex);
+                            var names = string.Join(" -> ", cycleNodes.ConvertAll(n => compiled[n].Name));
+                            warnings.Add($"[warn] OnEvent chain cycle: {names} -> {compiled[next].Name}");
+                        }
+                    }
+                    else if (color[next] == 0)
+                    {
+                        incomingViaEvent.Add(viaEvent);
+                        Visit(next);
+                        incomingViaEvent.RemoveAt(incomingViaEvent.Count - 1);
                     }
                 }
 
