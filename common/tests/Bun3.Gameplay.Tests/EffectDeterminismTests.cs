@@ -10,13 +10,26 @@ namespace Bun3.Gameplay.Tests;
 [TestFixture]
 public sealed class EffectDeterminismTests
 {
+    // Golden hash recorded on this machine on 2026-08-20 for EffectScenario.Run(20260817, 200).
+    // Two same-process runs agreeing only proves the scenario is stateless between calls -- it would
+    // not catch process-scoped nondeterminism (e.g. a hidden dependency on Dictionary/HashSet
+    // enumeration order, float rounding mode, or thread-local state), yet the library's promise is
+    // bit-identical results across machines and replays. Pinning the hash as a literal instead makes
+    // this run agree with a value recorded on another day and another machine.
+    // If this constant needs to change: a deliberate scenario or semantics change (new effect added
+    // to the scenario, a magnitude/formula change, an RNG algorithm change) legitimately shifts the
+    // hash -- recompute it and update the literal in the same commit as that change, with a note of
+    // why. If it changes on an unrelated commit, or differs between two machines/OSes/.NET versions
+    // running the same commit, that is a determinism regression -- do not update the constant to
+    // silence it, find the source of the divergence.
+    private const ulong ScenarioGoldenHash = 0xC2D703366D22082EUL;
+
     [Test]
     public void Scenario_hash_is_stable_across_runs()
     {
-        var first = EffectScenario.Run(20260817, 200);
-        var second = EffectScenario.Run(20260817, 200);
+        var hash = EffectScenario.Run(20260817, 200);
 
-        Assert.That(second, Is.EqualTo(first));
+        Assert.That(hash, Is.EqualTo(ScenarioGoldenHash));
     }
 
     [Test]
@@ -181,14 +194,18 @@ public sealed class EffectDeterminismTests
             pipeline.RemoveById(target.Id, target.ActiveEffects[0].Id);
     }
 
+    // Golden hash recorded on this machine on 2026-08-20 for EffectScenario.RunHash(..., seed: 20260820)
+    // over EffectScenario.ScenarioKit()'s catalogs. Same caveat and update rule as ScenarioGoldenHash
+    // above -- see its comment.
+    private const ulong WorldScenarioGoldenHash = 0x85B06EF573A05FCBUL;
+
     [Test]
     public void Same_seed_produces_the_same_world_state_hash()
     {
         var kit = EffectScenario.ScenarioKit();
-        var first = EffectScenario.RunHash(kit.Effects, kit.Abilities, kit.Tags, seed: 20260820);
-        var second = EffectScenario.RunHash(kit.Effects, kit.Abilities, kit.Tags, seed: 20260820);
+        var hash = EffectScenario.RunHash(kit.Effects, kit.Abilities, kit.Tags, seed: 20260820);
 
-        Assert.That(second, Is.EqualTo(first));
+        Assert.That(hash, Is.EqualTo(WorldScenarioGoldenHash));
     }
 
     [Test]
