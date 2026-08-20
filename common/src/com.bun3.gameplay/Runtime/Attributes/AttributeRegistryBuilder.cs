@@ -4,13 +4,13 @@ using System.Collections.Generic;
 
 namespace Bun3.Gameplay.Attributes
 {
-    /// <summary>Collects attribute definitions and validates them all at Build. Registration order does not affect the result.</summary>
+    /// <summary>Collects attribute registrations and validates them all at Build. Registration order does not affect the result.</summary>
     public sealed class AttributeRegistryBuilder
     {
-        private readonly Dictionary<ushort, AttributeDefinition> _definitions = new Dictionary<ushort, AttributeDefinition>();
+        private readonly Dictionary<ushort, CompiledAttribute> _attributes = new Dictionary<ushort, CompiledAttribute>();
         private bool _built;
 
-        /// <summary>Registers an attribute definition. Forward references are allowed; validation happens at Build.</summary>
+        /// <summary>Registers an attribute's clamp bounds and boundary policies. Forward references are allowed; validation happens at Build.</summary>
         public void Register(
             ushort attributeId,
             Operand? min = null,
@@ -19,10 +19,10 @@ namespace Bun3.Gameplay.Attributes
             MaxDecreasePolicy onMaxDecrease = MaxDecreasePolicy.Follow)
         {
             if (_built) throw new InvalidOperationException("Cannot register after Build.");
-            if (_definitions.ContainsKey(attributeId))
+            if (_attributes.ContainsKey(attributeId))
                 throw new InvalidOperationException($"Attribute {attributeId} is registered more than once.");
 
-            _definitions.Add(attributeId, new AttributeDefinition(min, max, onMaxIncrease, onMaxDecrease));
+            _attributes.Add(attributeId, new CompiledAttribute(min, max, onMaxIncrease, onMaxDecrease));
         }
 
         /// <summary>Validates references, cycles, and policy consistency, computes the topological order and dependent lists, and builds the immutable registry.</summary>
@@ -30,7 +30,7 @@ namespace Bun3.Gameplay.Attributes
         {
             _built = true;
             var dependencyLists = new Dictionary<ushort, List<ushort>>();
-            foreach (var pair in _definitions)
+            foreach (var pair in _attributes)
             {
                 ValidateBound(pair.Key, pair.Value.Min, dependencyLists);
                 ValidateBound(pair.Key, pair.Value.Max, dependencyLists);
@@ -49,25 +49,25 @@ namespace Bun3.Gameplay.Attributes
             }
 
             return new AttributeRegistry(
-                new Dictionary<ushort, AttributeDefinition>(_definitions), order, dependents,
-                ComputeSignature(_definitions, order));
+                new Dictionary<ushort, CompiledAttribute>(_attributes), order, dependents,
+                ComputeSignature(_attributes, order));
         }
 
         // FNV-1a over the shape in evaluation order. Evaluation order is itself derived from the shape,
         // so the hash is independent of registration order.
         private static uint ComputeSignature(
-            Dictionary<ushort, AttributeDefinition> definitions, ushort[] order)
+            Dictionary<ushort, CompiledAttribute> attributes, ushort[] order)
         {
             var hash = 2166136261u;
             for (var i = 0; i < order.Length; i++)
             {
                 var id = order[i];
-                var definition = definitions[id];
+                var attribute = attributes[id];
                 FeedUInt16(ref hash, id);
-                FeedBound(ref hash, definition.Min);
-                FeedBound(ref hash, definition.Max);
-                FeedByte(ref hash, (byte)definition.OnMaxIncrease);
-                FeedByte(ref hash, (byte)definition.OnMaxDecrease);
+                FeedBound(ref hash, attribute.Min);
+                FeedBound(ref hash, attribute.Max);
+                FeedByte(ref hash, (byte)attribute.OnMaxIncrease);
+                FeedByte(ref hash, (byte)attribute.OnMaxDecrease);
             }
 
             return hash;
@@ -118,7 +118,7 @@ namespace Bun3.Gameplay.Attributes
             if (!IsAttributeBound(bound)) return;
 
             var referenced = bound!.Value.AttributeId;
-            if (!_definitions.ContainsKey(referenced))
+            if (!_attributes.ContainsKey(referenced))
                 throw new InvalidOperationException($"Clamp of attribute {owner} references unregistered attribute {referenced}.");
 
             if (!dependencyLists.TryGetValue(referenced, out var list))
@@ -134,7 +134,7 @@ namespace Bun3.Gameplay.Attributes
         private ushort[] TopologicalOrder(Dictionary<ushort, List<ushort>> dependents)
         {
             var inDegree = new Dictionary<ushort, int>();
-            foreach (var id in _definitions.Keys) inDegree[id] = 0;
+            foreach (var id in _attributes.Keys) inDegree[id] = 0;
             foreach (var pair in dependents)
                 foreach (var dependent in pair.Value) inDegree[dependent]++;
 
@@ -164,7 +164,7 @@ namespace Bun3.Gameplay.Attributes
                 currentLevel = nextLevel;
             }
 
-            if (result.Count != _definitions.Count)
+            if (result.Count != _attributes.Count)
                 throw new InvalidOperationException("Clamp references contain a cycle.");
             return result.ToArray();
         }

@@ -87,19 +87,19 @@ namespace Bun3.Gameplay.Attributes
             for (var i = 0; i < ids.Length; i++)
             {
                 var id = ids[i];
-                var definition = registry.GetDefinition(id);
-                if (definition.Min.HasValue && definition.Min.Value.Kind == OperandKind.Attribute)
+                var attribute = registry.GetCompiledAttribute(id);
+                if (attribute.Min.HasValue && attribute.Min.Value.Kind == OperandKind.Attribute)
                 {
-                    var refId = definition.Min.Value.AttributeId;
+                    var refId = attribute.Min.Value.AttributeId;
                     if (!Has(refId))
                         throw new ArgumentException(
                             $"Clamp of attribute {id} references {refId}, which is not in the archetype declaration.",
                             nameof(attributeIds));
                 }
 
-                if (definition.Max.HasValue && definition.Max.Value.Kind == OperandKind.Attribute)
+                if (attribute.Max.HasValue && attribute.Max.Value.Kind == OperandKind.Attribute)
                 {
-                    var refId = definition.Max.Value.AttributeId;
+                    var refId = attribute.Max.Value.AttributeId;
                     if (!Has(refId))
                         throw new ArgumentException(
                             $"Clamp of attribute {id} references {refId}, which is not in the archetype declaration.",
@@ -187,16 +187,16 @@ namespace Bun3.Gameplay.Attributes
 
         private BigNum ClampToBounds(int slotIndex, BigNum value)
         {
-            var definition = _registry.GetDefinition(_slots[slotIndex].AttributeId);
-            if (definition.Min.HasValue)
+            var attribute = _registry.GetCompiledAttribute(_slots[slotIndex].AttributeId);
+            if (attribute.Min.HasValue)
             {
-                var min = ResolveBound(definition.Min.Value);
+                var min = ResolveBound(attribute.Min.Value);
                 if (value < min) value = min;
             }
 
-            if (definition.Max.HasValue)
+            if (attribute.Max.HasValue)
             {
-                var max = ResolveBound(definition.Max.Value);
+                var max = ResolveBound(attribute.Max.Value);
                 if (value > max) value = max;
             }
 
@@ -229,21 +229,21 @@ namespace Bun3.Gameplay.Attributes
             {
                 if (!Has(dependents[i])) continue;
                 var index = _slotByAttributeId[dependents[i]];
-                var definition = _registry.GetDefinition(dependents[i]);
-                var maxOperand = definition.Max.GetValueOrDefault();
-                var referencesAsMax = definition.Max.HasValue
+                var attribute = _registry.GetCompiledAttribute(dependents[i]);
+                var maxOperand = attribute.Max.GetValueOrDefault();
+                var referencesAsMax = attribute.Max.HasValue
                     && maxOperand.Kind == OperandKind.Attribute
                     && maxOperand.AttributeId == changedAttributeId;
 
                 if (referencesAsMax && newValue > oldValue
-                    && definition.OnMaxIncrease == MaxIncreasePolicy.Follow)
+                    && attribute.OnMaxIncrease == MaxIncreasePolicy.Follow)
                 {
                     var delta = (newValue - oldValue) * maxOperand.Value;   // coefficient applied
                     _slots[index].Base = ClampToBounds(index, _slots[index].Base + delta);
                 }
 
                 if (referencesAsMax && newValue < oldValue
-                    && definition.OnMaxDecrease == MaxDecreasePolicy.Follow)
+                    && attribute.OnMaxDecrease == MaxDecreasePolicy.Follow)
                 {
                     _slots[index].Base = ClampToBounds(index, _slots[index].Base);    // truncate Base to the lowered bound
                 }

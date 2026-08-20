@@ -4,10 +4,10 @@ using System.Collections.Generic;
 
 namespace Bun3.Gameplay.Attributes
 {
-    /// <summary>Clamp and policy definition for a single attribute.</summary>
-    public readonly struct AttributeDefinition
+    /// <summary>Resolved clamp bounds and boundary policies for a single attribute.</summary>
+    public readonly struct CompiledAttribute
     {
-        internal AttributeDefinition(
+        internal CompiledAttribute(
             Operand? min, Operand? max,
             MaxIncreasePolicy onMaxIncrease, MaxDecreasePolicy onMaxDecrease)
         {
@@ -30,21 +30,21 @@ namespace Bun3.Gameplay.Attributes
         public MaxDecreasePolicy OnMaxDecrease { get; }
     }
 
-    /// <summary>Immutable attribute definition registry, built once at startup.</summary>
+    /// <summary>Immutable registry of compiled attribute shapes, built once at startup.</summary>
     public sealed class AttributeRegistry
     {
-        private readonly Dictionary<ushort, AttributeDefinition> _definitions;
+        private readonly Dictionary<ushort, CompiledAttribute> _attributes;
         private readonly ushort[] _evaluationOrder;
         private readonly Dictionary<ushort, ushort[]> _clampDependents;
         private static readonly ushort[] Empty = Array.Empty<ushort>();
 
         internal AttributeRegistry(
-            Dictionary<ushort, AttributeDefinition> definitions,
+            Dictionary<ushort, CompiledAttribute> attributes,
             ushort[] evaluationOrder,
             Dictionary<ushort, ushort[]> clampDependents,
             uint signature)
         {
-            _definitions = definitions;
+            _attributes = attributes;
             _evaluationOrder = evaluationOrder;
             _clampDependents = clampDependents;
             Signature = signature;
@@ -58,12 +58,12 @@ namespace Bun3.Gameplay.Attributes
         public uint Signature { get; }
 
         /// <summary>Number of registered attributes.</summary>
-        public int Count => _definitions.Count;
+        public int Count => _attributes.Count;
 
         /// <summary>Returns whether the attribute id is registered.</summary>
-        public bool Contains(ushort attributeId) => _definitions.ContainsKey(attributeId);
+        public bool Contains(ushort attributeId) => _attributes.ContainsKey(attributeId);
 
-        internal AttributeDefinition GetDefinition(ushort attributeId) => _definitions[attributeId];
+        internal CompiledAttribute GetCompiledAttribute(ushort attributeId) => _attributes[attributeId];
 
         /// <summary>Clamp-dependency topological order (ties broken by ascending id).</summary>
         public ReadOnlySpan<ushort> EvaluationOrder => _evaluationOrder;
