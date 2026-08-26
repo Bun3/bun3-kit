@@ -19,7 +19,7 @@
     {
       "displayName": "Unified Toggle Group",
       "description": "N preset states, custom-extensible options, and cascading control of nested groups.",
-      "path": "Samples~/UnifiedToggleGroup"
+      "path": "Samples/UnifiedToggleGroup"
     }
   ]
 }

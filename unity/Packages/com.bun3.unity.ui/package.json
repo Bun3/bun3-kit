@@ -18,7 +18,7 @@
     {
       "displayName": "Button Interactable Scope",
       "description": "Combines multiple conditions to drive a button's interactable state and reports the disabled reason via IButtonDisabledHandler.",
-      "path": "Samples~/ButtonInteractableScope"
+      "path": "Samples/ButtonInteractableScope"
     }
   ]
 }

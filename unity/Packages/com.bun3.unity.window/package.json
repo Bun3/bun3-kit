@@ -20,7 +20,7 @@
     {
       "displayName": "Desktop Overlay",
       "description": "Always-on-top + transparent + click-through overlay bootstrap, with a build verification checklist.",
-      "path": "Samples~/DesktopOverlay"
+      "path": "Samples/DesktopOverlay"
     }
   ]
 }
