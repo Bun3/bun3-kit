@@ -101,6 +101,20 @@ namespace Bun3.Unity.Window
 
         private static Vector2 ReadPointerPosition()
         {
+#if BUN3_OVERLAY_SUPPORTED
+            // While WS_EX_TRANSPARENT is set the window receives no mouse messages, so
+            // Unity's input mouse position freezes and the hit test could never release
+            // click-through again. The global cursor works regardless of window state.
+            var hwnd = GameWindow.Handle;
+            if (hwnd != IntPtr.Zero && Win32Native.GetCursorPos(out var cursor))
+            {
+                var client = cursor;
+                if (Win32Native.ScreenToClient(hwnd, ref client))
+                {
+                    return new Vector2(client.X, Screen.height - client.Y);
+                }
+            }
+#endif
 #if ENABLE_INPUT_SYSTEM
             var mouse = Mouse.current;
             return mouse != null ? mouse.position.ReadValue() : Vector2.zero;
