@@ -50,7 +50,7 @@ namespace Bun3.Unity.Window
                 return;
             }
 #if !UNITY_EDITOR
-            _fitPending = settings.FitToWorkArea;
+            _fitEnabled = settings.FitToWorkArea;
 #if ENABLE_INPUT_SYSTEM
             if (settings.BackgroundInput)
             {
@@ -73,7 +73,9 @@ namespace Bun3.Unity.Window
             ClickThrough.AutoByPointer = settings.AutoClickThrough;
         }
 
-        private static bool _fitPending;
+        private const float FitCheckIntervalSeconds = 1f;
+        private static bool _fitEnabled;
+        private static float _nextFitTime;
 
         private static void Tick()
         {
@@ -86,10 +88,12 @@ namespace Bun3.Unity.Window
                 return;
             }
 
-            // The window handle can lag the first frames; retry until the fit lands.
-            if (_fitPending && MonitorFit.FitToWorkArea())
+            // Maintenance, not one-shot: Unity re-sizes its own window during startup
+            // and display changes, so keep re-fitting whenever the rect drifts.
+            if (_fitEnabled && Time.unscaledTime >= _nextFitTime)
             {
-                _fitPending = false;
+                _nextFitTime = Time.unscaledTime + FitCheckIntervalSeconds;
+                MonitorFit.EnsureFitted();
             }
 
             if (AlwaysOnTop.IsEnabled && Time.unscaledTime >= _nextEnforceTime)

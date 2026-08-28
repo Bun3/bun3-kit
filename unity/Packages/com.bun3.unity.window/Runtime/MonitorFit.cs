@@ -25,11 +25,13 @@ namespace Bun3.Unity.Window
 #endif
 
         /// <summary>
-        /// Fits the window to the work area of the monitor it currently occupies.
-        /// Returns false when the window handle or monitor cannot be resolved yet —
-        /// safe to retry next frame.
+        /// Fits the window to the work area of the monitor it currently occupies when it
+        /// is not already there. Maintenance-style like the topmost pin: Unity resizes
+        /// its own window during startup (and display changes), so a one-shot fit loses
+        /// the race — call this periodically instead. A matching window issues no native
+        /// write at all, so it is safe alongside cursor-clip-sensitive apps.
         /// </summary>
-        public static bool FitToWorkArea()
+        public static bool EnsureFitted()
         {
 #if BUN3_OVERLAY_SUPPORTED
             var hwnd = GameWindow.Handle;
@@ -46,6 +48,13 @@ namespace Bun3.Unity.Window
             }
 
             var work = info.Work;
+            if (Win32Native.GetWindowRect(hwnd, out var current)
+                && current.Left == work.Left && current.Top == work.Top
+                && current.Right == work.Right && current.Bottom == work.Bottom)
+            {
+                return true; // already fitted — no write
+            }
+
             return Win32Native.SetWindowPos(
                 hwnd,
                 IntPtr.Zero,

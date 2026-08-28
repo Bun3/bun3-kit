@@ -5,6 +5,16 @@ All notable changes to this package will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.1] - 2026-08-28
+
+### Fixed
+
+- Work-area fit is maintenance, not one-shot: Unity resizes its own window during
+  startup, so a first-frames fit lost the race and the window ended up covering the
+  taskbar. `MonitorFit.EnsureFitted()` compares the current rect and only writes when
+  drifted (checked every 1s while enabled) — a matching window issues no native call,
+  keeping it safe alongside the cursor-clip freeze. Replaces `FitToWorkArea()`.
+
 ## [0.4.0] - 2026-08-28
 
 ### Added
