@@ -219,7 +219,7 @@ namespace Bun3.Unity.Agents
 
             if (existing != null)
             {
-                var backupPath = settingsPath + ".ai-office.bak";
+                var backupPath = settingsPath + ".bun3-agents.bak";
                 if (!File.Exists(backupPath))
                     File.Copy(settingsPath, backupPath);
             }
