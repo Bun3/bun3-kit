@@ -90,6 +90,10 @@ namespace Bun3.Unity.Window
         public static extern bool GetClipCursor(out Rect rect);
 
         public const uint MONITOR_DEFAULTTONEAREST = 2;
+        public const uint SPI_GETWORKAREA = 48;
+
+        [DllImport("user32.dll")]
+        public static extern bool SystemParametersInfo(uint action, uint param, out Rect rect, uint winIni);
 
         [StructLayout(LayoutKind.Sequential)]
         public struct MonitorInfo

@@ -25,11 +25,19 @@ namespace Bun3.Unity.Window
 #endif
 
         /// <summary>
-        /// Fits the window to the work area of the monitor it currently occupies when it
-        /// is not already there. Maintenance-style like the topmost pin: Unity resizes
-        /// its own window during startup (and display changes), so a one-shot fit loses
-        /// the race — call this periodically instead. A matching window issues no native
-        /// write at all, so it is safe alongside cursor-clip-sensitive apps.
+        /// Target monitor for the fit. True (default) pins the overlay to the primary
+        /// monitor's work area — the OS or Unity can place the window on a secondary
+        /// display at startup, and fitting "wherever it happens to be" would keep it
+        /// there. False fits the monitor the window currently occupies.
+        /// </summary>
+        public static bool FitToPrimary { get; set; } = true;
+
+        /// <summary>
+        /// Fits the window to the target monitor's work area when it is not already
+        /// there. Maintenance-style like the topmost pin: Unity resizes its own window
+        /// during startup (and display changes), so a one-shot fit loses the race —
+        /// call this periodically instead. A matching window issues no native write at
+        /// all, so it is safe alongside cursor-clip-sensitive apps.
         /// </summary>
         public static bool EnsureFitted()
         {
@@ -40,14 +48,24 @@ namespace Bun3.Unity.Window
                 return false;
             }
 
-            var monitor = Win32Native.MonitorFromWindow(hwnd, Win32Native.MONITOR_DEFAULTTONEAREST);
-            var info = new Win32Native.MonitorInfo { Size = System.Runtime.InteropServices.Marshal.SizeOf<Win32Native.MonitorInfo>() };
-            if (monitor == IntPtr.Zero || !Win32Native.GetMonitorInfo(monitor, ref info))
+            Win32Native.Rect work;
+            if (FitToPrimary)
             {
-                return false;
+                if (!Win32Native.SystemParametersInfo(Win32Native.SPI_GETWORKAREA, 0, out work, 0))
+                {
+                    return false;
+                }
             }
-
-            var work = info.Work;
+            else
+            {
+                var monitor = Win32Native.MonitorFromWindow(hwnd, Win32Native.MONITOR_DEFAULTTONEAREST);
+                var info = new Win32Native.MonitorInfo { Size = System.Runtime.InteropServices.Marshal.SizeOf<Win32Native.MonitorInfo>() };
+                if (monitor == IntPtr.Zero || !Win32Native.GetMonitorInfo(monitor, ref info))
+                {
+                    return false;
+                }
+                work = info.Work;
+            }
             if (Win32Native.GetWindowRect(hwnd, out var current)
                 && current.Left == work.Left && current.Top == work.Top
                 && current.Right == work.Right && current.Bottom == work.Bottom)
