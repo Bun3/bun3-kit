@@ -44,13 +44,21 @@ namespace Bun3.Unity.Agents
         public static List<AgentHeartbeat> ReadAndPrune()
         {
             var result = new List<AgentHeartbeat>();
-            ReadDirectory(HeartbeatDirectory, result);
+            ReadDirectory(HeartbeatDirectory, result, migrated: null);
             if (DirectoryOverride == null && LegacyDirectory != HeartbeatDirectory)
-                ReadDirectory(LegacyDirectory, result);
+            {
+                // An id already in the new directory has migrated — its legacy file is a
+                // stale dead copy that would drag the fresh worker into Sleeping. Delete it.
+                var migrated = new HashSet<string>();
+                foreach (var hb in result)
+                    migrated.Add(hb.id);
+                ReadDirectory(LegacyDirectory, result, migrated);
+            }
+
             return result;
         }
 
-        private static void ReadDirectory(string directory, List<AgentHeartbeat> result)
+        private static void ReadDirectory(string directory, List<AgentHeartbeat> result, HashSet<string> migrated)
         {
             if (!Directory.Exists(directory))
                 return;
@@ -81,6 +89,12 @@ namespace Bun3.Unity.Agents
                     // the session is over. Wrong once? A live session recreates its
                     // file on its next event. pid 0 (adopted / manual entries) is exempt.
                     if (hb.pid > 0 && !ProcessAlive(hb.pid))
+                    {
+                        File.Delete(file);
+                        continue;
+                    }
+
+                    if (migrated != null && migrated.Contains(hb.id))
                     {
                         File.Delete(file);
                         continue;
