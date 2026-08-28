@@ -1,0 +1,12 @@
+{
+  "provider": "codex",
+  "displayName": "Codex",
+  "hooks": {
+    "settingsPath": "~/.codex/config.toml",
+    "schema": "codex-notify",
+    "script": "bun3-agent-codex-notify.ps1",
+    "events": [
+      { "event": "notify" }
+    ]
+  }
+}

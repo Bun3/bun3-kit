@@ -1,0 +1,13 @@
+{
+  "provider": "gemini",
+  "displayName": "Gemini",
+  "hooks": {
+    "settingsPath": "~/.gemini/settings.json",
+    "events": [
+      { "event": "BeforeAgent", "state": 1 },
+      { "event": "BeforeTool", "state": 2 },
+      { "event": "AfterAgent", "state": 0 },
+      { "event": "Notification", "state": 3 }
+    ]
+  }
+}

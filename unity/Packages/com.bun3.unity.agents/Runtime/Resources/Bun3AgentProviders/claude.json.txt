@@ -1,0 +1,28 @@
+{
+  "provider": "claude",
+  "displayName": "Claude",
+  "process": { "processName": "claude", "pathHints": ["AnthropicClaude", "WindowsApps\\Claude_"] },
+  "hooks": {
+    "settingsPath": "~/.claude/settings.json",
+    "script": "bun3-agent-heartbeat.ps1",
+    "events": [
+      { "event": "SessionStart" },
+      { "event": "UserPromptSubmit" },
+      { "event": "PreToolUse", "matcher": "*" },
+      { "event": "PostToolUse", "matcher": "*" },
+      { "event": "PostToolUseFailure", "matcher": "*" },
+      { "event": "Notification", "matcher": "permission_prompt|elicitation_dialog|elicitation_url_dialog|agent_needs_input" },
+      { "event": "Stop" },
+      { "event": "StopFailure" },
+      { "event": "SessionEnd" },
+      { "event": "SubagentStart" },
+      { "event": "SubagentStop" },
+      { "event": "PreCompact" },
+      { "event": "PostCompact" }
+    ]
+  },
+  "discovery": {
+    "transcriptRoot": "~/.claude/projects",
+    "exitMarker": "{\"type\":\"cost-state\""
+  }
+}

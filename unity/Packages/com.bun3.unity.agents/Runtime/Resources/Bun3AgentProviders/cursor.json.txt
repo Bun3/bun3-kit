@@ -1,0 +1,13 @@
+{
+  "provider": "cursor",
+  "displayName": "Cursor",
+  "hooks": {
+    "settingsPath": "~/.cursor/hooks.json",
+    "schema": "cursor",
+    "events": [
+      { "event": "beforeSubmitPrompt", "state": 1 },
+      { "event": "afterFileEdit", "state": 2 },
+      { "event": "stop", "state": 0 }
+    ]
+  }
+}

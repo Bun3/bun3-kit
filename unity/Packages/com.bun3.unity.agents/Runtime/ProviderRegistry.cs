@@ -73,7 +73,37 @@ namespace Bun3.Unity.Agents
         public static string UserDirectory =>
             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "bun3-agents", "providers");
 
-        public static IReadOnlyList<ProviderDef> All => _all ??= Load(BuiltinDirectory, UserDirectory);
+        public static IReadOnlyList<ProviderDef> All
+        {
+            get
+            {
+                if (_all == null)
+                {
+                    SeedDefaults(UserDirectory);
+                    _all = Load(BuiltinDirectory, UserDirectory);
+                }
+
+                return _all;
+            }
+        }
+
+        /// <summary>
+        /// Writes the bundled default manifests (Claude, Gemini, Cursor, Codex, ChatGPT)
+        /// into the add-on directory unless a file of that name already exists — the
+        /// defaults ARE add-ons, sitting right where a community manifest would go, as
+        /// live examples users can copy or edit. Edits win; delete a file to get the
+        /// bundled version back on next run.
+        /// </summary>
+        public static void SeedDefaults(string directory)
+        {
+            Directory.CreateDirectory(directory);
+            foreach (var asset in Resources.LoadAll<TextAsset>("Bun3AgentProviders"))
+            {
+                var path = Path.Combine(directory, asset.name); // "claude.json" (.txt stripped by the importer)
+                if (!File.Exists(path))
+                    File.WriteAllText(path, asset.text);
+            }
+        }
 
         public static ProviderDef Find(string provider)
         {

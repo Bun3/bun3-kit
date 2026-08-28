@@ -1,0 +1,5 @@
+{
+  "provider": "chatgpt",
+  "displayName": "ChatGPT",
+  "process": { "processName": "ChatGPT", "pathHints": ["ChatGPT"] }
+}
