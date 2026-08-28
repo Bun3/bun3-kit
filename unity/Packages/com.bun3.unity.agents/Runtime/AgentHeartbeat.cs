@@ -4,7 +4,7 @@ using UnityEngine;
 namespace Bun3.Unity.Agents
 {
     /// <summary>
-    /// One agent's heartbeat file: %LOCALAPPDATA%/ai-office/agents/&lt;id&gt;.json.
+    /// One agent's heartbeat file: %LOCALAPPDATA%/bun3-agents/agents/&lt;id&gt;.json.
     /// Any local AI agent (Claude Code hook, Codex wrapper, ...) writes
     /// {"id":"...","n":"Claude","st":1,"ts":1724650000000} to appear as a worker.
     /// </summary>

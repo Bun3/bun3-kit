@@ -20,11 +20,8 @@ namespace Bun3.Unity.Agents
             public string[] PreviousCommand;  // non-null when a foreign notify was replaced
         }
 
-        /// <summary>Installs our notify command. Null result = already installed. A line
-        /// carrying the legacy marker is an older install of ours — replaced without
-        /// capturing it as a foreign command (chaining our own old wrapper would double
-        /// every heartbeat).</summary>
-        public static Result Install(string toml, string ourCommandLine, string marker, string legacyMarker = null)
+        /// <summary>Installs our notify command. Null result = already installed.</summary>
+        public static Result Install(string toml, string ourCommandLine, string marker)
         {
             toml ??= "";
             var match = NotifyLine.Match(toml);
@@ -34,17 +31,16 @@ namespace Bun3.Unity.Agents
             var line = "notify = [" + ourCommandLine + "]";
             if (match.Success)
             {
-                var legacyOurs = legacyMarker != null && match.Value.Contains(legacyMarker);
                 return new Result
                 {
                     Toml = toml.Remove(match.Index, match.Length).Insert(match.Index, line),
-                    PreviousCommand = legacyOurs ? null : ParseItems(match.Groups["items"].Value),
+                    PreviousCommand = ParseItems(match.Groups["items"].Value),
                 };
             }
 
             // top-level keys must precede the first [section]
             var sectionAt = toml.IndexOf("\n[", System.StringComparison.Ordinal);
-            var insert = "\n# ai-office\n" + line + "\n";
+            var insert = "\n# bun3-agents\n" + line + "\n";
             return new Result
             {
                 Toml = sectionAt < 0 ? toml.TrimEnd() + "\n" + insert : toml.Insert(sectionAt, "\n" + insert),
@@ -70,7 +66,7 @@ namespace Bun3.Unity.Agents
                 return toml.Remove(match.Index, match.Length).Insert(match.Index, restored);
             }
 
-            return toml.Remove(match.Index, match.Length).Replace("# ai-office\n", "");
+            return toml.Remove(match.Index, match.Length).Replace("# bun3-agents\n", "");
         }
 
         public static string[] ParseItems(string items)

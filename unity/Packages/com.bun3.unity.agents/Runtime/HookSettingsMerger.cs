@@ -4,7 +4,7 @@ using Newtonsoft.Json.Linq;
 namespace Bun3.Unity.Agents
 {
     /// <summary>
-    /// Merges ai-office hook entries into a CLI's settings.json, preserving everything
+    /// Merges bun3-agent hook entries into a CLI's settings.json, preserving everything
     /// already there. Works for any CLI using the hooks.&lt;Event&gt;[] → {hooks:[{type,command}]}
     /// settings shape (Claude, Gemini). Which events/commands to merge comes from the
     /// provider manifest — no provider knowledge lives here. Pure string-in/string-out.

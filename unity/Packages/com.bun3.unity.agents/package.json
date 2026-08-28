@@ -1,7 +1,7 @@
 {
   "name": "com.bun3.unity.agents",
   "displayName": "Bun3 Unity Agents",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "unity": "6000.3",
   "unityRelease": "14f1",
   "description": "Local AI agent activity detection for desktop apps: a shared heartbeat-file protocol (%LOCALAPPDATA%/bun3-agents/agents) fed by CLI hook scripts and a desktop-process watcher, provider manifests (built-in + community add-on JSON, icons, hook auto-install into Claude/Gemini/Cursor/Codex settings with clean uninstall), and transcript-based discovery of sessions that predate the hooks. The heartbeat directory is a protocol namespace, not app data - every consumer app sees the same agents and shares the same add-on ecosystem. Windows-focused; consumers reconcile the heartbeat list into their own domain.",

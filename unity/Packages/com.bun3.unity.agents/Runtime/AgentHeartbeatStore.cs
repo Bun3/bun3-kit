@@ -21,12 +21,6 @@ namespace Bun3.Unity.Agents
             DirectoryOverride
             ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "bun3-agents", "agents");
 
-        /// <summary>Pre-0.2 namespace. Sessions whose hooks were registered before the
-        /// rename keep writing here until they restart — read (and prune) both so they
-        /// stay visible through the migration.</summary>
-        private static string LegacyDirectory =>
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ai-office", "agents");
-
         /// <summary>Injectable for tests.</summary>
         public static Func<int, bool> ProcessAlive = pid =>
         {
@@ -44,24 +38,9 @@ namespace Bun3.Unity.Agents
         public static List<AgentHeartbeat> ReadAndPrune()
         {
             var result = new List<AgentHeartbeat>();
-            ReadDirectory(HeartbeatDirectory, result, migrated: null);
-            if (DirectoryOverride == null && LegacyDirectory != HeartbeatDirectory)
-            {
-                // An id already in the new directory has migrated — its legacy file is a
-                // stale dead copy that would drag the fresh worker into Sleeping. Delete it.
-                var migrated = new HashSet<string>();
-                foreach (var hb in result)
-                    migrated.Add(hb.id);
-                ReadDirectory(LegacyDirectory, result, migrated);
-            }
-
-            return result;
-        }
-
-        private static void ReadDirectory(string directory, List<AgentHeartbeat> result, HashSet<string> migrated)
-        {
+            var directory = HeartbeatDirectory;
             if (!Directory.Exists(directory))
-                return;
+                return result;
             var nowMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
             foreach (var file in Directory.GetFiles(directory, "*.watch"))
             {
@@ -94,12 +73,6 @@ namespace Bun3.Unity.Agents
                         continue;
                     }
 
-                    if (migrated != null && migrated.Contains(hb.id))
-                    {
-                        File.Delete(file);
-                        continue;
-                    }
-
                     result.Add(hb);
                 }
                 catch (IOException)
@@ -107,6 +80,8 @@ namespace Bun3.Unity.Agents
                     // mid-write; next scan picks it up
                 }
             }
+
+            return result;
         }
     }
 }
