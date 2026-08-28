@@ -49,6 +49,16 @@ namespace Bun3.Unity.Window
             {
                 return;
             }
+#if !UNITY_EDITOR
+            _fitPending = settings.FitToWorkArea;
+#if ENABLE_INPUT_SYSTEM
+            if (settings.BackgroundInput)
+            {
+                UnityEngine.InputSystem.InputSystem.settings.backgroundBehavior =
+                    UnityEngine.InputSystem.InputSettings.BackgroundBehavior.IgnoreFocus;
+            }
+#endif
+#endif
             AlwaysOnTop.EnforceIntervalSeconds = settings.EnforceInterval;
             AlwaysOnTop.YieldToCursorClip = settings.YieldToCursorClip;
             AlwaysOnTop.SetEnabled(settings.AlwaysOnTopEnabled);
@@ -63,15 +73,23 @@ namespace Bun3.Unity.Window
             ClickThrough.AutoByPointer = settings.AutoClickThrough;
         }
 
+        private static bool _fitPending;
+
         private static void Tick()
         {
             // While a game confines the cursor, freeze EVERY native window write —
-            // z-order re-pins and style toggles alike wipe the clip and let the pointer
-            // escape the game's mouse lock. Checked every frame for tight latency.
+            // z-order re-pins, style toggles, and resizes alike wipe the clip and let
+            // the pointer escape the game's mouse lock. Checked every frame.
             AlwaysOnTop.UpdateCursorClipYield();
             if (AlwaysOnTop.IsYieldingToCursorClip)
             {
                 return;
+            }
+
+            // The window handle can lag the first frames; retry until the fit lands.
+            if (_fitPending && MonitorFit.FitToWorkArea())
+            {
+                _fitPending = false;
             }
 
             if (AlwaysOnTop.IsEnabled && Time.unscaledTime >= _nextEnforceTime)

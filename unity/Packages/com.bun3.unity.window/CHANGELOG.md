@@ -5,6 +5,19 @@ All notable changes to this package will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-08-28
+
+### Added
+
+- `MonitorFit.FitToWorkArea()` — sizes the window to its monitor's work area (excludes
+  the taskbar), the standard desktop-overlay shape. Win32 resize only: `Screen.SetResolution`
+  recreates the render surface at a nondeterministic time and wipes DWM transparency.
+  Settings toggle `Fit To Work Area` (default off) with first-frames retry in the tick;
+  the resize respects the cursor-clip freeze.
+- `Background Input` settings toggle (default **on**, builds with the Input System) —
+  keeps input devices alive without window focus. An overlay almost never has focus,
+  and without this the mouse freezes, starving pointer-driven click-through and UI clicks.
+
 ## [0.3.2] - 2026-08-28
 
 ### Fixed

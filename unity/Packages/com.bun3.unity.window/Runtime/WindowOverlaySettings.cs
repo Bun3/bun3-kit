@@ -14,6 +14,15 @@ namespace Bun3.Unity.Window
     {
         public const string ResourceName = "Bun3WindowOverlaySettings";
 
+        [Header("Window (build only)")]
+        [SerializeField]
+        [Tooltip("Size the window to its monitor's work area (excludes the taskbar) on startup - the standard desktop-overlay shape. Win32 resize only; Screen.SetResolution would wipe DWM transparency.")]
+        private bool _fitToWorkArea;
+
+        [SerializeField]
+        [Tooltip("Keep Input System devices alive without window focus. An overlay almost never has focus, and without this the mouse freezes - starving pointer-driven click-through and UI clicks.")]
+        private bool _backgroundInput = true;
+
         [Header("Always On Top")]
         [SerializeField]
         [Tooltip("Pin the window above all non-topmost windows on startup.")]
@@ -51,6 +60,8 @@ namespace Bun3.Unity.Window
         [Tooltip("What counts as interactive content under the pointer.")]
         private IPointerHitTest _hitTest = new EventSystemHitTest();
 
+        public bool FitToWorkArea => _fitToWorkArea;
+        public bool BackgroundInput => _backgroundInput;
         public bool AlwaysOnTopEnabled => _alwaysOnTop;
         public float EnforceInterval => _enforceInterval;
         public bool YieldToCursorClip => _yieldToCursorClip;

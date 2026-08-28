@@ -89,6 +89,23 @@ namespace Bun3.Unity.Window
         [DllImport("user32.dll")]
         public static extern bool GetClipCursor(out Rect rect);
 
+        public const uint MONITOR_DEFAULTTONEAREST = 2;
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct MonitorInfo
+        {
+            public int Size;
+            public Rect Monitor;
+            public Rect Work;
+            public uint Flags;
+        }
+
+        [DllImport("user32.dll")]
+        public static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint flags);
+
+        [DllImport("user32.dll")]
+        public static extern bool GetMonitorInfo(IntPtr monitor, ref MonitorInfo info);
+
         [DllImport("user32.dll")]
         public static extern int GetSystemMetrics(int index);
 
