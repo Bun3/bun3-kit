@@ -1,0 +1,30 @@
+# Generic ai-office heartbeat writer for CLIs whose hooks pass arguments
+# (Gemini, Codex, Cursor). One worker per CLI - no per-session identity.
+# Usage: ai-office-beat.ps1 -Provider gemini -State 1 [-Name "Gemini CLI"]
+param(
+    [Parameter(Mandatory = $true)][string]$Provider,
+    [Parameter(Mandatory = $true)][int]$State,
+    [string]$Name = ""
+)
+
+$dir = Join-Path $env:LOCALAPPDATA "ai-office\agents"
+New-Item -ItemType Directory -Force $dir | Out-Null
+$file = Join-Path $dir "$Provider-cli.json"
+
+if (-not $Name) {
+    $Name = switch ($Provider) {
+        "gemini" { "Gemini CLI" }
+        "codex"  { "Codex CLI" }
+        "cursor" { "Cursor" }
+        default  { $Provider }
+    }
+}
+
+$beat = @{
+    id  = "$Provider-cli"
+    n   = $Name
+    st  = $State
+    ts  = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
+    pid = 0
+}
+$beat | ConvertTo-Json -Compress | Set-Content -Encoding utf8 $file

@@ -1,0 +1,127 @@
+# Claude Code hook -> ai-office heartbeat.
+# Wire in ~/.claude/settings.json for PreToolUse / PostToolUse / UserPromptSubmit /
+# Notification / Stop / SessionEnd, command: powershell -File <this file>
+$hook = [Console]::In.ReadToEnd() | ConvertFrom-Json
+if (-not $hook.session_id) { exit 0 }  # some payloads (helper processes) carry no session
+
+$dir = Join-Path $env:LOCALAPPDATA "ai-office\agents"
+
+# The game prunes heartbeats whose owner process died (session killed without
+# SessionEnd). Our direct parent can be a throwaway cmd wrapper, so climb the
+# ancestor chain to the claude/node process = the session itself. Not found -> 0,
+# which the game treats as exempt from pruning.
+$ownerPid = 0
+try {
+    $cur = $PID
+    for ($i = 0; $i -lt 6; $i++) {
+        $parentId = [int](Get-CimInstance Win32_Process -Filter "ProcessId=$cur" -Property ParentProcessId -ErrorAction Stop).ParentProcessId
+        if ($parentId -le 0) { break }
+        $parent = Get-CimInstance Win32_Process -Filter "ProcessId=$parentId" -Property Name -ErrorAction Stop
+        if (-not $parent) { break }
+        if ($parent.Name -match '^(claude|node)') { $ownerPid = $parentId; break }
+        $cur = $parentId
+    }
+} catch {}
+
+# Subagents: chick workers parented to the session worker. Appear on start, vanish on stop.
+if ($hook.hook_event_name -in @("SubagentStart", "SubagentStop")) {
+    if (-not $hook.agent_id) { exit 0 }
+    $chickFile = Join-Path $dir "claude-$($hook.session_id)-$($hook.agent_id).json"
+    if ($hook.hook_event_name -eq "SubagentStop") {
+        Remove-Item $chickFile -Force -ErrorAction SilentlyContinue
+        exit 0
+    }
+    New-Item -ItemType Directory -Force $dir | Out-Null
+    $chick = @{
+        id  = "claude-$($hook.session_id)-$($hook.agent_id)"
+        n   = if ($hook.agent_type) { $hook.agent_type } else { "agent" }
+        st  = 2
+        ts  = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
+        p   = "claude-$($hook.session_id)"
+        pid = $ownerPid
+    }
+    $chick | ConvertTo-Json -Compress | Set-Content -Encoding utf8 $chickFile
+    exit 0
+}
+# Watching flag: set when a Monitor or background Bash starts. The flag stores the
+# starting turn's prompt_id: a Stop from a DIFFERENT turn without a user prompt in
+# between is the wake turn finishing its wrap-up (the background work completed and
+# was handled), so the flag clears and the worker goes Idle - same moment Orca-style
+# tools raise their "done" alarm. ponytail: one flag per session - if a turn starts
+# several background tasks, the first wake clears it; per-task tracking if that hurts.
+$watchFlag = Join-Path $dir "claude-$($hook.session_id).watch"
+if ($hook.hook_event_name -eq "PostToolUse") {
+    $bg = ($hook.tool_name -eq "Monitor") -or
+          ($hook.tool_name -eq "Bash" -and $hook.tool_input.run_in_background)
+    if ($bg) {
+        New-Item -ItemType Directory -Force $dir | Out-Null
+        # persistent monitors keep watching after each wake, so mark the flag
+        $marker = if ($hook.tool_name -eq "Monitor" -and $hook.tool_input.persistent) { " P" } else { "" }
+        Set-Content -Path $watchFlag -Value "$($hook.prompt_id)$marker" -Encoding ascii
+    }
+}
+elseif ($hook.hook_event_name -in @("UserPromptSubmit", "SessionEnd")) {
+    Remove-Item $watchFlag -Force -ErrorAction SilentlyContinue
+}
+
+$watchState = 0
+if ($hook.hook_event_name -eq "Stop" -and (Test-Path $watchFlag)) {
+    $flagRaw = (Get-Content $watchFlag -Raw -ErrorAction SilentlyContinue)
+    if ($null -ne $flagRaw) { $flagRaw = $flagRaw.Trim() }
+    $persistent = $flagRaw -and $flagRaw.EndsWith(" P")
+    $flagPrompt = if ($persistent) { $flagRaw.Substring(0, $flagRaw.Length - 2) } else { $flagRaw }
+    if ($flagPrompt -and $hook.prompt_id -and $flagPrompt -ne "$($hook.prompt_id)" -and -not $persistent) {
+        # a later turn ended with no user prompt in between: one-shot work done
+        Remove-Item $watchFlag -Force -ErrorAction SilentlyContinue
+        $watchState = 0
+    }
+    else {
+        $watchState = 5  # still on watch (persistent monitors stay after each wake)
+    }
+}
+
+$state = switch ($hook.hook_event_name) {
+    "SessionStart"       { 0 }   # Idle - session up, nothing running yet
+    "UserPromptSubmit"   { 1 }   # Thinking - prompt received, no tool yet
+    "Notification"       { 3 }   # WaitingInput - permission prompt or idle nudge
+    "Stop"               { $watchState }  # Watching while bg work pends, Idle once the wake turn wraps up
+    "StopFailure"        { 4 }   # Error - turn died on an API error (rate limit, billing, ...)
+    "PreCompact"         { 7 }   # Compacting - tidying its memory
+    "PostCompact"        { 2 }   # back to work
+    "SessionEnd"         { -1 }  # remove worker
+    default {
+        # Tool activity in a turn the user never prompted (flag from an earlier turn)
+        # is monitor-driven patrol work - show it as Watching, not generic Working.
+        $s = 2
+        if (Test-Path $watchFlag) {
+            $fp = Get-Content $watchFlag -Raw -ErrorAction SilentlyContinue
+            if ($null -ne $fp) { $fp = $fp.Trim() }
+            if ($fp -and $fp.EndsWith(" P")) { $fp = $fp.Substring(0, $fp.Length - 2) }
+            if ($fp -and $hook.prompt_id -and $fp -ne "$($hook.prompt_id)") { $s = 5 }
+        }
+        $s
+    }
+}
+
+$file = Join-Path $dir "claude-$($hook.session_id).json"
+
+if ($state -lt 0) {
+    Remove-Item $file -Force -ErrorAction SilentlyContinue
+    exit 0
+}
+
+New-Item -ItemType Directory -Force $dir | Out-Null
+# The payload cwd follows the shell's current directory, which drifts as the
+# session cd's around. Keep the first-seen name (the project root at session
+# start) as the stable identity.
+$name = $null
+try { $name = "$((Get-Content $file -Raw -ErrorAction Stop | ConvertFrom-Json).n)" } catch {}
+if (-not $name) { $name = if ($hook.cwd) { Split-Path -Leaf $hook.cwd } else { "Claude" } }
+$beat = @{
+    id  = "claude-$($hook.session_id)"
+    n   = $name
+    st  = $state
+    ts  = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
+    pid = $ownerPid
+}
+$beat | ConvertTo-Json -Compress | Set-Content -Encoding utf8 $file
