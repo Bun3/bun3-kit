@@ -14,10 +14,14 @@ namespace Bun3.Unity.Agents
     /// </summary>
     public static class ProviderHookInstaller
     {
-        private const string GenericScript = "ai-office-beat.ps1";
+        private const string GenericScript = "bun3-agent-beat.ps1";
 
         /// <summary>Every command we install carries this; uninstall removes by it.</summary>
-        public const string CommandMarker = "ai-office";
+        public const string CommandMarker = "bun3-agent";
+
+        /// <summary>Pre-0.2 marker — installs from before the protocol namespace was
+        /// decoupled from its first consumer app. Stripped on install and uninstall.</summary>
+        public const string LegacyCommandMarker = "ai-office";
 
 #if !UNITY_EDITOR
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
@@ -38,7 +42,7 @@ namespace Bun3.Unity.Agents
             var script = string.IsNullOrEmpty(def.hooks.script) ? GenericScript : def.hooks.script;
             var scriptDest = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "ai-office", "hooks", script);
+                "bun3-agents", "hooks", script);
             try
             {
                 var content = ResolveScript(def, script);
@@ -75,16 +79,24 @@ namespace Bun3.Unity.Agents
 
         private static string CodexOriginalPath => Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "bun3-agents", "hooks", "codex-notify-original.json");
+
+        private static string LegacyCodexOriginalPath => Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "ai-office", "hooks", "codex-notify-original.json");
 
         /// <summary>Codex has one notify slot in config.toml, not hook events; a foreign
         /// occupant is captured so the wrapper script chains it instead of evicting it.</summary>
         private static bool InstallCodexNotify(string settingsPath, string scriptDest)
         {
+            // a pre-rename install captured the original under the old namespace
+            if (!File.Exists(CodexOriginalPath) && File.Exists(LegacyCodexOriginalPath))
+                File.Copy(LegacyCodexOriginalPath, CodexOriginalPath);
+
             var existing = File.Exists(settingsPath) ? File.ReadAllText(settingsPath) : "";
             var ourLine = "\"powershell\", \"-NoProfile\", \"-ExecutionPolicy\", \"Bypass\", \"-File\", \""
                           + scriptDest.Replace("\\", "/") + "\"";
-            var patched = CodexNotifyPatch.Install(existing, ourLine, CommandMarker);
+            var patched = CodexNotifyPatch.Install(existing, ourLine, CommandMarker, LegacyCommandMarker);
             if (patched == null)
                 return false;
 
@@ -96,7 +108,7 @@ namespace Bun3.Unity.Agents
 
             if (!string.IsNullOrEmpty(existing))
             {
-                var backupPath = settingsPath + ".ai-office.bak";
+                var backupPath = settingsPath + ".bun3-agents.bak";
                 if (!File.Exists(backupPath))
                     File.Copy(settingsPath, backupPath);
             }
@@ -106,8 +118,9 @@ namespace Bun3.Unity.Agents
             return true;
         }
 
-        /// <summary>Removes every ai-office hook entry from the CLI's settings file,
-        /// leaving foreign hooks untouched. Returns true when something was removed.</summary>
+        /// <summary>Removes every hook entry of ours (current or legacy marker) from the
+        /// CLI's settings file, leaving foreign hooks untouched. Returns true when
+        /// something was removed.</summary>
         public static bool Uninstall(string settingsPath)
         {
             if (!File.Exists(settingsPath))
@@ -120,11 +133,13 @@ namespace Bun3.Unity.Agents
                 string[] previous = null;
                 if (File.Exists(CodexOriginalPath))
                     previous = Newtonsoft.Json.JsonConvert.DeserializeObject<string[]>(File.ReadAllText(CodexOriginalPath));
-                removed = CodexNotifyPatch.Remove(content, CommandMarker, previous);
+                removed = CodexNotifyPatch.Remove(content, CommandMarker, previous)
+                          ?? CodexNotifyPatch.Remove(content, LegacyCommandMarker, previous);
             }
             else
             {
                 removed = HookSettingsMerger.RemoveByMarker(content, CommandMarker);
+                removed = HookSettingsMerger.RemoveByMarker(removed ?? content, LegacyCommandMarker) ?? removed;
             }
 
             if (removed == null)
@@ -191,10 +206,14 @@ namespace Bun3.Unity.Agents
                 return InstallCodexNotify(settingsPath, scriptDest);
 
             var existing = File.Exists(settingsPath) ? File.ReadAllText(settingsPath) : null;
+            // migration: entries installed under the legacy marker are ours — replace, not accumulate
+            var legacyStripped = HookSettingsMerger.RemoveByMarker(existing, LegacyCommandMarker);
+            var baseline = legacyStripped ?? existing;
             var entries = BuildEntries(def, scriptDest);
             var merged = def.hooks.schema == "cursor"
-                ? HookSettingsMerger.MergeCursor(existing, entries)
-                : HookSettingsMerger.Merge(existing, entries);
+                ? HookSettingsMerger.MergeCursor(baseline, entries)
+                : HookSettingsMerger.Merge(baseline, entries);
+            merged ??= legacyStripped; // nothing new to add, but the legacy cleanup must land
             if (merged == null)
                 return false; // already installed
 

@@ -71,9 +71,13 @@ namespace Bun3.Unity.Agents
         public static string BuiltinDirectory => Path.Combine(Application.streamingAssetsPath, "providers");
 
         public static string UserDirectory =>
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "bun3-agents", "providers");
+
+        /// <summary>Pre-0.2 add-on location, still honored (new location wins per key).</summary>
+        public static string LegacyUserDirectory =>
             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ai-office", "providers");
 
-        public static IReadOnlyList<ProviderDef> All => _all ??= Load(BuiltinDirectory, UserDirectory);
+        public static IReadOnlyList<ProviderDef> All => _all ??= Load(BuiltinDirectory, LegacyUserDirectory, UserDirectory);
 
         public static ProviderDef Find(string provider)
         {

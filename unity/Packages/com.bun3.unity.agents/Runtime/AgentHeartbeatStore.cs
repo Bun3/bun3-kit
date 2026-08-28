@@ -19,7 +19,13 @@ namespace Bun3.Unity.Agents
         /// <summary>Protocol namespace shared by every consumer app — not per-app data.</summary>
         public static string HeartbeatDirectory =>
             DirectoryOverride
-            ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ai-office", "agents");
+            ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "bun3-agents", "agents");
+
+        /// <summary>Pre-0.2 namespace. Sessions whose hooks were registered before the
+        /// rename keep writing here until they restart — read (and prune) both so they
+        /// stay visible through the migration.</summary>
+        private static string LegacyDirectory =>
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ai-office", "agents");
 
         /// <summary>Injectable for tests.</summary>
         public static Func<int, bool> ProcessAlive = pid =>
@@ -38,17 +44,25 @@ namespace Bun3.Unity.Agents
         public static List<AgentHeartbeat> ReadAndPrune()
         {
             var result = new List<AgentHeartbeat>();
-            if (!Directory.Exists(HeartbeatDirectory))
-                return result;
+            ReadDirectory(HeartbeatDirectory, result);
+            if (DirectoryOverride == null && LegacyDirectory != HeartbeatDirectory)
+                ReadDirectory(LegacyDirectory, result);
+            return result;
+        }
+
+        private static void ReadDirectory(string directory, List<AgentHeartbeat> result)
+        {
+            if (!Directory.Exists(directory))
+                return;
             var nowMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-            foreach (var file in Directory.GetFiles(HeartbeatDirectory, "*.watch"))
+            foreach (var file in Directory.GetFiles(directory, "*.watch"))
             {
                 // watch flags from crashed sessions never get cleaned by SessionEnd
                 if (nowMs - new DateTimeOffset(File.GetLastWriteTimeUtc(file)).ToUnixTimeMilliseconds() >= AgentHeartbeat.CrashedAfterMs)
                     File.Delete(file);
             }
 
-            foreach (var file in Directory.GetFiles(HeartbeatDirectory, "*.json"))
+            foreach (var file in Directory.GetFiles(directory, "*.json"))
             {
                 try
                 {
@@ -79,8 +93,6 @@ namespace Bun3.Unity.Agents
                     // mid-write; next scan picks it up
                 }
             }
-
-            return result;
         }
     }
 }

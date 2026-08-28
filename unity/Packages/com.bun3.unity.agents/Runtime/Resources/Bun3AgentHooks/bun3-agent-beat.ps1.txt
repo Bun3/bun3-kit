@@ -1,13 +1,13 @@
-# Generic ai-office heartbeat writer for CLIs whose hooks pass arguments
+# Generic agent heartbeat writer for CLIs whose hooks pass arguments
 # (Gemini, Codex, Cursor). One worker per CLI - no per-session identity.
-# Usage: ai-office-beat.ps1 -Provider gemini -State 1 [-Name "Gemini CLI"]
+# Usage: bun3-agent-beat.ps1 -Provider gemini -State 1 [-Name "Gemini CLI"]
 param(
     [Parameter(Mandatory = $true)][string]$Provider,
     [Parameter(Mandatory = $true)][int]$State,
     [string]$Name = ""
 )
 
-$dir = Join-Path $env:LOCALAPPDATA "ai-office\agents"
+$dir = Join-Path $env:LOCALAPPDATA "bun3-agents\agents"
 New-Item -ItemType Directory -Force $dir | Out-Null
 $file = Join-Path $dir "$Provider-cli.json"
 

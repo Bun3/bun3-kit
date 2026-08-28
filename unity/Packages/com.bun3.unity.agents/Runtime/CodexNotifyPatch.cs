@@ -20,8 +20,11 @@ namespace Bun3.Unity.Agents
             public string[] PreviousCommand;  // non-null when a foreign notify was replaced
         }
 
-        /// <summary>Installs our notify command. Null result = already installed.</summary>
-        public static Result Install(string toml, string ourCommandLine, string marker)
+        /// <summary>Installs our notify command. Null result = already installed. A line
+        /// carrying the legacy marker is an older install of ours — replaced without
+        /// capturing it as a foreign command (chaining our own old wrapper would double
+        /// every heartbeat).</summary>
+        public static Result Install(string toml, string ourCommandLine, string marker, string legacyMarker = null)
         {
             toml ??= "";
             var match = NotifyLine.Match(toml);
@@ -31,10 +34,11 @@ namespace Bun3.Unity.Agents
             var line = "notify = [" + ourCommandLine + "]";
             if (match.Success)
             {
+                var legacyOurs = legacyMarker != null && match.Value.Contains(legacyMarker);
                 return new Result
                 {
                     Toml = toml.Remove(match.Index, match.Length).Insert(match.Index, line),
-                    PreviousCommand = ParseItems(match.Groups["items"].Value),
+                    PreviousCommand = legacyOurs ? null : ParseItems(match.Groups["items"].Value),
                 };
             }
 

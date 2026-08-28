@@ -1,9 +1,9 @@
-# Codex notify -> ai-office heartbeat, chaining any notify command that was
+# Codex notify -> agent heartbeat, chaining any notify command that was
 # installed before us (saved as codex-notify-original.json at install time).
 # Codex invokes notify with one JSON argument describing the notification.
 param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Rest)
 
-$hooksDir = Join-Path $env:LOCALAPPDATA "ai-office\hooks"
+$hooksDir = Join-Path $env:LOCALAPPDATA "bun3-agents\hooks"
 $originalFile = Join-Path $hooksDir "codex-notify-original.json"
 if (Test-Path $originalFile) {
     try {
@@ -23,7 +23,7 @@ try {
     if ($Rest -and ($Rest[-1] | ConvertFrom-Json).type -match "attention|approval|input") { $st = 3 }
 } catch {}
 
-$agents = Join-Path $env:LOCALAPPDATA "ai-office\agents"
+$agents = Join-Path $env:LOCALAPPDATA "bun3-agents\agents"
 New-Item -ItemType Directory -Force $agents | Out-Null
 $ts = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
 Set-Content -Encoding utf8 (Join-Path $agents "codex-cli.json") `

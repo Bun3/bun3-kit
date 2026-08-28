@@ -1,10 +1,10 @@
-# Claude Code hook -> ai-office heartbeat.
+# Claude Code hook -> agent heartbeat.
 # Wire in ~/.claude/settings.json for PreToolUse / PostToolUse / UserPromptSubmit /
 # Notification / Stop / SessionEnd, command: powershell -File <this file>
 $hook = [Console]::In.ReadToEnd() | ConvertFrom-Json
 if (-not $hook.session_id) { exit 0 }  # some payloads (helper processes) carry no session
 
-$dir = Join-Path $env:LOCALAPPDATA "ai-office\agents"
+$dir = Join-Path $env:LOCALAPPDATA "bun3-agents\agents"
 
 # The game prunes heartbeats whose owner process died (session killed without
 # SessionEnd). Our direct parent can be a throwaway cmd wrapper, so climb the
