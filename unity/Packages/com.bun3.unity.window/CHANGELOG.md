@@ -5,6 +5,19 @@ All notable changes to this package will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.2] - 2026-08-28
+
+### Fixed
+
+- The cursor-clip yield no longer unpins on clip start — that very `SetWindowPos` wiped
+  the game's fresh mouse lock, and the 1s-grace re-pin wiped the next one, turning the
+  yield into an oscillator that broke the lock continuously (log-verified against a
+  live game: `IsYieldingToCursorClip` flapped while the game's 1-px center clip kept
+  vanishing). The yield is now a pure write freeze: no unpin, no style writes, no
+  enforcement while a clip is live; everything resumes after the grace period. Clip
+  state is now checked every frame (`UpdateCursorClipYield`) instead of on the
+  enforcement interval, for tight reaction latency.
+
 ## [0.3.1] - 2026-08-28
 
 ### Fixed

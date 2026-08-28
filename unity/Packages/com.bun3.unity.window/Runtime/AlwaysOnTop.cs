@@ -32,13 +32,14 @@ namespace Bun3.Unity.Window
         public static float EnforceIntervalSeconds { get; set; } = 0.25f;
 
         /// <summary>
-        /// While another application confines the cursor with <c>ClipCursor</c> (games in
-        /// borderless fullscreen keep the mouse on their monitor this way), release the pin
-        /// and stop touching the z-order: any <c>SetWindowPos</c> from a background window
-        /// makes Windows drop the clip, and the pointer escapes onto other monitors
-        /// mid-game. The pin is restored automatically when the clip is released.
-        /// <see cref="IsEnabled"/> is unaffected — this is a temporary hold, not a state
-        /// change. Default on; opt out for overlays that must stay above clipping apps.
+        /// While another application confines the cursor with <c>ClipCursor</c> (games
+        /// lock the mouse to their window or its center this way), freeze all native
+        /// window writes: <c>SetWindowPos</c> and <c>SetWindowLong</c> from a background
+        /// window each wipe the clip, letting the pointer escape onto other monitors
+        /// mid-game. Nothing is unpinned — the overlay just goes write-silent until the
+        /// clip has been released for a grace period. <see cref="IsEnabled"/> is
+        /// unaffected. Default on; opt out for overlays that must keep enforcing above
+        /// clipping apps.
         /// </summary>
         public static bool YieldToCursorClip { get; set; } = true;
 
@@ -118,30 +119,10 @@ namespace Bun3.Unity.Window
                 return false;
             }
 
-            if (YieldToCursorClip)
+            UpdateCursorClipYield();
+            if (IsYieldingToCursorClip)
             {
-                if (Win32Native.CursorIsClipped())
-                {
-                    _clipLastSeenTime = Time.unscaledTime;
-                    if (!IsYieldingToCursorClip)
-                    {
-                        IsYieldingToCursorClip = true;
-                        SetTopMost(hwnd, topMost: false);
-                    }
-                    return false;
-                }
-                if (IsYieldingToCursorClip)
-                {
-                    // Grace period: a game may drop and re-set its clip within moments
-                    // (focus churn); re-pinning in that window would wipe the fresh clip.
-                    if (Time.unscaledTime - _clipLastSeenTime < ClipReleaseGraceSeconds)
-                    {
-                        return false;
-                    }
-                    IsYieldingToCursorClip = false;
-                    _lastForeground = Win32Native.GetForegroundWindow();
-                    return SetTopMost(hwnd, topMost: true);
-                }
+                return false;
             }
 
             var foreground = Win32Native.GetForegroundWindow();
@@ -160,6 +141,39 @@ namespace Bun3.Unity.Window
             return SetTopMost(hwnd, topMost: true);
 #else
             return false;
+#endif
+        }
+
+        /// <summary>
+        /// Tracks whether some app currently confines the cursor. While it does, every
+        /// native window write must be frozen — releasing the pin, re-pinning, or any
+        /// style change each wipe the clip (they are what let the pointer escape a
+        /// game's mouse lock in the first place). So the yield does NOTHING: no unpin,
+        /// no writes; enforcement and policy simply pause until the clip has been gone
+        /// for a grace period. Called every frame by the package tick, and by
+        /// <see cref="EnforceOnce"/> for standalone callers.
+        /// </summary>
+        public static void UpdateCursorClipYield()
+        {
+#if BUN3_TOPMOST_SUPPORTED
+            if (!YieldToCursorClip)
+            {
+                IsYieldingToCursorClip = false;
+                return;
+            }
+
+            if (Win32Native.CursorIsClipped())
+            {
+                _clipLastSeenTime = Time.unscaledTime;
+                IsYieldingToCursorClip = true;
+            }
+            else if (IsYieldingToCursorClip && Time.unscaledTime - _clipLastSeenTime >= ClipReleaseGraceSeconds)
+            {
+                IsYieldingToCursorClip = false;
+                // Stale foreground comparison would fire an instant re-pin; reset it so
+                // enforcement resumes from drift checks alone.
+                _lastForeground = Win32Native.GetForegroundWindow();
+            }
 #endif
         }
 

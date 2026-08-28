@@ -25,7 +25,7 @@ namespace Bun3.Unity.Window
         private float _enforceInterval = 0.25f;
 
         [SerializeField]
-        [Tooltip("Release the pin while another app confines the cursor (games in borderless fullscreen) - re-pinning would break their mouse confinement. Restored when the clip ends.")]
+        [Tooltip("Freeze all window writes while another app confines the cursor (games locking the mouse) - any SetWindowPos/style write breaks their confinement. Normal behavior resumes when the clip ends.")]
         private bool _yieldToCursorClip = true;
 
         [Header("Transparency (build only)")]
