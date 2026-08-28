@@ -5,6 +5,17 @@ All notable changes to this package will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] - 2026-08-28
+
+### Fixed
+
+- The cursor-clip yield now also pauses pointer-driven click-through toggling — each
+  `SetWindowLong` style write from a background window can drop a game's clip exactly
+  like a z-order change did, so click-through is pinned on for the duration (verified
+  against a live borderless-fullscreen game: the escapes came from the style toggles,
+  not the pin). Restoring the pin after a clip ends now waits a 1s grace period so a
+  game re-setting its clip during focus churn is not wiped mid-transition.
+
 ## [0.3.0] - 2026-08-28
 
 ### Added

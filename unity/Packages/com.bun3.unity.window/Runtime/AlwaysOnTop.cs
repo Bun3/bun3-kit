@@ -3,6 +3,7 @@
 #endif
 
 using System;
+using UnityEngine;
 
 namespace Bun3.Unity.Window
 {
@@ -43,6 +44,9 @@ namespace Bun3.Unity.Window
 
         /// <summary>True while the pin is temporarily held down for a cursor-clipping app.</summary>
         public static bool IsYieldingToCursorClip { get; private set; }
+
+        private const float ClipReleaseGraceSeconds = 1f;
+        private static float _clipLastSeenTime;
 
 #if BUN3_TOPMOST_SUPPORTED
         private static IntPtr _lastForeground;
@@ -118,6 +122,7 @@ namespace Bun3.Unity.Window
             {
                 if (Win32Native.CursorIsClipped())
                 {
+                    _clipLastSeenTime = Time.unscaledTime;
                     if (!IsYieldingToCursorClip)
                     {
                         IsYieldingToCursorClip = true;
@@ -127,6 +132,12 @@ namespace Bun3.Unity.Window
                 }
                 if (IsYieldingToCursorClip)
                 {
+                    // Grace period: a game may drop and re-set its clip within moments
+                    // (focus churn); re-pinning in that window would wipe the fresh clip.
+                    if (Time.unscaledTime - _clipLastSeenTime < ClipReleaseGraceSeconds)
+                    {
+                        return false;
+                    }
                     IsYieldingToCursorClip = false;
                     _lastForeground = Win32Native.GetForegroundWindow();
                     return SetTopMost(hwnd, topMost: true);

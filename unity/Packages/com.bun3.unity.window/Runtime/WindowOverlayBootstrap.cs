@@ -63,6 +63,8 @@ namespace Bun3.Unity.Window
             ClickThrough.AutoByPointer = settings.AutoClickThrough;
         }
 
+        private static bool _clipHold;
+
         private static void Tick()
         {
             if (AlwaysOnTop.IsEnabled && Time.unscaledTime >= _nextEnforceTime)
@@ -70,6 +72,22 @@ namespace Bun3.Unity.Window
                 _nextEnforceTime = Time.unscaledTime + AlwaysOnTop.EnforceIntervalSeconds;
                 AlwaysOnTop.EnforceOnce();
             }
+
+            // While a game confines the cursor, pointer-driven click-through toggling
+            // must pause too: each style write (SetWindowLong) from a background window
+            // can drop the game's clip just like a z-order change. Pin click-through on
+            // (nothing overlay-interactive happens mid-game) and resume policy after.
+            if (AlwaysOnTop.IsYieldingToCursorClip)
+            {
+                if (!_clipHold)
+                {
+                    _clipHold = true;
+                    ClickThrough.SetEnabled(true);
+                }
+                return;
+            }
+
+            _clipHold = false;
             ClickThrough.TickPolicy();
         }
 
