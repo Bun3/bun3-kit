@@ -101,9 +101,6 @@ namespace Bun3.Unity.Window
         }
 
         [DllImport("user32.dll")]
-        public static extern bool GetWindowRect(IntPtr hwnd, out Rect rect);
-
-        [DllImport("user32.dll")]
         public static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint flags);
 
         [DllImport("user32.dll")]
