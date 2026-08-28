@@ -50,6 +50,7 @@ namespace Bun3.Unity.Window
                 return;
             }
             AlwaysOnTop.EnforceIntervalSeconds = settings.EnforceInterval;
+            AlwaysOnTop.YieldToCursorClip = settings.YieldToCursorClip;
             AlwaysOnTop.SetEnabled(settings.AlwaysOnTopEnabled);
             if (settings.TransparencyEnabled)
             {

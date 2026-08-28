@@ -24,6 +24,10 @@ namespace Bun3.Unity.Window
         [Tooltip("Seconds between pin-drift enforcement checks (unscaled). 0 checks every frame.")]
         private float _enforceInterval = 0.25f;
 
+        [SerializeField]
+        [Tooltip("Release the pin while another app confines the cursor (games in borderless fullscreen) - re-pinning would break their mouse confinement. Restored when the clip ends.")]
+        private bool _yieldToCursorClip = true;
+
         [Header("Transparency (build only)")]
         [SerializeField]
         [Tooltip("Make undrawn pixels show the desktop behind the window on startup. Uses Camera.main.")]
@@ -49,6 +53,7 @@ namespace Bun3.Unity.Window
 
         public bool AlwaysOnTopEnabled => _alwaysOnTop;
         public float EnforceInterval => _enforceInterval;
+        public bool YieldToCursorClip => _yieldToCursorClip;
         public bool TransparencyEnabled => _transparency;
         public TransparencyPreference PreferredMethod => _preferredMethod;
         public Color ColorKey => _colorKey;

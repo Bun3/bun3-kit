@@ -87,6 +87,35 @@ namespace Bun3.Unity.Window
         public static extern bool GetCursorPos(out Point point);
 
         [DllImport("user32.dll")]
+        public static extern bool GetClipCursor(out Rect rect);
+
+        [DllImport("user32.dll")]
+        public static extern int GetSystemMetrics(int index);
+
+        public const int SM_XVIRTUALSCREEN = 76;
+        public const int SM_YVIRTUALSCREEN = 77;
+        public const int SM_CXVIRTUALSCREEN = 78;
+        public const int SM_CYVIRTUALSCREEN = 79;
+
+        /// <summary>
+        /// True while some application confines the cursor with ClipCursor — the clip
+        /// rect is smaller than the virtual desktop. Games do this in (borderless)
+        /// fullscreen to keep the mouse on their monitor.
+        /// </summary>
+        public static bool CursorIsClipped()
+        {
+            if (!GetClipCursor(out var clip))
+            {
+                return false;
+            }
+            var left = GetSystemMetrics(SM_XVIRTUALSCREEN);
+            var top = GetSystemMetrics(SM_YVIRTUALSCREEN);
+            var right = left + GetSystemMetrics(SM_CXVIRTUALSCREEN);
+            var bottom = top + GetSystemMetrics(SM_CYVIRTUALSCREEN);
+            return clip.Left > left || clip.Top > top || clip.Right < right || clip.Bottom < bottom;
+        }
+
+        [DllImport("user32.dll")]
         public static extern bool ScreenToClient(IntPtr hWnd, ref Point point);
 
         [DllImport("dwmapi.dll")]

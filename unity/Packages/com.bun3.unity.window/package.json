@@ -1,7 +1,7 @@
 {
   "name": "com.bun3.unity.window",
   "displayName": "Bun3 Unity Window",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "unity": "6000.3",
   "unityRelease": "14f1",
   "description": "Desktop-overlay window control for Windows: AlwaysOnTop (HWND_TOPMOST pinning with drift enforcement), WindowTransparency (DWM per-pixel alpha with color-key fallback), and ClickThrough (pointer-aware WS_EX_TRANSPARENT toggling). Fully static — configured via a WindowOverlaySettings asset in Resources and driven by one player-loop tick; no scene objects. Editor: always-on-top works on the editor window for play-mode testing; transparency and click-through are build-only. Non-Windows platforms are safe no-ops.",

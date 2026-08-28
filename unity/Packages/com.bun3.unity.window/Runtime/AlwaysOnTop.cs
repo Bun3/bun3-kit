@@ -30,6 +30,20 @@ namespace Bun3.Unity.Window
         /// <summary>Seconds between automatic enforcement checks (unscaled). 0 checks every frame.</summary>
         public static float EnforceIntervalSeconds { get; set; } = 0.25f;
 
+        /// <summary>
+        /// While another application confines the cursor with <c>ClipCursor</c> (games in
+        /// borderless fullscreen keep the mouse on their monitor this way), release the pin
+        /// and stop touching the z-order: any <c>SetWindowPos</c> from a background window
+        /// makes Windows drop the clip, and the pointer escapes onto other monitors
+        /// mid-game. The pin is restored automatically when the clip is released.
+        /// <see cref="IsEnabled"/> is unaffected — this is a temporary hold, not a state
+        /// change. Default on; opt out for overlays that must stay above clipping apps.
+        /// </summary>
+        public static bool YieldToCursorClip { get; set; } = true;
+
+        /// <summary>True while the pin is temporarily held down for a cursor-clipping app.</summary>
+        public static bool IsYieldingToCursorClip { get; private set; }
+
 #if BUN3_TOPMOST_SUPPORTED
         private static IntPtr _lastForeground;
 #endif
@@ -98,6 +112,25 @@ namespace Bun3.Unity.Window
             if (hwnd == IntPtr.Zero)
             {
                 return false;
+            }
+
+            if (YieldToCursorClip)
+            {
+                if (Win32Native.CursorIsClipped())
+                {
+                    if (!IsYieldingToCursorClip)
+                    {
+                        IsYieldingToCursorClip = true;
+                        SetTopMost(hwnd, topMost: false);
+                    }
+                    return false;
+                }
+                if (IsYieldingToCursorClip)
+                {
+                    IsYieldingToCursorClip = false;
+                    _lastForeground = Win32Native.GetForegroundWindow();
+                    return SetTopMost(hwnd, topMost: true);
+                }
             }
 
             var foreground = Win32Native.GetForegroundWindow();
