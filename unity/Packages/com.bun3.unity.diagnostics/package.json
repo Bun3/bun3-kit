@@ -1,0 +1,12 @@
+{
+  "name": "com.bun3.unity.diagnostics",
+  "displayName": "Bun3 Unity Diagnostics",
+  "version": "0.1.0",
+  "unity": "2022.3",
+  "description": "Editor-only diagnostics for Unity. Dumps Frame Debugger captures to Markdown/JSON with batching analysis: per-shader and per-break-cause call counts, shader interleave detection, run-length stats, single-quad draw counts, and hierarchy-path aggregation. Built for humans and AI agents driving draw-call optimization without the GUI.",
+  "author": {
+    "name": "Bun3",
+    "url": "https://github.com/Bun3",
+    "email": "bun3.dev@gmail.com"
+  }
+}
