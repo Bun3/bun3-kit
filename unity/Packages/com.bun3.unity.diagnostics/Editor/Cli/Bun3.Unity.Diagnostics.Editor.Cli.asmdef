@@ -1,0 +1,27 @@
+{
+    "name": "Bun3.Unity.Diagnostics.Editor.Cli",
+    "rootNamespace": "Bun3.Unity.Diagnostics",
+    "references": [
+        "Bun3.Unity.Diagnostics.Editor",
+        "Unity.Pipeline"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [
+        "BUN3_UNITY_PIPELINE"
+    ],
+    "versionDefines": [
+        {
+            "name": "com.unity.pipeline",
+            "expression": "",
+            "define": "BUN3_UNITY_PIPELINE"
+        }
+    ],
+    "noEngineReferences": false
+}
