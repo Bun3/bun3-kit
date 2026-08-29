@@ -57,7 +57,7 @@ namespace Bun3.Unity.Agents
             try
             {
                 using var fs = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-                var buf = new byte[Math.Min(8192, fs.Length)];
+                var buf = new byte[Math.Min(65536, fs.Length)]; // the cwd field can sit past a huge first record
                 var got = fs.Read(buf, 0, buf.Length);
                 var head = System.Text.Encoding.UTF8.GetString(buf, 0, got);
                 var match = System.Text.RegularExpressions.Regex.Match(head, "\"cwd\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"");

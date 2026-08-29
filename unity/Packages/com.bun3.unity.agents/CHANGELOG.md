@@ -5,6 +5,16 @@ All notable changes to this package will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.1] - 2026-08-30
+
+### Fixed
+
+- SyncNow is idempotent: pending provisional registrations (pid -1) count against the
+  unaccounted-process gap, and each pass adopts at most one candidate per project -
+  repeated syncs no longer pile up corpse registrations from the same project.
+- ProjectLeaf scans up to 64KB of the transcript head (the cwd field can sit past a
+  huge first record).
+
 ## [0.5.0] - 2026-08-29
 
 ### Added

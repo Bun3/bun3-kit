@@ -38,6 +38,7 @@ namespace Bun3.Unity.Agents
         {
             var accountedPids = new HashSet<int>();
             var registeredIds = new HashSet<string>();
+            var pendingProvisionals = 0;
             foreach (var hb in heartbeats)
             {
                 if (!hb.id.StartsWith(def.provider + "-"))
@@ -45,21 +46,28 @@ namespace Bun3.Unity.Agents
                 registeredIds.Add(hb.id);
                 if (hb.pid > 0)
                     accountedPids.Add(hb.pid);
+                else if (hb.pid == -1)
+                    pendingProvisionals++; // presumed to cover one unaccounted process until it confirms or expires
             }
 
-            var missing = CountUnaccountedCliProcesses(def, accountedPids);
+            // Idempotency: pending provisionals count against the gap, so re-syncing
+            // while they await confirmation adopts nothing more.
+            var missing = CountUnaccountedCliProcesses(def, accountedPids) - pendingProvisionals;
             if (missing <= 0)
                 return 0;
 
             var root = ProviderHookInstaller.ExpandHome(def.discovery.transcriptRoot);
             var nowMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
             var adopted = 0;
+            // one candidate per project per pass — a hard-killed pile shares one project,
+            // and adopting several of its corpses to fill the count just makes ghosts
+            var adoptedProjects = new HashSet<string>();
             foreach (var candidate in SessionDiscovery.FindRecent(root, nowMs, TranscriptWindowMs, def.discovery.exitMarker))
             {
                 if (adopted >= missing)
                     break;
                 var id = def.provider + "-" + candidate.SessionId;
-                if (registeredIds.Contains(id))
+                if (registeredIds.Contains(id) || !adoptedProjects.Add(candidate.ProjectName))
                     continue;
                 AgentHeartbeatStore.WriteProvisional(id, candidate.ProjectName);
                 adopted++;
