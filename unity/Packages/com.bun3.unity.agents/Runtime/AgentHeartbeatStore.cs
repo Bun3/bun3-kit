@@ -73,6 +73,21 @@ namespace Bun3.Unity.Agents
                 $"{{\"id\":\"{id}\",\"n\":\"{name}\",\"st\":0,\"ts\":{ts},\"pid\":-1}}");
         }
 
+        /// <summary>Removes an agent's heartbeat and watch flag — the consumer-initiated
+        /// exit ("fire this worker"). A session still alive recreates its file on its
+        /// next hook event, so removing a live one is self-healing, not destructive.</summary>
+        public static void Remove(string id)
+        {
+            try
+            {
+                File.Delete(Path.Combine(HeartbeatDirectory, id + ".json"));
+                File.Delete(Path.Combine(HeartbeatDirectory, id + ".watch"));
+            }
+            catch (IOException)
+            {
+            }
+        }
+
         public static List<AgentHeartbeat> ReadAndPrune()
         {
             var entries = new List<(AgentHeartbeat hb, string file)>();

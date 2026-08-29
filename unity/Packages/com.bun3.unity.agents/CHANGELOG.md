@@ -5,6 +5,18 @@ All notable changes to this package will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-08-30
+
+### Added
+
+- `SessionSync.KillSessionTree(pid)` - kills a session's whole CLI process tree
+  (topmost same-named ancestor plus every descendant: pty hosts, wrappers, MCP
+  servers, shells). Headless leftover sessions are invisible outside Task Manager,
+  so consumers can offer "fire this worker" instead of asking users to hunt pids.
+- `AgentHeartbeatStore.Remove(id)` - deletes an agent's heartbeat and watch flag,
+  the consumer-initiated exit. A session still alive recreates its file on its next
+  hook event, so removing a live one self-heals.
+
 ## [0.5.3] - 2026-08-30
 
 ### Fixed

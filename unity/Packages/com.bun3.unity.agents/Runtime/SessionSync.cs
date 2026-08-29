@@ -168,6 +168,78 @@ namespace Bun3.Unity.Agents
             return result;
         }
 
+        /// <summary>
+        /// Kills a session's whole CLI process tree: climbs to the topmost same-named
+        /// ancestor (pty host, wrapper), then kills it and every descendant in the
+        /// snapshot — the session, its MCP servers, its shells. A survivor (spawned
+        /// after the snapshot, kill denied) re-registers on its next hook event, so a
+        /// miss self-heals into reappearance rather than a ghost.
+        /// </summary>
+        public static void KillSessionTree(int pid)
+        {
+            string name;
+            try
+            {
+                using var target = Process.GetProcessById(pid);
+                name = target.ProcessName;
+            }
+            catch (Exception)
+            {
+                return; // already gone
+            }
+
+            var parents = SnapshotParentPids();
+            var root = pid;
+            for (var i = 0; i < 64 && parents.TryGetValue(root, out var pp) && pp > 0 && pp != root; i++)
+            {
+                try
+                {
+                    using var parent = Process.GetProcessById(pp);
+                    if (parent.ProcessName != name)
+                        break;
+                }
+                catch (Exception)
+                {
+                    break; // parent gone / inaccessible — root stays here
+                }
+
+                root = pp;
+            }
+
+            var children = new Dictionary<int, List<int>>();
+            foreach (var kv in parents)
+            {
+                if (!children.TryGetValue(kv.Value, out var list))
+                    children[kv.Value] = list = new List<int>();
+                list.Add(kv.Key);
+            }
+
+            var stack = new Stack<int>();
+            stack.Push(root);
+            var seen = new HashSet<int>();
+            while (stack.Count > 0)
+            {
+                var cur = stack.Pop();
+                if (!seen.Add(cur))
+                    continue;
+                if (children.TryGetValue(cur, out var kids))
+                {
+                    foreach (var kid in kids)
+                        stack.Push(kid);
+                }
+
+                try
+                {
+                    using var p = Process.GetProcessById(cur);
+                    p.Kill();
+                }
+                catch (Exception)
+                {
+                    // exited already / access denied
+                }
+            }
+        }
+
         private const uint TH32CS_SNAPPROCESS = 0x2;
 
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
