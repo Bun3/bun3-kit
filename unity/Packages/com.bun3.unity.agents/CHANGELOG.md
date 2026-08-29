@@ -5,6 +5,19 @@ All notable changes to this package will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-08-29
+
+### Added
+
+- `SessionSync.SyncNow()` - reconciles the store with reality instead of listing
+  "traces": counts the provider's live CLI processes unaccounted for by any heartbeat
+  pid (desktop-app processes excluded via path hints) and provisionally registers that
+  many of the newest unregistered transcript sessions. Zero unaccounted processes =
+  zero registrations, so corpses never enter.
+- `AgentHeartbeatStore.WriteProvisional(id, name)` - the pid -1 adoption writer.
+- `SessionDiscovery.ProjectLeaf` - candidates now carry the session's real folder name
+  read from the transcript cwd, not the path-encoded directory mush.
+
 ## [0.4.2] - 2026-08-29
 
 ### Fixed

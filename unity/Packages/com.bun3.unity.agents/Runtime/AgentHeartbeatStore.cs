@@ -35,6 +35,17 @@ namespace Bun3.Unity.Agents
             }
         };
 
+        /// <summary>Registers a session we could not verify (pid -1): the real session
+        /// overwrites this on its next hook event; a corpse's placeholder expires after
+        /// the deep-quiet threshold instead of living forever.</summary>
+        public static void WriteProvisional(string id, string name)
+        {
+            Directory.CreateDirectory(HeartbeatDirectory);
+            var ts = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            File.WriteAllText(Path.Combine(HeartbeatDirectory, id + ".json"),
+                $"{{\"id\":\"{id}\",\"n\":\"{name}\",\"st\":0,\"ts\":{ts},\"pid\":-1}}");
+        }
+
         public static List<AgentHeartbeat> ReadAndPrune()
         {
             var result = new List<AgentHeartbeat>();

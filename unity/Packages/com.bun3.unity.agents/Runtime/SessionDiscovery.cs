@@ -41,12 +41,36 @@ namespace Bun3.Unity.Agents
                     var writeMs = new DateTimeOffset(File.GetLastWriteTimeUtc(file)).ToUnixTimeMilliseconds();
                     if (nowMs - writeMs > maxAgeMs || EndedCleanly(file, exitMarker))
                         continue;
-                    result.Add(new Candidate(Path.GetFileNameWithoutExtension(file), project, writeMs));
+                    result.Add(new Candidate(Path.GetFileNameWithoutExtension(file), ProjectLeaf(file) ?? project, writeMs));
                 }
             }
 
             result.Sort((a, b) => b.LastWriteMs.CompareTo(a.LastWriteMs));
             return result;
+        }
+
+        /// <summary>The session's real folder name from the transcript head (records carry
+        /// a cwd field) — the directory name is a path-encoded mush like
+        /// "E--Projects-handwrite-scanner". Null when no cwd is found.</summary>
+        public static string ProjectLeaf(string file)
+        {
+            try
+            {
+                using var fs = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                var buf = new byte[Math.Min(8192, fs.Length)];
+                var got = fs.Read(buf, 0, buf.Length);
+                var head = System.Text.Encoding.UTF8.GetString(buf, 0, got);
+                var match = System.Text.RegularExpressions.Regex.Match(head, "\"cwd\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"");
+                if (!match.Success)
+                    return null;
+                var cwd = System.Text.RegularExpressions.Regex.Unescape(match.Groups[1].Value);
+                var leaf = Path.GetFileName(cwd.TrimEnd('\\', '/'));
+                return string.IsNullOrEmpty(leaf) ? null : leaf;
+            }
+            catch (Exception)
+            {
+                return null;
+            }
         }
 
         /// <summary>An exited session must not be offered for adoption. The manifest's
