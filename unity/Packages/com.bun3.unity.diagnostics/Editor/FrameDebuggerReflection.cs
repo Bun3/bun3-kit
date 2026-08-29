@@ -44,23 +44,24 @@ namespace Bun3.Unity.Diagnostics
             s_GetFrameEventData = s_Util.GetMethods(Flags).FirstOrDefault(m => m.Name == "GetFrameEventData");
             if (s_GetFrameEventData == null)
                 missing.Add("FrameDebuggerUtility.GetFrameEventData");
-            s_GetFrameEvents = s_Util.GetMethod("GetFrameEvents", Flags);
+            s_GetFrameEvents = s_Util.GetMethods(Flags).FirstOrDefault(m => m.Name == "GetFrameEvents");
             if (s_GetFrameEvents == null)
                 missing.Add("FrameDebuggerUtility.GetFrameEvents");
-            s_Limit = s_Util.GetProperty("limit", Flags);
+            s_Limit = s_Util.GetProperties(Flags).FirstOrDefault(p => p.Name == "limit");
             if (s_Limit == null)
                 missing.Add("FrameDebuggerUtility.limit");
-            if (s_Util.GetProperty("count", Flags) == null && s_Util.GetField("count", Flags) == null)
+            if (s_Util.GetProperties(Flags).FirstOrDefault(p => p.Name == "count") == null
+                && s_Util.GetFields(Flags).FirstOrDefault(f => f.Name == "count") == null)
                 missing.Add("FrameDebuggerUtility.count");
 
             IsBound = missing.Count == 0;
 
             // Optional members: their absence only degrades features (raw cause indexes, no
             // auto-enable) and must not block dumping, but the binding test still reports them.
-            s_GetBatchBreakCauseStrings = s_Util.GetMethod("GetBatchBreakCauseStrings", Flags);
+            s_GetBatchBreakCauseStrings = s_Util.GetMethods(Flags).FirstOrDefault(m => m.Name == "GetBatchBreakCauseStrings");
             if (s_GetBatchBreakCauseStrings == null)
                 missing.Add("FrameDebuggerUtility.GetBatchBreakCauseStrings (optional)");
-            s_SetEnabled = s_Util.GetMethod("SetEnabled", Flags);
+            s_SetEnabled = s_Util.GetMethods(Flags).FirstOrDefault(m => m.Name == "SetEnabled");
             if (s_SetEnabled == null)
                 missing.Add("FrameDebuggerUtility.SetEnabled (optional)");
 
