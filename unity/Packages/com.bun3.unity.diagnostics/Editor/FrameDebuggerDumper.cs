@@ -76,35 +76,43 @@ namespace Bun3.Unity.Diagnostics
                 return s_Tcs.Task;
             s_Tcs = new TaskCompletionSource<FrameDumpResult>();
 
-            if (EditorApplication.isPlaying && !EditorApplication.isPaused)
-                EditorApplication.isPaused = true;
-
-            var missing = FrameDebuggerReflection.Bind();
-            if (!FrameDebuggerReflection.IsBound)
+            try
             {
-                Complete(Fail($"Frame Debugger reflection bindings missing: {string.Join(", ", missing)}"));
-                return s_Tcs.Task;
-            }
+                if (EditorApplication.isPlaying && !EditorApplication.isPaused)
+                    EditorApplication.isPaused = true;
 
-            s_Attempts = 0;
-            s_Count = FrameDebuggerReflection.GetCount();
-            if (s_Count <= 0)
-            {
-                if (!FrameDebuggerReflection.TryEnable())
+                var missing = FrameDebuggerReflection.Bind();
+                if (!FrameDebuggerReflection.IsBound)
                 {
-                    Complete(Fail("No Frame Debugger capture and auto-enable is unavailable. Enable the Frame Debugger window and retry."));
+                    Complete(Fail($"Frame Debugger reflection bindings missing: {string.Join(", ", missing)}"));
                     return s_Tcs.Task;
                 }
 
-                s_WaitingForCapture = true;
-            }
-            else
-            {
-                BeginTraversal();
-            }
+                s_Attempts = 0;
+                s_Count = FrameDebuggerReflection.GetCount();
+                if (s_Count <= 0)
+                {
+                    if (!FrameDebuggerReflection.TryEnable())
+                    {
+                        Complete(Fail("No Frame Debugger capture and auto-enable is unavailable. Enable the Frame Debugger window and retry."));
+                        return s_Tcs.Task;
+                    }
 
-            EditorApplication.update -= Tick;
-            EditorApplication.update += Tick;
+                    s_WaitingForCapture = true;
+                }
+                else
+                {
+                    BeginTraversal();
+                }
+
+                EditorApplication.update -= Tick;
+                EditorApplication.update += Tick;
+            }
+            catch (Exception e)
+            {
+                EditorApplication.update -= Tick;
+                Complete(Fail($"Dump start failed: {e.GetBaseException().Message}"));
+            }
             return s_Tcs.Task;
         }
 
@@ -205,33 +213,40 @@ namespace Bun3.Unity.Diagnostics
                 return;
             }
 
-            var analysis = FrameDumpAnalyzer.Analyze(s_Events);
-            var now = DateTime.Now;
-            var dir = Path.Combine(Directory.GetParent(Application.dataPath).FullName, OutputDirName);
-            Directory.CreateDirectory(dir);
-            var stamp = now.ToString("yyyyMMdd_HHmmss");
-            var mdPath = Path.Combine(dir, $"FrameDebuggerDump_{stamp}.md");
-            var jsonPath = Path.Combine(dir, $"FrameDebuggerDump_{stamp}.json");
-            var timestamp = now.ToString("yyyy-MM-dd HH:mm:ss");
-            File.WriteAllText(mdPath, FrameDumpReportWriter.ToMarkdown(timestamp, s_Events, analysis), Encoding.UTF8);
-            File.WriteAllText(jsonPath, FrameDumpReportWriter.ToJson(timestamp, s_Events, analysis), Encoding.UTF8);
-
-            var top = analysis.callsByBreakCause.Count > 0 ? analysis.callsByBreakCause[0] : null;
-            var result = new FrameDumpResult
+            try
             {
-                success = error == null,
-                error = error ?? "",
-                eventCount = s_Count,
-                capturedCount = s_Events.Count,
-                markdownPath = mdPath,
-                jsonPath = jsonPath,
-                topBreakCause = top == null ? "" : $"{top.key} ({top.count})",
-            };
-            Debug.Log(
-                $"Frame Debugger dump: {result.capturedCount}/{result.eventCount} events\n" +
-                $"Top batch breaker: {result.topBreakCause}\n" +
-                $"Report: {mdPath}");
-            Complete(result);
+                var analysis = FrameDumpAnalyzer.Analyze(s_Events);
+                var now = DateTime.Now;
+                var dir = Path.Combine(Directory.GetParent(Application.dataPath).FullName, OutputDirName);
+                Directory.CreateDirectory(dir);
+                var stamp = now.ToString("yyyyMMdd_HHmmss");
+                var mdPath = Path.Combine(dir, $"FrameDebuggerDump_{stamp}.md");
+                var jsonPath = Path.Combine(dir, $"FrameDebuggerDump_{stamp}.json");
+                var timestamp = now.ToString("yyyy-MM-dd HH:mm:ss");
+                File.WriteAllText(mdPath, FrameDumpReportWriter.ToMarkdown(timestamp, s_Events, analysis), Encoding.UTF8);
+                File.WriteAllText(jsonPath, FrameDumpReportWriter.ToJson(timestamp, s_Events, analysis), Encoding.UTF8);
+
+                var top = analysis.callsByBreakCause.Count > 0 ? analysis.callsByBreakCause[0] : null;
+                var result = new FrameDumpResult
+                {
+                    success = error == null,
+                    error = error ?? "",
+                    eventCount = s_Count,
+                    capturedCount = s_Events.Count,
+                    markdownPath = mdPath,
+                    jsonPath = jsonPath,
+                    topBreakCause = top == null ? "" : $"{top.key} ({top.count})",
+                };
+                Debug.Log(
+                    $"Frame Debugger dump: {result.capturedCount}/{result.eventCount} events\n" +
+                    $"Top batch breaker: {result.topBreakCause}\n" +
+                    $"Report: {mdPath}");
+                Complete(result);
+            }
+            catch (Exception ex)
+            {
+                Complete(Fail($"Report write failed: {ex.GetBaseException().Message}"));
+            }
         }
 
         static FrameDumpResult Fail(string error) => new FrameDumpResult { success = false, error = error };
