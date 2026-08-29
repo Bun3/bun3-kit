@@ -5,6 +5,16 @@ All notable changes to this package will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.2] - 2026-08-30
+
+### Fixed
+
+- Expired provisional registrations are tombstoned (adoption-tombstones.txt in the
+  heartbeat directory) and sync never re-adopts them - infrastructure processes that
+  inflate the live-CLI count (daemons, pty hosts) can no longer cycle the same corpse
+  transcript into a ghost every sync. A session that later proves alive registers
+  itself through its hooks regardless.
+
 ## [0.5.1] - 2026-08-30
 
 ### Fixed

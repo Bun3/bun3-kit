@@ -35,6 +35,33 @@ namespace Bun3.Unity.Agents
             }
         };
 
+        /// <summary>Ids of provisional registrations that expired unconfirmed — corpses
+        /// sync must never adopt again. (A session that later proves alive registers
+        /// itself through its hooks regardless.)</summary>
+        public static string TombstonePath =>
+            Path.Combine(HeartbeatDirectory, "adoption-tombstones.txt");
+
+        public static HashSet<string> ReadTombstones()
+        {
+            var result = new HashSet<string>();
+            try
+            {
+                if (File.Exists(TombstonePath))
+                {
+                    foreach (var line in File.ReadAllLines(TombstonePath))
+                    {
+                        if (!string.IsNullOrWhiteSpace(line))
+                            result.Add(line.Trim());
+                    }
+                }
+            }
+            catch (IOException)
+            {
+            }
+
+            return result;
+        }
+
         /// <summary>Registers a session we could not verify (pid -1): the real session
         /// overwrites this on its next hook event; a corpse's placeholder expires after
         /// the deep-quiet threshold instead of living forever.</summary>
@@ -86,9 +113,11 @@ namespace Bun3.Unity.Agents
 
                     // pid -1 = unverified adoption placeholder: a live session overwrites
                     // it with its next hook event; one that never speaks was a corpse.
+                    // Tombstone it so sync never re-adopts the same corpse.
                     if (hb.pid == -1 && hb.IsCrashed(nowMs))
                     {
                         File.Delete(file);
+                        File.AppendAllText(TombstonePath, hb.id + "\n");
                         continue;
                     }
 

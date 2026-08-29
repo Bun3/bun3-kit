@@ -60,14 +60,16 @@ namespace Bun3.Unity.Agents
             var nowMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
             var adopted = 0;
             // one candidate per project per pass — a hard-killed pile shares one project,
-            // and adopting several of its corpses to fill the count just makes ghosts
+            // and adopting several of its corpses to fill the count just makes ghosts.
+            // Tombstoned ids already failed to confirm once: never again.
             var adoptedProjects = new HashSet<string>();
+            var tombstones = AgentHeartbeatStore.ReadTombstones();
             foreach (var candidate in SessionDiscovery.FindRecent(root, nowMs, TranscriptWindowMs, def.discovery.exitMarker))
             {
                 if (adopted >= missing)
                     break;
                 var id = def.provider + "-" + candidate.SessionId;
-                if (registeredIds.Contains(id) || !adoptedProjects.Add(candidate.ProjectName))
+                if (registeredIds.Contains(id) || tombstones.Contains(id) || !adoptedProjects.Add(candidate.ProjectName))
                     continue;
                 AgentHeartbeatStore.WriteProvisional(id, candidate.ProjectName);
                 adopted++;
