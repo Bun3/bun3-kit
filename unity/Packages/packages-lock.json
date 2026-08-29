@@ -16,6 +16,14 @@
         "com.unity.nuget.newtonsoft-json": "3.2.2"
       }
     },
+    "com.bun3.unity.agents": {
+      "version": "file:com.bun3.unity.agents",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {
+        "com.unity.nuget.newtonsoft-json": "3.2.1"
+      }
+    },
     "com.bun3.unity.core": {
       "version": "file:com.bun3.unity.core",
       "depth": 0,
@@ -25,6 +33,12 @@
         "com.mackysoft.serializereference-extensions": "https://github.com/mackysoft/Unity-SerializeReferenceExtensions.git?path=Assets/MackySoft/MackySoft.SerializeReferenceExtensions",
         "com.cysharp.unitask": "https://github.com/Cysharp/UniTask.git?path=src/UniTask/Assets/Plugins/UniTask"
       }
+    },
+    "com.bun3.unity.diagnostics": {
+      "version": "file:com.bun3.unity.diagnostics",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {}
     },
     "com.bun3.unity.ui": {
       "version": "file:com.bun3.unity.ui",
