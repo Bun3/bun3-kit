@@ -74,9 +74,18 @@ namespace Bun3.Unity.Diagnostics
         /// <summary>Loads a saved profiler capture into the buffer (replacing it), then dumps.</summary>
         public static ProfilerDumpResult LoadAndDump(string path, float budgetMs = DefaultBudgetMs)
         {
-            if (!ProfilerDriver.LoadProfile(path, false))
-                return Fail($"Failed to load profiler capture: {path}", $"file:{path}");
-            return DumpInternal($"file:{path}", budgetMs);
+            var source = $"file:{path}";
+            try
+            {
+                if (!ProfilerDriver.LoadProfile(path, false))
+                    return Fail($"Failed to load profiler capture: {path}", source);
+            }
+            catch (Exception e)
+            {
+                return Fail($"Failed to load profiler capture: {path} ({e.GetBaseException().Message})", source);
+            }
+
+            return DumpInternal(source, budgetMs);
         }
 
         /// <summary>
