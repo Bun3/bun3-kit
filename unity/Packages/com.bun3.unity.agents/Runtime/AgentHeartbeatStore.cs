@@ -73,6 +73,14 @@ namespace Bun3.Unity.Agents
                         continue;
                     }
 
+                    // pid -1 = unverified adoption placeholder: a live session overwrites
+                    // it with its next hook event; one that never speaks was a corpse.
+                    if (hb.pid == -1 && hb.IsCrashed(nowMs))
+                    {
+                        File.Delete(file);
+                        continue;
+                    }
+
                     result.Add(hb);
                 }
                 catch (IOException)

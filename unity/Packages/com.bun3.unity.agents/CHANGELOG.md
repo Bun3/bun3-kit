@@ -5,6 +5,14 @@ All notable changes to this package will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.2] - 2026-08-29
+
+### Fixed
+
+- Adoption placeholders (pid -1) expire after the deep-quiet threshold when no hook
+  event ever replaces them - adopting a session that turned out to be dead no longer
+  leaves an immortal sleeping zombie. Consumers should adopt with pid -1.
+
 ## [0.4.1] - 2026-08-29
 
 ### Fixed
