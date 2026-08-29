@@ -127,12 +127,67 @@ namespace Bun3.Unity.Diagnostics
 
         static List<InterleaveSpan> DetectInterleaves(IReadOnlyList<FrameEvent> events)
         {
-            return new List<InterleaveSpan>();
+            var spans = new List<InterleaveSpan>();
+            int i = 0;
+            while (i < events.Count - 1)
+            {
+                string a = events[i].shader;
+                string b = events[i + 1].shader;
+                if (string.IsNullOrEmpty(a) || string.IsNullOrEmpty(b) || a == b)
+                {
+                    i++;
+                    continue;
+                }
+
+                int j = i + 1;
+                int switches = 1;
+                while (j + 1 < events.Count)
+                {
+                    string expected = events[j].shader == a ? b : a;
+                    if (events[j + 1].shader != expected)
+                        break;
+                    j++;
+                    switches++;
+                }
+
+                if (switches >= InterleaveMinSwitches)
+                {
+                    spans.Add(new InterleaveSpan
+                    {
+                        startIndex = events[i].index,
+                        endIndex = events[j].index,
+                        shaderA = a,
+                        shaderB = b,
+                        switchCount = switches,
+                        // A span of N alternating events could collapse to two batches.
+                        wastedCalls = j - i - 1,
+                    });
+                }
+
+                i = j;
+            }
+
+            return spans;
         }
 
         static List<ShaderRun> LongestRuns(IReadOnlyList<FrameEvent> events)
         {
-            return new List<ShaderRun>();
+            var runs = new List<ShaderRun>();
+            for (int i = 0; i < events.Count;)
+            {
+                string shader = events[i].shader;
+                int start = i;
+                while (i < events.Count && events[i].shader == shader)
+                    i++;
+                if (!string.IsNullOrEmpty(shader))
+                    runs.Add(new ShaderRun { startIndex = events[start].index, length = i - start, shader = shader });
+            }
+
+            return runs
+                .OrderByDescending(r => r.length)
+                .ThenBy(r => r.startIndex)
+                .Take(TopRunCount)
+                .ToList();
         }
 
         static string PathPrefix(string path)

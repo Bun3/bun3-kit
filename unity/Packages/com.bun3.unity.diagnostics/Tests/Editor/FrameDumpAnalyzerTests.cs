@@ -70,5 +70,51 @@ namespace Bun3.Unity.Diagnostics.Editor.Tests
             Assert.AreEqual(2, a.callsByPathPrefix[0].count);
             Assert.AreEqual("World", a.callsByPathPrefix[1].key);
         }
+
+        [Test]
+        public void Analyze_ReportsAlternatingInterleaveSpan()
+        {
+            var a = FrameDumpAnalyzer.Analyze(new[] { E(0, "A"), E(1, "B"), E(2, "A"), E(3, "B"), E(4, "A") });
+
+            Assert.AreEqual(1, a.interleaves.Count);
+            var s = a.interleaves[0];
+            Assert.AreEqual(0, s.startIndex);
+            Assert.AreEqual(4, s.endIndex);
+            Assert.AreEqual("A", s.shaderA);
+            Assert.AreEqual("B", s.shaderB);
+            Assert.AreEqual(4, s.switchCount);
+            Assert.AreEqual(3, s.wastedCalls);
+        }
+
+        [Test]
+        public void Analyze_IgnoresShortAlternation()
+        {
+            var a = FrameDumpAnalyzer.Analyze(new[] { E(0, "A"), E(1, "B"), E(2, "A"), E(3, "C"), E(4, "C") });
+
+            Assert.IsEmpty(a.interleaves);
+        }
+
+        [Test]
+        public void Analyze_EmptyShaderBreaksInterleaveSpan()
+        {
+            var a = FrameDumpAnalyzer.Analyze(new[]
+            {
+                E(0, "A"), E(1, "B"), E(2, ""), E(3, "A"), E(4, "B"), E(5, "A"),
+            });
+
+            Assert.IsEmpty(a.interleaves);
+        }
+
+        [Test]
+        public void Analyze_FindsLongestRunsDescending()
+        {
+            var a = FrameDumpAnalyzer.Analyze(new[] { E(0, "A"), E(1, "A"), E(2, "A"), E(3, "B"), E(4, "B") });
+
+            Assert.AreEqual(2, a.longestRuns.Count);
+            Assert.AreEqual("A", a.longestRuns[0].shader);
+            Assert.AreEqual(3, a.longestRuns[0].length);
+            Assert.AreEqual(0, a.longestRuns[0].startIndex);
+            Assert.AreEqual("B", a.longestRuns[1].shader);
+        }
     }
 }
