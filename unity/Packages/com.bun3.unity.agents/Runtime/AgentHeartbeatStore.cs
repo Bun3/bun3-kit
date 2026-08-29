@@ -75,10 +75,10 @@ namespace Bun3.Unity.Agents
 
         public static List<AgentHeartbeat> ReadAndPrune()
         {
-            var result = new List<AgentHeartbeat>();
+            var entries = new List<(AgentHeartbeat hb, string file)>();
             var directory = HeartbeatDirectory;
             if (!Directory.Exists(directory))
-                return result;
+                return new List<AgentHeartbeat>();
             var nowMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
             foreach (var file in Directory.GetFiles(directory, "*.watch"))
             {
@@ -121,12 +121,34 @@ namespace Bun3.Unity.Agents
                         continue;
                     }
 
-                    result.Add(hb);
+                    entries.Add((hb, file));
                 }
                 catch (IOException)
                 {
                     // mid-write; next scan picks it up
                 }
+            }
+
+            // One CLI process hosts one session at a time — /clear and resume mint a
+            // new session id inside the same process, and the replaced session never
+            // gets a SessionEnd. Its heartbeat would pass the dead-pid check forever,
+            // so among session heartbeats claiming the same live pid only the newest
+            // survives. Chicks share their parent session's pid by design (p set).
+            var newestByPid = new Dictionary<int, long>();
+            foreach (var (hb, _) in entries)
+            {
+                if (hb.pid > 0 && string.IsNullOrEmpty(hb.p)
+                    && (!newestByPid.TryGetValue(hb.pid, out var best) || hb.ts > best))
+                    newestByPid[hb.pid] = hb.ts;
+            }
+
+            var result = new List<AgentHeartbeat>(entries.Count);
+            foreach (var (hb, file) in entries)
+            {
+                if (hb.pid > 0 && string.IsNullOrEmpty(hb.p) && hb.ts < newestByPid[hb.pid])
+                    File.Delete(file);
+                else
+                    result.Add(hb);
             }
 
             return result;

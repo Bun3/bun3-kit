@@ -5,6 +5,26 @@ All notable changes to this package will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.3] - 2026-08-30
+
+### Fixed
+
+- Sync counts unaccounted session process TREES, not processes: the CLI runs as a
+  small tree (wrapper → session, daemon → pty host → session) while hooks record one
+  pid inside it, so per-process counting minted one ghost adoption per helper spawn.
+  Parent links come from a Toolhelp32 snapshot (Windows); elsewhere grouping degrades
+  to the old per-process behavior.
+- Unaccounted trees with no member younger than the transcript window are not counted:
+  a long-idle heartbeat-less process (pre-hook session, forgotten shell) has no recent
+  transcript of its own, so counting it only ghosted other projects' corpses.
+- Adoption's one-per-project dedup keys on the transcript directory (Candidate.DirName)
+  instead of the display name, which falls back to the path-encoded dir when the
+  transcript head has no cwd - one project could slip through twice under two spellings.
+- ReadAndPrune keeps only the newest session heartbeat per live pid: /clear and resume
+  start a new session id in the same process and the replaced session never gets a
+  SessionEnd, so its heartbeat survived the dead-pid check forever as a sleeping ghost.
+  Chicks (p set) are exempt - they share their parent's pid by design.
+
 ## [0.5.2] - 2026-08-30
 
 ### Fixed

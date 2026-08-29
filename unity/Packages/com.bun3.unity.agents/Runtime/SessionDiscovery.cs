@@ -15,15 +15,23 @@ namespace Bun3.Unity.Agents
     {
         public readonly struct Candidate
         {
-            public Candidate(string sessionId, string projectName, long lastWriteMs)
+            public Candidate(string sessionId, string projectName, string dirName, long lastWriteMs)
             {
                 SessionId = sessionId;
                 ProjectName = projectName;
+                DirName = dirName;
                 LastWriteMs = lastWriteMs;
             }
 
             public string SessionId { get; }
             public string ProjectName { get; }
+
+            /// <summary>The transcript directory name — the stable per-project dedup
+            /// key. ProjectName is display-only: it falls back to this path-encoded
+            /// mush when the transcript head has no cwd, so one project can wear two
+            /// different display names.</summary>
+            public string DirName { get; }
+
             public long LastWriteMs { get; }
         }
 
@@ -41,7 +49,7 @@ namespace Bun3.Unity.Agents
                     var writeMs = new DateTimeOffset(File.GetLastWriteTimeUtc(file)).ToUnixTimeMilliseconds();
                     if (nowMs - writeMs > maxAgeMs || EndedCleanly(file, exitMarker))
                         continue;
-                    result.Add(new Candidate(Path.GetFileNameWithoutExtension(file), ProjectLeaf(file) ?? project, writeMs));
+                    result.Add(new Candidate(Path.GetFileNameWithoutExtension(file), ProjectLeaf(file) ?? project, project, writeMs));
                 }
             }
 
