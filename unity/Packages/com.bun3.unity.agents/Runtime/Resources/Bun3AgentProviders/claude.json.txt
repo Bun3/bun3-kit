@@ -20,9 +20,5 @@
       { "event": "PreCompact" },
       { "event": "PostCompact" }
     ]
-  },
-  "discovery": {
-    "transcriptRoot": "~/.claude/projects",
-    "exitMarker": "{\"type\":\"cost-state\""
   }
 }

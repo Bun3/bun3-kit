@@ -35,44 +35,6 @@ namespace Bun3.Unity.Agents
             }
         };
 
-        /// <summary>Ids of provisional registrations that expired unconfirmed — corpses
-        /// sync must never adopt again. (A session that later proves alive registers
-        /// itself through its hooks regardless.)</summary>
-        public static string TombstonePath =>
-            Path.Combine(HeartbeatDirectory, "adoption-tombstones.txt");
-
-        public static HashSet<string> ReadTombstones()
-        {
-            var result = new HashSet<string>();
-            try
-            {
-                if (File.Exists(TombstonePath))
-                {
-                    foreach (var line in File.ReadAllLines(TombstonePath))
-                    {
-                        if (!string.IsNullOrWhiteSpace(line))
-                            result.Add(line.Trim());
-                    }
-                }
-            }
-            catch (IOException)
-            {
-            }
-
-            return result;
-        }
-
-        /// <summary>Registers a session we could not verify (pid -1): the real session
-        /// overwrites this on its next hook event; a corpse's placeholder expires after
-        /// the deep-quiet threshold instead of living forever.</summary>
-        public static void WriteProvisional(string id, string name)
-        {
-            Directory.CreateDirectory(HeartbeatDirectory);
-            var ts = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-            File.WriteAllText(Path.Combine(HeartbeatDirectory, id + ".json"),
-                $"{{\"id\":\"{id}\",\"n\":\"{name}\",\"st\":0,\"ts\":{ts},\"pid\":-1}}");
-        }
-
         /// <summary>Removes an agent's heartbeat and watch flag — the consumer-initiated
         /// exit ("fire this worker"). A session still alive recreates its file on its
         /// next hook event, so removing a live one is self-healing, not destructive.</summary>
@@ -126,13 +88,12 @@ namespace Bun3.Unity.Agents
                         continue;
                     }
 
-                    // pid -1 = unverified adoption placeholder: a live session overwrites
-                    // it with its next hook event; one that never speaks was a corpse.
-                    // Tombstone it so sync never re-adopts the same corpse.
+                    // pid -1 = unverified placeholder (legacy adoption, manual entries):
+                    // a live session overwrites it with its next hook event; one that
+                    // never speaks expires instead of living forever.
                     if (hb.pid == -1 && hb.IsCrashed(nowMs))
                     {
                         File.Delete(file);
-                        File.AppendAllText(TombstonePath, hb.id + "\n");
                         continue;
                     }
 

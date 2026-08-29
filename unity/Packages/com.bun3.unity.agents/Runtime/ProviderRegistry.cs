@@ -19,7 +19,6 @@ namespace Bun3.Unity.Agents
         public ProcessRule process;  // optional — presence turns on desktop watching
 
         public HookRule hooks;         // optional — auto-installs hook calls into the CLI's settings
-        public DiscoveryRule discovery; // optional — find sessions from transcript files
 
         [Serializable]
         public sealed class ProcessRule
@@ -46,21 +45,12 @@ namespace Bun3.Unity.Agents
             }
         }
 
-        [Serializable]
-        public sealed class DiscoveryRule
-        {
-            public string transcriptRoot; // "~/.claude/projects" — one subdir per project, one file per session
-            public string exitMarker;     // last-line prefix that marks a cleanly exited session
-        }
-
         [NonSerialized] public string SourceDir;
 
         public bool WatchesProcess => process != null && !string.IsNullOrEmpty(process.processName);
 
         public bool InstallsHooks =>
             hooks != null && !string.IsNullOrEmpty(hooks.settingsPath) && hooks.events != null && hooks.events.Length > 0;
-
-        public bool DiscoversSessions => discovery != null && !string.IsNullOrEmpty(discovery.transcriptRoot);
     }
 
     /// <summary>Loads and indexes provider manifests; user add-ons override built-ins.</summary>

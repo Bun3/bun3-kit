@@ -5,6 +5,21 @@ All notable changes to this package will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-08-30
+
+### Removed
+
+- Automatic transcript adoption (`SessionSync.SyncNow`, `SessionDiscovery`,
+  `AgentHeartbeatStore.WriteProvisional`, tombstones, the manifest `discovery` rule).
+  Heartbeats are written by the hooks whether or not any consumer app runs, so a live
+  session always resurfaces on its own next hook event - the only gap adoption ever
+  closed was sessions predating hook install. Meanwhile process-count guessing kept
+  minting ghost workers: the CLI's exe is shared by pty hosts, daemons, nested
+  wrappers, and utility subcommands (attach, agents), and no count survives that.
+  Three ghost bugs in, the feature loses. `SessionSync.KillSessionTree` stays.
+- Consumers: drop `SyncNow` calls; expired pid -1 placeholders are still cleaned,
+  just no longer tombstoned.
+
 ## [0.6.0] - 2026-08-30
 
 ### Added
