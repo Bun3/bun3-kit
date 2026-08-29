@@ -64,6 +64,12 @@ elseif ($hook.hook_event_name -in @("UserPromptSubmit", "SessionEnd")) {
     Remove-Item $watchFlag -Force -ErrorAction SilentlyContinue
 }
 
+# Turn over = every subagent is done. Sweep this session's chick files so a
+# subagent killed without SubagentStop cannot linger as an orphan duckling.
+if ($hook.hook_event_name -in @("Stop", "StopFailure", "SessionEnd")) {
+    Remove-Item (Join-Path $dir "claude-$($hook.session_id)-*.json") -Force -ErrorAction SilentlyContinue
+}
+
 $watchState = 0
 if ($hook.hook_event_name -eq "Stop" -and (Test-Path $watchFlag)) {
     $flagRaw = (Get-Content $watchFlag -Raw -ErrorAction SilentlyContinue)

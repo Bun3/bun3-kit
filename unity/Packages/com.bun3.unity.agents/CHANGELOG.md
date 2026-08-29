@@ -5,6 +5,14 @@ All notable changes to this package will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.1] - 2026-08-29
+
+### Fixed
+
+- The Claude heartbeat script sweeps its session chick files on Stop/StopFailure/
+  SessionEnd - a subagent killed without SubagentStop no longer lingers as an orphan
+  duckling (chick pids point at the living parent, so pid pruning cannot catch them).
+
 ## [0.4.0] - 2026-08-29
 
 ### Changed
