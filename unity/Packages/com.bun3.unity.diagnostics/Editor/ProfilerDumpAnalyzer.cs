@@ -123,11 +123,50 @@ namespace Bun3.Unity.Diagnostics
 
         static List<SpikeFrame> SelectSpikes(IReadOnlyList<ProfilerFrameSample> frames, float budgetMs)
         {
-            return new List<SpikeFrame>();
+            return frames
+                .OrderByDescending(f => f.stat.cpuMs)
+                .Where((f, rank) => rank < WorstFrameCount || f.stat.cpuMs > budgetMs)
+                .Take(MaxSpikeCount)
+                .Select(f => new SpikeFrame
+                {
+                    frameIndex = f.stat.frameIndex,
+                    cpuMs = f.stat.cpuMs,
+                    topMarkers = f.markers
+                        .OrderByDescending(m => m.selfMs)
+                        .Take(SpikeTopMarkerCount)
+                        .ToList(),
+                })
+                .ToList();
         }
 
         static void AggregateMarkers(IReadOnlyList<ProfilerFrameSample> frames, ProfilerDumpAnalysis analysis)
         {
+            var byName = new Dictionary<string, ProfilerMarkerStat>();
+            foreach (var frame in frames)
+            {
+                foreach (var m in frame.markers)
+                {
+                    if (string.IsNullOrEmpty(m.name))
+                        continue;
+                    if (!byName.TryGetValue(m.name, out var stat))
+                        byName[m.name] = stat = new ProfilerMarkerStat { name = m.name };
+                    stat.totalSelfMs += m.selfMs;
+                    stat.maxSelfMs = Math.Max(stat.maxSelfMs, m.selfMs);
+                    stat.callCount += m.calls;
+                    stat.gcAllocBytes += m.gcAllocBytes;
+                }
+            }
+
+            foreach (var stat in byName.Values)
+                stat.avgSelfMsPerFrame = stat.totalSelfMs / frames.Count;
+
+            analysis.topMarkersBySelfTime = byName.Values
+                .OrderByDescending(s => s.totalSelfMs).ThenBy(s => s.name, StringComparer.Ordinal)
+                .Take(TopMarkerCount).ToList();
+            analysis.topMarkersByGcAlloc = byName.Values
+                .Where(s => s.gcAllocBytes > 0)
+                .OrderByDescending(s => s.gcAllocBytes).ThenBy(s => s.name, StringComparer.Ordinal)
+                .Take(TopMarkerCount).ToList();
         }
     }
 }
