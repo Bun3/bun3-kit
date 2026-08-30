@@ -70,7 +70,8 @@ CPU 마커 계층·GC 할당·프레임 스파이크를 읽을 수 있게 한다
 ## 출력
 
 - `<프로젝트 루트>/ProfilerDump/ProfilerDump_<yyyyMMdd_HHmmss>.md` + `.json`
-  (`{ timestamp, source(live|file:경로), frames[], markers[], analysis }`).
+  실제 산출 형태: `{ timestamp, source(live|file:경로), frames[], analysis }` —
+  마커 집계(topMarkersBySelfTime/topMarkersByGcAlloc)는 별도 `markers[]`가 아니라 `analysis` 내부에 있다.
 - 콘솔 3줄: 프레임 수/최악 cpu ms, 최다 self-time 마커, 리포트 경로.
 - 버퍼가 비었으면 실패 메시지(녹화 방법 안내 포함).
 

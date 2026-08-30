@@ -56,6 +56,7 @@ namespace Bun3.Unity.Diagnostics.Editor.Tests
             var a = ProfilerDumpAnalyzer.Analyze(frames, 33.3f);
 
             Assert.AreEqual(400L, a.totalGcAllocBytes);
+            Assert.AreEqual(200L, a.averageFrameGcAllocBytes);
             Assert.AreEqual(300L, a.worstFrameGcAllocBytes);
             Assert.AreEqual(3f, a.averageRenderThreadMs, 0.001f);
         }

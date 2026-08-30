@@ -72,6 +72,9 @@ namespace Bun3.Unity.Diagnostics
         /// <summary>GC allocation summed across all frames, in bytes.</summary>
         public long totalGcAllocBytes;
 
+        /// <summary>Average GC allocation per frame, in bytes.</summary>
+        public long averageFrameGcAllocBytes;
+
         /// <summary>Largest single-frame GC allocation, in bytes.</summary>
         public long worstFrameGcAllocBytes;
 
@@ -115,6 +118,7 @@ namespace Bun3.Unity.Diagnostics
             analysis.averageGpuMs = frames.Average(f => f.stat.gpuMs);
             analysis.averageRenderThreadMs = frames.Average(f => f.stat.renderThreadMs);
             analysis.totalGcAllocBytes = frames.Sum(f => f.stat.gcAllocBytes);
+            analysis.averageFrameGcAllocBytes = analysis.totalGcAllocBytes / frames.Count;
             analysis.worstFrameGcAllocBytes = frames.Max(f => f.stat.gcAllocBytes);
             analysis.spikes = SelectSpikes(frames, budgetMs);
             AggregateMarkers(frames, analysis);

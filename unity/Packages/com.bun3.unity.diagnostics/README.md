@@ -19,7 +19,8 @@ Editor-only Frame Debugger dump and batching analysis.
    markers, and per-marker self-time / GC-allocation totals.
 
 With `com.unity.pipeline` installed (Unity 6), the CLI commands `framedebugger_dump` /
-`framedebugger_dump_status` are also registered for terminal-driven capture.
+`framedebugger_dump_status` and `profiler_record` / `profiler_record_status` / `profiler_dump`
+are also registered for terminal-driven capture.
 
 ## Install (git URL)
 

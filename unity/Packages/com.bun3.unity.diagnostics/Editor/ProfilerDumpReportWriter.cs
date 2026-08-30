@@ -32,7 +32,7 @@ namespace Bun3.Unity.Diagnostics
             sb.AppendLine($"- Frames: {analysis.frameCount}");
             sb.AppendLine($"- CPU ms: median {analysis.medianCpuMs:F1} / avg {analysis.averageCpuMs:F1} / p95 {analysis.p95CpuMs:F1} / worst {analysis.worstCpuMs:F1} (budget {analysis.budgetMs:F1})");
             sb.AppendLine($"- GPU avg: {analysis.averageGpuMs:F1} ms, render thread avg: {analysis.averageRenderThreadMs:F1} ms");
-            sb.AppendLine($"- GC alloc: total {FormatBytes(analysis.totalGcAllocBytes)}, worst frame {FormatBytes(analysis.worstFrameGcAllocBytes)}");
+            sb.AppendLine($"- GC alloc: total {FormatBytes(analysis.totalGcAllocBytes)}, avg {FormatBytes(analysis.averageFrameGcAllocBytes)}/frame, worst frame {FormatBytes(analysis.worstFrameGcAllocBytes)}");
 
             sb.AppendLine();
             sb.AppendLine("## Spike frames");

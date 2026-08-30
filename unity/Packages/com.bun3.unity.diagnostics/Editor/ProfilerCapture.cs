@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UnityEditor.Profiling;
 using UnityEditorInternal;
@@ -53,6 +54,9 @@ namespace Bun3.Unity.Diagnostics
 
         static void CollectMarkers(HierarchyFrameDataView view, int root, List<int> scratch, List<MarkerSample> markers)
         {
+            // columnGcMemory is subtree-inclusive: a node's value already sums every descendant's
+            // allocations. Self-GC for a node is its own value minus the sum of its DIRECT children's
+            // values — computed here at pop-time, using the same child fetch the traversal already does.
             var byName = new Dictionary<string, MarkerSample>();
             var stack = new Stack<int>();
             stack.Push(root);
@@ -61,18 +65,27 @@ namespace Bun3.Unity.Diagnostics
                 int id = stack.Pop();
                 scratch.Clear();
                 view.GetItemChildren(id, scratch);
+
+                long childrenGcSum = 0;
                 foreach (int child in scratch)
+                    childrenGcSum += (long)view.GetItemColumnDataAsFloat(child, HierarchyFrameDataView.columnGcMemory);
+
+                if (id != root)
                 {
-                    stack.Push(child);
-                    string name = view.GetItemName(child);
-                    if (string.IsNullOrEmpty(name))
-                        continue;
-                    if (!byName.TryGetValue(name, out var m))
-                        byName[name] = m = new MarkerSample { name = name };
-                    m.selfMs += view.GetItemColumnDataAsFloat(child, HierarchyFrameDataView.columnSelfTime);
-                    m.calls += (int)view.GetItemColumnDataAsFloat(child, HierarchyFrameDataView.columnCalls);
-                    m.gcAllocBytes += (long)view.GetItemColumnDataAsFloat(child, HierarchyFrameDataView.columnGcMemory);
+                    string name = view.GetItemName(id);
+                    if (!string.IsNullOrEmpty(name))
+                    {
+                        if (!byName.TryGetValue(name, out var m))
+                            byName[name] = m = new MarkerSample { name = name };
+                        long idGc = (long)view.GetItemColumnDataAsFloat(id, HierarchyFrameDataView.columnGcMemory);
+                        m.selfMs += view.GetItemColumnDataAsFloat(id, HierarchyFrameDataView.columnSelfTime);
+                        m.calls += (int)view.GetItemColumnDataAsFloat(id, HierarchyFrameDataView.columnCalls);
+                        m.gcAllocBytes += Math.Max(0L, idGc - childrenGcSum);
+                    }
                 }
+
+                foreach (int child in scratch)
+                    stack.Push(child);
             }
 
             markers.AddRange(byName.Values);
