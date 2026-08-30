@@ -34,6 +34,7 @@ namespace Bun3.Unity.Agents
             public string schema;        // settings shape: "" = Claude/Gemini nested hooks, "cursor" = flat {command} entries
             public string script;        // optional custom hook script (parses the CLI's payload itself);
                                          // empty = the generic beat writer called with -Provider/-State
+            public string scriptArgs;    // optional extra arguments appended to a custom script's command
             public EventRule[] events;
 
             [Serializable]

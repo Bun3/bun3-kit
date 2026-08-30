@@ -1,6 +1,8 @@
-# Claude Code hook -> agent heartbeat.
-# Wire in ~/.claude/settings.json for PreToolUse / PostToolUse / UserPromptSubmit /
-# Notification / Stop / SessionEnd, command: powershell -File <this file>
+# CLI hook -> agent heartbeat. Claude Code and Codex share the same hook payload
+# (session_id / cwd / hook_event_name / tool_name / agent_id), so one script serves
+# both: powershell -File <this file> [-Provider codex]
+# Claude wires in ~/.claude/settings.json, Codex in ~/.codex/config.toml [[hooks.*]].
+param([string]$Provider = "claude")
 $hook = [Console]::In.ReadToEnd() | ConvertFrom-Json
 if (-not $hook.session_id) { exit 0 }  # some payloads (helper processes) carry no session
 
@@ -18,7 +20,7 @@ try {
         if ($parentId -le 0) { break }
         $parent = Get-CimInstance Win32_Process -Filter "ProcessId=$parentId" -Property Name -ErrorAction Stop
         if (-not $parent) { break }
-        if ($parent.Name -match '^(claude|node)') { $ownerPid = $parentId; break }
+        if ($parent.Name -match '^(claude|codex|node)') { $ownerPid = $parentId; break }
         $cur = $parentId
     }
 } catch {}
@@ -26,18 +28,18 @@ try {
 # Subagents: chick workers parented to the session worker. Appear on start, vanish on stop.
 if ($hook.hook_event_name -in @("SubagentStart", "SubagentStop")) {
     if (-not $hook.agent_id) { exit 0 }
-    $chickFile = Join-Path $dir "claude-$($hook.session_id)-$($hook.agent_id).json"
+    $chickFile = Join-Path $dir "$Provider-$($hook.session_id)-$($hook.agent_id).json"
     if ($hook.hook_event_name -eq "SubagentStop") {
         Remove-Item $chickFile -Force -ErrorAction SilentlyContinue
         exit 0
     }
     New-Item -ItemType Directory -Force $dir | Out-Null
     $chick = @{
-        id  = "claude-$($hook.session_id)-$($hook.agent_id)"
+        id  = "$Provider-$($hook.session_id)-$($hook.agent_id)"
         n   = if ($hook.agent_type) { $hook.agent_type } else { "agent" }
         st  = 2
         ts  = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
-        p   = "claude-$($hook.session_id)"
+        p   = "$Provider-$($hook.session_id)"
         pid = $ownerPid
     }
     $chick | ConvertTo-Json -Compress | Set-Content -Encoding utf8 $chickFile
@@ -49,7 +51,7 @@ if ($hook.hook_event_name -in @("SubagentStart", "SubagentStop")) {
 # was handled), so the flag clears and the worker goes Idle - same moment Orca-style
 # tools raise their "done" alarm. ponytail: one flag per session - if a turn starts
 # several background tasks, the first wake clears it; per-task tracking if that hurts.
-$watchFlag = Join-Path $dir "claude-$($hook.session_id).watch"
+$watchFlag = Join-Path $dir "$Provider-$($hook.session_id).watch"
 if ($hook.hook_event_name -eq "PostToolUse") {
     $bg = ($hook.tool_name -eq "Monitor") -or
           ($hook.tool_name -eq "Bash" -and $hook.tool_input.run_in_background)
@@ -67,7 +69,7 @@ elseif ($hook.hook_event_name -in @("UserPromptSubmit", "SessionEnd")) {
 # Turn over = every subagent is done. Sweep this session's chick files so a
 # subagent killed without SubagentStop cannot linger as an orphan duckling.
 if ($hook.hook_event_name -in @("Stop", "StopFailure", "SessionEnd")) {
-    Remove-Item (Join-Path $dir "claude-$($hook.session_id)-*.json") -Force -ErrorAction SilentlyContinue
+    Remove-Item (Join-Path $dir "$Provider-$($hook.session_id)-*.json") -Force -ErrorAction SilentlyContinue
 }
 
 $watchState = 0
@@ -90,6 +92,7 @@ $state = switch ($hook.hook_event_name) {
     "SessionStart"       { 0 }   # Idle - session up, nothing running yet
     "UserPromptSubmit"   { 1 }   # Thinking - prompt received, no tool yet
     "Notification"       { 3 }   # WaitingInput - permission prompt or idle nudge
+    "PermissionRequest"  { 3 }   # WaitingInput - Codex's approval prompt event
     "Stop"               { $watchState }  # Watching while bg work pends, Idle once the wake turn wraps up
     "StopFailure"        { 4 }   # Error - turn died on an API error (rate limit, billing, ...)
     "PreCompact"         { 7 }   # Compacting - tidying its memory
@@ -109,7 +112,7 @@ $state = switch ($hook.hook_event_name) {
     }
 }
 
-$file = Join-Path $dir "claude-$($hook.session_id).json"
+$file = Join-Path $dir "$Provider-$($hook.session_id).json"
 
 if ($state -lt 0) {
     Remove-Item $file -Force -ErrorAction SilentlyContinue
@@ -124,7 +127,7 @@ $name = $null
 try { $name = "$((Get-Content $file -Raw -ErrorAction Stop | ConvertFrom-Json).n)" } catch {}
 if (-not $name) { $name = if ($hook.cwd) { Split-Path -Leaf $hook.cwd } else { "Claude" } }
 $beat = @{
-    id  = "claude-$($hook.session_id)"
+    id  = "$Provider-$($hook.session_id)"
     n   = $name
     st  = $state
     ts  = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()

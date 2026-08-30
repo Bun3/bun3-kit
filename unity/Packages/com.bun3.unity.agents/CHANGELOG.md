@@ -5,6 +5,24 @@ All notable changes to this package will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2026-08-31
+
+### Changed
+
+- Codex detection moved from the legacy single-slot notify command to Codex's proper
+  hooks (config.toml [[hooks.*]] tables, stable since the hooks feature landed). Codex
+  sessions now get per-session workers with project names, live states, and pid-based
+  pruning - notify only fired at turn boundaries and merged every session into one
+  "Codex CLI" worker that never appeared until a first turn completed.
+- bun3-agent-heartbeat.ps1 is provider-parameterized (-Provider codex): Codex hooks
+  pipe the same payload shape as Claude's (session_id / cwd / hook_event_name /
+  tool_name / agent_id), so both CLIs share one script. HookRule gains `scriptArgs`.
+- Install migrates a legacy notify entry away automatically: the previous notify
+  occupant is restored and the merged codex-cli worker dropped.
+- NOTE: seeded manifests are never overwritten - delete
+  %LOCALAPPDATA%/bun3-agents/providers/codex.json once so the new manifest reseeds.
+  Codex asks to trust the new hooks on its next launch; approve them there.
+
 ## [0.7.0] - 2026-08-30
 
 ### Removed

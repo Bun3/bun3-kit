@@ -106,6 +106,37 @@ namespace Bun3.Unity.Agents
             return true;
         }
 
+        /// <summary>Codex proper hooks: appends our [[hooks.*]] block, migrating any
+        /// legacy notify install away first (its slot occupant is restored and the old
+        /// merged codex-cli worker dropped).</summary>
+        private static bool InstallCodexToml(ProviderDef def, string settingsPath, string scriptDest)
+        {
+            var existing = File.Exists(settingsPath) ? File.ReadAllText(settingsPath) : "";
+
+            string[] previous = null;
+            if (File.Exists(CodexOriginalPath))
+                previous = Newtonsoft.Json.JsonConvert.DeserializeObject<string[]>(File.ReadAllText(CodexOriginalPath));
+            var withoutNotify = CodexNotifyPatch.Remove(existing, CommandMarker, previous);
+            if (withoutNotify != null)
+            {
+                existing = withoutNotify;
+                File.Delete(CodexOriginalPath);
+                AgentHeartbeatStore.Remove("codex-cli");
+            }
+
+            var merged = CodexHooksPatch.Install(existing, BuildEntries(def, scriptDest), CommandMarker);
+            if (merged == null && withoutNotify == null)
+                return false; // already installed
+
+            var backupPath = settingsPath + ".bun3-agents.bak";
+            if (File.Exists(settingsPath) && !File.Exists(backupPath))
+                File.Copy(settingsPath, backupPath);
+
+            File.WriteAllText(settingsPath, merged ?? existing);
+            Debug.Log($"[ProviderHookInstaller] codex hooks installed into {settingsPath}");
+            return true;
+        }
+
         /// <summary>Removes every hook entry of ours from the CLI's settings file,
         /// leaving foreign hooks untouched. Returns true when something was removed.</summary>
         public static bool Uninstall(string settingsPath)
@@ -117,10 +148,12 @@ namespace Bun3.Unity.Agents
             string removed;
             if (settingsPath.EndsWith(".toml"))
             {
+                var withoutHooks = CodexHooksPatch.Remove(content, CommandMarker);
                 string[] previous = null;
                 if (File.Exists(CodexOriginalPath))
                     previous = Newtonsoft.Json.JsonConvert.DeserializeObject<string[]>(File.ReadAllText(CodexOriginalPath));
-                removed = CodexNotifyPatch.Remove(content, CommandMarker, previous);
+                var withoutNotify = CodexNotifyPatch.Remove(withoutHooks ?? content, CommandMarker, previous);
+                removed = withoutNotify ?? withoutHooks;
             }
             else
             {
@@ -170,6 +203,8 @@ namespace Bun3.Unity.Agents
         {
             var raw = !string.IsNullOrEmpty(def.hooks.script);
             var baseCommand = $"powershell -NoProfile -ExecutionPolicy Bypass -File \"{scriptDest}\"";
+            if (raw && !string.IsNullOrEmpty(def.hooks.scriptArgs))
+                baseCommand += " " + def.hooks.scriptArgs;
             var entries = new List<(string, string, string)>();
             foreach (var rule in def.hooks.events)
                 entries.Add((rule.@event, rule.matcher,
@@ -189,6 +224,8 @@ namespace Bun3.Unity.Agents
 
             if (def.hooks.schema == "codex-notify")
                 return InstallCodexNotify(settingsPath, scriptDest);
+            if (def.hooks.schema == "codex-toml")
+                return InstallCodexToml(def, settingsPath, scriptDest);
 
             var existing = File.Exists(settingsPath) ? File.ReadAllText(settingsPath) : null;
             var entries = BuildEntries(def, scriptDest);

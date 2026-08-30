@@ -3,10 +3,21 @@
   "displayName": "Codex",
   "hooks": {
     "settingsPath": "~/.codex/config.toml",
-    "schema": "codex-notify",
-    "script": "bun3-agent-codex-notify.ps1",
+    "schema": "codex-toml",
+    "script": "bun3-agent-heartbeat.ps1",
+    "scriptArgs": "-Provider codex",
     "events": [
-      { "event": "notify" }
+      { "event": "SessionStart" },
+      { "event": "UserPromptSubmit" },
+      { "event": "PreToolUse" },
+      { "event": "PostToolUse" },
+      { "event": "PermissionRequest" },
+      { "event": "Stop" },
+      { "event": "SessionEnd" },
+      { "event": "SubagentStart" },
+      { "event": "SubagentStop" },
+      { "event": "PreCompact" },
+      { "event": "PostCompact" }
     ]
   }
 }
