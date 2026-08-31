@@ -178,5 +178,33 @@ namespace Bun3.Unity.Audio
         internal void SetSourcePitch(int slot, float pitch) => _sources[slot].pitch = pitch;
 
         internal void SetSourcePosition(int slot, Vector3 position) => _sources[slot].transform.position = position;
+
+        private static readonly string[] ChannelParams =
+        {
+            "MasterVolume", "MusicVolume", "SfxVolume", "VoiceVolume",
+        };
+
+        /// <summary>Sets a channel's linear volume [0,1] on the mixer. Persisting the value is the game's job.</summary>
+        public void SetChannelVolume(SoundChannel channel, float linear)
+        {
+            if (_config.Mixer == null)
+            {
+#if DEVELOPMENT_BUILD || UNITY_EDITOR
+                Debug.LogWarning("SoundSystem.SetChannelVolume: no mixer configured; call ignored.");
+#endif
+                return;
+            }
+            _config.Mixer.SetFloat(ChannelParams[(int)channel], AudioMath.LinearToDb(linear));
+        }
+
+        /// <summary>Reads a channel's linear volume; 1 when no mixer or parameter is set.</summary>
+        public float GetChannelVolume(SoundChannel channel)
+        {
+            if (_config.Mixer == null || !_config.Mixer.GetFloat(ChannelParams[(int)channel], out var db))
+            {
+                return 1f;
+            }
+            return AudioMath.DbToLinear(db);
+        }
     }
 }
