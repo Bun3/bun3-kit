@@ -1,0 +1,13 @@
+{
+  "name": "com.bun3.unity.audio",
+  "displayName": "Bun3 Unity Audio",
+  "version": "0.1.0",
+  "unity": "6000.3",
+  "unityRelease": "14f1",
+  "description": "Sound manager for Unity: pooled AudioSources, generation-validated handles, coroutine-free fades, voice limits, cooldowns, pitch/volume variation, and UniTask-based playback awaiting.",
+  "author": { "name": "Bun3", "url": "https://github.com/Bun3", "email": "bun3.dev@gmail.com" },
+  "dependencies": {
+    "com.bun3.unity.core": "0.5.1",
+    "com.cysharp.unitask": "https://github.com/Cysharp/UniTask.git?path=src/UniTask/Assets/Plugins/UniTask"
+  }
+}

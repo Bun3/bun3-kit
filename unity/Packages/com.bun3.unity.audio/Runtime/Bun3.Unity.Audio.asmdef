@@ -1,0 +1,14 @@
+{
+    "name": "Bun3.Unity.Audio",
+    "rootNamespace": "Bun3.Unity.Audio",
+    "references": [ "UniTask", "Bun3.Unity.Core" ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
