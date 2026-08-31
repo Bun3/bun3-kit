@@ -24,7 +24,7 @@ Unity 내장이 영구히 비워 둔 사운드 관리 레이어(AudioSource 풀�
 | v1 스코프 | 코어(풀·fade·핸들·보이스 제한·채널 볼륨·쿨다운·variation) + 음악 + 오클루전 훅/raycast 기본 + Steam Audio 어댑터 + 타임스케일·스냅샷 헬퍼 |
 | 진입점 | **인스턴스 서비스** `new SoundSystem(config)` (DI 친화, 정적 파사드 아님) |
 | 클립 로딩 | 직접 AudioClip 참조 기본 + **Addressables 조건부 지원**(versionDefines) |
-| 믹서 | **기본 AudioMixer 에셋 동봉**(Master/Music/SFX/VoiceOver + duck + Normal/Paused 스냅샷), 게임 믹서로 교체 가능 |
+| 믹서 | **기본 AudioMixer 에셋 동봉**(Master/Music/SFX/Voice + duck + Normal/Paused 스냅샷), 게임 믹서로 교체 가능 |
 | 내부 구조 | 보이스 struct 배열 + PlayerLoopSystemHelper 단일 틱. MonoBehaviour 0개, coroutine 0개 |
 | 비동기 | 모든 진입 경로에 **UniTask 쌍** (PlayAsync/WaitAsync/StopAsync/CrossfadeAsync) |
 
