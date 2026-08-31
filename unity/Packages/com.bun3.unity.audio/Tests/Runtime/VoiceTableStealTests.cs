@@ -23,11 +23,11 @@ namespace Bun3.Unity.Audio.Tests
         {
             var table = new VoiceTable(8);
             var def = NewDef(maxInstances: 2);
-            table.TryAllocate(def, 1f, out var first, out _);
+            table.TryAllocate(def, 1f, out var first, out _, out _);
             table.Tick(0.1f, _scratch);
-            table.TryAllocate(def, 1f, out _, out _);
+            table.TryAllocate(def, 1f, out _, out _, out _);
             table.Tick(0.1f, _scratch);
-            Assert.IsTrue(table.TryAllocate(def, 1f, out var third, out var stolen));
+            Assert.IsTrue(table.TryAllocate(def, 1f, out var third, out var stolen, out _));
             Assert.That(stolen, Is.EqualTo(first));
             Assert.That(third, Is.EqualTo(first));
         }
@@ -38,11 +38,11 @@ namespace Bun3.Unity.Audio.Tests
             var table = new VoiceTable(2);
             var defA = NewDef();
             var defB = NewDef();
-            table.TryAllocate(defA, 1f, out var oldest, out _);
+            table.TryAllocate(defA, 1f, out var oldest, out _, out _);
             table.Tick(0.1f, _scratch);
-            table.TryAllocate(defA, 1f, out _, out _);
+            table.TryAllocate(defA, 1f, out _, out _, out _);
             table.Tick(0.1f, _scratch);
-            Assert.IsTrue(table.TryAllocate(defB, 1f, out var slot, out var stolen));
+            Assert.IsTrue(table.TryAllocate(defB, 1f, out var slot, out var stolen, out _));
             Assert.That(stolen, Is.EqualTo(oldest));
             Assert.That(slot, Is.EqualTo(oldest));
         }
@@ -52,10 +52,10 @@ namespace Bun3.Unity.Audio.Tests
         {
             var table = new VoiceTable(4);
             var def = NewDef(cooldown: 0.5f);
-            Assert.IsTrue(table.TryAllocate(def, 1f, out _, out _));
-            Assert.IsFalse(table.TryAllocate(def, 1f, out _, out _));
+            Assert.IsTrue(table.TryAllocate(def, 1f, out _, out _, out _));
+            Assert.IsFalse(table.TryAllocate(def, 1f, out _, out _, out _));
             table.Tick(0.6f, _scratch);
-            Assert.IsTrue(table.TryAllocate(def, 1f, out _, out _));
+            Assert.IsTrue(table.TryAllocate(def, 1f, out _, out _, out _));
         }
     }
 }

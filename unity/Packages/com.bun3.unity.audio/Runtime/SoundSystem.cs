@@ -103,13 +103,14 @@ namespace Bun3.Unity.Audio
             }
 
             var clip = PickClip(def);
-            if (!Table.TryAllocate(def, clip.length, out var slot, out var stolen))
+            if (!Table.TryAllocate(def, clip.length, out var slot, out var stolen, out var stolenCompletion))
             {
                 return SoundHandle.Invalid;
             }
             if (stolen >= 0)
             {
                 _sources[stolen].Stop();
+                stolenCompletion?.TrySetResult();
             }
 
             ref var voice = ref Table.Slots[slot];

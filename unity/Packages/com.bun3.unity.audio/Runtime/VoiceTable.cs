@@ -28,12 +28,16 @@ namespace Bun3.Unity.Audio
         /// <summary>
         /// Reserves a slot for <paramref name="def"/>. Returns false when blocked by cooldown
         /// (or zero capacity). <paramref name="stolenSlot"/> is the slot whose previous voice
-        /// was cut short (-1 if none) so the caller can complete its awaiter.
+        /// was cut short (-1 if none); <paramref name="stolenCompletion"/> is that voice's
+        /// awaiter (captured before the slot is overwritten) so the caller can signal it.
         /// </summary>
-        public bool TryAllocate(SoundDef def, float clipLength, out int slotIndex, out int stolenSlot)
+        public bool TryAllocate(
+            SoundDef def, float clipLength, out int slotIndex, out int stolenSlot,
+            out AutoResetUniTaskCompletionSource stolenCompletion)
         {
             stolenSlot = -1;
             slotIndex = -1;
+            stolenCompletion = null;
             if (Slots.Length == 0)
             {
                 return false;
@@ -46,6 +50,10 @@ namespace Bun3.Unity.Audio
             }
 
             slotIndex = FindSlot(def, ref stolenSlot);
+            if (stolenSlot >= 0)
+            {
+                stolenCompletion = Slots[stolenSlot].Completion;
+            }
             ref var slot = ref Slots[slotIndex];
             slot.Generation++;
             slot.State = VoiceState.Playing;

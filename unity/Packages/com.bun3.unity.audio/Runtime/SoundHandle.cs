@@ -1,3 +1,4 @@
+using Cysharp.Threading.Tasks;
 using UnityEngine;
 
 namespace Bun3.Unity.Audio
@@ -31,6 +32,22 @@ namespace Bun3.Unity.Audio
 
         /// <summary>Stops the voice, optionally fading out over <paramref name="fadeOut"/> seconds.</summary>
         public void Stop(float fadeOut = 0f) => Owner?.Stop(this, fadeOut);
+
+        /// <summary>Completes when the voice ends (natural end, steal, or Stop — all count as done). Invalid handles complete immediately.</summary>
+        public UniTask WaitAsync(System.Threading.CancellationToken ct = default)
+            => Owner == null ? UniTask.CompletedTask : Owner.WaitInternal(this, ct);
+
+        /// <summary>Begins a fade-out and completes when it finishes. Invalid handles complete immediately.</summary>
+        public UniTask StopAsync(float fadeOut, System.Threading.CancellationToken ct = default)
+        {
+            if (Owner == null)
+            {
+                return UniTask.CompletedTask;
+            }
+            var wait = Owner.WaitInternal(this, ct);
+            Owner.Stop(this, fadeOut);
+            return wait;
+        }
 
         /// <summary>Scales the voice's rolled base volume (1 = as rolled).</summary>
         public void SetVolume(float volume)

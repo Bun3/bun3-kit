@@ -24,7 +24,7 @@ namespace Bun3.Unity.Audio.Tests
         public void Tick_CompletesVoiceAfterClipLength()
         {
             var table = new VoiceTable(2);
-            table.TryAllocate(NewDef(), clipLength: 0.5f, out var slot, out _);
+            table.TryAllocate(NewDef(), clipLength: 0.5f, out var slot, out _, out _);
             table.Tick(0.4f, _completed);
             Assert.IsEmpty(_completed);
             table.Tick(0.2f, _completed);
@@ -37,7 +37,7 @@ namespace Bun3.Unity.Audio.Tests
         public void Tick_LoopingVoiceNeverCompletes()
         {
             var table = new VoiceTable(2);
-            table.TryAllocate(NewDef(loop: true), 0.5f, out _, out _);
+            table.TryAllocate(NewDef(loop: true), 0.5f, out _, out _, out _);
             table.Tick(10f, _completed);
             Assert.IsEmpty(_completed);
         }
@@ -46,7 +46,7 @@ namespace Bun3.Unity.Audio.Tests
         public void FadeIn_RampsFactorFromZeroToOne()
         {
             var table = new VoiceTable(2);
-            table.TryAllocate(NewDef(loop: true), 1f, out var slot, out _);
+            table.TryAllocate(NewDef(loop: true), 1f, out var slot, out _, out _);
             table.BeginFadeIn(slot, 1f);
             Assert.That(table.Slots[slot].FadeFactor, Is.EqualTo(0f));
             table.Tick(0.5f, _completed);
@@ -60,7 +60,7 @@ namespace Bun3.Unity.Audio.Tests
         public void FadeOut_CompletesAndReleases()
         {
             var table = new VoiceTable(2);
-            table.TryAllocate(NewDef(loop: true), 1f, out var slot, out _);
+            table.TryAllocate(NewDef(loop: true), 1f, out var slot, out _, out _);
             table.BeginFadeOut(slot, 0.5f);
             table.Tick(0.25f, _completed);
             Assert.That(table.Slots[slot].FadeFactor, Is.EqualTo(0.5f).Within(0.001f));
@@ -74,7 +74,7 @@ namespace Bun3.Unity.Audio.Tests
         public void FadeOut_DuringFadeIn_StartsFromCurrentFactor()
         {
             var table = new VoiceTable(2);
-            table.TryAllocate(NewDef(loop: true), 1f, out var slot, out _);
+            table.TryAllocate(NewDef(loop: true), 1f, out var slot, out _, out _);
             table.BeginFadeIn(slot, 1f);
             table.Tick(0.5f, _completed);
             table.BeginFadeOut(slot, 1f);
