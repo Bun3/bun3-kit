@@ -21,7 +21,7 @@ namespace Bun3.Unity.Audio
 
         internal readonly VoiceTable Table;
         private readonly AudioSource[] _sources;
-        private readonly List<(int Slot, Cysharp.Threading.Tasks.AutoResetUniTaskCompletionSource Completion)> _completedScratch = new();
+        private readonly List<(int Slot, Cysharp.Threading.Tasks.AutoResetUniTaskCompletionSource Completion)> _completedScratch;
         private readonly SoundSystemConfig _config;
         private GameObject _root;
         private bool _disposed;
@@ -41,6 +41,9 @@ namespace Bun3.Unity.Audio
             _config = config;
             Table = new VoiceTable(config.SfxVoices);
             _sources = new AudioSource[config.SfxVoices];
+            // At most one completion per slot per tick; preallocate to that bound so the
+            // hot Tick path never grows this list (List.Add would allocate on growth).
+            _completedScratch = new(config.SfxVoices);
             _root = new GameObject("Bun3.SoundSystem");
             if (Application.isPlaying)
             {
