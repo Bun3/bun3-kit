@@ -87,18 +87,54 @@ namespace Bun3.Unity.Audio
             return s.BaseVolume * s.VolumeScale * s.FadeFactor;
         }
 
+        /// <summary>Test hook: advances internal time without ticking voices.</summary>
+        internal void AdvanceTime(float seconds) => _time += seconds;
+
         private int FindSlot(SoundDef def, ref int stolenSlot)
         {
-            // Task 4 replaces this body with maxInstances + global-oldest stealing.
+            if (def.MaxInstances > 0)
+            {
+                var count = 0;
+                var oldestOfDef = -1;
+                var oldestTime = float.MaxValue;
+                for (var i = 0; i < Slots.Length; i++)
+                {
+                    ref var s = ref Slots[i];
+                    if (s.State == VoiceState.Idle || !ReferenceEquals(s.Def, def))
+                    {
+                        continue;
+                    }
+                    count++;
+                    if (s.StartTime < oldestTime)
+                    {
+                        oldestTime = s.StartTime;
+                        oldestOfDef = i;
+                    }
+                }
+                if (count >= def.MaxInstances)
+                {
+                    stolenSlot = oldestOfDef;
+                    return oldestOfDef;
+                }
+            }
+
+            var globalOldest = 0;
+            var globalOldestTime = float.MaxValue;
             for (var i = 0; i < Slots.Length; i++)
             {
-                if (Slots[i].State == VoiceState.Idle)
+                ref var s = ref Slots[i];
+                if (s.State == VoiceState.Idle)
                 {
                     return i;
                 }
+                if (s.StartTime < globalOldestTime)
+                {
+                    globalOldestTime = s.StartTime;
+                    globalOldest = i;
+                }
             }
-            stolenSlot = 0;
-            return 0;
+            stolenSlot = globalOldest;
+            return globalOldest;
         }
     }
 }
