@@ -153,6 +153,27 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(GameplayTagPlaySessionCatalog.Current, Is.Null);
         }
 
+        /// <summary>Verifies a failed EnteredPlayMode restore in batch mode does not cancel but still warns.</summary>
+        [Test]
+        public void Entered_play_mode_malformed_marker_in_batch_mode_does_not_cancel_but_still_warns()
+        {
+            SetRawPreparedMarker(" ", " ", "not-base64");
+            var cancelCount = 0;
+            var warningCount = 0;
+
+            Assert.That(() => GameplayTagPlayModeGate.HandlePlayModeStateChanged(
+                PlayModeStateChange.EnteredPlayMode,
+                () => throw new AssertionException("EnteredPlayMode restore must not resolve Sources."),
+                _ => warningCount++,
+                () => cancelCount++,
+                build: null,
+                isBatchMode: true), Throws.Nothing);
+
+            Assert.That(cancelCount, Is.EqualTo(0));
+            Assert.That(warningCount, Is.EqualTo(1));
+            Assert.That(GameplayTagPlaySessionCatalog.Current, Is.Null);
+        }
+
         /// <summary>Blocks play preparation without pinning the preview or last-good binary when there is no provider context.</summary>
         [Test]
         public void Missing_provider_context_blocks_prepare_and_never_freezes_preview_or_last_good_binary()
@@ -310,6 +331,31 @@ namespace Bun3.Gameplay.Unity.Tests
             Assert.That(cancelCount, Is.EqualTo(0));
             Assert.That(popupCount, Is.EqualTo(1));
             Assert.That(popupDiagnostic, Does.Contain("B3TAG3001"));
+            Assert.That(GameplayTagPlaySessionCatalog.Current, Is.Null);
+        }
+
+        /// <summary>Verifies an ExitingEditMode exception in batch mode does not cancel but still warns.</summary>
+        [Test]
+        public void Exiting_edit_mode_exception_in_batch_mode_does_not_cancel_but_still_warns()
+        {
+            var popupCount = 0;
+            var cancelCount = 0;
+            var popupDiagnostic = string.Empty;
+
+            GameplayTagPlayModeGate.HandlePlayModeStateChanged(
+                PlayModeStateChange.ExitingEditMode,
+                () => throw new InvalidOperationException("workspace open failed"),
+                diagnostic =>
+                {
+                    popupCount++;
+                    popupDiagnostic = diagnostic;
+                },
+                () => cancelCount++,
+                isBatchMode: true);
+
+            Assert.That(cancelCount, Is.EqualTo(0));
+            Assert.That(popupCount, Is.EqualTo(1));
+            Assert.That(popupDiagnostic, Does.Contain("workspace open failed"));
             Assert.That(GameplayTagPlaySessionCatalog.Current, Is.Null);
         }
 
