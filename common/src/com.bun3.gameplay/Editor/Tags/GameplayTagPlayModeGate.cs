@@ -81,11 +81,13 @@ namespace Bun3.Gameplay.Editor.Tags
             Func<GameplayTagEditorWorkspace> openFreshWorkspace,
             Action<string> showWarning,
             Action cancelPlay,
-            Func<GameplayTagEditorWorkspace, TagCatalog>? build = null)
+            Func<GameplayTagEditorWorkspace, TagCatalog>? build = null,
+            bool? isBatchMode = null)
         {
             if (openFreshWorkspace is null) throw new ArgumentNullException(nameof(openFreshWorkspace));
             if (showWarning is null) throw new ArgumentNullException(nameof(showWarning));
             if (cancelPlay is null) throw new ArgumentNullException(nameof(cancelPlay));
+            var batchMode = isBatchMode ?? Application.isBatchMode;
             if (state == PlayModeStateChange.EnteredEditMode)
             {
                 GameplayTagPlaySessionCatalog.Clear();
@@ -110,7 +112,7 @@ namespace Bun3.Gameplay.Editor.Tags
                         "Prepared GameplayTag Catalog could not be restored: " + exception.Message;
                 }
 
-                cancelPlay();
+                if (!batchMode) cancelPlay();
                 showWarning(restoreDiagnostic);
                 return;
             }
@@ -131,13 +133,13 @@ namespace Bun3.Gameplay.Editor.Tags
                         TagCatalogDevelopmentPath.Get(catalog!.CatalogId));
                     return;
                 }
-                cancelPlay();
+                if (!batchMode) cancelPlay();
                 showWarning(diagnostic);
             }
             catch (Exception exception)
             {
                 GameplayTagPlaySessionCatalog.Clear();
-                cancelPlay();
+                if (!batchMode) cancelPlay();
                 showWarning(exception.Message);
             }
         }

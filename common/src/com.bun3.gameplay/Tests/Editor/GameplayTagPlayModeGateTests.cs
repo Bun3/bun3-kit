@@ -144,7 +144,9 @@ namespace Bun3.Gameplay.Unity.Tests
                 PlayModeStateChange.EnteredPlayMode,
                 () => throw new AssertionException("EnteredPlayMode restore must not resolve Sources."),
                 _ => warningCount++,
-                () => cancelCount++), Throws.Nothing);
+                () => cancelCount++,
+                build: null,
+                isBatchMode: false), Throws.Nothing);
 
             Assert.That(cancelCount, Is.EqualTo(1));
             Assert.That(warningCount, Is.EqualTo(1));
@@ -267,9 +269,45 @@ namespace Bun3.Gameplay.Unity.Tests
                 },
                 () => cancelCount++,
                 workspace => GameplayTagDevelopmentCatalogBuilder.Build(
-                    workspace, _temporaryDirectory));
+                    workspace, _temporaryDirectory),
+                isBatchMode: false);
 
             Assert.That(cancelCount, Is.EqualTo(1));
+            Assert.That(popupCount, Is.EqualTo(1));
+            Assert.That(popupDiagnostic, Does.Contain("B3TAG3001"));
+            Assert.That(GameplayTagPlaySessionCatalog.Current, Is.Null);
+        }
+
+        /// <summary>Verifies an ExitingEditMode preparation failure in batch mode warns but lets play proceed.</summary>
+        [Test]
+        public void Exiting_edit_mode_failure_in_batch_mode_does_not_cancel_but_still_warns()
+        {
+            var valid = GameplayTagDevelopmentCatalogTests.CreateValidWorkspace(
+                "play-batch-game", "state.ready");
+            var invalid = GameplayTagEditorWorkspace.Open(
+                new GameplayTagBuildContextResolution(
+                    null,
+                    new[] { "B3TAG3001: provider missing" },
+                    permitsGameOnlyValidation: true),
+                valid.Snapshot!.Sources[0]);
+            var popupCount = 0;
+            var cancelCount = 0;
+            var popupDiagnostic = string.Empty;
+
+            GameplayTagPlayModeGate.HandlePlayModeStateChanged(
+                PlayModeStateChange.ExitingEditMode,
+                () => invalid,
+                diagnostic =>
+                {
+                    popupCount++;
+                    popupDiagnostic = diagnostic;
+                },
+                () => cancelCount++,
+                workspace => GameplayTagDevelopmentCatalogBuilder.Build(
+                    workspace, _temporaryDirectory),
+                isBatchMode: true);
+
+            Assert.That(cancelCount, Is.EqualTo(0));
             Assert.That(popupCount, Is.EqualTo(1));
             Assert.That(popupDiagnostic, Does.Contain("B3TAG3001"));
             Assert.That(GameplayTagPlaySessionCatalog.Current, Is.Null);

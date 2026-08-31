@@ -77,6 +77,12 @@ namespace Bun3.Gameplay.Editor.Tags
         {
             if (title is null) throw new ArgumentNullException(nameof(title));
             if (diagnostic is null) throw new ArgumentNullException(nameof(diagnostic));
+            if (Application.isBatchMode)
+            {
+                Debug.LogWarning($"{title}: {diagnostic}");
+                return;
+            }
+
             EditorUtility.DisplayDialog(title, diagnostic, "OK");
         }
     }
