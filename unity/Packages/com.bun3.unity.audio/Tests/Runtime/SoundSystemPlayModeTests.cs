@@ -50,5 +50,18 @@ namespace Bun3.Unity.Audio.Tests
             yield return null; // Object.Destroy defers actual destruction to end of frame.
             Assert.That(Object.FindObjectsByType<AudioSource>(FindObjectsSortMode.None), Is.Empty);
         }
+
+        [UnityTest]
+        public IEnumerator Play_WithFadeIn_RampsVolume()
+        {
+            using var sys = new SoundSystem(new SoundSystemConfig { SfxVoices = 2 });
+            var loopDef = ScriptableObject.CreateInstance<SoundDef>();
+            loopDef.Clips = new[] { AudioClip.Create("loop-clip", 44100, 1, 44100, false) };
+            loopDef.Loop = true;
+            var handle = sys.Play(loopDef, fadeIn: 1f);
+            sys.Tick(0.5f);
+            Assert.That(sys.Table.Slots[handle.SlotIndex].FadeFactor, Is.EqualTo(0.5f).Within(0.001f));
+            yield break;
+        }
     }
 }

@@ -16,7 +16,8 @@ namespace Bun3.Unity.Audio.Tests
             def.Clips = new[] { AudioClip.Create("test-clip", 4410, 1, 44100, false) };
             def.Cooldown = 0f;
 
-            // Warm every lazy path once: first play of a def grows the cooldown dictionary.
+            // Warm every lazy path once (def.Cooldown is 0 here, so the cooldown dictionary
+            // itself is never touched — see VoiceTable.TryAllocate).
             sys.Play(def).Stop();
             sys.Tick(0.02f);
 

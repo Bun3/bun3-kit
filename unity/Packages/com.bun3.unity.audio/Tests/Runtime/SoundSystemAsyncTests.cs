@@ -40,5 +40,29 @@ namespace Bun3.Unity.Audio.Tests
             sys.Play(ShortClipDef()); // steals the only slot
             await waiting;            // must complete, not hang
         });
+
+        [UnityTest]
+        public IEnumerator Dispose_SignalsPendingAwaiters() => UniTask.ToCoroutine(async () =>
+        {
+            var sys = new SoundSystem(new SoundSystemConfig { SfxVoices = 2 });
+            var loopDef = ScriptableObject.CreateInstance<SoundDef>();
+            loopDef.Clips = new[] { AudioClip.Create("loop-clip", 44100, 1, 44100, false) };
+            loopDef.Loop = true;
+            var handle = sys.Play(loopDef);
+            var waiting = handle.WaitAsync();
+            sys.Dispose();
+            Assert.IsFalse(handle.IsValid);
+            await waiting; // Dispose fires TrySetResult synchronously, so this must not hang.
+        });
+
+        [UnityTest]
+        public IEnumerator PlayFromCompletionContinuation_NewVoiceSurvives() => UniTask.ToCoroutine(async () =>
+        {
+            using var sys = new SoundSystem(new SoundSystemConfig { SfxVoices = 2 });
+            await sys.PlayAsync(ShortClipDef());
+            var h = sys.Play(ShortClipDef()); // played from inside the completion continuation
+            sys.Tick(0.02f);                  // internal access; well short of the 0.1s clip
+            Assert.IsTrue(h.IsPlaying);
+        });
     }
 }
