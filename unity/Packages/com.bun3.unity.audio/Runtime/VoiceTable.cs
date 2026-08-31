@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Cysharp.Threading.Tasks;
 using UnityEngine;
 
 namespace Bun3.Unity.Audio
@@ -87,8 +88,85 @@ namespace Bun3.Unity.Audio
             return s.BaseVolume * s.VolumeScale * s.FadeFactor;
         }
 
-        /// <summary>Test hook: advances internal time without ticking voices.</summary>
-        internal void AdvanceTime(float seconds) => _time += seconds;
+        /// <summary>Starts a fade from the current factor to full volume.</summary>
+        public void BeginFadeIn(int slot, float duration)
+        {
+            ref var s = ref Slots[slot];
+            if (duration <= 0f)
+            {
+                s.FadeDuration = 0f;
+                s.FadeFactor = 1f;
+                s.State = VoiceState.Playing;
+                return;
+            }
+            s.FadeFrom = 0f;
+            s.FadeTo = 1f;
+            s.FadeFactor = 0f;
+            s.FadeElapsed = 0f;
+            s.FadeDuration = duration;
+            s.State = VoiceState.FadingIn;
+        }
+
+        /// <summary>
+        /// Starts a fade from the current factor to silence; the voice completes and is
+        /// released on the tick the fade finishes (immediately next tick when duration ≤ 0).
+        /// </summary>
+        public void BeginFadeOut(int slot, float duration)
+        {
+            ref var s = ref Slots[slot];
+            s.FadeFrom = s.FadeFactor;
+            s.FadeTo = 0f;
+            s.FadeElapsed = 0f;
+            s.FadeDuration = Mathf.Max(duration, float.Epsilon);
+            s.State = VoiceState.FadingOut;
+        }
+
+        /// <summary>
+        /// Advances all active voices: fade interpolation, elapsed-time completion
+        /// (never AudioSource.isPlaying — pause would misread). For each completed slot, the
+        /// slot index and its Completion (captured before Release nulls it) are appended to
+        /// <paramref name="completed"/>.
+        /// </summary>
+        public void Tick(float dt, List<(int Slot, AutoResetUniTaskCompletionSource Completion)> completed)
+        {
+            _time += dt;
+            for (var i = 0; i < Slots.Length; i++)
+            {
+                ref var s = ref Slots[i];
+                if (s.State == VoiceState.Idle)
+                {
+                    continue;
+                }
+
+                s.Elapsed += dt;
+
+                if (s.FadeDuration > 0f)
+                {
+                    s.FadeElapsed += dt;
+                    var t = Mathf.Clamp01(s.FadeElapsed / s.FadeDuration);
+                    s.FadeFactor = Mathf.Lerp(s.FadeFrom, s.FadeTo, t);
+                    if (t >= 1f)
+                    {
+                        s.FadeDuration = 0f;
+                        if (s.State == VoiceState.FadingOut)
+                        {
+                            var completion = s.Completion;
+                            Release(i);
+                            completed.Add((i, completion));
+                            continue;
+                        }
+                        s.State = VoiceState.Playing;
+                    }
+                }
+
+                if (!s.Loop && s.Elapsed >= s.ClipLength)
+                {
+                    var completion = s.Completion;
+                    Release(i);
+                    completed.Add((i, completion));
+                }
+            }
+        }
 
         private int FindSlot(SoundDef def, ref int stolenSlot)
         {
