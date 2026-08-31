@@ -24,7 +24,7 @@ Unity 내장이 영구히 비워 둔 사운드 관리 레이어(AudioSource 풀�
 | v1 스코프 | 코어(풀·fade·핸들·보이스 제한·채널 볼륨·쿨다운·variation) + 음악 + 오클루전 훅/raycast 기본 + Steam Audio 어댑터 + 타임스케일·스냅샷 헬퍼 |
 | 진입점 | **인스턴스 서비스** `new SoundSystem(config)` (DI 친화, 정적 파사드 아님) |
 | 클립 로딩 | 직접 AudioClip 참조 기본 + **Addressables 조건부 지원**(versionDefines) |
-| 믹서 | **기본 AudioMixer 에셋 동봉**(Master/Music/SFX/Voice + duck + Normal/Paused 스냅샷), 게임 믹서로 교체 가능 |
+| 믹서 | **기본 AudioMixer 에셋 동봉**(Master/Music/SFX/VoiceOver + duck + Normal/Paused 스냅샷), 게임 믹서로 교체 가능 |
 | 내부 구조 | 보이스 struct 배열 + PlayerLoopSystemHelper 단일 틱. MonoBehaviour 0개, coroutine 0개 |
 | 비동기 | 모든 진입 경로에 **UniTask 쌍** (PlayAsync/WaitAsync/StopAsync/CrossfadeAsync) |
 
@@ -35,7 +35,7 @@ unity/Packages/com.bun3.unity.audio/            v0.1.0, Unity 6000.3
   Runtime/Bun3.Unity.Audio.asmdef               core·UniTask 의존
                                                 versionDefines: com.unity.addressables → BUN3_ADDRESSABLES
   Runtime/   SoundSystem.cs, SoundSystem.Tick.cs, SoundSystem.Music.cs (partial=역할),
-             SoundHandle.cs, SoundDef.cs, MusicDef.cs, Voice.cs,
+             SoundHandle.cs, SoundDef.cs, MusicDef.cs, VoiceSlot.cs,
              IOcclusionProvider.cs, RaycastOcclusionProvider.cs
   Runtime/Assets/  기본 AudioMixer
   Editor/    SoundDef 인스펙터 프리뷰 버튼
@@ -114,7 +114,7 @@ var sound = new SoundSystem(new SoundSystemConfig
 보이스 슬롯(AoS — 수십 개 규모라 SoA 불요):
 
 ```csharp
-struct Voice {
+struct VoiceSlot {
     uint generation; VoiceState state;   // Idle/Playing/FadingIn/FadingOut
     SoundDef def; float elapsed, clipLength;
     float fadeElapsed, fadeDuration, fadeFrom, fadeTo;
