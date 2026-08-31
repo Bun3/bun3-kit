@@ -57,7 +57,10 @@ namespace Bun3.Unity.Audio
                 _sources[i].playOnAwake = false;
             }
 
-            if (Live.Count == 0)
+            // Checks actual player-loop insertion rather than Live.Count: with domain reload
+            // disabled, Application.quitting can remove the tick while stale entries survive
+            // in the static Live list, which would otherwise block re-registration.
+            if (!PlayerLoopSystemHelper.IsInserted(typeof(TickMarker)))
             {
                 PlayerLoopSystemHelper.InsertSystemAfter(
                     typeof(TickMarker), TickAll,
@@ -67,13 +70,21 @@ namespace Bun3.Unity.Audio
         }
 
         /// <summary>Plays a 2D (or def-default) sound. Returns an invalid handle when blocked.</summary>
-        public SoundHandle Play(SoundDef def) => PlayCore(def, Vector3.zero, null);
+        /// <param name="def">Sound definition to play.</param>
+        /// <param name="fadeIn">When > 0, ramps volume from silence over this many seconds.</param>
+        public SoundHandle Play(SoundDef def, float fadeIn = 0f) => PlayCore(def, Vector3.zero, null, fadeIn);
 
         /// <summary>Plays at a fixed world position (def should use SpatialMode.Positional).</summary>
-        public SoundHandle Play(SoundDef def, Vector3 position) => PlayCore(def, position, null);
+        /// <param name="def">Sound definition to play.</param>
+        /// <param name="position">Fixed world position for the voice.</param>
+        /// <param name="fadeIn">When > 0, ramps volume from silence over this many seconds.</param>
+        public SoundHandle Play(SoundDef def, Vector3 position, float fadeIn = 0f) => PlayCore(def, position, null, fadeIn);
 
         /// <summary>Plays tracking a transform every frame (def should use SpatialMode.Follow).</summary>
-        public SoundHandle Play(SoundDef def, Transform follow) => PlayCore(def, follow != null ? follow.position : Vector3.zero, follow);
+        /// <param name="def">Sound definition to play.</param>
+        /// <param name="follow">Transform to track every frame.</param>
+        /// <param name="fadeIn">When > 0, ramps volume from silence over this many seconds.</param>
+        public SoundHandle Play(SoundDef def, Transform follow, float fadeIn = 0f) => PlayCore(def, follow != null ? follow.position : Vector3.zero, follow, fadeIn);
 
         /// <summary>Stops the voice, optionally fading out first. No-op for stale handles.</summary>
         public void Stop(SoundHandle handle, float fadeOut = 0f)
@@ -91,7 +102,7 @@ namespace Bun3.Unity.Audio
             return !_disposed && handle.Owner == this && Table.IsValid(slot, handle.Generation);
         }
 
-        private SoundHandle PlayCore(SoundDef def, Vector3 position, Transform follow)
+        private SoundHandle PlayCore(SoundDef def, Vector3 position, Transform follow, float fadeIn)
         {
             if (_disposed)
             {
@@ -113,23 +124,34 @@ namespace Bun3.Unity.Audio
             if (stolen >= 0)
             {
                 _sources[stolen].Stop();
-                stolenCompletion?.TrySetResult();
             }
 
             ref var voice = ref Table.Slots[slot];
             voice.Follow = follow;
+            if (fadeIn > 0f)
+            {
+                Table.BeginFadeIn(slot, fadeIn);
+            }
 
             var source = _sources[slot];
             source.clip = clip;
             source.loop = def.Loop;
             source.pitch = voice.Pitch;
-            source.volume = Table.CurrentVolume(slot);
+            source.volume = Table.CurrentVolume(slot); // reflects FadeFactor 0 when fading in
             source.outputAudioMixerGroup = def.MixerGroup != null ? def.MixerGroup : _config.SfxGroup;
             source.spatialBlend = def.Spatial == SpatialMode.None ? 0f : 1f;
             source.minDistance = def.MinDistance;
             source.maxDistance = def.MaxDistance;
             source.transform.position = position;
             source.Play();
+
+            // Fired only after the new source is fully configured and playing: a continuation
+            // may re-enter PlayCore (this is a stolen voice's awaiter) and must never observe
+            // a half-configured slot.
+            if (stolen >= 0)
+            {
+                stolenCompletion?.TrySetResult();
+            }
 
             return new SoundHandle(this, slot, voice.Generation);
         }
@@ -151,7 +173,11 @@ namespace Bun3.Unity.Audio
             return clips[index];
         }
 
-        /// <summary>Stops all voices, destroys the pool, and unregisters the tick when last alive.</summary>
+        /// <summary>
+        /// Stops all voices, destroys the pool, and unregisters the tick when last alive.
+        /// Any pending <see cref="SoundHandle.WaitAsync"/> awaiters complete normally (never
+        /// with an exception).
+        /// </summary>
         public void Dispose()
         {
             if (_disposed)
@@ -159,13 +185,22 @@ namespace Bun3.Unity.Audio
                 return;
             }
             _disposed = true;
+
+            // Two-phase, same discipline as Tick: capture every active slot's awaiter before
+            // releasing (Release nulls Completion), finish all teardown, then fire the
+            // awaiters last — a continuation re-entering this instance must see it fully
+            // disposed, not mid-teardown.
+            _completedScratch.Clear();
             for (var i = 0; i < Table.Slots.Length; i++)
             {
                 if (Table.Slots[i].State != VoiceState.Idle)
                 {
+                    var completion = Table.Slots[i].Completion;
                     Table.Release(i);
+                    _completedScratch.Add((i, completion));
                 }
             }
+
             Live.Remove(this);
             if (Live.Count == 0)
             {
@@ -175,6 +210,11 @@ namespace Bun3.Unity.Audio
             {
                 UnityEngine.Object.Destroy(_root);
                 _root = null;
+            }
+
+            for (var i = 0; i < _completedScratch.Count; i++)
+            {
+                _completedScratch[i].Completion?.TrySetResult();
             }
         }
 

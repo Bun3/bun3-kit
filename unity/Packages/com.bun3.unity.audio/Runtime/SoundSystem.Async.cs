@@ -9,16 +9,27 @@ namespace Bun3.Unity.Audio
     public sealed partial class SoundSystem
     {
         /// <summary>Plays and completes when the voice ends (natural end, steal, or Stop). Cancelling <paramref name="ct"/> stops the voice.</summary>
-        public UniTask PlayAsync(SoundDef def, CancellationToken ct = default)
-            => WaitInternal(Play(def), ct);
+        /// <param name="def">Sound definition to play.</param>
+        /// <param name="ct">Cancelling stops the voice and throws <see cref="OperationCanceledException"/>.</param>
+        /// <param name="fadeIn">When > 0, ramps volume from silence over this many seconds.</param>
+        public UniTask PlayAsync(SoundDef def, CancellationToken ct = default, float fadeIn = 0f)
+            => WaitInternal(Play(def, fadeIn), ct);
 
-        /// <summary>Positional variant of <see cref="PlayAsync(SoundDef, CancellationToken)"/>.</summary>
-        public UniTask PlayAsync(SoundDef def, Vector3 position, CancellationToken ct = default)
-            => WaitInternal(Play(def, position), ct);
+        /// <summary>Positional variant of <see cref="PlayAsync(SoundDef, CancellationToken, float)"/>.</summary>
+        /// <param name="def">Sound definition to play.</param>
+        /// <param name="position">Fixed world position for the voice.</param>
+        /// <param name="ct">Cancelling stops the voice and throws <see cref="OperationCanceledException"/>.</param>
+        /// <param name="fadeIn">When > 0, ramps volume from silence over this many seconds.</param>
+        public UniTask PlayAsync(SoundDef def, Vector3 position, CancellationToken ct = default, float fadeIn = 0f)
+            => WaitInternal(Play(def, position, fadeIn), ct);
 
-        /// <summary>Following variant of <see cref="PlayAsync(SoundDef, CancellationToken)"/>.</summary>
-        public UniTask PlayAsync(SoundDef def, Transform follow, CancellationToken ct = default)
-            => WaitInternal(Play(def, follow), ct);
+        /// <summary>Following variant of <see cref="PlayAsync(SoundDef, CancellationToken, float)"/>.</summary>
+        /// <param name="def">Sound definition to play.</param>
+        /// <param name="follow">Transform to track every frame.</param>
+        /// <param name="ct">Cancelling stops the voice and throws <see cref="OperationCanceledException"/>.</param>
+        /// <param name="fadeIn">When > 0, ramps volume from silence over this many seconds.</param>
+        public UniTask PlayAsync(SoundDef def, Transform follow, CancellationToken ct = default, float fadeIn = 0f)
+            => WaitInternal(Play(def, follow, fadeIn), ct);
 
         /// <summary>
         /// Awaits the given handle's voice ending. Lazily creates the pooled completion source

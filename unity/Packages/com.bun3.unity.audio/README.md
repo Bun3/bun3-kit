@@ -40,6 +40,7 @@ var sound = new SoundSystem(new SoundSystemConfig
 SoundHandle handle = sound.Play(mySoundDef);
 sound.Play(mySoundDef, worldPosition);      // fixed 3D position
 sound.Play(mySoundDef, followTransform);    // tracks a Transform every frame
+sound.Play(mySoundDef, fadeIn: 0.3f);       // ramps volume from silence
 
 // Stop, optionally fading out.
 handle.Stop(fadeOut: 0.2f);

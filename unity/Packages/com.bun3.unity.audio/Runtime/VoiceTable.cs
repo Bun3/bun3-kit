@@ -70,7 +70,10 @@ namespace Bun3.Unity.Audio
             slot.StartTime = _time;
             slot.Follow = null;
             slot.Completion = null;
-            _lastPlayTime[def] = _time;
+            if (def.Cooldown > 0f)
+            {
+                _lastPlayTime[def] = _time;
+            }
             return true;
         }
 

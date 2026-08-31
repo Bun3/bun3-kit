@@ -7,9 +7,14 @@ namespace Bun3.Unity.Audio
     {
         private static void TickAll()
         {
-            for (var i = 0; i < Live.Count; i++)
+            // Continuations run inline (UniTask's TrySetResult invokes them synchronously) and
+            // may Dispose() a SoundSystem, which removes it from Live. Iterate backwards so a
+            // shrinking Live cannot skip another system's tick this frame.
+            for (var i = Live.Count - 1; i >= 0; i--)
             {
-                Live[i].Tick(Time.deltaTime);
+                // AudioSource playback runs on real time regardless of Time.timeScale, so
+                // elapsed-time completion must track real time too.
+                Live[i].Tick(Time.unscaledDeltaTime);
             }
         }
 
@@ -18,11 +23,17 @@ namespace Bun3.Unity.Audio
             _completedScratch.Clear();
             Table.Tick(dt, _completedScratch);
 
+            // Two-pass: stop every completed source before firing any continuation. A
+            // continuation may call Play() synchronously (TrySetResult invokes it inline) and
+            // be handed a freshly (re)allocated slot — that new voice must never be stopped by
+            // a later iteration of this same batch's stop pass.
             for (var i = 0; i < _completedScratch.Count; i++)
             {
-                var (slot, completion) = _completedScratch[i];
-                _sources[slot].Stop();
-                completion?.TrySetResult();
+                _sources[_completedScratch[i].Slot].Stop();
+            }
+            for (var i = 0; i < _completedScratch.Count; i++)
+            {
+                _completedScratch[i].Completion?.TrySetResult();
             }
 
             for (var i = 0; i < Table.Slots.Length; i++)
