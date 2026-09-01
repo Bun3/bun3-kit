@@ -20,6 +20,10 @@ namespace Bun3.Unity.Audio
         /// <summary>True while any music channel is audible (fading counts).</summary>
         public bool IsMusicPlaying => ActiveMusic >= 0;
 
+        /// <summary>Whether the foreground track is paused.</summary>
+        public bool IsMusicPaused
+            => ActiveMusic >= 0 && MusicChannels[ActiveMusic].Paused;
+
         /// <summary>
         /// Plays a music track. A negative <paramref name="fade"/> uses the def's DefaultFade.
         /// Silent: fades the new track in on channel 0 (0 = instant). Playing: crossfades —
@@ -79,6 +83,64 @@ namespace Bun3.Unity.Audio
             var completion = BeginMusicFadeOut(ActiveMusic, fadeOut);
             ActiveMusic = -1;
             completion?.TrySetResult(); // last, after all state mutation (two-phase)
+        }
+
+        /// <summary>
+        /// Pauses all music channels. A loop that is scheduled but not yet started is
+        /// cancelled (the DSP clock keeps running while paused; a live schedule would
+        /// fire mid-pause) and rescheduled from the intro's remaining time on resume.
+        /// </summary>
+        public void PauseMusic()
+        {
+            if (_disposed)
+            {
+                return;
+            }
+            for (var i = 0; i < MusicChannelCount; i++)
+            {
+                ref var ch = ref MusicChannels[i];
+                if (ch.State == MusicState.Idle || ch.Paused)
+                {
+                    continue;
+                }
+                if (ch.LoopScheduled && AudioSettings.dspTime < ch.LoopStartDsp)
+                {
+                    MusicLoopSources[i].Stop();
+                    ch.LoopScheduled = false;
+                }
+                MusicIntroSources[i].Pause();
+                MusicLoopSources[i].Pause();
+                ch.Paused = true;
+            }
+        }
+
+        /// <summary>Resumes paused music, rescheduling a cancelled loop from the intro's remaining time.</summary>
+        public void ResumeMusic()
+        {
+            if (_disposed)
+            {
+                return;
+            }
+            for (var i = 0; i < MusicChannelCount; i++)
+            {
+                ref var ch = ref MusicChannels[i];
+                if (ch.State == MusicState.Idle || !ch.Paused)
+                {
+                    continue;
+                }
+                ch.Paused = false;
+                MusicIntroSources[i].UnPause();
+                MusicLoopSources[i].UnPause();
+                if (!ch.LoopScheduled && ch.Def != null && ch.Def.Intro != null)
+                {
+                    var intro = ch.Def.Intro;
+                    var remaining = MusicMath.RemainingSeconds(
+                        MusicIntroSources[i].timeSamples, intro.samples, intro.frequency);
+                    ch.LoopStartDsp = AudioSettings.dspTime + remaining;
+                    MusicLoopSources[i].PlayScheduled(ch.LoopStartDsp);
+                    ch.LoopScheduled = true;
+                }
+            }
         }
 
         private void StartMusicOnChannel(int channel, MusicDef def, float fadeIn)
