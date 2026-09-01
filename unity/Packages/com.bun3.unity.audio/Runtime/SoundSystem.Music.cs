@@ -131,12 +131,13 @@ namespace Bun3.Unity.Audio
                 ch.Paused = false;
                 MusicIntroSources[i].UnPause();
                 MusicLoopSources[i].UnPause();
-                if (!ch.LoopScheduled && ch.Def != null && ch.Def.Intro != null)
+                if (!ch.LoopScheduled && ch.Def != null)
                 {
                     var intro = ch.Def.Intro;
-                    var remaining = MusicMath.RemainingSeconds(
-                        MusicIntroSources[i].timeSamples, intro.samples, intro.frequency);
-                    ch.LoopStartDsp = AudioSettings.dspTime + remaining;
+                    var delay = intro != null
+                        ? MusicMath.RemainingSeconds(MusicIntroSources[i].timeSamples, intro.samples, intro.frequency)
+                        : MusicScheduleHeadroom;
+                    ch.LoopStartDsp = AudioSettings.dspTime + delay;
                     MusicLoopSources[i].PlayScheduled(ch.LoopStartDsp);
                     ch.LoopScheduled = true;
                 }

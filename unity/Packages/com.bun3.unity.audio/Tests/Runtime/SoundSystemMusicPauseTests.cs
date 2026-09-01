@@ -59,5 +59,19 @@ namespace Bun3.Unity.Audio.Tests
             Assert.That(sys.MusicChannels[ch].FadeFactor, Is.EqualTo(frozen));
             yield break;
         }
+
+        [UnityTest]
+        public IEnumerator PauseImmediately_NoIntro_ResumeReschedulesLoop()
+        {
+            using var sys = new SoundSystem(new SoundSystemConfig { SfxVoices = 2 });
+            sys.PlayMusic(SoundSystemMusicTests.Def(withIntro: false));
+            var ch = sys.ActiveMusic;
+            sys.PauseMusic(); // same frame: inside the schedule headroom → cancels the loop schedule
+            Assert.IsFalse(sys.MusicChannels[ch].LoopScheduled);
+            sys.ResumeMusic();
+            Assert.IsTrue(sys.MusicChannels[ch].LoopScheduled, "no-intro track must reschedule its loop on resume");
+            yield return new WaitForSecondsRealtime(0.3f);
+            Assert.IsTrue(sys.MusicLoopSources[ch].isPlaying);
+        }
     }
 }
