@@ -49,6 +49,8 @@ namespace Bun3.Unity.Audio
                     _sources[i].transform.position = voice.Follow.position;
                 }
             }
+
+            TickMusic(dt);
         }
     }
 }

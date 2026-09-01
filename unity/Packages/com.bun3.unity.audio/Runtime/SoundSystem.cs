@@ -62,6 +62,11 @@ namespace Bun3.Unity.Audio
                 _sources[i] = go.AddComponent<AudioSource>();
                 _sources[i].playOnAwake = false;
             }
+            for (var i = 0; i < MusicChannelCount; i++)
+            {
+                MusicIntroSources[i] = CreateMusicSource("MusicIntro");
+                MusicLoopSources[i] = CreateMusicSource("MusicLoop");
+            }
 
             // Checks actual player-loop insertion rather than Live.Count: with domain reload
             // disabled, Application.quitting can remove the tick while stale entries survive
@@ -162,6 +167,17 @@ namespace Bun3.Unity.Audio
             return new SoundHandle(this, slot, voice.Generation);
         }
 
+        private AudioSource CreateMusicSource(string name)
+        {
+            var go = new GameObject(name);
+            go.transform.SetParent(_root.transform, false);
+            var source = go.AddComponent<AudioSource>();
+            source.playOnAwake = false;
+            source.spatialBlend = 0f;
+            source.outputAudioMixerGroup = _config.MusicGroup;
+            return source;
+        }
+
         private AudioClip PickClip(SoundDef def)
         {
             var clips = def.Clips;
@@ -207,6 +223,18 @@ namespace Bun3.Unity.Audio
                 }
             }
 
+            Cysharp.Threading.Tasks.AutoResetUniTaskCompletionSource musicCompletion0 = null;
+            Cysharp.Threading.Tasks.AutoResetUniTaskCompletionSource musicCompletion1 = null;
+            for (var i = 0; i < MusicChannelCount; i++)
+            {
+                if (MusicChannels[i].State != MusicState.Idle)
+                {
+                    var completion = SilenceMusicChannel(i);
+                    if (i == 0) { musicCompletion0 = completion; } else { musicCompletion1 = completion; }
+                }
+            }
+            ActiveMusic = -1;
+
             Live.Remove(this);
             if (Live.Count == 0)
             {
@@ -222,6 +250,8 @@ namespace Bun3.Unity.Audio
             {
                 _completedScratch[i].Completion?.TrySetResult();
             }
+            musicCompletion0?.TrySetResult();
+            musicCompletion1?.TrySetResult();
         }
 
         internal void SetSourcePitch(int slot, float pitch) => _sources[slot].pitch = pitch;
