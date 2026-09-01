@@ -15,6 +15,9 @@ Features:
 - Logical channel volumes (`Master` / `Music` / `Sfx` / `Voice`) via an
   `AudioMixer`.
 - Optional UniTask-based awaiting (`PlayAsync`, `SoundHandle.WaitAsync`).
+- Music subsystem: sample-accurate intro+loop handoff, crossfade with
+  newest-wins channel stealing, pause/resume, and awaitable transitions
+  (`PlayMusicAsync`, `StopMusicAsync`).
 
 ## Install
 
@@ -57,6 +60,30 @@ await handle.WaitAsync();
 sound.Dispose();
 ```
 
+### Music
+
+```csharp
+// Intro + loop: the intro plays once, then hands off to the loop sample-accurately.
+sound.PlayMusic(introLoopDef);              // fade = -1 uses def.DefaultFade
+sound.PlayMusic(loopOnlyDef, fade: 0f);     // no intro clip, no fade: starts instantly
+
+// Crossfade: while a track is playing, PlayMusic fades the old one out while the
+// new one fades in on the other channel. A third call mid-crossfade steals the
+// fading-out channel (newest wins).
+sound.PlayMusic(nextTrackDef, fade: 1.5f);
+
+// Awaitable transitions — completes on fade-in end (or immediately if fade is 0).
+// Cancelling stops the music and throws OperationCanceledException.
+await sound.PlayMusicAsync(introLoopDef, fade: 1.5f);
+await sound.StopMusicAsync(fadeOut: 1f);
+
+sound.PauseMusic();
+sound.ResumeMusic();   // reschedules a cancelled loop from the intro's remaining time
+```
+
 Sound definitions are authored as `SoundDef` assets
 (`Assets > Create > Bun3 > Audio > Sound Def`), which hold clips, volume/pitch
-ranges, loop/spatial settings, max instances, and cooldown.
+ranges, loop/spatial settings, max instances, and cooldown. Music tracks are
+authored as `MusicDef` assets (`Assets > Create > Bun3 > Audio > Music Def`),
+which hold the optional intro clip, the required loop clip, volume, and the
+default fade duration.

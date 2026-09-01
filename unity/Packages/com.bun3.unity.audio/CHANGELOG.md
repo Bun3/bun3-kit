@@ -16,3 +16,6 @@
 - Zero-allocation hot play/tick path (asserted by a PlayMode test).
 - Isolated variation RNG (private `System.Random`, optional `RandomSeed`) — never
   consumes `UnityEngine.Random` state, so seeded gameplay stays deterministic.
+- Music subsystem: sample-accurate intro+loop via `PlayScheduled`, crossfade with
+  newest-wins channel stealing, pause/resume with loop-schedule recomputation,
+  and awaitable transitions (`PlayMusicAsync`/`StopMusicAsync`).

@@ -29,5 +29,22 @@ namespace Bun3.Unity.Audio.Tests
                 sys.Tick(0.2f);
             }, Is.Not.AllocatingGCMemory());
         }
+
+        [Test]
+        public void MusicTick_DoesNotAllocate()
+        {
+            using var sys = new SoundSystem(new SoundSystemConfig { SfxVoices = 2 });
+            var def = ScriptableObject.CreateInstance<MusicDef>();
+            def.Loop = AudioClip.Create("loop", 4410, 1, 44100, false);
+            sys.PlayMusic(def, fade: 0.5f);   // warm: channel active, fading
+            sys.TickMusic(0.1f);
+
+            Assert.That(() =>
+            {
+                sys.TickMusic(0.1f);          // mid-fade tick
+                sys.TickMusic(1f);            // fade completes (no awaiter → no signal)
+                sys.TickMusic(0.1f);          // steady-state tick
+            }, Is.Not.AllocatingGCMemory());
+        }
     }
 }

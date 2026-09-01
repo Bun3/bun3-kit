@@ -227,6 +227,55 @@ namespace Bun3.Unity.Audio
             MusicLoopSources[channel].volume = volume;
         }
 
+        /// <summary>
+        /// Plays a track and completes when the transition finishes (fade-in end; immediately
+        /// when the effective fade is 0). Cancelling stops the music. Cancellation is a cold
+        /// path and may allocate.
+        /// </summary>
+        public UniTask PlayMusicAsync(MusicDef def, float fade = -1f, System.Threading.CancellationToken ct = default)
+        {
+            PlayMusic(def, fade);
+            if (ActiveMusic < 0)
+            {
+                return UniTask.CompletedTask; // rejected def (no loop clip)
+            }
+            ref var ch = ref MusicChannels[ActiveMusic];
+            if (ch.State == MusicState.Playing)
+            {
+                return UniTask.CompletedTask; // zero-fade path: already done
+            }
+            ch.Completion ??= AutoResetUniTaskCompletionSource.Create();
+            var task = ch.Completion.Task;
+            return ct.CanBeCanceled ? WithMusicCancellation(task, ct) : task;
+        }
+
+        /// <summary>Fades the current track out and completes when it is silent.</summary>
+        public UniTask StopMusicAsync(float fadeOut, System.Threading.CancellationToken ct = default)
+        {
+            if (_disposed || ActiveMusic < 0)
+            {
+                return UniTask.CompletedTask;
+            }
+            ref var ch = ref MusicChannels[ActiveMusic];
+            ch.Completion ??= AutoResetUniTaskCompletionSource.Create();
+            var task = ch.Completion.Task;
+            StopMusic(fadeOut);
+            return ct.CanBeCanceled ? WithMusicCancellation(task, ct) : task;
+        }
+
+        private async UniTask WithMusicCancellation(UniTask task, System.Threading.CancellationToken ct)
+        {
+            try
+            {
+                await task.AttachExternalCancellation(ct);
+            }
+            catch (System.OperationCanceledException)
+            {
+                StopMusic();
+                throw;
+            }
+        }
+
         internal void TickMusic(float dt)
         {
             // Phase 1: advance state; collect at most one signal per channel.
