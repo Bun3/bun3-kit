@@ -23,6 +23,7 @@ namespace Bun3.Unity.Audio
         private readonly AudioSource[] _sources;
         private readonly List<(int Slot, Cysharp.Threading.Tasks.AutoResetUniTaskCompletionSource Completion)> _completedScratch;
         private readonly SoundSystemConfig _config;
+        private readonly System.Random _rng;
         private GameObject _root;
         private bool _disposed;
 
@@ -39,7 +40,12 @@ namespace Bun3.Unity.Audio
             }
 
             _config = config;
-            Table = new VoiceTable(config.SfxVoices);
+            // Private variation stream: cosmetic randomness must never consume
+            // UnityEngine.Random state (seeded gameplay would desync otherwise).
+            _rng = config.RandomSeed.HasValue
+                ? new System.Random(config.RandomSeed.Value)
+                : new System.Random();
+            Table = new VoiceTable(config.SfxVoices, _rng);
             _sources = new AudioSource[config.SfxVoices];
             // At most one completion per slot per tick; preallocate to that bound so the
             // hot Tick path never grows this list (List.Add would allocate on growth).
@@ -156,7 +162,7 @@ namespace Bun3.Unity.Audio
             return new SoundHandle(this, slot, voice.Generation);
         }
 
-        private static AudioClip PickClip(SoundDef def)
+        private AudioClip PickClip(SoundDef def)
         {
             var clips = def.Clips;
             if (clips.Length == 1)
@@ -166,7 +172,7 @@ namespace Bun3.Unity.Audio
             int index;
             do
             {
-                index = UnityEngine.Random.Range(0, clips.Length);
+                index = _rng.Next(0, clips.Length);
             }
             while (index == def.LastClipIndex);
             def.LastClipIndex = index;

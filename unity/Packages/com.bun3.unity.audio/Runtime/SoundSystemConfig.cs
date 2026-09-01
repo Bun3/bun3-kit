@@ -13,5 +13,12 @@ namespace Bun3.Unity.Audio
 
         /// <summary>Number of prewarmed SFX voices. Fixed for the system's lifetime.</summary>
         public int SfxVoices = 24;
+
+        /// <summary>
+        /// Seed for the system's private variation stream (clip pick, volume/pitch rolls).
+        /// Null (default) seeds from time; set for deterministic tests or replays.
+        /// The stream is isolated — it never touches UnityEngine.Random state.
+        /// </summary>
+        public int? RandomSeed;
     }
 }

@@ -14,3 +14,5 @@
 - Logical channel volumes (`Master`/`Music`/`Sfx`/`Voice`) via `AudioMixer`.
 - UniTask-based playback awaiting (`PlayAsync`, `SoundHandle.WaitAsync`/`StopAsync`).
 - Zero-allocation hot play/tick path (asserted by a PlayMode test).
+- Isolated variation RNG (private `System.Random`, optional `RandomSeed`) — never
+  consumes `UnityEngine.Random` state, so seeded gameplay stays deterministic.

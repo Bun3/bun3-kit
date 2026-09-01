@@ -1,5 +1,4 @@
 using System;
-using UnityEngine;
 
 namespace Bun3.Unity.Audio
 {
@@ -20,7 +19,11 @@ namespace Bun3.Unity.Audio
             Max = max;
         }
 
-        /// <summary>Returns a uniformly random value in [Min, Max].</summary>
-        public float Roll() => UnityEngine.Random.Range(Min, Max);
+        /// <summary>
+        /// Returns a uniformly random value in [Min, Max] using the caller's stream.
+        /// Takes an explicit <see cref="Random"/> so cosmetic audio variation never
+        /// consumes the engine's global random stream (seeded gameplay stays unperturbed).
+        /// </summary>
+        public float Roll(Random rng) => Min + (float)rng.NextDouble() * (Max - Min);
     }
 }

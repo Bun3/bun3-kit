@@ -13,10 +13,12 @@ namespace Bun3.Unity.Audio
         public readonly VoiceSlot[] Slots;
 
         private readonly Dictionary<SoundDef, float> _lastPlayTime = new();
+        private readonly System.Random _rng;
         private float _time;
 
-        public VoiceTable(int capacity)
+        public VoiceTable(int capacity, System.Random rng = null)
         {
+            _rng = rng ?? new System.Random();
             Slots = new VoiceSlot[capacity];
             for (var i = 0; i < Slots.Length; i++)
             {
@@ -64,9 +66,9 @@ namespace Bun3.Unity.Audio
             slot.FadeElapsed = 0f;
             slot.FadeDuration = 0f;
             slot.FadeFactor = 1f;
-            slot.BaseVolume = def.Volume.Roll();
+            slot.BaseVolume = def.Volume.Roll(_rng);
             slot.VolumeScale = 1f;
-            slot.Pitch = def.Pitch.Roll();
+            slot.Pitch = def.Pitch.Roll(_rng);
             slot.StartTime = _time;
             slot.Follow = null;
             slot.Completion = null;
