@@ -17,7 +17,7 @@ namespace Bun3.Unity.Audio
         /// <summary>Channel currently owning the foreground track; -1 when silent.</summary>
         internal int ActiveMusic { get; private set; } = -1;
 
-        /// <summary>True while any music channel is audible (fading counts).</summary>
+        /// <summary>True while a foreground track is active (from PlayMusic until StopMusic is issued).</summary>
         public bool IsMusicPlaying => ActiveMusic >= 0;
 
         /// <summary>Whether the foreground track is paused.</summary>
@@ -31,6 +31,7 @@ namespace Bun3.Unity.Audio
         /// Mid-crossfade: newest wins — the fading-out channel is stolen (silenced instantly)
         /// and the new track starts there, while the previously active channel fades out.
         /// </summary>
+        /// <exception cref="System.ObjectDisposedException">The SoundSystem has been disposed.</exception>
         public void PlayMusic(MusicDef def, float fade = -1f)
         {
             if (_disposed)
@@ -54,7 +55,21 @@ namespace Bun3.Unity.Audio
             AutoResetUniTaskCompletionSource silenced = null;
             if (ActiveMusic < 0)
             {
-                channel = 0;
+                if (MusicChannels[0].State == MusicState.Idle)
+                {
+                    channel = 0;
+                }
+                else if (MusicChannels[1].State == MusicState.Idle)
+                {
+                    channel = 1; // preserve the other channel's fade tail (e.g. StopMusicAsync in flight)
+                }
+                else
+                {
+                    // Both channels still busy (e.g. crossfade cut short by StopMusic): steal
+                    // channel 0 so any awaiter on it (StopMusicAsync) still resolves.
+                    channel = 0;
+                    stolen = SilenceMusicChannel(0);
+                }
             }
             else
             {
@@ -114,7 +129,11 @@ namespace Bun3.Unity.Audio
             }
         }
 
-        /// <summary>Resumes paused music, rescheduling a cancelled loop from the intro's remaining time.</summary>
+        /// <summary>
+        /// Resumes paused music, rescheduling a cancelled loop from the intro's remaining time.
+        /// The resumed intro restarts via UnPause at normal latency, so the intro→loop handoff
+        /// on resume can be off by up to one audio buffer; only the initial handoff is sample-accurate.
+        /// </summary>
         public void ResumeMusic()
         {
             if (_disposed)
@@ -191,8 +210,9 @@ namespace Bun3.Unity.Audio
             {
                 return null;
             }
-            if (duration <= 0f)
+            if (duration <= 0f || ch.Paused)
             {
+                // A paused track is inaudible; fading it is meaningless — silence instantly so awaiters resolve.
                 return SilenceMusicChannel(channel);
             }
             ch.FadeFrom = ch.FadeFactor;
@@ -230,7 +250,8 @@ namespace Bun3.Unity.Audio
         /// <summary>
         /// Plays a track and completes when the transition finishes (fade-in end; immediately
         /// when the effective fade is 0). Cancelling stops the music. Cancellation is a cold
-        /// path and may allocate.
+        /// path and may allocate. On cancellation, stops whatever track is current at that
+        /// moment — not necessarily the one this call started, if it was since replaced.
         /// </summary>
         public UniTask PlayMusicAsync(MusicDef def, float fade = -1f, System.Threading.CancellationToken ct = default)
         {
@@ -250,7 +271,11 @@ namespace Bun3.Unity.Audio
             return ct.CanBeCanceled ? WithMusicCancellation(task, ct) : task;
         }
 
-        /// <summary>Fades the current track out and completes when it is silent.</summary>
+        /// <summary>
+        /// Fades the current track out and completes when it is silent. On cancellation,
+        /// stops whatever track is current at that moment — not necessarily the one this
+        /// call started, if it was since replaced.
+        /// </summary>
         public UniTask StopMusicAsync(float fadeOut, System.Threading.CancellationToken ct = default)
         {
             if (_disposed || ActiveMusic < 0)
@@ -304,7 +329,7 @@ namespace Bun3.Unity.Audio
                             if (i == 0) { signal0 = completion; } else { signal1 = completion; }
                             continue;
                         }
-                        // Fade-in finished: signal the awaiter (PlayMusicAsync, Task 5).
+                        // Fade-in finished: signal the awaiter (PlayMusicAsync).
                         ch.State = MusicState.Playing;
                         if (i == 0) { signal0 = ch.Completion; } else { signal1 = ch.Completion; }
                         ch.Completion = null;

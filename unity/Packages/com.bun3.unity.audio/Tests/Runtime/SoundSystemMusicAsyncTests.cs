@@ -56,5 +56,17 @@ namespace Bun3.Unity.Audio.Tests
             Assert.IsTrue(task.Status.IsCompleted(), "rejected def must complete immediately, not wait on the active fade");
             await task;
         });
+
+        [UnityTest]
+        public IEnumerator PlayMusic_AfterStopMusicAsyncFade_CompletesStopAwaiter() => UniTask.ToCoroutine(async () =>
+        {
+            using var sys = new SoundSystem(new SoundSystemConfig { SfxVoices = 2 });
+            sys.PlayMusic(SoundSystemMusicTests.Def(withIntro: false));
+            var stopping = sys.StopMusicAsync(1f);              // ch0 FadingOut, ActiveMusic = -1
+            sys.PlayMusic(SoundSystemMusicTests.Def(withIntro: false)); // must pick the Idle channel (1)
+            Assert.That(sys.ActiveMusic, Is.EqualTo(1), "new track must not clobber the fading channel");
+            sys.TickMusic(1.1f);                                // fade-out completes
+            await stopping;                                     // must complete, not hang
+        });
     }
 }

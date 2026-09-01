@@ -1,5 +1,6 @@
 using System.Collections;
 using Bun3.Unity.Audio;
+using Cysharp.Threading.Tasks;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
@@ -73,5 +74,16 @@ namespace Bun3.Unity.Audio.Tests
             yield return new WaitForSecondsRealtime(0.3f);
             Assert.IsTrue(sys.MusicLoopSources[ch].isPlaying);
         }
+
+        [UnityTest]
+        public IEnumerator StopMusicAsync_WhilePaused_CompletesImmediately() => UniTask.ToCoroutine(async () =>
+        {
+            using var sys = new SoundSystem(new SoundSystemConfig { SfxVoices = 2 });
+            sys.PlayMusic(SoundSystemMusicTests.Def(withIntro: false));
+            sys.PauseMusic();
+            await sys.StopMusicAsync(1f);   // paused → instant silence, must not hang
+            Assert.IsFalse(sys.IsMusicPlaying);
+            Assert.That(sys.MusicChannels[0].State, Is.EqualTo(MusicState.Idle));
+        });
     }
 }
