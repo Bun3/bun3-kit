@@ -11,6 +11,9 @@ namespace Bun3.Unity.Audio
         /// <summary>Fallback group for defs without an explicit MixerGroup.</summary>
         public AudioMixerGroup SfxGroup;
 
+        /// <summary>Mixer group music routes to; null leaves music unrouted.</summary>
+        public AudioMixerGroup MusicGroup;
+
         /// <summary>Number of prewarmed SFX voices. Fixed for the system's lifetime.</summary>
         public int SfxVoices = 24;
 
