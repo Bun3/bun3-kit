@@ -22,8 +22,10 @@ namespace Bun3.Unity.Audio
 
         /// <summary>
         /// Plays a music track. A negative <paramref name="fade"/> uses the def's DefaultFade.
-        /// When another track is playing, the fade crossfades the two (see Task 3);
-        /// when silent, it fades the new track in (0 = instant).
+        /// Silent: fades the new track in on channel 0 (0 = instant). Playing: crossfades —
+        /// the current track fades out while the new one fades in on the other channel.
+        /// Mid-crossfade: newest wins — the fading-out channel is stolen (silenced instantly)
+        /// and the new track starts there, while the previously active channel fades out.
         /// </summary>
         public void PlayMusic(MusicDef def, float fade = -1f)
         {
@@ -43,9 +45,28 @@ namespace Bun3.Unity.Audio
                 fade = def.DefaultFade;
             }
 
-            var channel = 0; // silent path: always channel 0. Task 3 picks the free channel.
+            int channel;
+            AutoResetUniTaskCompletionSource stolen = null;
+            AutoResetUniTaskCompletionSource silenced = null;
+            if (ActiveMusic < 0)
+            {
+                channel = 0;
+            }
+            else
+            {
+                var other = 1 - ActiveMusic;
+                if (MusicChannels[other].State == MusicState.FadingOut)
+                {
+                    // Third request mid-crossfade: newest wins — cut the dying track now.
+                    stolen = SilenceMusicChannel(other);
+                }
+                channel = other;
+                silenced = BeginMusicFadeOut(ActiveMusic, fade);
+            }
             StartMusicOnChannel(channel, def, fade);
             ActiveMusic = channel;
+            stolen?.TrySetResult(); // last, after all state mutation (two-phase)
+            silenced?.TrySetResult();
         }
 
         /// <summary>Stops the current track, optionally fading out first.</summary>
@@ -55,8 +76,9 @@ namespace Bun3.Unity.Audio
             {
                 return;
             }
-            BeginMusicFadeOut(ActiveMusic, fadeOut);
+            var completion = BeginMusicFadeOut(ActiveMusic, fadeOut);
             ActiveMusic = -1;
+            completion?.TrySetResult(); // last, after all state mutation (two-phase)
         }
 
         private void StartMusicOnChannel(int channel, MusicDef def, float fadeIn)
@@ -96,23 +118,26 @@ namespace Bun3.Unity.Audio
             ApplyMusicVolume(channel);
         }
 
-        private void BeginMusicFadeOut(int channel, float duration)
+        // Returns the collected Completion when the fade is instant (SilenceMusicChannel's
+        // result); null when it starts a fade (TickMusic signals completion later).
+        // Callers must TrySetResult() the return value last, after all state mutation (two-phase).
+        private AutoResetUniTaskCompletionSource BeginMusicFadeOut(int channel, float duration)
         {
             ref var ch = ref MusicChannels[channel];
             if (ch.State == MusicState.Idle)
             {
-                return;
+                return null;
             }
             if (duration <= 0f)
             {
-                SilenceMusicChannel(channel);
-                return;
+                return SilenceMusicChannel(channel);
             }
             ch.FadeFrom = ch.FadeFactor;
             ch.FadeTo = 0f;
             ch.FadeElapsed = 0f;
             ch.FadeDuration = duration;
             ch.State = MusicState.FadingOut;
+            return null;
         }
 
         // Stops both sources and frees the channel. Does NOT signal Completion —
