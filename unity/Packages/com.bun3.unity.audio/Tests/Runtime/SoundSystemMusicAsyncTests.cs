@@ -44,5 +44,17 @@ namespace Bun3.Unity.Audio.Tests
             await sys.StopMusicAsync(0.1f);
             Assert.IsFalse(sys.IsMusicPlaying);
         });
+
+        [UnityTest]
+        public IEnumerator PlayMusicAsync_RejectedDef_WhileFadingIn_CompletesImmediately() => UniTask.ToCoroutine(async () =>
+        {
+            using var sys = new SoundSystem(new SoundSystemConfig { SfxVoices = 2 });
+            sys.PlayMusic(SoundSystemMusicTests.Def(withIntro: false), fade: 5f); // active channel mid-fade
+            var bad = ScriptableObject.CreateInstance<MusicDef>();                 // no Loop clip
+            LogAssert.Expect(LogType.Warning, "SoundSystem.PlayMusic: def has no loop clip; ignored.");
+            var task = sys.PlayMusicAsync(bad);
+            Assert.IsTrue(task.Status.IsCompleted(), "rejected def must complete immediately, not wait on the active fade");
+            await task;
+        });
     }
 }

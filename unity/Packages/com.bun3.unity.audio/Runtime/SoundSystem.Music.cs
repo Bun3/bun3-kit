@@ -234,11 +234,12 @@ namespace Bun3.Unity.Audio
         /// </summary>
         public UniTask PlayMusicAsync(MusicDef def, float fade = -1f, System.Threading.CancellationToken ct = default)
         {
-            PlayMusic(def, fade);
-            if (ActiveMusic < 0)
+            if (def == null || def.Loop == null)
             {
-                return UniTask.CompletedTask; // rejected def (no loop clip)
+                PlayMusic(def, fade); // keeps the dev-only warning path consistent
+                return UniTask.CompletedTask;
             }
+            PlayMusic(def, fade);
             ref var ch = ref MusicChannels[ActiveMusic];
             if (ch.State == MusicState.Playing)
             {
