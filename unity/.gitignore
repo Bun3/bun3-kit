@@ -105,3 +105,13 @@ InitTestScene*.unity*
 
 # Auto-generated scenes by play mode tests
 /[Aa]ssets/[Ii]nit[Tt]est[Ss]cene*.unity*
+
+# Steam Audio: no UPM package exists upstream (only a legacy .unitypackage,
+# see Vendor/README.md). Importing it lands ~275MB of native binaries under
+# Assets/Plugins/SteamAudio — too large to commit, and fully regenerable via
+# the Vendor/README.md import steps. Only the resulting project settings
+# (AudioManager.asset spatializer, ProjectSettings.asset define symbols) are
+# committed. Assets/Plugins/ currently holds only Steam Audio, so the whole
+# folder is ignored (Unity regenerates its .meta on next import).
+/[Aa]ssets/[Pp]lugins/
+/[Aa]ssets/[Pp]lugins.meta
