@@ -5,6 +5,8 @@ namespace Bun3.Unity.Audio
 {
     public sealed partial class SoundSystem
     {
+        private float _lastTimeScale = 1f;
+
         private static void TickAll()
         {
             // Continuations run inline (UniTask's TrySetResult invokes them synchronously) and
@@ -49,6 +51,22 @@ namespace Bun3.Unity.Audio
                 if (voice.Follow != null)
                 {
                     _sources[i].transform.position = voice.Follow.position;
+                }
+            }
+
+            if (_config.PitchWithTimescale)
+            {
+                var scale = Time.timeScale;
+                if (!Mathf.Approximately(scale, _lastTimeScale))
+                {
+                    _lastTimeScale = scale;
+                    for (var i = 0; i < Table.Slots.Length; i++)
+                    {
+                        if (Table.Slots[i].State != VoiceState.Idle)
+                        {
+                            _sources[i].pitch = Table.Slots[i].Pitch * scale;
+                        }
+                    }
                 }
             }
 

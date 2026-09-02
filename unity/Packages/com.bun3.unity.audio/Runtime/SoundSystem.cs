@@ -148,7 +148,7 @@ namespace Bun3.Unity.Audio
             var source = _sources[slot];
             source.clip = clip;
             source.loop = def.Loop;
-            source.pitch = voice.Pitch;
+            source.pitch = _config.PitchWithTimescale ? voice.Pitch * _lastTimeScale : voice.Pitch;
             source.volume = Table.CurrentVolume(slot); // reflects FadeFactor 0 when fading in
             source.outputAudioMixerGroup = def.MixerGroup != null ? def.MixerGroup : _config.SfxGroup;
             source.spatialBlend = def.Spatial == SpatialMode.None ? 0f : 1f;
@@ -258,6 +258,21 @@ namespace Bun3.Unity.Audio
         internal void SetSourcePitch(int slot, float pitch) => _sources[slot].pitch = pitch;
 
         internal void SetSourcePosition(int slot, Vector3 position) => _sources[slot].transform.position = position;
+
+        internal float SourcePitchForTest(int slot) => _sources[slot].pitch;
+
+        /// <summary>Thin wrapper over AudioMixerSnapshot.TransitionTo; no-op on null.</summary>
+        public void TransitionTo(UnityEngine.Audio.AudioMixerSnapshot snapshot, float seconds)
+        {
+            if (snapshot == null)
+            {
+#if DEVELOPMENT_BUILD || UNITY_EDITOR
+                Debug.LogWarning("SoundSystem.TransitionTo: null snapshot; ignored.");
+#endif
+                return;
+            }
+            snapshot.TransitionTo(seconds);
+        }
 
         private static readonly string[] ChannelParams =
         {

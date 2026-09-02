@@ -45,5 +45,8 @@ namespace Bun3.Unity.Audio
         /// The stream is isolated — it never touches UnityEngine.Random state.
         /// </summary>
         public int? RandomSeed;
+
+        /// <summary>When true, SFX voice pitch is multiplied by Time.timeScale (slow-motion effect). Music is unaffected.</summary>
+        public bool PitchWithTimescale;
     }
 }
