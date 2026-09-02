@@ -37,9 +37,8 @@ namespace Bun3.Unity.Audio
         /// Round-robin occlusion evaluation: up to OcclusionChecksPerFrame occlusion-enabled
         /// voices per call. Listener lookup on loss is the one sanctioned cold-path allocation.
         /// A source's transform position reflects last frame's mirrored Follow target when the
-        /// voice is following: evaluating one frame stale is intentional (the alternative is
-        /// re-deriving the position here) and self-corrects next frame, well within what
-        /// OcclusionSmoothingSeconds already dwarfs.
+        /// voice is following: evaluating one frame stale self-corrects next frame, well within
+        /// what OcclusionSmoothingSeconds already dwarfs.
         /// </summary>
         internal void EvaluateOcclusion()
         {

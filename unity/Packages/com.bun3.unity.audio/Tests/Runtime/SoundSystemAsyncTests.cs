@@ -62,7 +62,7 @@ namespace Bun3.Unity.Audio.Tests
             await sys.PlayAsync(ShortClipDef());
             var h = sys.Play(ShortClipDef()); // played from inside the completion continuation
             sys.Tick(0.02f);                  // internal access; well short of the 0.1s clip
-            Assert.IsTrue(h.IsPlaying);
+            Assert.IsTrue(h.IsValid);
         });
     }
 }

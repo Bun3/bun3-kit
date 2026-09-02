@@ -7,7 +7,12 @@ namespace Bun3.Unity.Audio
     /// <summary>Construction-time settings for <see cref="SoundSystem"/>. Validated once; not live-tunable.</summary>
     public sealed class SoundSystemConfig
     {
-        /// <summary>Mixer used for channel volumes; null skips mixer integration until the bundled asset ships.</summary>
+        /// <summary>
+        /// Mixer used for channel volumes; null auto-loads the package's bundled default mixer
+        /// (<c>Bun3DefaultAudioMixer</c>, loaded from Resources). Mixer integration is off only
+        /// when that bundled asset is missing (e.g. stripped from the build) and no mixer was
+        /// assigned here.
+        /// </summary>
         public AudioMixer Mixer;
 
         /// <summary>

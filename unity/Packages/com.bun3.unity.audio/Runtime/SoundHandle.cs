@@ -27,13 +27,6 @@ namespace Bun3.Unity.Audio
         /// <summary>True while this handle still refers to its original voice.</summary>
         public bool IsValid => Owner != null && Owner.TryGetSlot(this, out _);
 
-        /// <summary>
-        /// True while the voice is audible (fading counts as playing). Currently equals
-        /// <see cref="IsValid"/>; audibility nuances such as pause or virtualization are
-        /// future semantics.
-        /// </summary>
-        public bool IsPlaying => IsValid;
-
         /// <summary>Stops the voice, optionally fading out over <paramref name="fadeOut"/> seconds.</summary>
         public void Stop(float fadeOut = 0f) => Owner?.Stop(this, fadeOut);
 

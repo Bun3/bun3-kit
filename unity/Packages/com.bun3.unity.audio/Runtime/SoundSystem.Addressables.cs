@@ -1,3 +1,5 @@
+// Addressables preload/release: loads SoundDef.AddressableClips ahead of Play and
+// releases them when retired. Compiles out entirely without com.unity.addressables.
 #if BUN3_ADDRESSABLES
 using System;
 using System.Collections.Generic;
@@ -91,8 +93,7 @@ namespace Bun3.Unity.Audio
             // of orphaning it when it would overwrite the winner's tracking entry — and
             // (b) Dispose() racing a load — completing after Dispose must not commit handles
             // into a dead system (they'd never be released) or leave RuntimeClips set on a
-            // disposed system. The wasted duplicate load in case (a) is accepted cold-path
-            // cost; an in-flight marker would dedupe it too but isn't needed to close the leak.
+            // disposed system.
             if (_disposed || _preloaded.ContainsKey(def))
             {
                 ReleaseHandles(handles, handles.Length);

@@ -67,6 +67,9 @@ var current = sound.GetChannelVolume(SoundChannel.Music);
 await sound.PlayAsync(mySoundDef);
 await handle.WaitAsync();
 
+// Or a callback instead of awaiting — fires once, with the original (now-stale) handle.
+sound.SetCompletionCallback(handle, h => Debug.Log("voice ended"));
+
 // Tear down (stops all voices, unregisters the tick).
 sound.Dispose();
 ```

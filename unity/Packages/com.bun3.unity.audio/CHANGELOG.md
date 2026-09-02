@@ -7,6 +7,11 @@
 - Initial core: `SoundSystem` with a prewarmed `AudioSource` pool driven by a
   single player-loop tick (no MonoBehaviours, no coroutines).
 - Generation-validated `SoundHandle` — stale handles no-op instead of throwing.
+  `SoundHandle` exposes `IsValid` only; a speculative `IsPlaying` alias was
+  removed before this package's first release.
+- `SoundSystem.SetCompletionCallback`: registers a callback invoked once when
+  a voice ends (natural end, fade-out, steal, Stop, or dispose), with the
+  original (now-stale) handle.
 - Coroutine-free fade-in/fade-out.
 - Per-`SoundDef` voice limits (oldest steals when exceeded) and cooldowns.
 - Pitch/volume variation via rolled `FloatRange`s.
