@@ -44,9 +44,15 @@ namespace Bun3.Unity.Audio.Tests
             {
                 new AssetReferenceT<AudioClip>(System.Guid.NewGuid().ToString("N")),
             };
-            LogAssert.ignoreFailingMessages = true; // Addressables' own error spam
-            await sys.PreloadAsync(def); // must not throw (silent-skip contract)
-            LogAssert.ignoreFailingMessages = false;
+            try
+            {
+                LogAssert.ignoreFailingMessages = true; // Addressables' own error spam
+                await sys.PreloadAsync(def); // must not throw (silent-skip contract)
+            }
+            finally
+            {
+                LogAssert.ignoreFailingMessages = false; // never leaves the toggle on for later tests, even if await throws
+            }
             Assert.IsFalse(sys.IsPreloaded(def));
         });
 
@@ -54,12 +60,11 @@ namespace Bun3.Unity.Audio.Tests
         // PreloadAsync(def) calls both complete, the def ends up preloaded exactly once,
         // and the loser's redundant batch is released rather than leaked.
         //
-        // Each call gets its own AssetReferenceT instance (same GUID) rather than sharing
-        // one: AssetReferenceT.LoadAssetAsync() is itself single-flight per instance (throws
-        // an Addressables Error log if called again before release — see AssetReference.cs),
-        // so reusing one instance across the two calls would test that guard, not this one.
-        // PreloadAsync reads def.AddressableClips synchronously before its first await, so
-        // reassigning between the two calls still races both loads against the same def.
+        // Both calls share the def's single AssetReferenceT instance — the real production
+        // shape, since instances live on the def asset. This only stays leak-safe because
+        // PreloadAsync now loads by RuntimeKey (Addressables.LoadAssetAsync<AudioClip>), not
+        // through the instance's own LoadAssetAsync(): the instance method is single-flight
+        // per instance and would throw on the second concurrent call.
         [UnityTest]
         public IEnumerator ConcurrentPreload_BothComplete_NoLeak() => UniTask.ToCoroutine(async () =>
         {
@@ -67,13 +72,32 @@ namespace Bun3.Unity.Audio.Tests
             var def = ScriptableObject.CreateInstance<SoundDef>();
             def.AddressableClips = new[] { TestClipReference() };
             var a = sys.PreloadAsync(def);
-            def.AddressableClips = new[] { TestClipReference() };
             var b = sys.PreloadAsync(def); // concurrent — loser must release its own batch
             await a;
             await b;
             Assert.IsTrue(sys.IsPreloaded(def));
             sys.ReleasePreloaded(def);
             Assert.IsFalse(sys.IsPreloaded(def));
+        });
+
+        // Regression for the dispose-during-preload leak: PreloadAsync completing after
+        // Dispose() must not commit handles into a dead system (never released) or leave
+        // RuntimeClips set. Holds in both interleavings: if the load is still in flight when
+        // Dispose() runs, PreloadAsync's post-load recheck (_disposed) releases the batch and
+        // returns without touching RuntimeClips; if PreloadAsync already finished before
+        // Dispose() (a fast AssetDatabase load can race ahead of the Dispose() call above),
+        // Dispose's ReleaseAllPreloadedOnDispose releases it and nulls RuntimeClips instead —
+        // either way the assertion holds.
+        [UnityTest]
+        public IEnumerator DisposeDuringPreload_ReleasesBatch() => UniTask.ToCoroutine(async () =>
+        {
+            var sys = new SoundSystem(new SoundSystemConfig { SfxVoices = 2 });
+            var def = ScriptableObject.CreateInstance<SoundDef>();
+            def.AddressableClips = new[] { TestClipReference() };
+            var pending = sys.PreloadAsync(def);
+            sys.Dispose();                    // dispose while load may be in flight
+            await pending;                    // must complete normally (no throw)
+            Assert.IsNull(def.RuntimeClips, "a disposed system must not leave clips on the def");
         });
     }
 }

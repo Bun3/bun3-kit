@@ -25,6 +25,9 @@ namespace Bun3.Unity.Audio
         /// a development-build warning is logged, and the call returns normally — silent-skip,
         /// never an exception. On cancellation, loaded handles are released and
         /// <see cref="OperationCanceledException"/> propagates.
+        /// A def's preload belongs to exactly one <see cref="SoundSystem"/>: do not preload
+        /// the same def on two live systems, since releasing it on one nulls the shared
+        /// <see cref="SoundDef.RuntimeClips"/> out from under the other.
         /// </summary>
         /// <param name="def">Sound definition whose AddressableClips to load.</param>
         /// <param name="ct">Checked between clip loads; does not abort an in-flight load.</param>
@@ -54,7 +57,13 @@ namespace Bun3.Unity.Audio
                     ct.ThrowIfCancellationRequested();
                 }
 
-                handles[i] = refs[i].LoadAssetAsync();
+                // Load by RuntimeKey, not refs[i].LoadAssetAsync(): AssetReference's own
+                // LoadAssetAsync is single-flight per INSTANCE (a second concurrent call on
+                // the same instance — the production shape, since instances live on the def
+                // asset — logs an Error and returns an invalid handle whose .Task throws,
+                // breaking the silent-skip contract). Key-based loads are independent,
+                // separately ref-counted handles that never touch the instance's cache.
+                handles[i] = Addressables.LoadAssetAsync<AudioClip>(refs[i].RuntimeKey);
                 loadedCount = i + 1;
                 await handles[i].Task;
 
@@ -76,12 +85,15 @@ namespace Bun3.Unity.Audio
             }
 
             _preloaded ??= new Dictionary<SoundDef, AsyncOperationHandle<AudioClip>[]>();
-            // Entry-time IsPreloaded is TOCTOU under concurrent PreloadAsync(def) calls: both
-            // can pass the guard and load in parallel. Recheck here so the loser releases its
-            // own (redundant but harmless) batch instead of orphaning it when it overwrites
-            // the winner's tracking entry — the wasted duplicate load is accepted cold-path
+            // Two races land here: entry-time IsPreloaded/_disposed is TOCTOU under (a)
+            // concurrent PreloadAsync(def) calls — both can pass the guard and load in
+            // parallel, so the loser releases its own (redundant but harmless) batch instead
+            // of orphaning it when it would overwrite the winner's tracking entry — and
+            // (b) Dispose() racing a load — completing after Dispose must not commit handles
+            // into a dead system (they'd never be released) or leave RuntimeClips set on a
+            // disposed system. The wasted duplicate load in case (a) is accepted cold-path
             // cost; an in-flight marker would dedupe it too but isn't needed to close the leak.
-            if (_preloaded.ContainsKey(def))
+            if (_disposed || _preloaded.ContainsKey(def))
             {
                 ReleaseHandles(handles, handles.Length);
                 return;
@@ -111,7 +123,7 @@ namespace Bun3.Unity.Audio
             {
                 if (Table.Slots[i].State != VoiceState.Idle && ReferenceEquals(Table.Slots[i].Def, def))
                 {
-                    Debug.LogWarning($"SoundSystem.ReleasePreloaded: '{def.name}' has an active voice; it will keep playing on its already-assigned clip.");
+                    Debug.LogWarning($"SoundSystem.ReleasePreloaded: '{def.name}' has an active voice; releasing while voices of this def are playing may unload their clip and cut them off (packed builds), stop them first.");
                     break;
                 }
             }

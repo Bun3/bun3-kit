@@ -184,7 +184,10 @@ sound.ReleasePreloaded(mySoundDef);
 
 A load failure silently skips the def (dev-build warning, no exception) and
 leaves it unpreloaded. Concurrent `PreloadAsync(def)` calls on the same def
-are safe — the loser's redundant batch is released instead of leaking.
+are safe — the loser's redundant batch is released instead of leaking. A
+def's preload belongs to exactly one `SoundSystem`: don't preload the same
+def on two live systems, since releasing it on one nulls the shared runtime
+clips out from under the other.
 
 `MusicDef` has no `AddressableClips` field of its own; for Addressable music,
 load the clip yourself and build a runtime `MusicDef`:
