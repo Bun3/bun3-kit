@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using Bun3.Unity.Core.PlayerLoop;
 using UnityEngine;
+using UnityEngine.Audio;
 
 namespace Bun3.Unity.Audio
 {
@@ -23,6 +24,7 @@ namespace Bun3.Unity.Audio
         private readonly AudioSource[] _sources;
         private readonly List<(int Slot, Cysharp.Threading.Tasks.AutoResetUniTaskCompletionSource Completion)> _completedScratch;
         private readonly SoundSystemConfig _config;
+        private readonly AudioMixer _mixer;
         private readonly System.Random _rng;
         private GameObject _root;
         private bool _disposed;
@@ -40,6 +42,27 @@ namespace Bun3.Unity.Audio
             }
 
             _config = config;
+            // Bundled fallback: ships in Runtime/Resources so games that never configure a
+            // mixer still get channel volumes and default routing. Resources.Load returns
+            // null when the asset was stripped from the build; every mixer read below stays
+            // null-tolerant for that case.
+            _mixer = config.Mixer != null ? config.Mixer : Resources.Load<AudioMixer>("Bun3DefaultAudioMixer");
+            if (config.SfxGroup == null && _mixer != null)
+            {
+                var sfxGroups = _mixer.FindMatchingGroups("SFX");
+                if (sfxGroups.Length > 0)
+                {
+                    config.SfxGroup = sfxGroups[0];
+                }
+            }
+            if (config.MusicGroup == null && _mixer != null)
+            {
+                var musicGroups = _mixer.FindMatchingGroups("Music");
+                if (musicGroups.Length > 0)
+                {
+                    config.MusicGroup = musicGroups[0];
+                }
+            }
             // Private variation stream: cosmetic randomness must never consume
             // UnityEngine.Random state (seeded gameplay would desync otherwise).
             _rng = config.RandomSeed.HasValue
@@ -282,20 +305,20 @@ namespace Bun3.Unity.Audio
         /// <summary>Sets a channel's linear volume [0,1] on the mixer. Persisting the value is the game's job.</summary>
         public void SetChannelVolume(SoundChannel channel, float linear)
         {
-            if (_config.Mixer == null)
+            if (_mixer == null)
             {
 #if DEVELOPMENT_BUILD || UNITY_EDITOR
                 Debug.LogWarning("SoundSystem.SetChannelVolume: no mixer configured; call ignored.");
 #endif
                 return;
             }
-            _config.Mixer.SetFloat(ChannelParams[(int)channel], AudioMath.LinearToDb(linear));
+            _mixer.SetFloat(ChannelParams[(int)channel], AudioMath.LinearToDb(linear));
         }
 
         /// <summary>Reads a channel's linear volume; 1 when no mixer or parameter is set.</summary>
         public float GetChannelVolume(SoundChannel channel)
         {
-            if (_config.Mixer == null || !_config.Mixer.GetFloat(ChannelParams[(int)channel], out var db))
+            if (_mixer == null || !_mixer.GetFloat(ChannelParams[(int)channel], out var db))
             {
                 return 1f;
             }
