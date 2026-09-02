@@ -158,6 +158,47 @@ group routing work out of the box:
   parameter permanently takes it out of snapshot control until
   `AudioMixer.ClearFloat` is called.
 
+### Addressable clips
+
+Requires [com.unity.addressables](https://docs.unity3d.com/Packages/com.unity.addressables@latest)
+installed; without it, `SoundDef.AddressableClips` and every API below compile
+out entirely (gated by the package's own `versionDefines` → `BUN3_ADDRESSABLES`)
+— the rest of the package works exactly as before.
+
+`SoundDef.AddressableClips` is an alternative to `Clips`: assign an
+`AssetReferenceT<AudioClip>[]` instead of direct clip references, then preload
+before playing — an unpreloaded addressable def plays nothing (invalid handle
+plus a development-build warning).
+
+```csharp
+// Preload once (e.g. a loading screen), then play normally.
+await sound.PreloadAsync(mySoundDef);
+sound.Play(mySoundDef);
+
+sound.IsPreloaded(mySoundDef);   // true once RuntimeClips is populated
+
+// Release when the def's voices are no longer playing (a dev-build warning
+// fires, but does not block, if a voice is still active on it).
+sound.ReleasePreloaded(mySoundDef);
+```
+
+A load failure silently skips the def (dev-build warning, no exception) and
+leaves it unpreloaded. Concurrent `PreloadAsync(def)` calls on the same def
+are safe — the loser's redundant batch is released instead of leaking.
+
+`MusicDef` has no `AddressableClips` field of its own; for Addressable music,
+load the clip yourself and build a runtime `MusicDef`:
+
+```csharp
+// Music via Addressables: load the clip yourself, then build a runtime MusicDef.
+var handle = Addressables.LoadAssetAsync<AudioClip>("bgm-main");
+var clip = await handle.Task;
+var def = ScriptableObject.CreateInstance<MusicDef>();
+def.Loop = clip;
+sound.PlayMusic(def, fade: 2f);
+// Keep `handle` and Addressables.Release(handle) when the track is retired.
+```
+
 Sound definitions are authored as `SoundDef` assets
 (`Assets > Create > Bun3 > Audio > Sound Def`), which hold clips, volume/pitch
 ranges, loop/spatial settings, max instances, and cooldown. Music tracks are

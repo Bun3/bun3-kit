@@ -33,3 +33,8 @@
 - Bundled default `AudioMixer` (`Bun3DefaultAudioMixer`, groups `Music`/`SFX`/
   `Voice`, params `MasterVolume`/`MusicVolume`/`SfxVolume`/`VoiceVolume`,
   snapshots `Normal`/`Paused`) as a zero-setup fallback.
+- `SoundDef.AddressableClips` (requires `com.unity.addressables`, otherwise
+  compiles out entirely): `SoundSystem.PreloadAsync`/`IsPreloaded`/
+  `ReleasePreloaded` load and release Addressable clips ahead of `Play`;
+  unpreloaded defs play nothing, and load failures silent-skip with a
+  development-build warning.
