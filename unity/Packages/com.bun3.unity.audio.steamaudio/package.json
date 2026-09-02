@@ -1,0 +1,12 @@
+{
+  "name": "com.bun3.unity.audio.steamaudio",
+  "displayName": "Bun3 Unity Audio - Steam Audio Adapter",
+  "version": "0.1.0",
+  "unity": "6000.3",
+  "unityRelease": "14f1",
+  "description": "Steam Audio adapter for Bun3 Unity Audio: disables the core linecast occlusion/low-pass pipeline and binds Steam Audio's SteamAudioSource to each configured SFX voice.",
+  "author": { "name": "Bun3", "url": "https://github.com/Bun3", "email": "bun3.dev@gmail.com" },
+  "dependencies": {
+    "com.bun3.unity.audio": "0.1.0"
+  }
+}

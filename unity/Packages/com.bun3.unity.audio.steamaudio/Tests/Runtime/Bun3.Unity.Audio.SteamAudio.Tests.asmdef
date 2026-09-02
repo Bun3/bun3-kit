@@ -1,0 +1,14 @@
+{
+    "name": "Bun3.Unity.Audio.SteamAudio.Tests",
+    "rootNamespace": "Bun3.Unity.Audio.SteamAudio.Tests",
+    "references": [ "Bun3.Unity.Audio", "Bun3.Unity.Audio.SteamAudio", "SteamAudioUnity", "UniTask", "UnityEngine.TestRunner", "UnityEditor.TestRunner" ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [ "nunit.framework.dll" ],
+    "autoReferenced": false,
+    "defineConstraints": [ "UNITY_INCLUDE_TESTS", "STEAMAUDIO_ENABLED" ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

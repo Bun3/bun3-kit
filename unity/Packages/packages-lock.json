@@ -33,6 +33,14 @@
         "com.cysharp.unitask": "https://github.com/Cysharp/UniTask.git?path=src/UniTask/Assets/Plugins/UniTask"
       }
     },
+    "com.bun3.unity.audio.steamaudio": {
+      "version": "file:com.bun3.unity.audio.steamaudio",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {
+        "com.bun3.unity.audio": "0.1.0"
+      }
+    },
     "com.bun3.unity.core": {
       "version": "file:com.bun3.unity.core",
       "depth": 0,
