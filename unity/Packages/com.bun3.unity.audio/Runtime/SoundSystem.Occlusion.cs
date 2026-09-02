@@ -9,7 +9,7 @@ namespace Bun3.Unity.Audio
         private IOcclusionProvider _occlusionProvider;
         private AudioLowPassFilter[] _lowPassFilters;
         private Transform _listener;
-        private bool _listenerMissing;
+        private float _nextListenerSearchTime;
         private int _occlusionCursor;
 
         private const float OpenCutoffHz = 22000f;
@@ -84,10 +84,10 @@ namespace Bun3.Unity.Audio
 
         /// <summary>
         /// Resolves the occlusion listener transform. A found listener is cached and reused
-        /// (re-resolved only once it is destroyed); when none exists yet in the scene, the
-        /// miss itself is cached so idle ticks stop re-searching — <c>FindAnyObjectByType</c>
-        /// is the one sanctioned cold-path allocation in this system, paid at most once per
-        /// outcome rather than every tick.
+        /// (re-resolved once it is destroyed); when none exists yet in the scene, a
+        /// not-found search re-arms at most once per second — the sanctioned cold-path
+        /// allocation, throttled so a listener spawned after construction is still picked
+        /// up without paying <c>FindAnyObjectByType</c> every tick in the meantime.
         /// </summary>
         private Transform ResolveListener()
         {
@@ -99,13 +99,16 @@ namespace Bun3.Unity.Audio
             {
                 return _listener;
             }
-            if (_listenerMissing)
+            if (Time.unscaledTime < _nextListenerSearchTime)
             {
                 return null;
             }
             var found = UnityEngine.Object.FindAnyObjectByType<AudioListener>();
             _listener = found != null ? found.transform : null;
-            _listenerMissing = _listener == null;
+            if (_listener == null)
+            {
+                _nextListenerSearchTime = Time.unscaledTime + 1f;
+            }
             return _listener;
         }
     }

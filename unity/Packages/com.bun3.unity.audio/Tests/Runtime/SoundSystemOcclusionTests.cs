@@ -104,5 +104,24 @@ namespace Bun3.Unity.Audio.Tests
             Object.Destroy(listener);
             yield break;
         }
+
+        [UnityTest]
+        public IEnumerator ListenerSpawnedLate_IsPickedUpWithinASecond()
+        {
+            var provider = new FakeProvider { Value = 1f };
+            using var sys = new SoundSystem(new SoundSystemConfig
+            {
+                SfxVoices = 2,
+                OcclusionProvider = provider,
+            });
+            sys.Play(OccludedDef(), new Vector3(0f, 0f, 5f));
+            sys.EvaluateOcclusion();
+            Assert.That(provider.Calls, Is.EqualTo(0), "no listener yet");
+            var listener = ListenerGo();
+            yield return new WaitForSecondsRealtime(1.2f); // past the 1 s re-search throttle
+            sys.EvaluateOcclusion();
+            Assert.That(provider.Calls, Is.GreaterThanOrEqualTo(1), "late listener must be found");
+            Object.Destroy(listener);
+        }
     }
 }
