@@ -5,6 +5,20 @@ All notable changes to this package will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0] - 2026-09-03
+
+### Changed
+
+- Codex hook commands point at a fixed-path argumentless launcher
+  (bun3-agent-codex-launcher.ps1) that dispatches in-process to the shared
+  heartbeat script. Codex trust-hashes the command string, so script renames or
+  argument changes no longer cost the user a re-approval - only this one
+  migration does. Pre-launcher blocks are stripped and rewritten on install.
+- The heartbeat script caches the resolved owner pid: the previous event's pid is
+  reused while that process is alive and still looks like a CLI, so the multi-query
+  WMI ancestor walk runs only on the first event of a session (or after a miss).
+  Fallback worker name with no cwd is now the provider name, not always Claude.
+
 ## [0.8.0] - 2026-08-31
 
 ### Changed

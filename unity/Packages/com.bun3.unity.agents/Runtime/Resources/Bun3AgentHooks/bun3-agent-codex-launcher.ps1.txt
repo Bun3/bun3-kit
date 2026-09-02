@@ -1,0 +1,6 @@
+# Fixed-path Codex hook launcher. Codex trusts the config.toml command string by
+# hash (event + command shape), so that string must never change - it points here
+# and only here, with no arguments. This file's CONTENT may change freely between
+# package versions without costing the user another trust approval.
+# Runs the shared heartbeat script in-process: stdin flows through untouched.
+& (Join-Path $PSScriptRoot "bun3-agent-heartbeat.ps1") -Provider codex

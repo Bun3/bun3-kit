@@ -7,23 +7,34 @@ $hook = [Console]::In.ReadToEnd() | ConvertFrom-Json
 if (-not $hook.session_id) { exit 0 }  # some payloads (helper processes) carry no session
 
 $dir = Join-Path $env:LOCALAPPDATA "bun3-agents\agents"
+$file = Join-Path $dir "$Provider-$($hook.session_id).json"
+$prev = $null
+try { $prev = Get-Content $file -Raw -ErrorAction Stop | ConvertFrom-Json } catch {}
 
 # The game prunes heartbeats whose owner process died (session killed without
 # SessionEnd). Our direct parent can be a throwaway cmd wrapper, so climb the
-# ancestor chain to the claude/node process = the session itself. Not found -> 0,
-# which the game treats as exempt from pruning.
+# ancestor chain to the claude/codex/node process = the session itself. Not
+# found -> 0, which the game treats as exempt from pruning.
+# The climb costs several WMI queries, so the previous event's resolved pid is
+# reused while that process is still alive and still looks like a CLI.
 $ownerPid = 0
-try {
-    $cur = $PID
-    for ($i = 0; $i -lt 6; $i++) {
-        $parentId = [int](Get-CimInstance Win32_Process -Filter "ProcessId=$cur" -Property ParentProcessId -ErrorAction Stop).ParentProcessId
-        if ($parentId -le 0) { break }
-        $parent = Get-CimInstance Win32_Process -Filter "ProcessId=$parentId" -Property Name -ErrorAction Stop
-        if (-not $parent) { break }
-        if ($parent.Name -match '^(claude|codex|node)') { $ownerPid = $parentId; break }
-        $cur = $parentId
-    }
-} catch {}
+if ($prev -and $prev.pid -gt 0) {
+    $cached = Get-Process -Id $prev.pid -ErrorAction SilentlyContinue
+    if ($cached -and $cached.ProcessName -match '^(claude|codex|node)') { $ownerPid = [int]$prev.pid }
+}
+if ($ownerPid -eq 0) {
+    try {
+        $cur = $PID
+        for ($i = 0; $i -lt 6; $i++) {
+            $parentId = [int](Get-CimInstance Win32_Process -Filter "ProcessId=$cur" -Property ParentProcessId -ErrorAction Stop).ParentProcessId
+            if ($parentId -le 0) { break }
+            $parent = Get-CimInstance Win32_Process -Filter "ProcessId=$parentId" -Property Name -ErrorAction Stop
+            if (-not $parent) { break }
+            if ($parent.Name -match '^(claude|codex|node)') { $ownerPid = $parentId; break }
+            $cur = $parentId
+        }
+    } catch {}
+}
 
 # Subagents: chick workers parented to the session worker. Appear on start, vanish on stop.
 if ($hook.hook_event_name -in @("SubagentStart", "SubagentStop")) {
@@ -112,8 +123,6 @@ $state = switch ($hook.hook_event_name) {
     }
 }
 
-$file = Join-Path $dir "$Provider-$($hook.session_id).json"
-
 if ($state -lt 0) {
     Remove-Item $file -Force -ErrorAction SilentlyContinue
     exit 0
@@ -123,9 +132,8 @@ New-Item -ItemType Directory -Force $dir | Out-Null
 # The payload cwd follows the shell's current directory, which drifts as the
 # session cd's around. Keep the first-seen name (the project root at session
 # start) as the stable identity.
-$name = $null
-try { $name = "$((Get-Content $file -Raw -ErrorAction Stop | ConvertFrom-Json).n)" } catch {}
-if (-not $name) { $name = if ($hook.cwd) { Split-Path -Leaf $hook.cwd } else { "Claude" } }
+$name = if ($prev) { "$($prev.n)" } else { $null }
+if (-not $name) { $name = if ($hook.cwd) { Split-Path -Leaf $hook.cwd } else { $Provider } }
 $beat = @{
     id  = "$Provider-$($hook.session_id)"
     n   = $name

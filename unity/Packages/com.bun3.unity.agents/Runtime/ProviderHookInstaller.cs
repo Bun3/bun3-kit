@@ -106,11 +106,21 @@ namespace Bun3.Unity.Agents
             return true;
         }
 
+        private const string CodexLauncher = "bun3-agent-codex-launcher.ps1";
+
         /// <summary>Codex proper hooks: appends our [[hooks.*]] block, migrating any
         /// legacy notify install away first (its slot occupant is restored and the old
-        /// merged codex-cli worker dropped).</summary>
+        /// merged codex-cli worker dropped). Commands point at a fixed-path launcher
+        /// with no arguments: Codex trust-hashes the command string, so pointing at
+        /// the heartbeat script directly would cost the user a re-approval every time
+        /// the script name or its arguments change.</summary>
         private static bool InstallCodexToml(ProviderDef def, string settingsPath, string scriptDest)
         {
+            var launcher = Resources.Load<TextAsset>("Bun3AgentHooks/" + CodexLauncher);
+            var launcherDest = Path.Combine(Path.GetDirectoryName(scriptDest), CodexLauncher);
+            if (launcher != null)
+                File.WriteAllText(launcherDest, launcher.text);
+
             var existing = File.Exists(settingsPath) ? File.ReadAllText(settingsPath) : "";
 
             string[] previous = null;
@@ -124,8 +134,22 @@ namespace Bun3.Unity.Agents
                 AgentHeartbeatStore.Remove("codex-cli");
             }
 
-            var merged = CodexHooksPatch.Install(existing, BuildEntries(def, scriptDest), CommandMarker);
-            if (merged == null && withoutNotify == null)
+            // a pre-launcher block points commands at the heartbeat script directly:
+            // strip and rewrite (costs the user one final trust approval)
+            var migratedDirect = false;
+            if (existing.Contains(CodexHooksPatch.Begin(CommandMarker)) && !existing.Contains(CodexLauncher))
+            {
+                existing = CodexHooksPatch.Remove(existing, CommandMarker) ?? existing;
+                migratedDirect = true;
+            }
+
+            var launcherCommand = $"powershell -NoProfile -ExecutionPolicy Bypass -File \"{launcherDest}\"";
+            var entries = new List<(string evt, string matcher, string command)>();
+            foreach (var rule in def.hooks.events)
+                entries.Add((rule.@event, rule.matcher, launcherCommand));
+
+            var merged = CodexHooksPatch.Install(existing, entries, CommandMarker);
+            if (merged == null && withoutNotify == null && !migratedDirect)
                 return false; // already installed
 
             var backupPath = settingsPath + ".bun3-agents.bak";
