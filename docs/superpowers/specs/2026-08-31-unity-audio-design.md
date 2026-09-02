@@ -1,8 +1,18 @@
 # Bun3.Unity.Audio 사운드 매니저 설계
 
 날짜: 2026-08-31
-상태: 승인
+상태: 승인 (구현 완료 — 2026-09-02 룰링 추기 반영)
 선행 리서치: [2026-08-31-unity-sound-manager-landscape.md](../../research/2026-08-31-unity-sound-manager-landscape.md)
+
+## 구현 중 확정 룰링 추기 (2026-09-02)
+
+슬라이스별 플랜의 룰링 외에, 전체 코드리뷰에서 기록 갭으로 확인돼 여기 공식화한다:
+
+- **variation RNG 격리(오너 지시)**: 재생 variation·클립 선택은 `SoundSystemConfig.RandomSeed`(null=시간 시드)로 시드 가능한 SoundSystem 소유 `System.Random`을 쓴다 — `UnityEngine.Random` 전역 스트림을 소비하지 않아 시드 고정 게임플레이가 사운드에 의해 흐트러지지 않는다. `FloatRange.Roll(rng)`은 명시적 스트림 파라미터.
+- **쿨다운 차단은 경고 없이 무효 핸들 반환**: 에러 처리 절의 "cooldown → 경고 로그"를 철회한다. 쿨다운 차단은 기능이 의도대로 작동하는 것(연타 억제)이므로 개발 빌드 경고조차 콘솔 스팸이 된다. 경고는 클립 미로드 경로에만 남는다.
+- **LPF 부착은 오클루전 활성 시에만**: 워밍 시 `AudioLowPassFilter` "전량 부착"은 `OcclusionChecksPerFrame > 0`일 때로 한정한다 — `0`은 오클루전 완전 오프이자 외부 spatializer 어댑터(Steam Audio)의 공식 스위치로, 이때 죽은 필터 컴포넌트를 만들지 않는다.
+- **완료 콜백은 보이스당 1개**: `SetCompletionCallback`은 기존 등록을 덮어쓴다(1-awaiter 계약과 대칭). 콜백은 종료 시(자연 종료·페이드·스틸·Stop·Dispose) 정확히 1회, 이미 무효화된 핸들과 함께 호출된다.
+- **`SoundHandle.IsPlaying` 별칭 제거**: `IsValid`와 의미가 동일한 공개 별칭은 미래 시맨틱(일시정지/가상화) 없이는 유지하지 않는다 — 첫 릴리스 전 API에서 삭제.
 
 ## 목표
 
