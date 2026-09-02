@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.1.0] - Unreleased
+## [0.1.0] - Initial release
 
 ### Added
 
@@ -12,3 +12,10 @@
   `SteamAudioSource` per SFX voice — `AudioSource.spatialize` from
   `SoundDef.Spatial`, and for 3D voices the component's `occlusion` field
   from `SoundDef.Occlusion`.
+- Editor spatializer validator (`SteamAudioSetupValidator`): logs a one-time
+  warning on domain load if the project's configured Audio spatializer
+  plugin isn't "Steam Audio Spatializer". Log-only, never blocks batchmode/CI.
+- All runtime and editor assemblies gate on the `STEAMAUDIO_ENABLED`
+  scripting define (auto-added by Steam Audio's own `.unitypackage`
+  installer), so this package compiles to nothing until Steam Audio is
+  imported — safe to keep installed either way.

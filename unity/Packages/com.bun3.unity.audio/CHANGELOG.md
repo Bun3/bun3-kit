@@ -22,6 +22,12 @@
 - Occlusion: pluggable `IOcclusionProvider` (built-in raycast default),
   round-robin per-frame evaluation, smoothed volume attenuation and low-pass
   filtering via `SoundDef.Occlusion` and `SoundSystemConfig` tuning.
+  `OcclusionChecksPerFrame = 0` disables the pipeline entirely (no raycasts,
+  no filters) — the off switch for external spatializer adapters.
+- `SoundSystemConfig.OnVoiceConfigured`: per-play hook invoked after an SFX
+  source is fully configured, just before `Play` — lets adapters (e.g. the
+  Steam Audio package) attach and configure components on the pooled
+  `AudioSource`.
 - `PitchWithTimescale` (SFX pitch scaled by `Time.timeScale`) and
   `SoundSystem.TransitionTo` (thin `AudioMixerSnapshot.TransitionTo` wrapper).
 - Bundled default `AudioMixer` (`Bun3DefaultAudioMixer`, groups `Music`/`SFX`/

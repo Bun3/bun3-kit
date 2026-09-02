@@ -32,6 +32,10 @@ This package lives at `unity/Packages/com.bun3.unity.audio` and is consumed as
 an embedded UPM package (referenced by path in `manifest.json`). It depends on
 `com.bun3.unity.core` and `com.cysharp.unitask`.
 
+Using [Steam Audio](https://valvesoftware.github.io/steam-audio/) for
+spatialization/occlusion? See the optional
+[`com.bun3.unity.audio.steamaudio`](../com.bun3.unity.audio.steamaudio) adapter.
+
 ## Usage
 
 ```csharp

@@ -73,6 +73,7 @@ namespace Bun3.Unity.Audio
         /// <summary>
         /// Invoked once per play after the SFX source is fully configured, just before Play.
         /// Register a cached delegate (hot path — allocation-free). Music sources are not decorated.
+        /// Do not call back into Play/Stop from this delegate (it runs inside the play path).
         /// </summary>
         public Action<AudioSource, SoundDef> OnVoiceConfigured;
     }
