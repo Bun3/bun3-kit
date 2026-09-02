@@ -43,3 +43,6 @@
   `ReleasePreloaded` load and release Addressable clips ahead of `Play`;
   unpreloaded defs play nothing, and load failures silent-skip with a
   development-build warning.
+- `SoundDef` inspector Preview/Stop buttons (new `Editor` assembly), reached via
+  reflection over `UnityEditor.AudioUtil` with a graceful no-throw fallback when
+  the expected methods are missing.
