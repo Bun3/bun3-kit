@@ -59,5 +59,21 @@ namespace Bun3.Unity.Audio
 
         /// <summary>Round-robin memory: index of the clip chosen on the previous play.</summary>
         [System.NonSerialized] internal int LastClipIndex = -1;
+
+#if BUN3_ADDRESSABLES
+        /// <summary>
+        /// Addressable clip alternative to <see cref="Clips"/>. Load with
+        /// SoundSystem.PreloadAsync before playing; unpreloaded defs play nothing.
+        /// </summary>
+        public UnityEngine.AddressableAssets.AssetReferenceT<AudioClip>[] AddressableClips;
+#endif
+
+        /// <summary>
+        /// Runtime clip cache; when set it takes precedence over <see cref="Clips"/>.
+        /// Populated by preloading (or manually for runtime-created defs).
+        /// </summary>
+        [System.NonSerialized] internal AudioClip[] RuntimeClips;
+
+        internal AudioClip[] EffectiveClips => RuntimeClips ?? Clips;
     }
 }

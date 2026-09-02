@@ -1,7 +1,7 @@
 {
     "name": "Bun3.Unity.Audio",
     "rootNamespace": "Bun3.Unity.Audio",
-    "references": [ "UniTask", "Bun3.Unity.Core" ],
+    "references": [ "UniTask", "Bun3.Unity.Core", "Unity.Addressables" ],
     "includePlatforms": [],
     "excludePlatforms": [],
     "allowUnsafeCode": false,
@@ -9,6 +9,8 @@
     "precompiledReferences": [],
     "autoReferenced": true,
     "defineConstraints": [],
-    "versionDefines": [],
+    "versionDefines": [
+        { "name": "com.unity.addressables", "expression": "", "define": "BUN3_ADDRESSABLES" }
+    ],
     "noEngineReferences": false
 }

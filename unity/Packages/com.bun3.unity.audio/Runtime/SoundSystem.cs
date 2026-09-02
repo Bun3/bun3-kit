@@ -147,10 +147,10 @@ namespace Bun3.Unity.Audio
             {
                 throw new ObjectDisposedException(nameof(SoundSystem));
             }
-            if (def == null || def.Clips == null || def.Clips.Length == 0)
+            if (def == null || def.EffectiveClips == null || def.EffectiveClips.Length == 0)
             {
 #if DEVELOPMENT_BUILD || UNITY_EDITOR
-                Debug.LogWarning("SoundSystem.Play: def has no clips; returning an invalid handle.");
+                Debug.LogWarning("SoundSystem.Play: def has no loaded clips (assign Clips or preload AddressableClips); returning an invalid handle.");
 #endif
                 return SoundHandle.Invalid;
             }
@@ -213,7 +213,7 @@ namespace Bun3.Unity.Audio
 
         private AudioClip PickClip(SoundDef def)
         {
-            var clips = def.Clips;
+            var clips = def.EffectiveClips;
             if (clips.Length == 1)
             {
                 return clips[0];
