@@ -1,7 +1,7 @@
 {
     "name": "Bun3.Unity.Audio.Editor",
     "rootNamespace": "Bun3.Unity.Audio.Editor",
-    "references": [ "Bun3.Unity.Audio" ],
+    "references": [ "Bun3.Unity.Audio", "Unity.Addressables" ],
     "includePlatforms": [ "Editor" ],
     "excludePlatforms": [],
     "allowUnsafeCode": false,
@@ -9,6 +9,8 @@
     "precompiledReferences": [],
     "autoReferenced": true,
     "defineConstraints": [],
-    "versionDefines": [],
+    "versionDefines": [
+        { "name": "com.unity.addressables", "expression": "", "define": "BUN3_ADDRESSABLES" }
+    ],
     "noEngineReferences": false
 }

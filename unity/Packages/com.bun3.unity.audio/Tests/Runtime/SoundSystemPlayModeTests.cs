@@ -91,5 +91,19 @@ namespace Bun3.Unity.Audio.Tests
             Assert.That(callCount, Is.EqualTo(1));
             yield break;
         }
+
+        [UnityTest]
+        public IEnumerator CallbackDisposingSystem_DoesNotCorruptSignalBatch()
+        {
+            var sys = new SoundSystem(new SoundSystemConfig { SfxVoices = 2 });
+            var otherEnded = false;
+            var h1 = sys.Play(ShortClipDef());
+            var h2 = sys.Play(ShortClipDef());
+            sys.SetCompletionCallback(h1, _ => sys.Dispose()); // re-entrant dispose from signal phase
+            sys.SetCompletionCallback(h2, _ => otherEnded = true);
+            sys.Tick(1f); // both complete same tick
+            Assert.IsTrue(otherEnded, "second voice's callback must still fire");
+            yield break;
+        }
     }
 }

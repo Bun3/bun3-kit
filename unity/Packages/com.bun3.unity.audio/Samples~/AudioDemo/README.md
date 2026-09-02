@@ -12,7 +12,7 @@ A self-contained demo of `SoundSystem` that needs no imported audio assets — e
 ## How to run
 
 1. Import this sample via **Package Manager > Bun3 Unity Audio > Samples > Audio Demo**.
-2. Drop `AudioDemo.cs` on any GameObject in an empty scene.
+2. Drop `AudioDemo` (`Bun3.Unity.Audio.Samples.AudioDemo`) on any GameObject in an empty scene.
 3. Enter Play mode. The Console logs the key bindings on start:
    - `1` — play the intro+loop music track.
    - `2` — crossfade to a second (loop-only) track.

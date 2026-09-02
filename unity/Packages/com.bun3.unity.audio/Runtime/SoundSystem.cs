@@ -267,8 +267,11 @@ namespace Bun3.Unity.Audio
             // Two-phase, same discipline as Tick: capture every active slot's awaiter before
             // releasing (Release nulls Completion), finish all teardown, then fire the
             // awaiters last — a continuation re-entering this instance must see it fully
-            // disposed, not mid-teardown.
-            _completedScratch.Clear();
+            // disposed, not mid-teardown. Uses a LOCAL list rather than _completedScratch: a
+            // completion callback can call Dispose() re-entrantly while Tick's own signal loop
+            // is still iterating _completedScratch, and clearing/refilling that shared list here
+            // would corrupt the outer iteration (dropped or double-fired entries).
+            var completed = new List<(int Slot, uint Generation, Cysharp.Threading.Tasks.AutoResetUniTaskCompletionSource Completion, Action<SoundHandle> Callback)>(Table.Slots.Length);
             for (var i = 0; i < Table.Slots.Length; i++)
             {
                 if (Table.Slots[i].State != VoiceState.Idle)
@@ -277,7 +280,7 @@ namespace Bun3.Unity.Audio
                     var completion = Table.Slots[i].Completion;
                     var callback = Table.Slots[i].CompletionCallback;
                     Table.Release(i);
-                    _completedScratch.Add((i, generation, completion, callback));
+                    completed.Add((i, generation, completion, callback));
                 }
             }
 
@@ -308,9 +311,9 @@ namespace Bun3.Unity.Audio
                 _root = null;
             }
 
-            for (var i = 0; i < _completedScratch.Count; i++)
+            for (var i = 0; i < completed.Count; i++)
             {
-                var entry = _completedScratch[i];
+                var entry = completed[i];
                 entry.Completion?.TrySetResult();
                 entry.Callback?.Invoke(new SoundHandle(this, entry.Slot, entry.Generation));
             }

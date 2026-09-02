@@ -20,8 +20,10 @@ namespace Bun3.Unity.Audio.Editor
     [CustomEditor(typeof(SoundDef))]
     internal sealed class SoundDefEditor : UnityEditor.Editor
     {
-        private static readonly MethodInfo PlayPreviewClipMethod;
-        private static readonly MethodInfo StopAllPreviewClipsMethod;
+        // Not readonly: a failed Invoke nulls the offending one out so the button disables
+        // itself and the warning it logs ("preview disabled") stays true for the rest of the session.
+        private static MethodInfo PlayPreviewClipMethod;
+        private static MethodInfo StopAllPreviewClipsMethod;
 
         static SoundDefEditor()
         {
@@ -68,7 +70,7 @@ namespace Bun3.Unity.Audio.Editor
                 {
                     if (GUILayout.Button("■ Stop"))
                     {
-                        StopAllPreviewClipsMethod.Invoke(null, null);
+                        StopAllPreview();
                     }
                 }
             }
@@ -150,8 +152,24 @@ namespace Bun3.Unity.Audio.Editor
             }
             catch (Exception e)
             {
+                PlayPreviewClipMethod = null;
                 Debug.LogWarning(
                     $"Bun3.Unity.Audio.Editor: AudioUtil.PlayPreviewClip threw; preview " +
+                    $"disabled for this session. {e.Message}");
+            }
+        }
+
+        private static void StopAllPreview()
+        {
+            try
+            {
+                StopAllPreviewClipsMethod.Invoke(null, null);
+            }
+            catch (Exception e)
+            {
+                StopAllPreviewClipsMethod = null;
+                Debug.LogWarning(
+                    $"Bun3.Unity.Audio.Editor: AudioUtil.StopAllPreviewClips threw; stop " +
                     $"disabled for this session. {e.Message}");
             }
         }
