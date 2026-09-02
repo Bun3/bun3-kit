@@ -186,6 +186,7 @@ namespace Bun3.Unity.Audio
             source.minDistance = def.MinDistance;
             source.maxDistance = def.MaxDistance;
             source.transform.position = position;
+            _config.OnVoiceConfigured?.Invoke(source, def);
             source.Play();
 
             // Fired only after the new source is fully configured and playing: a continuation

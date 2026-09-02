@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 using UnityEngine.Audio;
 
@@ -68,5 +69,11 @@ namespace Bun3.Unity.Audio
         /// <c>Time.timeScale = 0</c> leaves newly started sounds silent rather than paused.
         /// </summary>
         public bool PitchWithTimescale;
+
+        /// <summary>
+        /// Invoked once per play after the SFX source is fully configured, just before Play.
+        /// Register a cached delegate (hot path — allocation-free). Music sources are not decorated.
+        /// </summary>
+        public Action<AudioSource, SoundDef> OnVoiceConfigured;
     }
 }
