@@ -55,9 +55,9 @@ namespace Bun3.Unity.Audio.Tests
             var ch = sys.ActiveMusic;
             sys.TickMusic(0.5f);
             sys.PauseMusic();
-            var frozen = sys.MusicChannels[ch].FadeFactor;
+            var frozen = sys.MusicChannels[ch].Fade.Factor;
             sys.TickMusic(10f);
-            Assert.That(sys.MusicChannels[ch].FadeFactor, Is.EqualTo(frozen));
+            Assert.That(sys.MusicChannels[ch].Fade.Factor, Is.EqualTo(frozen));
             yield break;
         }
 

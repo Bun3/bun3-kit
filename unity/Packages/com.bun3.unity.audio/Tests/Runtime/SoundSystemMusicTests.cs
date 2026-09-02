@@ -67,7 +67,7 @@ namespace Bun3.Unity.Audio.Tests
             sys.PlayMusic(Def(withIntro: false), fade: 1f);
             var ch = sys.ActiveMusic;
             sys.TickMusic(0.5f);
-            Assert.That(sys.MusicChannels[ch].FadeFactor, Is.EqualTo(0.5f).Within(0.01f));
+            Assert.That(sys.MusicChannels[ch].Fade.Factor, Is.EqualTo(0.5f).Within(0.01f));
             sys.TickMusic(0.6f);
             Assert.That(sys.MusicChannels[ch].State, Is.EqualTo(MusicState.Playing));
             yield break;

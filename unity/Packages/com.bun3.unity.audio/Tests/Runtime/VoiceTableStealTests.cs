@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Bun3.Unity.Audio;
 using Cysharp.Threading.Tasks;
@@ -16,7 +17,7 @@ namespace Bun3.Unity.Audio.Tests
             return def;
         }
 
-        private readonly List<(int Slot, AutoResetUniTaskCompletionSource Completion)> _scratch = new();
+        private readonly List<(int Slot, uint Generation, AutoResetUniTaskCompletionSource Completion, Action<SoundHandle> Callback)> _scratch = new();
 
         [Test]
         public void MaxInstances_StealsOldestOfSameDef()

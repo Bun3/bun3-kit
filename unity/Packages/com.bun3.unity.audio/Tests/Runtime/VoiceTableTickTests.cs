@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Bun3.Unity.Audio;
 using Cysharp.Threading.Tasks;
@@ -15,7 +16,7 @@ namespace Bun3.Unity.Audio.Tests
             return def;
         }
 
-        private readonly List<(int Slot, AutoResetUniTaskCompletionSource Completion)> _completed = new();
+        private readonly List<(int Slot, uint Generation, AutoResetUniTaskCompletionSource Completion, Action<SoundHandle> Callback)> _completed = new();
 
         [SetUp]
         public void SetUp() => _completed.Clear();
@@ -48,11 +49,11 @@ namespace Bun3.Unity.Audio.Tests
             var table = new VoiceTable(2);
             table.TryAllocate(NewDef(loop: true), 1f, out var slot, out _, out _);
             table.BeginFadeIn(slot, 1f);
-            Assert.That(table.Slots[slot].FadeFactor, Is.EqualTo(0f));
+            Assert.That(table.Slots[slot].Fade.Factor, Is.EqualTo(0f));
             table.Tick(0.5f, _completed);
-            Assert.That(table.Slots[slot].FadeFactor, Is.EqualTo(0.5f).Within(0.001f));
+            Assert.That(table.Slots[slot].Fade.Factor, Is.EqualTo(0.5f).Within(0.001f));
             table.Tick(0.5f, _completed);
-            Assert.That(table.Slots[slot].FadeFactor, Is.EqualTo(1f));
+            Assert.That(table.Slots[slot].Fade.Factor, Is.EqualTo(1f));
             Assert.That(table.Slots[slot].State, Is.EqualTo(VoiceState.Playing));
         }
 
@@ -63,7 +64,7 @@ namespace Bun3.Unity.Audio.Tests
             table.TryAllocate(NewDef(loop: true), 1f, out var slot, out _, out _);
             table.BeginFadeOut(slot, 0.5f);
             table.Tick(0.25f, _completed);
-            Assert.That(table.Slots[slot].FadeFactor, Is.EqualTo(0.5f).Within(0.001f));
+            Assert.That(table.Slots[slot].Fade.Factor, Is.EqualTo(0.5f).Within(0.001f));
             table.Tick(0.25f, _completed);
             Assert.That(_completed.Count, Is.EqualTo(1));
             Assert.That(_completed[0].Slot, Is.EqualTo(slot));
@@ -78,7 +79,7 @@ namespace Bun3.Unity.Audio.Tests
             table.BeginFadeIn(slot, 1f);
             table.Tick(0.5f, _completed);
             table.BeginFadeOut(slot, 1f);
-            Assert.That(table.Slots[slot].FadeFrom, Is.EqualTo(0.5f).Within(0.001f));
+            Assert.That(table.Slots[slot].Fade.From, Is.EqualTo(0.5f).Within(0.001f));
         }
 
         [Test]

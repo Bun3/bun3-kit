@@ -169,11 +169,14 @@ namespace Bun3.Unity.Audio
             ch.State = fadeIn > 0f ? MusicState.FadingIn : MusicState.Playing;
             ch.Def = def;
             ch.Paused = false;
-            ch.FadeElapsed = 0f;
-            ch.FadeDuration = fadeIn;
-            ch.FadeFrom = 0f;
-            ch.FadeTo = 1f;
-            ch.FadeFactor = fadeIn > 0f ? 0f : 1f;
+            if (fadeIn > 0f)
+            {
+                ch.Fade.Begin(0f, 1f, fadeIn);
+            }
+            else
+            {
+                ch.Fade.SetInstant(1f);
+            }
             ch.Completion = null;
 
             var introSource = MusicIntroSources[channel];
@@ -215,10 +218,7 @@ namespace Bun3.Unity.Audio
                 // A paused track is inaudible; fading it is meaningless — silence instantly so awaiters resolve.
                 return SilenceMusicChannel(channel);
             }
-            ch.FadeFrom = ch.FadeFactor;
-            ch.FadeTo = 0f;
-            ch.FadeElapsed = 0f;
-            ch.FadeDuration = duration;
+            ch.Fade.Begin(ch.Fade.Factor, 0f, duration);
             ch.State = MusicState.FadingOut;
             return null;
         }
@@ -242,7 +242,7 @@ namespace Bun3.Unity.Audio
         private void ApplyMusicVolume(int channel)
         {
             ref var ch = ref MusicChannels[channel];
-            var volume = (ch.Def != null ? ch.Def.Volume : 0f) * ch.FadeFactor;
+            var volume = (ch.Def != null ? ch.Def.Volume : 0f) * ch.Fade.Factor;
             MusicIntroSources[channel].volume = volume;
             MusicLoopSources[channel].volume = volume;
         }
@@ -315,25 +315,18 @@ namespace Bun3.Unity.Audio
                     continue;
                 }
 
-                if (ch.FadeDuration > 0f)
+                if (ch.Fade.Advance(dt))
                 {
-                    ch.FadeElapsed += dt;
-                    var t = Mathf.Clamp01(ch.FadeElapsed / ch.FadeDuration);
-                    ch.FadeFactor = Mathf.Lerp(ch.FadeFrom, ch.FadeTo, t);
-                    if (t >= 1f)
+                    if (ch.State == MusicState.FadingOut)
                     {
-                        ch.FadeDuration = 0f;
-                        if (ch.State == MusicState.FadingOut)
-                        {
-                            var completion = SilenceMusicChannel(i);
-                            if (i == 0) { signal0 = completion; } else { signal1 = completion; }
-                            continue;
-                        }
-                        // Fade-in finished: signal the awaiter (PlayMusicAsync).
-                        ch.State = MusicState.Playing;
-                        if (i == 0) { signal0 = ch.Completion; } else { signal1 = ch.Completion; }
-                        ch.Completion = null;
+                        var completion = SilenceMusicChannel(i);
+                        if (i == 0) { signal0 = completion; } else { signal1 = completion; }
+                        continue;
                     }
+                    // Fade-in finished: signal the awaiter (PlayMusicAsync).
+                    ch.State = MusicState.Playing;
+                    if (i == 0) { signal0 = ch.Completion; } else { signal1 = ch.Completion; }
+                    ch.Completion = null;
                 }
                 ApplyMusicVolume(i);
             }

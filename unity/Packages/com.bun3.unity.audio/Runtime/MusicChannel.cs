@@ -24,11 +24,7 @@ namespace Bun3.Unity.Audio
         public bool Paused;
         public bool LoopScheduled;
         public double LoopStartDsp;
-        public float FadeElapsed;
-        public float FadeDuration;
-        public float FadeFrom;
-        public float FadeTo;
-        public float FadeFactor;
+        public FadeState Fade;
         public AutoResetUniTaskCompletionSource Completion;
     }
 

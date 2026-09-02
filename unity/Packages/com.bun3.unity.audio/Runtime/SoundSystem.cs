@@ -9,8 +9,15 @@ namespace Bun3.Unity.Audio
     /// <summary>
     /// Instance sound service: a prewarmed AudioSource pool driven by a single
     /// player-loop tick. No MonoBehaviours, no coroutines, no per-play allocation.
-    /// Partial layout: this file owns construction/playback/disposal;
-    /// SoundSystem.Tick.cs owns the per-frame mirror of <see cref="VoiceTable"/> state.
+    /// Partial layout:
+    /// <list type="bullet">
+    /// <item><description>SoundSystem.cs: construction, playback, disposal.</description></item>
+    /// <item><description>SoundSystem.Tick.cs: per-frame mirror of <see cref="VoiceTable"/>/music state onto AudioSources.</description></item>
+    /// <item><description>SoundSystem.Music.cs: intro+loop music channels, crossfade, pause/resume.</description></item>
+    /// <item><description>SoundSystem.Occlusion.cs: round-robin occlusion evaluation and low-pass/volume application.</description></item>
+    /// <item><description>SoundSystem.Async.cs: UniTask entry points built on voice completion sources.</description></item>
+    /// <item><description>SoundSystem.Addressables.cs: Addressable clip preload/release (compiled under BUN3_ADDRESSABLES).</description></item>
+    /// </list>
     /// </summary>
     public sealed partial class SoundSystem : IDisposable
     {
@@ -22,7 +29,7 @@ namespace Bun3.Unity.Audio
 
         internal readonly VoiceTable Table;
         private readonly AudioSource[] _sources;
-        private readonly List<(int Slot, Cysharp.Threading.Tasks.AutoResetUniTaskCompletionSource Completion)> _completedScratch;
+        private readonly List<(int Slot, uint Generation, Cysharp.Threading.Tasks.AutoResetUniTaskCompletionSource Completion, Action<SoundHandle> Callback)> _completedScratch;
         private readonly SoundSystemConfig _config;
         private readonly AudioMixer _mixer;
         private readonly System.Random _rng;
@@ -135,6 +142,21 @@ namespace Bun3.Unity.Audio
             Table.BeginFadeOut(slot, fadeOut);
         }
 
+        /// <summary>
+        /// Registers a callback invoked once when the voice ends (natural end, fade-out,
+        /// steal, Stop, or Dispose), with the original (now-stale) handle. No-op for a stale
+        /// handle. Overwrites any previously registered callback for this voice — one callback
+        /// per voice, mirroring the one-awaiter contract of <see cref="SoundHandle.WaitAsync"/>.
+        /// Cold-path registration; cache the delegate rather than allocating a closure per call.
+        /// </summary>
+        public void SetCompletionCallback(SoundHandle handle, Action<SoundHandle> callback)
+        {
+            if (TryGetSlot(handle, out var slot))
+            {
+                Table.Slots[slot].CompletionCallback = callback;
+            }
+        }
+
         internal bool TryGetSlot(SoundHandle handle, out int slot)
         {
             slot = handle.SlotIndex;
@@ -156,7 +178,7 @@ namespace Bun3.Unity.Audio
             }
 
             var clip = PickClip(def);
-            if (!Table.TryAllocate(def, clip.length, out var slot, out var stolen, out var stolenCompletion))
+            if (!Table.TryAllocate(def, clip.length, out var slot, out var stolen, out var stolenSignal))
             {
                 return SoundHandle.Invalid;
             }
@@ -180,7 +202,7 @@ namespace Bun3.Unity.Audio
             source.loop = def.Loop;
             source.pitch = _config.PitchWithTimescale ? voice.Pitch * _lastTimeScale : voice.Pitch;
             voice.PlaybackRate = source.pitch;
-            source.volume = Table.CurrentVolume(slot); // reflects FadeFactor 0 when fading in
+            source.volume = Table.CurrentVolume(slot); // reflects Fade.Factor 0 when fading in
             source.outputAudioMixerGroup = def.MixerGroup != null ? def.MixerGroup : _config.SfxGroup;
             source.spatialBlend = def.Spatial == SpatialMode.None ? 0f : 1f;
             source.minDistance = def.MinDistance;
@@ -194,7 +216,8 @@ namespace Bun3.Unity.Audio
             // a half-configured slot.
             if (stolen >= 0)
             {
-                stolenCompletion?.TrySetResult();
+                stolenSignal.Completion?.TrySetResult();
+                stolenSignal.Callback?.Invoke(new SoundHandle(this, stolen, stolenSignal.Generation));
             }
 
             return new SoundHandle(this, slot, voice.Generation);
@@ -250,9 +273,11 @@ namespace Bun3.Unity.Audio
             {
                 if (Table.Slots[i].State != VoiceState.Idle)
                 {
+                    var generation = Table.Slots[i].Generation;
                     var completion = Table.Slots[i].Completion;
+                    var callback = Table.Slots[i].CompletionCallback;
                     Table.Release(i);
-                    _completedScratch.Add((i, completion));
+                    _completedScratch.Add((i, generation, completion, callback));
                 }
             }
 
@@ -285,7 +310,9 @@ namespace Bun3.Unity.Audio
 
             for (var i = 0; i < _completedScratch.Count; i++)
             {
-                _completedScratch[i].Completion?.TrySetResult();
+                var entry = _completedScratch[i];
+                entry.Completion?.TrySetResult();
+                entry.Callback?.Invoke(new SoundHandle(this, entry.Slot, entry.Generation));
             }
             musicCompletion0?.TrySetResult();
             musicCompletion1?.TrySetResult();

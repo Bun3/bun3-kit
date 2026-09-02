@@ -37,7 +37,9 @@ namespace Bun3.Unity.Audio
             }
             for (var i = 0; i < _completedScratch.Count; i++)
             {
-                _completedScratch[i].Completion?.TrySetResult();
+                var entry = _completedScratch[i];
+                entry.Completion?.TrySetResult();
+                entry.Callback?.Invoke(new SoundHandle(this, entry.Slot, entry.Generation));
             }
 
             for (var i = 0; i < Table.Slots.Length; i++)

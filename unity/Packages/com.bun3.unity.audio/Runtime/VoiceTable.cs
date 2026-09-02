@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
@@ -25,23 +26,23 @@ namespace Bun3.Unity.Audio
             for (var i = 0; i < Slots.Length; i++)
             {
                 Slots[i].VolumeScale = 1f;
-                Slots[i].FadeFactor = 1f;
+                Slots[i].Fade.Factor = 1f;
             }
         }
 
         /// <summary>
         /// Reserves a slot for <paramref name="def"/>. Returns false when blocked by cooldown
         /// (or zero capacity). <paramref name="stolenSlot"/> is the slot whose previous voice
-        /// was cut short (-1 if none); <paramref name="stolenCompletion"/> is that voice's
-        /// awaiter (captured before the slot is overwritten) so the caller can signal it.
+        /// was cut short (-1 if none); <paramref name="stolenSignal"/> carries that voice's
+        /// pre-overwrite generation, awaiter, and completion callback so the caller can signal it.
         /// </summary>
         public bool TryAllocate(
             SoundDef def, float clipLength, out int slotIndex, out int stolenSlot,
-            out AutoResetUniTaskCompletionSource stolenCompletion)
+            out (uint Generation, AutoResetUniTaskCompletionSource Completion, Action<SoundHandle> Callback) stolenSignal)
         {
             stolenSlot = -1;
             slotIndex = -1;
-            stolenCompletion = null;
+            stolenSignal = default;
             if (Slots.Length == 0)
             {
                 return false;
@@ -56,7 +57,8 @@ namespace Bun3.Unity.Audio
             slotIndex = FindSlot(def, ref stolenSlot);
             if (stolenSlot >= 0)
             {
-                stolenCompletion = Slots[stolenSlot].Completion;
+                ref var stolenRef = ref Slots[stolenSlot];
+                stolenSignal = (stolenRef.Generation, stolenRef.Completion, stolenRef.CompletionCallback);
             }
             ref var slot = ref Slots[slotIndex];
             slot.Generation++;
@@ -65,9 +67,7 @@ namespace Bun3.Unity.Audio
             slot.Elapsed = 0f;
             slot.ClipLength = clipLength;
             slot.Loop = def.Loop;
-            slot.FadeElapsed = 0f;
-            slot.FadeDuration = 0f;
-            slot.FadeFactor = 1f;
+            slot.Fade.SetInstant(1f);
             slot.BaseVolume = def.Volume.Roll(_rng);
             slot.VolumeScale = 1f;
             slot.Pitch = def.Pitch.Roll(_rng);
@@ -75,6 +75,7 @@ namespace Bun3.Unity.Audio
             slot.StartTime = _time;
             slot.Follow = null;
             slot.Completion = null;
+            slot.CompletionCallback = null;
             slot.OcclusionCurrent = 0f;
             slot.OcclusionTarget = 0f;
             if (def.Cooldown > 0f)
@@ -97,13 +98,14 @@ namespace Bun3.Unity.Audio
             s.Def = null;
             s.Follow = null;
             s.Completion = null;
+            s.CompletionCallback = null;
         }
 
         /// <summary>Effective playback volume for the slot (base × handle scale × fade).</summary>
         public float CurrentVolume(int slot)
         {
             ref var s = ref Slots[slot];
-            return s.BaseVolume * s.VolumeScale * s.FadeFactor;
+            return s.BaseVolume * s.VolumeScale * s.Fade.Factor;
         }
 
         /// <summary>Starts a fade from the current factor to full volume.</summary>
@@ -112,16 +114,11 @@ namespace Bun3.Unity.Audio
             ref var s = ref Slots[slot];
             if (duration <= 0f)
             {
-                s.FadeDuration = 0f;
-                s.FadeFactor = 1f;
+                s.Fade.SetInstant(1f);
                 s.State = VoiceState.Playing;
                 return;
             }
-            s.FadeFrom = 0f;
-            s.FadeTo = 1f;
-            s.FadeFactor = 0f;
-            s.FadeElapsed = 0f;
-            s.FadeDuration = duration;
+            s.Fade.Begin(0f, 1f, duration);
             s.State = VoiceState.FadingIn;
         }
 
@@ -132,10 +129,7 @@ namespace Bun3.Unity.Audio
         public void BeginFadeOut(int slot, float duration)
         {
             ref var s = ref Slots[slot];
-            s.FadeFrom = s.FadeFactor;
-            s.FadeTo = 0f;
-            s.FadeElapsed = 0f;
-            s.FadeDuration = Mathf.Max(duration, float.Epsilon);
+            s.Fade.Begin(s.Fade.Factor, 0f, Mathf.Max(duration, float.Epsilon));
             s.State = VoiceState.FadingOut;
         }
 
@@ -144,11 +138,13 @@ namespace Bun3.Unity.Audio
         /// even on a frozen voice) and playback-rate-scaled completion (never
         /// AudioSource.isPlaying — pause would misread). Completion tracks
         /// <see cref="VoiceSlot.PlaybackRate"/>, not real time: a pitch-0 voice never expires,
-        /// a 2x voice completes in half the real time. For each completed slot, the slot index
-        /// and its Completion (captured before Release nulls it) are appended to
-        /// <paramref name="completed"/>.
+        /// a 2x voice completes in half the real time. For each completed slot, the slot index,
+        /// its pre-release Generation, Completion, and CompletionCallback (all captured before
+        /// Release clears them) are appended to <paramref name="completed"/>.
         /// </summary>
-        public void Tick(float dt, List<(int Slot, AutoResetUniTaskCompletionSource Completion)> completed)
+        public void Tick(
+            float dt,
+            List<(int Slot, uint Generation, AutoResetUniTaskCompletionSource Completion, Action<SoundHandle> Callback)> completed)
         {
             _time += dt;
             for (var i = 0; i < Slots.Length; i++)
@@ -167,30 +163,27 @@ namespace Bun3.Unity.Audio
                         s.OcclusionCurrent, s.OcclusionTarget, dt / _occlusionSmoothing);
                 }
 
-                if (s.FadeDuration > 0f)
+                if (s.Fade.Advance(dt))
                 {
-                    s.FadeElapsed += dt;
-                    var t = Mathf.Clamp01(s.FadeElapsed / s.FadeDuration);
-                    s.FadeFactor = Mathf.Lerp(s.FadeFrom, s.FadeTo, t);
-                    if (t >= 1f)
+                    if (s.State == VoiceState.FadingOut)
                     {
-                        s.FadeDuration = 0f;
-                        if (s.State == VoiceState.FadingOut)
-                        {
-                            var completion = s.Completion;
-                            Release(i);
-                            completed.Add((i, completion));
-                            continue;
-                        }
-                        s.State = VoiceState.Playing;
+                        var generation = s.Generation;
+                        var completion = s.Completion;
+                        var callback = s.CompletionCallback;
+                        Release(i);
+                        completed.Add((i, generation, completion, callback));
+                        continue;
                     }
+                    s.State = VoiceState.Playing;
                 }
 
                 if (!s.Loop && s.Elapsed >= s.ClipLength)
                 {
+                    var generation = s.Generation;
                     var completion = s.Completion;
+                    var callback = s.CompletionCallback;
                     Release(i);
-                    completed.Add((i, completion));
+                    completed.Add((i, generation, completion, callback));
                 }
             }
         }
