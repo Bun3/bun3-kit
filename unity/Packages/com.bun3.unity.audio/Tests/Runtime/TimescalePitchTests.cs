@@ -78,5 +78,20 @@ namespace Bun3.Unity.Audio.Tests
             }
             yield break;
         }
+
+        [UnityTest]
+        public IEnumerator TimescaleChange_UpdatesPlaybackRate()
+        {
+            using var sys = new SoundSystem(new SoundSystemConfig { SfxVoices = 2, PitchWithTimescale = true });
+            sys.Play(LoopDef());
+            try
+            {
+                Time.timeScale = 0.5f;
+                sys.Tick(0.02f);
+                Assert.That(sys.Table.Slots[0].PlaybackRate, Is.EqualTo(0.5f).Within(0.001f));
+            }
+            finally { Time.timeScale = 1f; }
+            yield break;
+        }
     }
 }

@@ -32,6 +32,13 @@ namespace Bun3.Unity.Audio
         public float BaseVolume;
         public float VolumeScale;
         public float Pitch;
+
+        /// <summary>
+        /// Effective playback speed (rolled pitch times any timescale multiplier); drives
+        /// <see cref="VoiceTable.Tick"/> completion progress, not fades.
+        /// </summary>
+        public float PlaybackRate;
+
         public float StartTime;
         public Transform Follow;
         public AutoResetUniTaskCompletionSource Completion;

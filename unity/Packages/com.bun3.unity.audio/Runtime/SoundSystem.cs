@@ -179,6 +179,7 @@ namespace Bun3.Unity.Audio
             source.clip = clip;
             source.loop = def.Loop;
             source.pitch = _config.PitchWithTimescale ? voice.Pitch * _lastTimeScale : voice.Pitch;
+            voice.PlaybackRate = source.pitch;
             source.volume = Table.CurrentVolume(slot); // reflects FadeFactor 0 when fading in
             source.outputAudioMixerGroup = def.MixerGroup != null ? def.MixerGroup : _config.SfxGroup;
             source.spatialBlend = def.Spatial == SpatialMode.None ? 0f : 1f;
@@ -285,8 +286,11 @@ namespace Bun3.Unity.Audio
             musicCompletion1?.TrySetResult();
         }
 
-        internal void SetSourcePitch(int slot, float pitch) =>
+        internal void SetSourcePitch(int slot, float pitch)
+        {
             _sources[slot].pitch = _config.PitchWithTimescale ? pitch * _lastTimeScale : pitch;
+            Table.Slots[slot].PlaybackRate = _sources[slot].pitch;
+        }
 
         internal void SetSourcePosition(int slot, Vector3 position) => _sources[slot].transform.position = position;
 

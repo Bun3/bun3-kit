@@ -123,12 +123,14 @@ var sound = new SoundSystem(new SoundSystemConfig { SfxVoices = 24, PitchWithTim
 sound.TransitionTo(pausedSnapshot, seconds: 0.3f);
 ```
 
-Non-loop voices always complete on real time, regardless of pitch, so a
-one-shot played at a low `Time.timeScale` is cut off before its audio
-finishes (backlog: pitch-scaled completion). `Time.timeScale = 0` is **not**
-the supported pause path — use `AudioListener.pause` or the bundled `Paused`
-snapshot; a sound played while timeScale is 0 starts inaudible (pitch 0) and
-still expires on schedule.
+Non-loop voice completion follows playback progress (pitch × timescale), not
+real time, so a one-shot played at a low `Time.timeScale` plays out its full
+audio instead of being cut short. At `Time.timeScale = 0` SFX freeze in
+place — audio and lifetime both stop advancing — and resume intact once
+timeScale recovers. `Time.timeScale = 0` is still **not** the recommended
+pause path — use `AudioListener.pause` or the bundled `Paused` snapshot
+instead, since a sound started while timeScale is 0 begins silent/frozen
+rather than paused.
 
 ### Bundled default mixer
 

@@ -80,5 +80,31 @@ namespace Bun3.Unity.Audio.Tests
             table.BeginFadeOut(slot, 1f);
             Assert.That(table.Slots[slot].FadeFrom, Is.EqualTo(0.5f).Within(0.001f));
         }
+
+        [Test]
+        public void Tick_HalfRate_CompletesAtDoubleRealTime()
+        {
+            var table = new VoiceTable(2);
+            table.TryAllocate(NewDef(), clipLength: 1f, out var slot, out _, out _);
+            table.Slots[slot].PlaybackRate = 0.5f;
+            table.Tick(1.5f, _completed);
+            Assert.IsEmpty(_completed);           // 0.75 consumed < 1
+            table.Tick(0.6f, _completed);         // 1.05 consumed
+            Assert.That(_completed.Count, Is.EqualTo(1));
+            Assert.That(_completed[0].Slot, Is.EqualTo(slot));
+        }
+
+        [Test]
+        public void Tick_ZeroRate_NeverCompletes_ButFadeOutStillDoes()
+        {
+            var table = new VoiceTable(2);
+            table.TryAllocate(NewDef(), 0.5f, out var slot, out _, out _);
+            table.Slots[slot].PlaybackRate = 0f;
+            table.Tick(10f, _completed);
+            Assert.IsEmpty(_completed);           // frozen voice never expires
+            table.BeginFadeOut(slot, 0.5f);
+            table.Tick(0.6f, _completed);         // fade is real-time: completes
+            Assert.That(_completed.Count, Is.EqualTo(1));
+        }
     }
 }

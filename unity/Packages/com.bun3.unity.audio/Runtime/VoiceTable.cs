@@ -71,6 +71,7 @@ namespace Bun3.Unity.Audio
             slot.BaseVolume = def.Volume.Roll(_rng);
             slot.VolumeScale = 1f;
             slot.Pitch = def.Pitch.Roll(_rng);
+            slot.PlaybackRate = Mathf.Max(0f, slot.Pitch);
             slot.StartTime = _time;
             slot.Follow = null;
             slot.Completion = null;
@@ -139,9 +140,12 @@ namespace Bun3.Unity.Audio
         }
 
         /// <summary>
-        /// Advances all active voices: fade interpolation, elapsed-time completion
-        /// (never AudioSource.isPlaying — pause would misread). For each completed slot, the
-        /// slot index and its Completion (captured before Release nulls it) are appended to
+        /// Advances all active voices: fade interpolation (real-time — a fade-out must finish
+        /// even on a frozen voice) and playback-rate-scaled completion (never
+        /// AudioSource.isPlaying — pause would misread). Completion tracks
+        /// <see cref="VoiceSlot.PlaybackRate"/>, not real time: a pitch-0 voice never expires,
+        /// a 2x voice completes in half the real time. For each completed slot, the slot index
+        /// and its Completion (captured before Release nulls it) are appended to
         /// <paramref name="completed"/>.
         /// </summary>
         public void Tick(float dt, List<(int Slot, AutoResetUniTaskCompletionSource Completion)> completed)
@@ -155,7 +159,7 @@ namespace Bun3.Unity.Audio
                     continue;
                 }
 
-                s.Elapsed += dt;
+                s.Elapsed += dt * s.PlaybackRate;
 
                 if (s.OcclusionCurrent != s.OcclusionTarget)
                 {

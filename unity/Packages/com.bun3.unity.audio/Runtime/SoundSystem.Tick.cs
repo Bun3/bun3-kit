@@ -65,6 +65,7 @@ namespace Bun3.Unity.Audio
                         if (Table.Slots[i].State != VoiceState.Idle)
                         {
                             _sources[i].pitch = Table.Slots[i].Pitch * scale;
+                            Table.Slots[i].PlaybackRate = _sources[i].pitch;
                         }
                     }
                 }

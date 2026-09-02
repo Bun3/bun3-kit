@@ -58,12 +58,14 @@ namespace Bun3.Unity.Audio
 
         /// <summary>
         /// When true, SFX voice pitch is multiplied by Time.timeScale (slow-motion effect).
-        /// Music is unaffected. Non-loop voices still complete on real time regardless of
-        /// pitch, so at a low timeScale a one-shot's audio is cut off before it finishes
-        /// (backlog: pitch-scaled completion). Setting <c>Time.timeScale = 0</c> is not the
-        /// supported way to pause sound — use <see cref="AudioListener.pause"/> or the
-        /// bundled Paused snapshot instead; a voice played while timeScale is 0 starts
-        /// inaudible (pitch 0) and still expires on schedule.
+        /// Music is unaffected. Non-loop voice completion follows playback progress (pitch
+        /// times timescale), not real time, so a slowed one-shot plays out its full audio
+        /// instead of being truncated. At <c>Time.timeScale = 0</c> SFX freeze in place —
+        /// audio and lifetime both stop advancing — and resume intact once timeScale
+        /// recovers; a voice played while timeScale is 0 starts inaudible (pitch 0) and never
+        /// expires until it does. <see cref="AudioListener.pause"/> or the bundled
+        /// <c>Paused</c> snapshot is still the recommended way to pause sound, since
+        /// <c>Time.timeScale = 0</c> leaves newly started sounds silent rather than paused.
         /// </summary>
         public bool PitchWithTimescale;
     }
