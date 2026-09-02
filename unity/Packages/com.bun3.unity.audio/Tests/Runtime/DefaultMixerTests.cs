@@ -15,6 +15,7 @@ namespace Bun3.Unity.Audio.Tests
             Assert.That(mixer.FindMatchingGroups("Music"), Has.Length.GreaterThanOrEqualTo(1));
             Assert.That(mixer.FindMatchingGroups("SFX"), Has.Length.GreaterThanOrEqualTo(1));
             Assert.That(mixer.FindMatchingGroups("Voice"), Has.Length.GreaterThanOrEqualTo(1));
+            Assert.That(mixer.FindMatchingGroups("Mix"), Has.Length.GreaterThanOrEqualTo(1));
             Assert.IsNotNull(mixer.FindSnapshot("Normal"));
             Assert.IsNotNull(mixer.FindSnapshot("Paused"));
             Assert.IsTrue(mixer.GetFloat("MasterVolume", out _), "MasterVolume must be exposed");

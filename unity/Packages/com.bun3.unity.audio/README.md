@@ -145,11 +145,14 @@ group routing work out of the box:
 - Snapshots: `Normal`, `Paused`.
 - The bundled mixer does **not** include ducking or low-pass effects — add
   those in the Editor's Audio Mixer window if your game needs them.
-- Calling `SetChannelVolume(SoundChannel.Master, …)` writes `MasterVolume`
-  directly, which permanently takes it out of snapshot control (Unity
-  `AudioMixer.SetFloat` semantics) — the bundled `Paused` snapshot stops
-  affecting master volume from then on. `AudioMixer.ClearFloat("MasterVolume")`
-  restores snapshot control.
+- Snapshot ducking routes through an unexposed `Mix` stage (`Master` → `Mix`
+  → `Music`/`SFX`/`Voice`): the bundled `Paused` snapshot lowers `Mix`, never
+  an exposed channel parameter, so `SetChannelVolume` and
+  `TransitionTo(Paused)` are independent by design — turning a volume slider
+  can never disarm pause ducking. The general Unity caveat still applies to
+  custom mixers you build yourself: `AudioMixer.SetFloat` on an *exposed*
+  parameter permanently takes it out of snapshot control until
+  `AudioMixer.ClearFloat` is called.
 
 Sound definitions are authored as `SoundDef` assets
 (`Assets > Create > Bun3 > Audio > Sound Def`), which hold clips, volume/pitch

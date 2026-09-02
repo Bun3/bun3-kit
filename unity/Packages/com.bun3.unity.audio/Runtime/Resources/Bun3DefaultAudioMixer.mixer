@@ -1,5 +1,19 @@
 %YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
+--- !u!244 &-6914089812663483214
+AudioMixerEffectController:
+  m_ObjectHideFlags: 3
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: 
+  m_EffectID: 18f2fa9003ad4f948b691e6735b98c01
+  m_EffectName: Attenuation
+  m_MixLevel: 1ed6ad5932424ca46a3d8e56ee55d5ac
+  m_Parameters: []
+  m_SendTarget: {fileID: 0}
+  m_EnableWetMix: 0
+  m_Bypass: 0
 --- !u!244 &-5078007644388023726
 AudioMixerEffectController:
   m_ObjectHideFlags: 3
@@ -123,9 +137,7 @@ AudioMixerGroupController:
   m_AudioMixer: {fileID: 24100000}
   m_GroupID: 2b6bc260e8c84ec409f5db085aea2386
   m_Children:
-  - {fileID: -1909927170582543351}
-  - {fileID: -3755203265987628453}
-  - {fileID: -2255194026206036288}
+  - {fileID: 8086919311610223801}
   m_Volume: a1d7581e1f3e3ec48b9ba7c7559f3b82
   m_Pitch: 4e0ac2f955abd8e43bf35703d2198c26
   m_Send: 00000000000000000000000000000000
@@ -159,6 +171,7 @@ AudioMixerSnapshotController:
   m_AudioMixer: {fileID: 24100000}
   m_SnapshotID: 53f564ee07bced24094c0feb855ffeb8
   m_FloatValues:
+    65daf9a4ab698fa4286e39781164bfdb: 0
     a1d7581e1f3e3ec48b9ba7c7559f3b82: 0
   m_TransitionOverrides: {}
 --- !u!244 &739955753148895953
@@ -185,5 +198,28 @@ AudioMixerSnapshotController:
   m_AudioMixer: {fileID: 24100000}
   m_SnapshotID: b3678487d781a0a40924b83ac1dde300
   m_FloatValues:
-    a1d7581e1f3e3ec48b9ba7c7559f3b82: -20
+    65daf9a4ab698fa4286e39781164bfdb: -20
+    a1d7581e1f3e3ec48b9ba7c7559f3b82: 0
   m_TransitionOverrides: {}
+--- !u!243 &8086919311610223801
+AudioMixerGroupController:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: Mix
+  m_AudioMixer: {fileID: 24100000}
+  m_GroupID: ed0f227d18f314f499ea148703a7c4e0
+  m_Children:
+  - {fileID: -1909927170582543351}
+  - {fileID: -3755203265987628453}
+  - {fileID: -2255194026206036288}
+  m_Volume: 65daf9a4ab698fa4286e39781164bfdb
+  m_Pitch: 33984125c489dc947b9c2264b4c34726
+  m_Send: 00000000000000000000000000000000
+  m_Effects:
+  - {fileID: -6914089812663483214}
+  m_UserColorIndex: 0
+  m_Mute: 0
+  m_Solo: 0
+  m_BypassEffects: 0
