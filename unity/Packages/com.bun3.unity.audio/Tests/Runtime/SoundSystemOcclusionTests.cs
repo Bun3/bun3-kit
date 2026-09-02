@@ -106,6 +106,35 @@ namespace Bun3.Unity.Audio.Tests
         }
 
         [UnityTest]
+        public IEnumerator TwoDDef_WithOcclusionFlag_NeverEvaluated()
+        {
+            var listener = ListenerGo();
+            var provider = new FakeProvider { Value = 1f };
+            using var sys = new SoundSystem(new SoundSystemConfig { SfxVoices = 2, OcclusionProvider = provider, Listener = listener.transform });
+            var def = OccludedDef();
+            def.Spatial = SpatialMode.None; // 2D but Occlusion=true (misconfig)
+            sys.Play(def);
+            sys.EvaluateOcclusion();
+            Assert.That(provider.Calls, Is.EqualTo(0));
+            Object.Destroy(listener);
+            yield break;
+        }
+
+        [UnityTest]
+        public IEnumerator ChecksPerFrameZero_DisablesOcclusionEntirely()
+        {
+            var listener = ListenerGo();
+            var provider = new FakeProvider { Value = 1f };
+            using var sys = new SoundSystem(new SoundSystemConfig { SfxVoices = 2, OcclusionProvider = provider, Listener = listener.transform, OcclusionChecksPerFrame = 0 });
+            sys.Play(OccludedDef(), new Vector3(0f, 0f, 5f));
+            sys.EvaluateOcclusion();
+            sys.Tick(0.02f);
+            Assert.That(provider.Calls, Is.EqualTo(0));
+            Object.Destroy(listener);
+            yield break;
+        }
+
+        [UnityTest]
         public IEnumerator ListenerSpawnedLate_IsPickedUpWithinASecond()
         {
             var provider = new FakeProvider { Value = 1f };

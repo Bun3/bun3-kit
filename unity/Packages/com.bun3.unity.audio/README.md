@@ -123,6 +123,13 @@ var sound = new SoundSystem(new SoundSystemConfig { SfxVoices = 24, PitchWithTim
 sound.TransitionTo(pausedSnapshot, seconds: 0.3f);
 ```
 
+Non-loop voices always complete on real time, regardless of pitch, so a
+one-shot played at a low `Time.timeScale` is cut off before its audio
+finishes (backlog: pitch-scaled completion). `Time.timeScale = 0` is **not**
+the supported pause path — use `AudioListener.pause` or the bundled `Paused`
+snapshot; a sound played while timeScale is 0 starts inaudible (pitch 0) and
+still expires on schedule.
+
 ### Bundled default mixer
 
 Games that never assign `SoundSystemConfig.Mixer` fall back to the package's
@@ -136,6 +143,11 @@ group routing work out of the box:
 - Snapshots: `Normal`, `Paused`.
 - The bundled mixer does **not** include ducking or low-pass effects — add
   those in the Editor's Audio Mixer window if your game needs them.
+- Calling `SetChannelVolume(SoundChannel.Master, …)` writes `MasterVolume`
+  directly, which permanently takes it out of snapshot control (Unity
+  `AudioMixer.SetFloat` semantics) — the bundled `Paused` snapshot stops
+  affecting master volume from then on. `AudioMixer.ClearFloat("MasterVolume")`
+  restores snapshot control.
 
 Sound definitions are authored as `SoundDef` assets
 (`Assets > Create > Bun3 > Audio > Sound Def`), which hold clips, volume/pitch

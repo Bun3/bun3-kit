@@ -43,6 +43,25 @@ namespace Bun3.Unity.Audio.Tests
         }
 
         [UnityTest]
+        public IEnumerator SetPitch_UnderTimescale_Composes()
+        {
+            using var sys = new SoundSystem(new SoundSystemConfig { SfxVoices = 2, PitchWithTimescale = true });
+            var h = sys.Play(LoopDef());
+            try
+            {
+                Time.timeScale = 0.5f;
+                sys.Tick(0.02f);
+                h.SetPitch(2f);
+                Assert.That(sys.SourcePitchForTest(0), Is.EqualTo(1f).Within(0.001f)); // 2 * 0.5
+                Time.timeScale = 1f;
+                sys.Tick(0.02f);
+                Assert.That(sys.SourcePitchForTest(0), Is.EqualTo(2f).Within(0.001f));
+            }
+            finally { Time.timeScale = 1f; }
+            yield break;
+        }
+
+        [UnityTest]
         public IEnumerator FlagOff_PitchUntouched()
         {
             using var sys = new SoundSystem(new SoundSystemConfig { SfxVoices = 2 });

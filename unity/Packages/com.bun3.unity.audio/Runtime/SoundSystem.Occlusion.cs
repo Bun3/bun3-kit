@@ -16,6 +16,12 @@ namespace Bun3.Unity.Audio
 
         private void InitializeOcclusion()
         {
+            if (_config.OcclusionChecksPerFrame <= 0)
+            {
+                // Off switch: no filters attached, no provider constructed, EvaluateOcclusion
+                // early-returns. Lets external spatializer adapters own low-pass/attenuation.
+                return;
+            }
             _occlusionProvider = _config.OcclusionProvider
                 ?? new RaycastOcclusionProvider(_config.OcclusionMask);
             _lowPassFilters = new AudioLowPassFilter[_sources.Length];
@@ -30,9 +36,18 @@ namespace Bun3.Unity.Audio
         /// <summary>
         /// Round-robin occlusion evaluation: up to OcclusionChecksPerFrame occlusion-enabled
         /// voices per call. Listener lookup on loss is the one sanctioned cold-path allocation.
+        /// A source's transform position reflects last frame's mirrored Follow target when the
+        /// voice is following: evaluating one frame stale is intentional (the alternative is
+        /// re-deriving the position here) and self-corrects next frame, well within what
+        /// OcclusionSmoothingSeconds already dwarfs.
         /// </summary>
         internal void EvaluateOcclusion()
         {
+            var budget = _config.OcclusionChecksPerFrame;
+            if (budget <= 0)
+            {
+                return;
+            }
             var listener = ResolveListener();
             if (listener == null)
             {
@@ -40,14 +55,14 @@ namespace Bun3.Unity.Audio
             }
             var listenerPos = listener.position;
             var slots = Table.Slots;
-            var budget = _config.OcclusionChecksPerFrame;
             var checkedCount = 0;
             for (var step = 0; step < slots.Length && checkedCount < budget; step++)
             {
                 var i = _occlusionCursor;
                 _occlusionCursor = (_occlusionCursor + 1) % slots.Length;
                 ref var s = ref slots[i];
-                if (s.State == VoiceState.Idle || s.Def == null || !s.Def.Occlusion)
+                if (s.State == VoiceState.Idle || s.Def == null || !s.Def.Occlusion
+                    || s.Def.Spatial == SpatialMode.None)
                 {
                     continue;
                 }
@@ -67,8 +82,15 @@ namespace Bun3.Unity.Audio
         /// <summary>Mirrors the slot's occlusion onto its low-pass filter (enabled only when occluded).</summary>
         internal void ApplyOcclusionFilter(int slot)
         {
+            if (_lowPassFilters == null)
+            {
+                return;
+            }
             var occ = Table.Slots[slot].OcclusionCurrent;
             var filter = _lowPassFilters[slot];
+            // 0.001 boundary needs no hysteresis: OcclusionCurrent is MoveTowards-smoothed and
+            // terminates exactly at 0, and provider flicker is already rate-limited by that
+            // same smoothing, so the filter can't chatter on/off from noise crossing this line.
             if (occ <= 0.001f)
             {
                 if (filter.enabled)
@@ -82,12 +104,29 @@ namespace Bun3.Unity.Audio
             filter.cutoffFrequency = Mathf.Lerp(OpenCutoffHz, _config.OcclusionMuffledCutoffHz, occ);
         }
 
+        /// <summary>Clears a slot's low-pass filter back to fully open before a new voice starts playing on it.</summary>
+        internal void ResetOcclusionFilter(int slot)
+        {
+            if (_lowPassFilters == null)
+            {
+                return;
+            }
+            var filter = _lowPassFilters[slot];
+            if (filter.enabled)
+            {
+                filter.cutoffFrequency = OpenCutoffHz;
+                filter.enabled = false;
+            }
+        }
+
         /// <summary>
         /// Resolves the occlusion listener transform. A found listener is cached and reused
         /// (re-resolved once it is destroyed); when none exists yet in the scene, a
         /// not-found search re-arms at most once per second — the sanctioned cold-path
         /// allocation, throttled so a listener spawned after construction is still picked
-        /// up without paying <c>FindAnyObjectByType</c> every tick in the meantime.
+        /// up without paying <c>FindAnyObjectByType</c> every tick in the meantime. While no
+        /// listener is found, EvaluateOcclusion returns early and every voice's occlusion
+        /// value freezes at its last state (no drift back to open) until one reappears.
         /// </summary>
         private Transform ResolveListener()
         {

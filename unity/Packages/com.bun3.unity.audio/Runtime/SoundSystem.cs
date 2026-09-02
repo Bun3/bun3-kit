@@ -164,6 +164,9 @@ namespace Bun3.Unity.Audio
             {
                 _sources[stolen].Stop();
             }
+            // A stolen (or reused) slot's filter may still be muffled from the voice it just
+            // replaced; clear it before the new source plays so the new voice starts open.
+            ResetOcclusionFilter(slot);
 
             ref var voice = ref Table.Slots[slot];
             voice.Follow = follow;
@@ -282,7 +285,8 @@ namespace Bun3.Unity.Audio
             musicCompletion1?.TrySetResult();
         }
 
-        internal void SetSourcePitch(int slot, float pitch) => _sources[slot].pitch = pitch;
+        internal void SetSourcePitch(int slot, float pitch) =>
+            _sources[slot].pitch = _config.PitchWithTimescale ? pitch * _lastTimeScale : pitch;
 
         internal void SetSourcePosition(int slot, Vector3 position) => _sources[slot].transform.position = position;
 

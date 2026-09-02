@@ -27,7 +27,11 @@ namespace Bun3.Unity.Audio
         /// <summary>Obstruction layers for the built-in raycast provider (ignored with a custom provider).</summary>
         public LayerMask OcclusionMask = ~0;
 
-        /// <summary>Occlusion-enabled voices evaluated per frame (round-robin).</summary>
+        /// <summary>
+        /// Occlusion-enabled voices evaluated per frame (round-robin). 0 (or negative)
+        /// disables occlusion entirely — no filters are attached and no evaluation runs;
+        /// the intended off switch for external spatializer adapters.
+        /// </summary>
         public int OcclusionChecksPerFrame = 4;
 
         /// <summary>Low-pass cutoff (Hz) at full occlusion; 22000 = open.</summary>
@@ -52,7 +56,15 @@ namespace Bun3.Unity.Audio
         /// </summary>
         public int? RandomSeed;
 
-        /// <summary>When true, SFX voice pitch is multiplied by Time.timeScale (slow-motion effect). Music is unaffected.</summary>
+        /// <summary>
+        /// When true, SFX voice pitch is multiplied by Time.timeScale (slow-motion effect).
+        /// Music is unaffected. Non-loop voices still complete on real time regardless of
+        /// pitch, so at a low timeScale a one-shot's audio is cut off before it finishes
+        /// (backlog: pitch-scaled completion). Setting <c>Time.timeScale = 0</c> is not the
+        /// supported way to pause sound — use <see cref="AudioListener.pause"/> or the
+        /// bundled Paused snapshot instead; a voice played while timeScale is 0 starts
+        /// inaudible (pitch 0) and still expires on schedule.
+        /// </summary>
         public bool PitchWithTimescale;
     }
 }
