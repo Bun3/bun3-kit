@@ -35,5 +35,7 @@ namespace Bun3.Unity.Audio
         public float StartTime;
         public Transform Follow;
         public AutoResetUniTaskCompletionSource Completion;
+        public float OcclusionCurrent;
+        public float OcclusionTarget;
     }
 }

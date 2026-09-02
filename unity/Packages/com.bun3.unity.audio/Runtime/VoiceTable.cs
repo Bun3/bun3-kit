@@ -14,11 +14,13 @@ namespace Bun3.Unity.Audio
 
         private readonly Dictionary<SoundDef, float> _lastPlayTime = new();
         private readonly System.Random _rng;
+        private readonly float _occlusionSmoothing;
         private float _time;
 
-        public VoiceTable(int capacity, System.Random rng = null)
+        public VoiceTable(int capacity, System.Random rng = null, float occlusionSmoothingSeconds = 0.15f)
         {
             _rng = rng ?? new System.Random();
+            _occlusionSmoothing = Mathf.Max(occlusionSmoothingSeconds, 0.0001f);
             Slots = new VoiceSlot[capacity];
             for (var i = 0; i < Slots.Length; i++)
             {
@@ -72,6 +74,8 @@ namespace Bun3.Unity.Audio
             slot.StartTime = _time;
             slot.Follow = null;
             slot.Completion = null;
+            slot.OcclusionCurrent = 0f;
+            slot.OcclusionTarget = 0f;
             if (def.Cooldown > 0f)
             {
                 _lastPlayTime[def] = _time;
@@ -152,6 +156,12 @@ namespace Bun3.Unity.Audio
                 }
 
                 s.Elapsed += dt;
+
+                if (s.OcclusionCurrent != s.OcclusionTarget)
+                {
+                    s.OcclusionCurrent = Mathf.MoveTowards(
+                        s.OcclusionCurrent, s.OcclusionTarget, dt / _occlusionSmoothing);
+                }
 
                 if (s.FadeDuration > 0f)
                 {

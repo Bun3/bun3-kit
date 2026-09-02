@@ -1,3 +1,4 @@
+using UnityEngine;
 using UnityEngine.Audio;
 
 namespace Bun3.Unity.Audio
@@ -13,6 +14,27 @@ namespace Bun3.Unity.Audio
 
         /// <summary>Mixer group music routes to; null leaves music unrouted.</summary>
         public AudioMixerGroup MusicGroup;
+
+        /// <summary>Occlusion evaluation strategy; null uses the built-in single-linecast provider.</summary>
+        public IOcclusionProvider OcclusionProvider;
+
+        /// <summary>Obstruction layers for the built-in raycast provider (ignored with a custom provider).</summary>
+        public LayerMask OcclusionMask = ~0;
+
+        /// <summary>Occlusion-enabled voices evaluated per frame (round-robin).</summary>
+        public int OcclusionChecksPerFrame = 4;
+
+        /// <summary>Low-pass cutoff (Hz) at full occlusion; 22000 = open.</summary>
+        public float OcclusionMuffledCutoffHz = 1200f;
+
+        /// <summary>Volume multiplier at full occlusion (1 = no attenuation).</summary>
+        public float OcclusionVolumeAtFull = 0.35f;
+
+        /// <summary>Seconds for the occlusion factor to travel 0→1 (click-free transitions).</summary>
+        public float OcclusionSmoothingSeconds = 0.15f;
+
+        /// <summary>Listener transform for occlusion rays; null finds the scene AudioListener.</summary>
+        public Transform Listener;
 
         /// <summary>Number of prewarmed SFX voices. Fixed for the system's lifetime.</summary>
         public int SfxVoices = 24;

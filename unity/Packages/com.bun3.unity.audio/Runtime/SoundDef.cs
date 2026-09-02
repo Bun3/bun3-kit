@@ -54,6 +54,9 @@ namespace Bun3.Unity.Audio
         /// <summary>3D attenuation maximum distance (used when Spatial != None).</summary>
         public float MaxDistance = 30f;
 
+        /// <summary>Whether this sound participates in occlusion evaluation (3D sounds only).</summary>
+        public bool Occlusion;
+
         /// <summary>Round-robin memory: index of the clip chosen on the previous play.</summary>
         [System.NonSerialized] internal int LastClipIndex = -1;
     }
