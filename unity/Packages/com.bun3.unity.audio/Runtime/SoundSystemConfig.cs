@@ -74,6 +74,11 @@ namespace Bun3.Unity.Audio
         /// Invoked once per play after the SFX source is fully configured, just before Play.
         /// Register a cached delegate (hot path — allocation-free). Music sources are not decorated.
         /// Do not call back into Play/Stop from this delegate (it runs inside the play path).
+        /// A hook that throws aborts the play — the voice's source never starts, and if the
+        /// play stole another voice's slot, that stolen voice's awaiter can be left unresolved;
+        /// hooks must not throw. Assign hooks before applying adapter setups (or use <c>+=</c>
+        /// instead of <c>=</c>) — a plain assignment after an adapter's <c>Apply</c> call wipes
+        /// out the binder it registered.
         /// </summary>
         public Action<AudioSource, SoundDef> OnVoiceConfigured;
     }

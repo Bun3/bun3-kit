@@ -115,3 +115,11 @@ InitTestScene*.unity*
 # so a future unrelated plugin there isn't silently gitignored too.
 /[Aa]ssets/[Pp]lugins/[Ss]team[Aa]udio/
 /[Aa]ssets/[Pp]lugins/[Ss]team[Aa]udio.meta
+
+# Assets/Plugins.meta (the folder's own .meta) is untracked too: since every
+# file under Assets/Plugins/ is gitignored above, a fresh clone never
+# materializes the Assets/Plugins/ directory at all, so a tracked
+# Plugins.meta would be an orphan Unity deletes on open (tree churn). Once
+# Steam Audio is imported the folder exists and Unity regenerates this meta
+# locally; it doesn't need to be committed.
+/[Aa]ssets/[Pp]lugins.meta

@@ -36,11 +36,20 @@ gitignored (`unity/Vendor/*.unitypackage`) instead of committed.
 
 Importing the unitypackage auto-adds the `STEAMAUDIO_ENABLED` scripting define
 symbol to Standalone/Android/iOS/WebGL (the package's own
-`Assets/Plugins/SteamAudio/Scripts/Editor/Build.cs` does this on import — it's
-already committed in `ProjectSettings/ProjectSettings.asset`). Bun3's Steam
-Audio adapter code and asmdefs gate on this define, so on a fresh clone
-without the plugin imported, the adapter compiles out cleanly instead of
-hitting a broken assembly reference.
+`Assets/Plugins/SteamAudio/Scripts/Editor/Build.cs` does this on import).
+Bun3's Steam Audio adapter code and asmdefs gate on this define — behavior
+differs depending on where you are:
+
+- **Downstream game projects** consuming `com.bun3.unity.audio.steamaudio`:
+  the define is absent until you import Steam Audio (its importer adds it).
+  Until then the adapter asmdefs compile out cleanly — no broken assembly
+  reference — so it's safe to add the package without importing Steam Audio.
+- **This dev repo**: `STEAMAUDIO_ENABLED` is already committed in
+  `ProjectSettings/ProjectSettings.asset`, but `Assets/Plugins/SteamAudio/` is
+  gitignored (not committed — see below). On a fresh clone the define is
+  satisfied and the adapter asmdefs compile, but `SteamAudioUnity` isn't
+  there yet, so they fail with a missing assembly reference. **Expect compile
+  errors on first open until you complete step 3 above.**
 
 ## What's already committed for you
 

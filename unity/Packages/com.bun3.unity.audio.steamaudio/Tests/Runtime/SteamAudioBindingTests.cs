@@ -48,6 +48,16 @@ namespace Bun3.Unity.Audio.SteamAudio.Tests
         }
 
         [UnityTest]
+        public IEnumerator TwoDFirst_DoesNotAttachComponent()
+        {
+            using var sys = new SoundSystem(SteamAudioSoundSetup.Apply(new SoundSystemConfig { SfxVoices = 1 }));
+            sys.Play(Def(SpatialMode.None, occlusion: false));
+            Assert.IsFalse(sys.SourceForTest(0).TryGetComponent<SteamAudioSourceComponent>(out _),
+                "2D-only playback must not create Steam Audio native sources");
+            yield break;
+        }
+
+        [UnityTest]
         public IEnumerator SlotReuse_DoesNotDuplicateComponent()
         {
             using var sys = new SoundSystem(SteamAudioSoundSetup.Apply(new SoundSystemConfig { SfxVoices = 1 }));

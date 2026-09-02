@@ -55,16 +55,18 @@ namespace Bun3.Unity.Audio.SteamAudio
         /// <summary>
         /// Per-play voice binder. Defensive no-op on a null <paramref name="source"/>
         /// or <paramref name="def"/> (chained hooks may be invoked with either null
-        /// in tests). Ensures a <see cref="global::SteamAudio.SteamAudioSource"/>
-        /// exists on the source's GameObject (added once, on first use — the
-        /// pooled source keeps it afterward), sets <see cref="AudioSource.spatialize"/>
-        /// from <see cref="SoundDef.Spatial"/>, and for 3D voices enables the
-        /// component and maps <see cref="SoundDef.Occlusion"/> onto its
-        /// <c>occlusion</c> field. 2D voices disable the component. Other Steam
-        /// Audio fields (<c>occlusionType</c>, <c>occlusionInput</c>,
-        /// <c>transmission*</c>) are left at Steam Audio's own defaults — this
-        /// adapter only maps spatialization/occlusion on-off, not per-def
-        /// transmission tuning.
+        /// in tests). 2D voices (<see cref="SoundDef.Spatial"/> is
+        /// <see cref="SpatialMode.None"/>) never get a
+        /// <see cref="global::SteamAudio.SteamAudioSource"/> attached — attaching one
+        /// triggers native Steam Audio simulator registration on <c>Awake</c>, which
+        /// a 2D-only voice never needs; an already-attached component (from a pooled
+        /// source reused across defs) is disabled instead. 3D voices ensure the
+        /// component exists (added once, on first use — the pooled source keeps it
+        /// afterward), enable it, and map <see cref="SoundDef.Occlusion"/> onto its
+        /// <c>occlusion</c> field. Other Steam Audio fields (<c>occlusionType</c>,
+        /// <c>occlusionInput</c>, <c>transmission*</c>) are left at Steam Audio's own
+        /// defaults — this adapter only maps spatialization/occlusion on-off, not
+        /// per-def transmission tuning.
         /// </summary>
         private static void Bind(AudioSource source, SoundDef def)
         {
@@ -73,18 +75,25 @@ namespace Bun3.Unity.Audio.SteamAudio
                 return;
             }
 
+            if (def.Spatial == SpatialMode.None)
+            {
+                source.spatialize = false;
+                if (source.TryGetComponent<global::SteamAudio.SteamAudioSource>(out var existing))
+                {
+                    existing.enabled = false;
+                }
+
+                return;
+            }
+
+            source.spatialize = true;
             if (!source.TryGetComponent<global::SteamAudio.SteamAudioSource>(out var steamSource))
             {
                 steamSource = source.gameObject.AddComponent<global::SteamAudio.SteamAudioSource>();
             }
 
-            var is3D = def.Spatial != SpatialMode.None;
-            source.spatialize = is3D;
-            steamSource.enabled = is3D;
-            if (is3D)
-            {
-                steamSource.occlusion = def.Occlusion;
-            }
+            steamSource.enabled = true;
+            steamSource.occlusion = def.Occlusion;
         }
     }
 }
