@@ -36,6 +36,9 @@ Using [Steam Audio](https://valvesoftware.github.io/steam-audio/) for
 spatialization/occlusion? See the optional
 [`com.bun3.unity.audio.steamaudio`](../com.bun3.unity.audio.steamaudio) adapter.
 
+A runnable, asset-free demo (procedurally-generated music + SFX) is available via
+**Package Manager > Bun3 Unity Audio > Samples > Audio Demo**.
+
 ## Usage
 
 ```csharp

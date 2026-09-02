@@ -9,5 +9,12 @@
   "dependencies": {
     "com.bun3.unity.core": "0.5.1",
     "com.cysharp.unitask": "https://github.com/Cysharp/UniTask.git?path=src/UniTask/Assets/Plugins/UniTask"
-  }
+  },
+  "samples": [
+    {
+      "displayName": "Audio Demo",
+      "description": "Procedurally-generated music and SFX demo — no audio assets needed; ear-verifies the intro-loop DSP seam.",
+      "path": "Samples~/AudioDemo"
+    }
+  ]
 }

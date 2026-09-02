@@ -46,3 +46,6 @@
 - `SoundDef` inspector Preview/Stop buttons (new `Editor` assembly), reached via
   reflection over `UnityEditor.AudioUtil` with a graceful no-throw fallback when
   the expected methods are missing.
+- `Samples~/AudioDemo`: an asset-free demo (procedurally-generated intro/loop/SFX
+  clips) that ear-verifies the intro-loop DSP seam and exercises crossfade,
+  pause/resume, and pitch-varied SFX.
