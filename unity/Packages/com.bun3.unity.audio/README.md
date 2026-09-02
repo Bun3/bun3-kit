@@ -18,6 +18,13 @@ Features:
 - Music subsystem: sample-accurate intro+loop handoff, crossfade with
   newest-wins channel stealing, pause/resume, and awaitable transitions
   (`PlayMusicAsync`, `StopMusicAsync`).
+- Occlusion: round-robin per-frame evaluation with a pluggable
+  `IOcclusionProvider` (built-in single-linecast default), smoothed
+  volume attenuation and low-pass filtering.
+- Optional timescale-scaled SFX pitch (`PitchWithTimescale`) and a thin
+  `TransitionTo` wrapper over `AudioMixerSnapshot` transitions.
+- Bundled default `AudioMixer` (`Bun3DefaultAudioMixer`) so channel volumes
+  and routing work with zero mixer setup.
 
 ## Install
 
@@ -80,6 +87,55 @@ await sound.StopMusicAsync(fadeOut: 1f);
 sound.PauseMusic();
 sound.ResumeMusic();   // reschedules a cancelled loop from the intro's remaining time
 ```
+
+### Occlusion
+
+```csharp
+// Enable per SoundDef; only 3D sounds (Positional/Follow) are evaluated.
+mySoundDef.Occlusion = true;
+
+var sound = new SoundSystem(new SoundSystemConfig
+{
+    SfxVoices = 24,
+    Listener = playerHead,                 // null finds the scene AudioListener
+    OcclusionMask = wallsLayerMask,         // layers the built-in raycast provider tests against
+    OcclusionChecksPerFrame = 4,            // round-robin budget; not every voice re-checked each frame
+    OcclusionMuffledCutoffHz = 1200f,       // low-pass cutoff at full occlusion (22000 = open)
+    OcclusionVolumeAtFull = 0.35f,          // volume multiplier at full occlusion
+    OcclusionSmoothingSeconds = 0.15f,      // seconds for the occlusion factor to travel 0->1
+});
+```
+
+The default provider (`RaycastOcclusionProvider`) does a single
+`Physics.Linecast` from listener to source (binary blocked/clear). Supply a
+custom strategy via `SoundSystemConfig.OcclusionProvider` — implement
+`IOcclusionProvider.Evaluate(in Vector3 listenerPos, in Vector3 sourcePos)`
+returning 0 (open) .. 1 (fully occluded); it is called from the tick on the
+round-robin budget above, so implementations must not allocate.
+
+### Timescale and mixer snapshots
+
+```csharp
+// Scales SFX voice pitch by Time.timeScale (slow-motion); music is unaffected.
+var sound = new SoundSystem(new SoundSystemConfig { SfxVoices = 24, PitchWithTimescale = true });
+
+// Thin wrapper over AudioMixerSnapshot.TransitionTo; no-op on a null snapshot.
+sound.TransitionTo(pausedSnapshot, seconds: 0.3f);
+```
+
+### Bundled default mixer
+
+Games that never assign `SoundSystemConfig.Mixer` fall back to the package's
+own `Bun3DefaultAudioMixer` (loaded from `Resources`), so channel volumes and
+group routing work out of the box:
+
+- Groups: `Music`, `SFX`, `Voice` (matched by `AudioMixer.FindMatchingGroups`;
+  `SfxGroup`/`MusicGroup` are populated in place on the config when left null).
+- Exposed parameters: `MasterVolume`, `MusicVolume`, `SfxVolume`, `VoiceVolume`
+  (used by `SetChannelVolume`/`GetChannelVolume`).
+- Snapshots: `Normal`, `Paused`.
+- The bundled mixer does **not** include ducking or low-pass effects — add
+  those in the Editor's Audio Mixer window if your game needs them.
 
 Sound definitions are authored as `SoundDef` assets
 (`Assets > Create > Bun3 > Audio > Sound Def`), which hold clips, volume/pitch

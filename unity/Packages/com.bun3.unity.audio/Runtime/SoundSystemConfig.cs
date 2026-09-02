@@ -9,10 +9,16 @@ namespace Bun3.Unity.Audio
         /// <summary>Mixer used for channel volumes; null skips mixer integration until the bundled asset ships.</summary>
         public AudioMixer Mixer;
 
-        /// <summary>Fallback group for defs without an explicit MixerGroup.</summary>
+        /// <summary>
+        /// Fallback group for defs without an explicit MixerGroup.
+        /// May be populated in place by SoundSystem's constructor from the bundled mixer when left null.
+        /// </summary>
         public AudioMixerGroup SfxGroup;
 
-        /// <summary>Mixer group music routes to; null leaves music unrouted.</summary>
+        /// <summary>
+        /// Mixer group music routes to; null leaves music unrouted.
+        /// May be populated in place by SoundSystem's constructor from the bundled mixer when left null.
+        /// </summary>
         public AudioMixerGroup MusicGroup;
 
         /// <summary>Occlusion evaluation strategy; null uses the built-in single-linecast provider.</summary>

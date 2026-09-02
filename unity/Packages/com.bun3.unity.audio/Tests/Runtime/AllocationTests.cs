@@ -46,5 +46,32 @@ namespace Bun3.Unity.Audio.Tests
                 sys.TickMusic(0.1f);          // steady-state tick
             }, Is.Not.AllocatingGCMemory());
         }
+
+        [Test]
+        public void OcclusionTickPath_DoesNotAllocate()
+        {
+            var listenerGo = new GameObject("alloc-listener");
+            listenerGo.AddComponent<AudioListener>();
+            using var sys = new SoundSystem(new SoundSystemConfig
+            {
+                SfxVoices = 4,
+                Listener = listenerGo.transform,
+                OcclusionChecksPerFrame = 4,
+            });
+            var def = ScriptableObject.CreateInstance<SoundDef>();
+            def.Clips = new[] { AudioClip.Create("occ-alloc", 44100, 1, 44100, false) };
+            def.Loop = true;
+            def.Occlusion = true;
+            sys.Play(def, new Vector3(0f, 0f, 5f));
+            sys.Tick(0.02f); // warm all paths (listener cached, provider constructed)
+
+            Assert.That(() =>
+            {
+                sys.Tick(0.02f);
+                sys.Tick(0.02f);
+            }, Is.Not.AllocatingGCMemory());
+
+            Object.DestroyImmediate(listenerGo);
+        }
     }
 }

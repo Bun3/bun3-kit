@@ -19,3 +19,11 @@
 - Music subsystem: sample-accurate intro+loop via `PlayScheduled`, crossfade with
   newest-wins channel stealing, pause/resume with loop-schedule recomputation,
   and awaitable transitions (`PlayMusicAsync`/`StopMusicAsync`).
+- Occlusion: pluggable `IOcclusionProvider` (built-in raycast default),
+  round-robin per-frame evaluation, smoothed volume attenuation and low-pass
+  filtering via `SoundDef.Occlusion` and `SoundSystemConfig` tuning.
+- `PitchWithTimescale` (SFX pitch scaled by `Time.timeScale`) and
+  `SoundSystem.TransitionTo` (thin `AudioMixerSnapshot.TransitionTo` wrapper).
+- Bundled default `AudioMixer` (`Bun3DefaultAudioMixer`, groups `Music`/`SFX`/
+  `Voice`, params `MasterVolume`/`MusicVolume`/`SfxVolume`/`VoiceVolume`,
+  snapshots `Normal`/`Paused`) as a zero-setup fallback.

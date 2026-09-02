@@ -29,7 +29,11 @@ namespace Bun3.Unity.Audio
         private GameObject _root;
         private bool _disposed;
 
-        /// <summary>Creates the pool and registers the tick. Dispose to tear both down.</summary>
+        /// <summary>
+        /// Creates the pool and registers the tick. Dispose to tear both down. When no
+        /// mixer/groups are configured, the bundled default mixer is loaded and the config's
+        /// SfxGroup/MusicGroup are populated in place.
+        /// </summary>
         public SoundSystem(SoundSystemConfig config)
         {
             if (config == null)
