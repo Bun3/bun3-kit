@@ -14,8 +14,9 @@ namespace Bun3.Unity.Audio
             // shrinking Live cannot skip another system's tick this frame.
             for (var i = Live.Count - 1; i >= 0; i--)
             {
-                // AudioSource playback runs on real time regardless of Time.timeScale, so
-                // elapsed-time completion must track real time too.
+                // dt stays real time (unscaled): fades and occlusion smoothing are
+                // control-plane. Completion is scaled separately via VoiceSlot.PlaybackRate
+                // inside VoiceTable.Tick, so pitched/frozen voices expire with their audio.
                 Live[i].Tick(Time.unscaledDeltaTime);
             }
         }
