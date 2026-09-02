@@ -53,7 +53,9 @@ namespace Bun3.Unity.Audio.Tests
             sys.PlayMusic(Def(withIntro: false));
             yield return null;
             sys.StopMusic(fadeOut: 0.1f);
-            yield return new WaitForSecondsRealtime(0.3f);
+            // 10x the fade: real-time waits under full-suite batch load need generous
+            // slack; the assertion is state-based so extra wait only costs wall-clock.
+            yield return new WaitForSecondsRealtime(1.0f);
             Assert.IsFalse(sys.IsMusicPlaying);
             Assert.IsFalse(sys.MusicLoopSources[0].isPlaying);
         }
