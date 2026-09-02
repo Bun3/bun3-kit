@@ -297,6 +297,8 @@ namespace Bun3.Unity.Audio
 
         internal float SourcePitchForTest(int slot) => _sources[slot].pitch;
 
+        internal AudioSource SourceForTest(int slot) => _sources[slot];
+
         /// <summary>Thin wrapper over AudioMixerSnapshot.TransitionTo; no-op on null.</summary>
         public void TransitionTo(UnityEngine.Audio.AudioMixerSnapshot snapshot, float seconds)
         {

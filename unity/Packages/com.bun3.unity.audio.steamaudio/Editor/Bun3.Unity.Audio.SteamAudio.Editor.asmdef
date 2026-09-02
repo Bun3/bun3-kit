@@ -1,0 +1,14 @@
+{
+    "name": "Bun3.Unity.Audio.SteamAudio.Editor",
+    "rootNamespace": "Bun3.Unity.Audio.SteamAudio.Editor",
+    "references": [],
+    "includePlatforms": [ "Editor" ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [ "STEAMAUDIO_ENABLED" ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
