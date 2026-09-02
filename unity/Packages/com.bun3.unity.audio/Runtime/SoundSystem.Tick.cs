@@ -21,6 +21,7 @@ namespace Bun3.Unity.Audio
         internal void Tick(float dt)
         {
             _completedScratch.Clear();
+            EvaluateOcclusion();
             Table.Tick(dt, _completedScratch);
 
             // Two-pass: stop every completed source before firing any continuation. A
@@ -43,7 +44,8 @@ namespace Bun3.Unity.Audio
                 {
                     continue;
                 }
-                _sources[i].volume = Table.CurrentVolume(i);
+                _sources[i].volume = Table.CurrentVolume(i) * OcclusionVolumeMultiplier(i);
+                ApplyOcclusionFilter(i);
                 if (voice.Follow != null)
                 {
                     _sources[i].transform.position = voice.Follow.position;

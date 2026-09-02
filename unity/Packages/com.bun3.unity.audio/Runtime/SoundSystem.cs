@@ -45,7 +45,7 @@ namespace Bun3.Unity.Audio
             _rng = config.RandomSeed.HasValue
                 ? new System.Random(config.RandomSeed.Value)
                 : new System.Random();
-            Table = new VoiceTable(config.SfxVoices, _rng);
+            Table = new VoiceTable(config.SfxVoices, _rng, config.OcclusionSmoothingSeconds);
             _sources = new AudioSource[config.SfxVoices];
             // At most one completion per slot per tick; preallocate to that bound so the
             // hot Tick path never grows this list (List.Add would allocate on growth).
@@ -67,6 +67,7 @@ namespace Bun3.Unity.Audio
                 MusicIntroSources[i] = CreateMusicSource("MusicIntro");
                 MusicLoopSources[i] = CreateMusicSource("MusicLoop");
             }
+            InitializeOcclusion();
 
             // Checks actual player-loop insertion rather than Live.Count: with domain reload
             // disabled, Application.quitting can remove the tick while stale entries survive
