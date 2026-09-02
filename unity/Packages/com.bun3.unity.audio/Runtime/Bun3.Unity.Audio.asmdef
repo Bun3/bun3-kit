@@ -1,7 +1,7 @@
 {
     "name": "Bun3.Unity.Audio",
     "rootNamespace": "Bun3.Unity.Audio",
-    "references": [ "UniTask", "Bun3.Unity.Core", "Unity.Addressables" ],
+    "references": [ "UniTask", "Bun3.Unity.Core", "Unity.Addressables", "Unity.ResourceManager" ],
     "includePlatforms": [],
     "excludePlatforms": [],
     "allowUnsafeCode": false,

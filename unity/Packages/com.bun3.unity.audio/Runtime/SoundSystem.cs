@@ -273,6 +273,10 @@ namespace Bun3.Unity.Audio
             {
                 PlayerLoopSystemHelper.TryRemoveSystem(typeof(TickMarker));
             }
+            // Addressable handles reference AudioClips the sources may still hold; releasing
+            // before the sources/root are destroyed is safe either way, but doing it here
+            // keeps teardown ordered top-down (voices/music already silenced above).
+            ReleaseAllPreloadedOnDispose();
             if (_root != null)
             {
                 UnityEngine.Object.Destroy(_root);
@@ -286,6 +290,13 @@ namespace Bun3.Unity.Audio
             musicCompletion0?.TrySetResult();
             musicCompletion1?.TrySetResult();
         }
+
+        /// <summary>
+        /// Releases every preloaded Addressables handle. Implemented only in
+        /// SoundSystem.Addressables.cs (compiled under BUN3_ADDRESSABLES); with that define
+        /// off, this partial method call compiles out entirely (C# partial method semantics).
+        /// </summary>
+        partial void ReleaseAllPreloadedOnDispose();
 
         internal void SetSourcePitch(int slot, float pitch)
         {

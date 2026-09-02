@@ -1,7 +1,7 @@
 {
     "name": "Bun3.Unity.Audio.Tests",
     "rootNamespace": "Bun3.Unity.Audio.Tests",
-    "references": [ "Bun3.Unity.Audio", "UniTask", "UnityEngine.TestRunner", "UnityEditor.TestRunner" ],
+    "references": [ "Bun3.Unity.Audio", "UniTask", "UnityEngine.TestRunner", "UnityEditor.TestRunner", "Unity.Addressables" ],
     "includePlatforms": [],
     "excludePlatforms": [],
     "allowUnsafeCode": false,
