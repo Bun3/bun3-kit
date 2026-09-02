@@ -29,6 +29,7 @@ namespace Bun3.Unity.Audio
         /// <param name="def">Sound definition whose AddressableClips to load.</param>
         /// <param name="ct">Checked between clip loads; does not abort an in-flight load.</param>
         /// <exception cref="ObjectDisposedException">The system has been disposed.</exception>
+        /// <exception cref="OperationCanceledException"><paramref name="ct"/> was canceled.</exception>
         public async UniTask PreloadAsync(SoundDef def, CancellationToken ct = default)
         {
             if (_disposed)
@@ -75,6 +76,16 @@ namespace Bun3.Unity.Audio
             }
 
             _preloaded ??= new Dictionary<SoundDef, AsyncOperationHandle<AudioClip>[]>();
+            // Entry-time IsPreloaded is TOCTOU under concurrent PreloadAsync(def) calls: both
+            // can pass the guard and load in parallel. Recheck here so the loser releases its
+            // own (redundant but harmless) batch instead of orphaning it when it overwrites
+            // the winner's tracking entry — the wasted duplicate load is accepted cold-path
+            // cost; an in-flight marker would dedupe it too but isn't needed to close the leak.
+            if (_preloaded.ContainsKey(def))
+            {
+                ReleaseHandles(handles, handles.Length);
+                return;
+            }
             _preloaded[def] = handles;
             def.RuntimeClips = clips;
         }
