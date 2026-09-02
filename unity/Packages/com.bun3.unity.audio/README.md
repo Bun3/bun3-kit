@@ -175,7 +175,7 @@ plus a development-build warning).
 await sound.PreloadAsync(mySoundDef);
 sound.Play(mySoundDef);
 
-sound.IsPreloaded(mySoundDef);   // true once RuntimeClips is populated
+sound.IsPreloaded(mySoundDef);   // true once the def's addressable clips have finished loading
 
 // Release when the def's voices are no longer playing (a dev-build warning
 // fires, but does not block, if a voice is still active on it).
