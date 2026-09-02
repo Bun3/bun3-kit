@@ -111,7 +111,7 @@ InitTestScene*.unity*
 # Assets/Plugins/SteamAudio — too large to commit, and fully regenerable via
 # the Vendor/README.md import steps. Only the resulting project settings
 # (AudioManager.asset spatializer, ProjectSettings.asset define symbols) are
-# committed. Assets/Plugins/ currently holds only Steam Audio, so the whole
-# folder is ignored (Unity regenerates its .meta on next import).
-/[Aa]ssets/[Pp]lugins/
-/[Aa]ssets/[Pp]lugins.meta
+# committed. Scoped to the SteamAudio subtree only, not all of Assets/Plugins/,
+# so a future unrelated plugin there isn't silently gitignored too.
+/[Aa]ssets/[Pp]lugins/[Ss]team[Aa]udio/
+/[Aa]ssets/[Pp]lugins/[Ss]team[Aa]udio.meta

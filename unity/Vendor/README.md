@@ -32,11 +32,23 @@ gitignored (`unity/Vendor/*.unitypackage`) instead of committed.
    as a committed, intentional setting — this step is only needed if that asset
    is reverted or you are setting up a fresh clone without pulling it.)
 
+## Scripting define: `STEAMAUDIO_ENABLED`
+
+Importing the unitypackage auto-adds the `STEAMAUDIO_ENABLED` scripting define
+symbol to Standalone/Android/iOS/WebGL (the package's own
+`Assets/Plugins/SteamAudio/Scripts/Editor/Build.cs` does this on import — it's
+already committed in `ProjectSettings/ProjectSettings.asset`). Bun3's Steam
+Audio adapter code and asmdefs gate on this define, so on a fresh clone
+without the plugin imported, the adapter compiles out cleanly instead of
+hitting a broken assembly reference.
+
 ## What's already committed for you
 
 - `ProjectSettings/AudioManager.asset` — `m_SpatializerPlugin` set to
   `Steam Audio Spatializer` (verified round-trip via SerializedObject after
   import; confirmed live via `AudioSettings.GetSpatializerPluginNames()`).
+- `ProjectSettings/ProjectSettings.asset` — `STEAMAUDIO_ENABLED` scripting
+  define symbols (see above).
 - This README + the `.gitignore` rule for the binary itself.
 
 The `.unitypackage` binary and the source zip are **not** committed — re-fetch
