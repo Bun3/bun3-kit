@@ -1,0 +1,6 @@
+{
+  "name": "Bun3.Unity.Inspector.Editor",
+  "rootNamespace": "Bun3.Unity.Inspector.Editor",
+  "references": ["Bun3.Unity.Inspector"],
+  "includePlatforms": ["Editor"]
+}

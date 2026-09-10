@@ -1,0 +1,8 @@
+{
+  "name": "com.bun3.unity.inspector",
+  "displayName": "Bun3 Unity Inspector",
+  "version": "0.1.0",
+  "unity": "2022.3",
+  "description": "Reusable Inspector field attributes and drawers for Unity.",
+  "author": { "name": "Bun3", "url": "https://github.com/Bun3" }
+}
