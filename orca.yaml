@@ -1,0 +1,13 @@
+# Orca 워크트리 훅 — worktree-share 엔진으로 무거운 캐시를 junction 공유한다.
+# 이 파일은 <engine>/install-repo.ps1 이 생성했다. 엔진을 갱신했으면 다시 실행하면 된다.
+# - 공유 규칙: 레포 루트의 .worktree-share.json (엔진이 자동으로 읽음)
+# - 엔진 경로가 다른 PC는 환경변수 WORKTREE_SHARE_HOME 만 설정하면 된다(이 파일 수정 불필요).
+# - 엔진이 아예 없는 PC에서는 조용히 건너뛴다(워크트리는 정상 생성, 캐시만 새로 만들어짐).
+# - archive 훅은 junction 을 먼저 끊어 원본 삭제 사고를 막는다.
+scripts:
+  setup: |
+    if defined WORKTREE_SHARE_HOME (set "WS=%WORKTREE_SHARE_HOME%") else (set "WS=E:\Projects\worktree-share")
+    if exist "%WS%\orca-setup.cmd" (call "%WS%\orca-setup.cmd") else (echo [worktree-share] engine not found - skipped)
+  archive: |
+    if defined WORKTREE_SHARE_HOME (set "WS=%WORKTREE_SHARE_HOME%") else (set "WS=E:\Projects\worktree-share")
+    if exist "%WS%\orca-archive.cmd" (call "%WS%\orca-archive.cmd") else (echo [worktree-share] engine not found - skipped)
