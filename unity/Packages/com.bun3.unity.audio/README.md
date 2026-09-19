@@ -1,8 +1,9 @@
 # Bun3 Unity Audio
 
 A lightweight sound manager for Unity: a prewarmed `AudioSource` pool driven by a
-single player-loop tick. No MonoBehaviours, no coroutines, no per-play GC
-allocation on the hot play/tick path.
+single player-loop tick. The service itself requires no MonoBehaviour or coroutine.
+Prepared playback and tick paths reuse storage; setup, first-time preparation,
+profile changes, Addressables and cancellation are cold paths that can allocate.
 
 Features:
 
@@ -28,9 +29,42 @@ Features:
 
 ## Install
 
-This package lives at `unity/Packages/com.bun3.unity.audio` and is consumed as
-an embedded UPM package (referenced by path in `manifest.json`). It depends on
-`com.bun3.unity.core` and `com.cysharp.unitask`.
+The package declares Unity **6000.3.14f1** as its minimum. For the development
+branch, use **Window > Package Manager > Install package from Git URL**:
+
+```text
+https://github.com/Bun3/bun3-kit.git?path=unity/Packages/com.bun3.unity.audio#Bun3/jp-sound-integration
+```
+
+Git must be available and the machine must have repository access. Commit both
+`Packages/manifest.json` and `Packages/packages-lock.json`; the lock records the
+resolved commit while the branch moves. No developer-specific absolute path is needed.
+
+A Git install does not discover sibling monorepo packages. Unless a registry
+supplies them, resolve Bun3 dependencies explicitly in the consuming manifest.
+Merge this **dependency fragment** with existing dependencies:
+
+```json
+{
+  "com.bun3.common": "https://github.com/Bun3/bun3-kit.git?path=common/src/com.bun3.common#Bun3/jp-sound-integration",
+  "com.bun3.unity.core": "https://github.com/Bun3/bun3-kit.git?path=unity/Packages/com.bun3.unity.core#Bun3/jp-sound-integration",
+  "com.bun3.unity.audio": "https://github.com/Bun3/bun3-kit.git?path=unity/Packages/com.bun3.unity.audio#Bun3/jp-sound-integration",
+  "com.cysharp.unitask": "https://github.com/Cysharp/UniTask.git?path=src/UniTask/Assets/Plugins/UniTask",
+  "com.mackysoft.serializereference-extensions": "https://github.com/Bun3/Unity-SerializeReferenceExtensions.git?path=Assets/MackySoft/MackySoft.SerializeReferenceExtensions",
+  "com.mrdav30.fixedmathsharp.lean": "https://github.com/mrdav30/FixedMathSharp-Unity.git?path=/com.mrdav30.fixedmathsharp.lean#v7.0.0",
+  "com.unity.addressables": "2.10.2"
+}
+```
+
+These versions match the repository's authoring setup. Preserve compatible versions
+already resolved by your project rather than downgrading them. The non-audio
+libraries above are transitive dependencies of the shared Bun3 foundation.
+
+Reference `Bun3.Unity.Audio` from an application asmdef. Also reference `UniTask`
+and `Unity.Addressables` when your own code uses them. **Addressables is required
+even for direct clips** by the current runtime asmdef. Its version define supplies
+`BUN3_ADDRESSABLES` to the package assembly, not globally to application code.
+No Dissonance or Steam Audio SDK is needed for basic playback.
 
 Using [Steam Audio](https://valvesoftware.github.io/steam-audio/) for
 spatialization/occlusion? See the optional
@@ -39,7 +73,65 @@ spatialization/occlusion? See the optional
 A runnable, asset-free demo (procedurally-generated music + SFX) is available via
 **Package Manager > Bun3 Unity Audio > Samples > Audio Demo**.
 
+## Responsibilities
+
+This package owns audible SFX/music playback, pooling, fades, routing and selected
+external-source controls. It does not transmit voice packets, interpret AI hearing,
+decide game voice groups, or synchronize volume preferences over a network.
+
+| Need | Package |
+|---|---|
+| Audible pooled playback, definitions and profiles | This package |
+| Logical sound events interpreted by gameplay | `com.bun3.unity.sound-events` |
+| Grid geometry and connectivity | `com.bun3.unity.acoustics` |
+| Native acoustic simulation and SFX rendering | `com.bun3.unity.audio.steamaudio` |
+| Dissonance rooms, activity and output bridge | `com.bun3.unity.audio.dissonance` |
+| NGO voice identity/session binding | `com.bun3.unity.audio.dissonance.netcode` |
+| Dissonance PCM rendered through Steam Audio | `com.bun3.unity.audio.dissonance.steamaudio` |
+
+## Quick start
+
+Create a **Bun3 > Audio > Sound Def** asset, assign a non-null clip, and leave Spatial
+at None for a UI sound. Assign it to this component in a scene with an active
+`AudioListener`. Use an application-level owner for audio that survives scene changes.
+
+```csharp
+using Bun3.Unity.Audio;
+using UnityEngine;
+
+public sealed class AudioExample : MonoBehaviour
+{
+    [SerializeField] private SoundDef click = null;
+    private SoundSystem sound;
+    private SoundHandle lastClick;
+
+    private void Awake()
+    {
+        sound = new SoundSystem(new SoundSystemConfig { SfxVoices = 24 });
+        sound.Prepare(click);
+    }
+
+    private void Start()
+    {
+        sound.SetChannelVolume(SoundChannel.Master, 0.8f);
+    }
+
+    public void PlayClick() => lastClick = sound.Play(click);
+    public void StopClick() => lastClick.Stop(fadeOut: 0.1f);
+
+    private void OnDestroy() => sound?.Dispose();
+}
+```
+
+`Prepare` reserves cooldown bookkeeping. It does not load Addressables or prepare
+a native adapter's PCM cache. Perform those operations separately before playback.
+The service inserts its own player-loop callback: do not tick it from Update.
+
 ## Usage
+
+The snippets below are method-body fragments. Supply the named assets, positions,
+transforms and mixer references. Put asynchronous snippets in an `async UniTask`
+method. Each independently constructed service must eventually be disposed.
 
 ```csharp
 using Bun3.Unity.Audio;
@@ -153,8 +245,8 @@ group routing work out of the box:
 - Exposed parameters: `MasterVolume`, `MusicVolume`, `SfxVolume`, `VoiceVolume`
   (used by `SetChannelVolume`/`GetChannelVolume`).
 - Snapshots: `Normal`, `Paused`.
-- The bundled mixer does **not** include ducking or low-pass effects — add
-  those in the Editor's Audio Mixer window if your game needs them.
+- The bundled mixer has no sidechain ducking or low-pass effect. The `Paused`
+  snapshot provides fixed attenuation; add custom effects when needed.
 - Snapshot ducking routes through an unexposed `Mix` stage (`Master` → `Mix`
   → `Music`/`SFX`/`Voice`): the bundled `Paused` snapshot lowers `Mix`, never
   an exposed channel parameter, so `SetChannelVolume` and
@@ -270,8 +362,12 @@ sound.IsPreloaded(mySoundDef);   // true once the def's addressable clips have f
 sound.ReleasePreloaded(mySoundDef);
 ```
 
-A load failure silently skips the def (dev-build warning, no exception) and
-leaves it unpreloaded. Concurrent `PreloadAsync(def)` calls on the same def
+An Addressables operation with failed status skips the definition and leaves it
+unpreloaded. The package emits a development-build warning; Addressables may
+separately log its own error. Cancellation propagates `OperationCanceledException`;
+malformed references and other unexpected exceptions can also propagate. Handles
+not transferred to the preload cache are released on every exit path.
+Concurrent `PreloadAsync(def)` calls on the same def
 are safe — the loser's redundant batch is released instead of leaking. A
 def's preload belongs to exactly one `SoundSystem`: don't preload the same
 def on two live systems, since releasing it on one nulls the shared runtime
@@ -282,12 +378,15 @@ load the clip yourself and build a runtime `MusicDef`:
 
 ```csharp
 // Music via Addressables: load the clip yourself, then build a runtime MusicDef.
-var handle = Addressables.LoadAssetAsync<AudioClip>("bgm-main");
+var handle = UnityEngine.AddressableAssets.Addressables.LoadAssetAsync<AudioClip>("bgm-main");
 var clip = await handle.Task;
 var def = ScriptableObject.CreateInstance<MusicDef>();
 def.Loop = clip;
 sound.PlayMusic(def, fade: 2f);
-// Keep `handle` and Addressables.Release(handle) when the track is retired.
+// Keep both objects until playback has stopped. At final teardown:
+sound.StopMusic(fadeOut: 0f);
+UnityEngine.AddressableAssets.Addressables.Release(handle);
+UnityEngine.Object.Destroy(def);
 ```
 
 Sound definitions are authored as `SoundDef` assets
@@ -311,10 +410,12 @@ Before removing SDK assets, remove or guard application references to adapter ty
 `SoundCatalog` maps ordinal, case-sensitive string keys to `SoundDef` assets. Create it through **Bun3/Audio/Sound Catalog**. Definitions remain the single source of playback settings; catalogs contain no duplicate clip, gain, or cooldown fields. `ValidateOrThrow()` rejects blank/duplicate keys and missing definitions. `TryGet` returns false for unknown keys. `SetEntries` validates atomically; warm lookup allocates no managed memory.
 
 ```csharp
-system.Prepare(catalog); // Validate and prewarm cooldown tracking.
-var footstep = catalog.Get("player.footstep");
-system.Play(footstep, position);
-system.Play(footstep, position, SpatialMode.None, volumeScale: 0.5f);
+sound.Prepare(catalog); // Validate and prewarm cooldown tracking.
+if (catalog.TryGet("player.footstep", out var footstep))
+{
+    sound.Play(footstep, position);
+    sound.Play(footstep, position, SpatialMode.None, volumeScale: 0.5f);
+}
 ```
 
 The spatial/gain overload overrides a single request without editing the asset. Cooldown and instance limits remain shared by definition. Optional output owners implement `ISpatialSoundVoiceOutput` to receive the effective request mode; legacy owners retain their existing interface.
@@ -331,16 +432,16 @@ Use `Effective*` getters in custom consumers. The public serialized fields remai
 `SpatialBlendProfile` is a reusable mono/full-width native-distance range. With `EffectiveInheritSpatialBlend` enabled, native adapters use their world default. Otherwise the selected blend profile wins, with inline mono/full distances as fallback. A shared spatial profile can select the same blend profile for many sounds. Zero/invalid full-width ranges retain spatial output. The blend asset is SDK-independent; actual path-distance evaluation is provided by the native adapter.
 
 ```csharp
-sound.PlaybackProfile = sharedPlayback;
-sound.SpatialProfile = sharedSpatial;
+mySoundDef.PlaybackProfile = sharedPlayback;
+mySoundDef.SpatialProfile = sharedSpatial;
 // Per-sound spatial settings instead of the shared group:
-sound.SpatialProfile = null;
-sound.InheritSpatialBlend = false;
-sound.SpatialBlendProfile = speechAndFootstepBlend;
+mySoundDef.SpatialProfile = null;
+mySoundDef.InheritSpatialBlend = false;
+mySoundDef.SpatialBlendProfile = speechAndFootstepBlend;
 // To use inline distances instead:
-sound.SpatialBlendProfile = null;
-sound.MonoDistance = 1;
-sound.FullSpatialDistance = 3;
+mySoundDef.SpatialBlendProfile = null;
+mySoundDef.MonoDistance = 1;
+mySoundDef.FullSpatialDistance = 3;
 ```
 
 Playback parameters are primarily consumed when starting a voice. Native adapters continue reading effective attenuation and width profiles on the control thread during simulation. No profile allocation occurs on a warm playback or audio-processing path.
@@ -361,3 +462,78 @@ When extending this package, keep calculations separate from Unity operations,
 use named intermediate values and guard clauses, and keep related steps in the
 same file. Hot paths use direct calls and reusable storage; function composition
 must not introduce per-frame closures or collection allocations.
+
+## API and tuning reference
+
+| Entry point / setting | Meaning |
+|---|---|
+| `Play` / `PlayAsync` | Start a direct or preloaded definition; rejected requests return an invalid handle. Async variants await completion. |
+| `Prepare(SoundDef)` / `Prepare(SoundCatalog)` | Prewarm cooldown bookkeeping. Catalog preparation also validates mappings. |
+| `SoundHandle` | Generation-checked stop, fade, pitch, volume, follow and await controls. Stale handles do nothing. |
+| `SetCompletionCallback` | One callback per voice, invoked after retirement. A later registration replaces the previous one. |
+| `PreloadAsync` / `ReleasePreloaded` | Own an Addressables batch until release or system disposal. Stop users of a clip before release. |
+| `PlayMusic` / `StopMusic` | Two-channel intro/loop crossfade subsystem; music does not consume SFX slots. |
+| `SfxVoices` | Fixed pool capacity. Per-definition limits steal the oldest matching voice; a full global pool steals its oldest voice. |
+| `MaxInstances` / `Cooldown` | Definition-scoped concurrency limit and minimum retrigger seconds; zero disables the respective restriction. |
+| `DistanceAttenuation` | Disable distance gain independently of direction. Basic output uses a flat rolloff when disabled. |
+| `AttenuationProfile` | Native distance curve. Basic AudioSource output uses its rolloff and MinDistance/MaxDistance instead. |
+| `SpatialBlendProfile` | Native path-distance mono/full-width transition, independent of distance volume. |
+| `VolumeGroup` / `GroupGain` | Live logical gain; does not create a mixer group or network synchronization. |
+
+For `DistanceAttenuationProfile.VolumeByDistance`, X is metres and Y is gain.
+Invalid distances and empty curves are silent; output is zero at and beyond the
+last key. Use a zero-valued final key to avoid an abrupt edge. `GetSnapshot`
+returns an immutable copy for native callbacks and allocates when rebuilding
+changed authored data. Do not access Unity profile assets from an audio callback.
+
+## Lifetime, threading and performance
+
+- Construct, configure, prepare, play and dispose on Unity's main thread. Core
+  source/control APIs are not a worker-thread queue.
+- Keep one owner for a service and dispose it when that owner ends. Disposal stops
+  voices, retires outputs, releases preloads and unregisters the player-loop entry.
+- Completion callbacks can run inline and start another voice. Output adapters and
+  configuration hooks must not reenter or throw.
+- One waiter per voice is supported. Concurrent `WaitAsync` calls on the same
+  voice are not supported.
+- Prewarm definitions with cooldowns, cache delegates, and keep custom gain and
+  occlusion implementations allocation-free. A new closure per play still allocates.
+- Construction, first-time setup, changed snapshots, Addressables and cancellation
+  can allocate. The package does not promise every API is allocation-free.
+- Preferences and routing are local controls. Persisting or transmitting settings
+  is the application's responsibility.
+
+## Troubleshooting
+
+| Symptom | Check |
+|---|---|
+| Invalid handle / no SFX | Assigned non-null clips or successful preload; cooldown; output adapter availability. |
+| Missing Addressables namespace | Install Addressables; the current asmdefs reference its assemblies directly. |
+| UI sound changes with distance | Use Spatial=None; check the effective shared profile and output adapter. |
+| Profile edit appears ignored | Effective getters can resolve a shared asset. Most playback parameters apply at the next play. |
+| Closed obstacle remains audible | Basic occlusion defaults to nonzero blocked gain and uses a 3D linecast. It does not find diffraction paths or query Collider2D. |
+| Custom distance curve ignored | Basic AudioSource output does not consume the native distance curve; use the corresponding adapter. |
+| Voice ends too early/late | Check pitch, timescale and custom output completion/tail behavior. |
+| Mixer volume has no effect | Check exposed parameter names and source routing. |
+| Gain reduced twice | Keep mixer preference gain, request gain and acoustic gain distinct; apply each once. |
+| Error during preload tests | Expected fixture exceptions are captured; unrelated errors remain visible and need investigation. |
+
+## Tests
+
+Install Unity Test Framework. For Git-installed packages, merge this root-level
+entry into the consumer's `Packages/manifest.json`, preserving existing testables:
+
+```json
+"testables": ["com.bun3.unity.audio"]
+```
+
+Open **Window > General > Test Runner** and run both EditMode and PlayMode.
+Filter `Bun3.Unity.Audio.Tests`. Editor-only fixtures cover catalogs and curves;
+PlayMode covers pooling, callbacks, profiles, music, occlusion, allocation checks
+and Addressables lifetime. Unity test compilation supplies `UNITY_INCLUDE_TESTS`.
+
+`PreloadRealLoadTests` registers its own locator/provider and needs no project WAV.
+It exercises real Addressables operation reference counts, not AssetBundle delivery
+or microphone/network behavior. The host still needs working Addressables initialization.
+Optional adapters have separate gated test assemblies; core tests do not establish
+SDK integration or target-platform build compatibility.
