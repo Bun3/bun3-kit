@@ -1,3 +1,5 @@
+using UnityEngine.TestTools.Constraints;
+using Is = NUnit.Framework.Is;
 using System;
 using System.Runtime.InteropServices;
 using NUnit.Framework;
@@ -143,10 +145,13 @@ namespace Bun3.Unity.Audio.SteamAudio.Tests
                 var coefficients = new[] { 0.2820948f, 0.4886025f, 0f, 0f };
                 var listener = Listener;
                 for (int i = 0; i < 32; i++) renderer.Render(mono, stereo, coefficients, 1, 1, 1, listener, 1, false);
-                long before = GC.GetAllocatedBytesForCurrentThread();
-                for (int i = 0; i < 100; i++) renderer.Render(mono, stereo, coefficients, 1, 1, 1, listener, 1, false);
-                long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
-                Assert.That(allocated, Is.Zero);
+                Assert.That(() => System.GC.KeepAlive(new byte[1024]),
+                    UnityEngine.TestTools.Constraints.Is.AllocatingGCMemory(),
+                    "GC allocation recorder must detect a known allocation before measuring this path.");
+                Assert.That(() =>
+                {
+                    for (int i = 0; i < 100; i++) renderer.Render(mono, stereo, coefficients, 1, 1, 1, listener, 1, false);
+                }, UnityEngine.TestTools.Constraints.Is.Not.AllocatingGCMemory());
             }
             finally { hrtf.Release(); context.Release(); }
         }

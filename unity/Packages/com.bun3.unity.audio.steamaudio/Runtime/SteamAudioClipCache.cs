@@ -33,6 +33,37 @@ namespace Bun3.Unity.Audio.SteamAudio
         /// <summary>Gets the committed managed PCM byte count.</summary>
         public long DecodedBytes { get; private set; }
 
+        /// <summary>Gets whether a live clip has committed PCM in this cache without allocating.</summary>
+        public bool IsPrepared(AudioClip clip) => TryGet(clip, out _);
+
+        /// <summary>Gets whether every nonnull effective positional clip is prepared without allocating.</summary>
+        public bool IsDefinitionPrepared(SoundDef definition)
+        {
+            if (_disposed || definition == null) return false;
+            if (definition.EffectiveSpatial == SpatialMode.None) return true;
+            var clips = definition.EffectiveClips;
+            if (clips == null) return true;
+            for (int i = 0; i < clips.Length; i++)
+                if (clips[i] != null && !IsPrepared(clips[i])) return false;
+            return true;
+        }
+
+        /// <summary>
+        /// Prepares a definition's nonnull effective positional clips on the main-thread cold path.
+        /// Nonpositional definitions bypass this cache. Failures leave all previously committed PCM unchanged.
+        /// </summary>
+        public void PrepareDefinition(SoundDef definition)
+        {
+            if (_disposed) throw new ObjectDisposedException(nameof(SteamAudioClipCache));
+            if (definition == null) throw new ArgumentNullException(nameof(definition));
+            if (IsDefinitionPrepared(definition)) return;
+            var clips = definition.EffectiveClips;
+            var candidates = new List<AudioClip>(clips.Length);
+            for (int i = 0; i < clips.Length; i++)
+                if (clips[i] != null && !IsPrepared(clips[i])) candidates.Add(clips[i]);
+            PrepareClips(candidates);
+        }
+
         /// <summary>
         /// Copies loaded mono/stereo, non-streaming Decompress On Load clips on the main thread. Duplicate clips
         /// are counted once. Budget/format/read failures leave the previously committed cache unchanged.

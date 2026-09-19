@@ -1,3 +1,5 @@
+using UnityEngine.TestTools.Constraints;
+using Is = NUnit.Framework.Is;
 using System;
 using System.Collections;
 using System.Reflection;
@@ -369,20 +371,27 @@ namespace Bun3.Unity.Audio.SteamAudio.Tests
                 Assert.That(output.TryStart(def, clip, 1), Is.EqualTo(VoiceOutputStartResult.Started));
                 Assert.That(output.CurrentParameters.TryPublish(Coefficients, Settings), Is.True);
                 for (int i = 0; i < 10; i++) { Array.Fill(block, 1f); process(block, 2); }
-                long before = GC.GetAllocatedBytesForCurrentThread();
-                for (int i = 0; i < 100; i++) { Array.Fill(block, 1f); process(block, 2); }
-                Assert.That(GC.GetAllocatedBytesForCurrentThread() - before, Is.Zero);
+                Assert.That(() => System.GC.KeepAlive(new byte[1024]),
+                    UnityEngine.TestTools.Constraints.Is.AllocatingGCMemory(),
+                    "GC allocation recorder must detect a known allocation before measuring this path.");
+                Assert.That(() =>
+                {
+                    for (int i = 0; i < 100; i++) { Array.Fill(block, 1f); process(block, 2); }
+                }, UnityEngine.TestTools.Constraints.Is.Not.AllocatingGCMemory());
                 output.Retire();
                 int unavailable = 0;
-                before = GC.GetAllocatedBytesForCurrentThread();
-                for (int i = 0; i < 1000; i++)
+                Assert.That(() => System.GC.KeepAlive(new byte[1024]),
+                    UnityEngine.TestTools.Constraints.Is.AllocatingGCMemory(),
+                    "GC allocation recorder must detect a known allocation before measuring this path.");
+                Assert.That(() =>
                 {
-                    if (output.TryStart(def, clip, 1) != VoiceOutputStartResult.Started) unavailable++;
-                    output.Retire();
-                }
-                long playAllocations = GC.GetAllocatedBytesForCurrentThread() - before;
+                    for (int i = 0; i < 1000; i++)
+                    {
+                        if (output.TryStart(def, clip, 1) != VoiceOutputStartResult.Started) unavailable++;
+                        output.Retire();
+                    }
+                }, UnityEngine.TestTools.Constraints.Is.Not.AllocatingGCMemory(), "Warm ownership reuse must not create clips, sources, arrays or publisher objects per play.");
                 Assert.That(unavailable, Is.Zero);
-                Assert.That(playAllocations, Is.Zero, "Warm ownership reuse must not create clips, sources, arrays or publisher objects per play.");
                 def.Spatial = SpatialMode.None;
                 Assert.That(output.TryStart(def, clip, 1), Is.EqualTo(VoiceOutputStartResult.Unsupported));
                 Assert.That(output.CurrentParameters.IsValid, Is.False);

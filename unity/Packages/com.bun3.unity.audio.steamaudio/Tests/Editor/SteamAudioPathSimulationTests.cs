@@ -1,3 +1,5 @@
+using UnityEngine.TestTools.Constraints;
+using Is = NUnit.Framework.Is;
 using System;
 using System.Reflection;
 using System.Runtime.InteropServices;
@@ -291,15 +293,18 @@ namespace Bun3.Unity.Audio.SteamAudio.Tests
                 scope.SetSource(handle, source); scope.SetListener(listener); scope.Simulate(i);
                 scope.TryCopyResult(handle, destination, out _);
             }
-            long before = GC.GetAllocatedBytesForCurrentThread();
-            for (int i = 8; i < 40; i++)
+            Assert.That(() => System.GC.KeepAlive(new byte[1024]),
+                UnityEngine.TestTools.Constraints.Is.AllocatingGCMemory(),
+                "GC allocation recorder must detect a known allocation before measuring this path.");
+            Assert.That(() =>
             {
-                scope.SetSourceMinimumDistance(handle, 1 + i % 3);
-                scope.SetSource(handle, source); scope.SetListener(listener); scope.Simulate(i);
-                scope.TryCopyResult(handle, destination, out _);
-            }
-            long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
-            Assert.That(allocated, Is.Zero);
+                for (int i = 8; i < 40; i++)
+                {
+                    scope.SetSourceMinimumDistance(handle, 1 + i % 3);
+                    scope.SetSource(handle, source); scope.SetListener(listener); scope.Simulate(i);
+                    scope.TryCopyResult(handle, destination, out _);
+                }
+            }, UnityEngine.TestTools.Constraints.Is.Not.AllocatingGCMemory());
         }
 
         [Test]
@@ -312,10 +317,13 @@ namespace Bun3.Unity.Audio.SteamAudio.Tests
             Call(scope, "SetListener", Space(2, 0));
             var simulate = (Action<double>)Delegate.CreateDelegate(typeof(Action<double>), scope, scope.GetType().GetMethod("Simulate"));
             for (int i = 0; i < 8; i++) simulate(i);
-            long before = GC.GetAllocatedBytesForCurrentThread();
-            for (int i = 8; i < 40; i++) simulate(i);
-            long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
-            Assert.That(allocated, Is.Zero);
+            Assert.That(() => System.GC.KeepAlive(new byte[1024]),
+                UnityEngine.TestTools.Constraints.Is.AllocatingGCMemory(),
+                "GC allocation recorder must detect a known allocation before measuring this path.");
+            Assert.That(() =>
+            {
+                for (int i = 8; i < 40; i++) simulate(i);
+            }, UnityEngine.TestTools.Constraints.Is.Not.AllocatingGCMemory());
         }
     }
 }

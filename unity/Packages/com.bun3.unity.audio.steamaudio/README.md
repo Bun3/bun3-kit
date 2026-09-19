@@ -191,3 +191,7 @@ Override `PlanarAcousticSettings.MonoDistance` and `FullSpatialDistance` to coll
 ### Shared and per-output width profiles
 
 `PlanarAcousticSettings.SpatialBlendProfile` optionally supplies the world default; its inline distances remain the null-profile fallback. SFX bindings honor the effective SoundDef spatial group: inherit world defaults, or select a shared blend profile/inline range. Dissonance settings may additionally implement `IPlanarVoiceSpatialSettings` to supply a voice-specific profile; absent/null means world inheritance. Existing `IPlanarVoiceSettings` implementations remain compatible. Diagnostics read the output's effective width rather than assuming the world default.
+
+### Definition preparation
+
+For a direct `SoundDef`, call `cache.PrepareDefinition(definition)` and `soundSystem.Prepare(definition)` during loading. The cache uses effective playback clips, including Addressables overrides; nonpositional definitions bypass native PCM preparation. Null clip entries are ignored. `IsDefinitionPrepared` and `IsPrepared` are allocation-free readiness checks. Replacing clips requires another preparation call before positional playback. Budget or format failures leave the previously committed PCM unchanged, allowing the caller to reject one definition while keeping other sounds available.

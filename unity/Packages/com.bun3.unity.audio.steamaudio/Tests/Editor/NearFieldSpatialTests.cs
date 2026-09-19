@@ -1,3 +1,5 @@
+using UnityEngine.TestTools.Constraints;
+using Is = NUnit.Framework.Is;
 using System;
 using NUnit.Framework;
 using SA = global::SteamAudio;
@@ -133,10 +135,13 @@ namespace Bun3.Unity.Audio.SteamAudio.Tests
             Assert.Throws<ArgumentOutOfRangeException>(() => render(input, output, Coefficients, 1, 1, 1, listener, 1, false, -1));
             Assert.Throws<ArgumentOutOfRangeException>(() => render(input, output, Coefficients, 1, 1, 1, listener, 1, false, 2));
             for (int i = 0; i < 32; i++) render(input, output, Coefficients, 1, 1, 1, listener, 1, false, .5f);
-            long before = GC.GetAllocatedBytesForCurrentThread();
-            for (int i = 0; i < 100; i++) render(input, output, Coefficients, 1, 1, 1, listener, 1, false, .5f);
-            long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
-            Assert.That(allocated, Is.Zero);
+            Assert.That(() => System.GC.KeepAlive(new byte[1024]),
+                UnityEngine.TestTools.Constraints.Is.AllocatingGCMemory(),
+                "GC allocation recorder must detect a known allocation before measuring this path.");
+            Assert.That(() =>
+            {
+                for (int i = 0; i < 100; i++) render(input, output, Coefficients, 1, 1, 1, listener, 1, false, .5f);
+            }, UnityEngine.TestTools.Constraints.Is.Not.AllocatingGCMemory());
             render(input, output, Coefficients, 1, 1, 1, listener, 0, false, 0);
             Assert.That(output, Is.All.EqualTo(0));
         }
