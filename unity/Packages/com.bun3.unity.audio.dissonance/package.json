@@ -1,0 +1,10 @@
+{
+  "name": "com.bun3.unity.audio.dissonance",
+  "displayName": "Bun3 Unity Audio Dissonance",
+  "version": "0.2.0",
+  "unity": "6000.3",
+  "description": "Optional Dissonance Unity playback ownership bridge. Requires the separately installed Dissonance SDK.",
+  "dependencies": {
+    "com.bun3.unity.audio": "0.3.0"
+  }
+}
