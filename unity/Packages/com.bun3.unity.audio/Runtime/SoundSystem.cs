@@ -102,23 +102,8 @@ namespace Bun3.Unity.Audio
             }
             try
             {
-                for (var i = 0; i < _sources.Length; i++)
-                {
-                    var go = new GameObject("Voice");
-                    go.transform.SetParent(_root.transform, false);
-                    _sources[i] = go.AddComponent<AudioSource>();
-                    _sources[i].playOnAwake = false;
-                    config.OnSourceCreated?.Invoke(_sources[i]);
-                    _sourceRolloffModes[i] = _sources[i].rolloffMode;
-                    if (_sourceRolloffModes[i] == AudioRolloffMode.Custom)
-                        _sourceRolloffCurves[i] = _sources[i].GetCustomCurve(AudioSourceCurveType.CustomRolloff);
-                    _outputs[i] = config.CreateVoiceOutput?.Invoke(_sources[i]);
-                }
-                for (var i = 0; i < MusicChannelCount; i++)
-                {
-                    MusicIntroSources[i] = CreateMusicSource("MusicIntro");
-                    MusicLoopSources[i] = CreateMusicSource("MusicLoop");
-                }
+                CreateVoicePool();
+                CreateMusicChannels();
                 InitializeOcclusion();
             }
             catch
@@ -253,46 +238,14 @@ namespace Bun3.Unity.Audio
                 Table.BeginFadeIn(slot, fadeIn);
             }
 
-            var source = _sources[slot];
-            source.clip = clip;
-            source.loop = def.EffectiveLoop;
-            source.pitch = _config.PitchWithTimescale ? voice.Pitch * _lastTimeScale : voice.Pitch;
-            voice.PlaybackRate = source.pitch;
-            source.volume = Table.CurrentVolume(slot) * GroupGain(def); // reflects Fade.Factor 0 when fading in
-            source.outputAudioMixerGroup = def.EffectiveMixerGroup != null ? def.EffectiveMixerGroup : _config.SfxGroup;
-            source.spatialBlend = (spatial ?? def.EffectiveSpatial) == SpatialMode.None ? 0f : 1f;
-            source.minDistance = def.EffectiveMinDistance;
-            source.maxDistance = def.EffectiveMaxDistance;
-            ConfigureDistanceAttenuation(slot, def.EffectiveDistanceAttenuation);
-            source.transform.position = position;
+            ConfigureVoiceSource(slot, def, clip, position, spatial);
             var generation = voice.Generation;
+            _config.OnVoiceConfigured?.Invoke(_sources[slot], def);
+
             var accepted = true;
-            _config.OnVoiceConfigured?.Invoke(source, def);
             if (!_disposed && Table.IsValid(slot, generation))
             {
-                var output = _outputs[slot];
-                var result = output is ISpatialSoundVoiceOutput spatialOutput
-                    ? spatialOutput.TryStart(def, clip, voice.PlaybackRate, spatial ?? def.EffectiveSpatial)
-                    : output != null ? output.TryStart(def, clip, voice.PlaybackRate) : VoiceOutputStartResult.Unsupported;
-                if (result == VoiceOutputStartResult.Started)
-                {
-                    _outputActive[slot] = true;
-                    voice.ExternalCompletion = true;
-                    ResetOcclusionFilter(slot);
-                    source.Play();
-                }
-                else if (result == VoiceOutputStartResult.Unsupported)
-                {
-                    source.Play();
-                }
-                else
-                {
-                    output?.Retire();
-                    source.Stop();
-                    source.clip = null;
-                    Table.Release(slot);
-                    accepted = false;
-                }
+                accepted = StartConfiguredVoice(slot, def, clip, spatial);
             }
 
             // Fired only after the new source is fully configured and playing: a continuation
@@ -305,6 +258,61 @@ namespace Bun3.Unity.Audio
             }
 
             return accepted ? new SoundHandle(this, slot, generation) : SoundHandle.Invalid;
+        }
+
+        private void ConfigureVoiceSource(int slot, SoundDef def, AudioClip clip, Vector3 position, SpatialMode? spatial)
+        {
+            ref var voice = ref Table.Slots[slot];
+            var source = _sources[slot];
+            source.clip = clip;
+            source.loop = def.EffectiveLoop;
+            source.pitch = _config.PitchWithTimescale ? voice.Pitch * _lastTimeScale : voice.Pitch;
+            voice.PlaybackRate = source.pitch;
+            source.volume = Table.CurrentVolume(slot) * GroupGain(def); // reflects Fade.Factor 0 when fading in
+            source.outputAudioMixerGroup = def.EffectiveMixerGroup != null ? def.EffectiveMixerGroup : _config.SfxGroup;
+            source.spatialBlend = (spatial ?? def.EffectiveSpatial) == SpatialMode.None ? 0f : 1f;
+            source.minDistance = def.EffectiveMinDistance;
+            source.maxDistance = def.EffectiveMaxDistance;
+            ConfigureDistanceAttenuation(slot, def.EffectiveDistanceAttenuation);
+            source.transform.position = position;
+        }
+
+        private bool StartConfiguredVoice(int slot, SoundDef def, AudioClip clip, SpatialMode? spatial)
+        {
+            ref var voice = ref Table.Slots[slot];
+            var source = _sources[slot];
+            var output = _outputs[slot];
+            var result = TryStartVoiceOutput(output, def, clip, voice.PlaybackRate, spatial);
+            switch (result)
+            {
+                case VoiceOutputStartResult.Started:
+                    _outputActive[slot] = true;
+                    voice.ExternalCompletion = true;
+                    ResetOcclusionFilter(slot);
+                    source.Play();
+                    return true;
+                case VoiceOutputStartResult.Unsupported:
+                    source.Play();
+                    return true;
+                default:
+                    output?.Retire();
+                    source.Stop();
+                    source.clip = null;
+                    Table.Release(slot);
+                    return false;
+            }
+        }
+
+        private static VoiceOutputStartResult TryStartVoiceOutput(
+            ISoundVoiceOutput output, SoundDef def, AudioClip clip, float playbackRate, SpatialMode? spatial)
+        {
+            if (output is ISpatialSoundVoiceOutput spatialOutput)
+            {
+                return spatialOutput.TryStart(def, clip, playbackRate, spatial ?? def.EffectiveSpatial);
+            }
+            return output != null
+                ? output.TryStart(def, clip, playbackRate)
+                : VoiceOutputStartResult.Unsupported;
         }
 
         private void ConfigureDistanceAttenuation(int slot, bool enabled)
@@ -323,6 +331,31 @@ namespace Bun3.Unity.Audio
                 source.rolloffMode = AudioRolloffMode.Custom;
             }
             _distanceAttenuationDisabled[slot] = !enabled;
+        }
+
+        private void CreateVoicePool()
+        {
+            for (var i = 0; i < _sources.Length; i++)
+            {
+                var go = new GameObject("Voice");
+                go.transform.SetParent(_root.transform, false);
+                _sources[i] = go.AddComponent<AudioSource>();
+                _sources[i].playOnAwake = false;
+                _config.OnSourceCreated?.Invoke(_sources[i]);
+                _sourceRolloffModes[i] = _sources[i].rolloffMode;
+                if (_sourceRolloffModes[i] == AudioRolloffMode.Custom)
+                    _sourceRolloffCurves[i] = _sources[i].GetCustomCurve(AudioSourceCurveType.CustomRolloff);
+                _outputs[i] = _config.CreateVoiceOutput?.Invoke(_sources[i]);
+            }
+        }
+
+        private void CreateMusicChannels()
+        {
+            for (var i = 0; i < MusicChannelCount; i++)
+            {
+                MusicIntroSources[i] = CreateMusicSource("MusicIntro");
+                MusicLoopSources[i] = CreateMusicSource("MusicLoop");
+            }
         }
 
         private AudioSource CreateMusicSource(string name)

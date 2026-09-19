@@ -117,7 +117,11 @@ namespace Bun3.Unity.Audio.Editor
                 nameof(SoundDef.Occlusion), nameof(SoundDef.OcclusionVolumeAtFull));
             serializedObject.ApplyModifiedProperties();
 
-            var def = (SoundDef)target;
+            DrawPreview((SoundDef)target);
+        }
+
+        private static void DrawPreview(SoundDef def)
+        {
             EditorGUILayout.Space();
             EditorGUILayout.LabelField("Preview", EditorStyles.boldLabel);
 

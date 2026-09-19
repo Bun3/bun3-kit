@@ -35,6 +35,13 @@ namespace Bun3.Unity.Audio
         {
             if (_disposed) { throw new ObjectDisposedException(nameof(ExternalAudioRegistry)); }
             if (source == null) { throw new ArgumentNullException(nameof(source)); }
+            ValidateSettings(source, settings);
+            var index = FindAvailableSlot(source, settings.LowPassFilter);
+            return AcquireSlot(index, source, settings);
+        }
+
+        private static void ValidateSettings(AudioSource source, ExternalAudioSettings settings)
+        {
             if (settings.Gain.HasValue) { ValidateGain(settings.Gain.Value); }
             var filter = settings.LowPassFilter;
             if (!ReferenceEquals(filter, null))
@@ -45,7 +52,10 @@ namespace Bun3.Unity.Audio
                 }
                 ValidateCutoff(settings.LowPassCutoff);
             }
+        }
 
+        private int FindAvailableSlot(AudioSource source, AudioLowPassFilter filter)
+        {
             var index = -1;
             for (var i = 0; i < _registrations.Length; i++)
             {
@@ -66,6 +76,12 @@ namespace Bun3.Unity.Audio
             }
             if (index < 0) { throw new InvalidOperationException("External audio registry capacity is exhausted."); }
 
+            return index;
+        }
+
+        private ExternalAudioHandle AcquireSlot(int index, AudioSource source, ExternalAudioSettings settings)
+        {
+            var filter = settings.LowPassFilter;
             ref var registration = ref _registrations[index];
             registration.Generation++;
             registration.Active = true;
