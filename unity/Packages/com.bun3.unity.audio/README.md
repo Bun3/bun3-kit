@@ -425,24 +425,34 @@ The spatial/gain overload overrides a single request without editing the asset. 
 
 ## Shared definition profiles
 
-`SoundDef` optionally references four independently shared assets: `SoundPlaybackProfile` (volume, pitch, loop), `SoundRoutingProfile` (mixer and logical volume group), `SoundConcurrencyProfile` (per-definition limits/cooldown), and `SoundSpatialProfile` (positioning, attenuation, occlusion, near-field selection). A non-null profile replaces its entire group; null uses the definition's retained inline fields. Clips and sound identity stay on the definition. Sharing a concurrency profile does not combine active voice counts or cooldown state between definitions.
+`SoundDef` optionally references four independently shared assets: `SoundPlaybackProfile` (volume, pitch, loop), `SoundRoutingProfile` (mixer and logical volume group), `SoundConcurrencyProfile` (per-definition limits/cooldown), and `SoundSpatialProfile` (positioning, occlusion and an acoustic selection). Clips and sound identity stay on the definition. Sharing a concurrency profile does not combine active voice counts or cooldown state between definitions.
 
-Use `Effective*` getters in custom consumers. The public serialized fields remain local authoring values for compatibility, even when a profile is selected. The Inspector distinguishes shared editing from local editing and retains local values when references are assigned or removed. Duplicate a profile for a sound-specific variation, or clear its reference and author the local group. No per-field override mask is applied.
+`SoundAcousticSelection` gives SFX and voice the same choice between a shared `SoundAcousticProfile` and retained local `SoundAcousticSettings`. The acoustic settings contain distance attenuation, its optional curve, fallback minimum/maximum distances, and the mono/full-width selection. A selected `SoundDef.SpatialProfile` has the highest precedence and supplies its own acoustic selection; otherwise `SoundDef.Acoustics` resolves its selected profile or local values. Assigning or clearing either profile never copies over the inactive local values. No per-field override mask is applied.
+
+Use `Effective*` getters in custom `SoundDef` consumers. The older public properties such as `DistanceAttenuation`, `AttenuationProfile`, `MonoDistance` and `FullSpatialDistance` address the retained local acoustic values for source compatibility; they are not necessarily the resolved values. Duplicate a profile for a sound-specific variation, or clear its reference and author the local group.
 
 `SpatialBlendProfile` is a reusable mono/full-width native-distance range. With `EffectiveInheritSpatialBlend` enabled, native adapters use their world default. Otherwise the selected blend profile wins, with inline mono/full distances as fallback. A shared spatial profile can select the same blend profile for many sounds. Zero/invalid full-width ranges retain spatial output. The blend asset is SDK-independent; actual path-distance evaluation is provided by the native adapter.
 
 ```csharp
 mySoundDef.PlaybackProfile = sharedPlayback;
 mySoundDef.SpatialProfile = sharedSpatial;
-// Per-sound spatial settings instead of the shared group:
+// The spatial profile's acoustic selection now has highest precedence.
+
+// Per-sound spatial and acoustic settings instead of the shared group:
 mySoundDef.SpatialProfile = null;
-mySoundDef.InheritSpatialBlend = false;
-mySoundDef.SpatialBlendProfile = speechAndFootstepBlend;
-// To use inline distances instead:
-mySoundDef.SpatialBlendProfile = null;
-mySoundDef.MonoDistance = 1;
-mySoundDef.FullSpatialDistance = 3;
+mySoundDef.Acoustics.Profile = sharedAcoustics;
+
+// Return to the SoundDef's retained local acoustic settings:
+mySoundDef.Acoustics.Profile = null;
+var localAcoustics = mySoundDef.Acoustics.Local;
+localAcoustics.InheritSpatialBlend = false;
+localAcoustics.SpatialBlendProfile = speechAndFootstepBlend;
+mySoundDef.Acoustics.Local = localAcoustics;
 ```
+
+The ordinary AudioSource path uses resolved minimum/maximum distance and the
+`DistanceAttenuation` switch. It does not evaluate `AttenuationProfile` curves or
+native path-distance mono settings; those fields are consumed by native adapters.
 
 Playback parameters are primarily consumed when starting a voice. Native adapters continue reading effective attenuation and width profiles on the control thread during simulation. No profile allocation occurs on a warm playback or audio-processing path.
 
@@ -475,8 +485,9 @@ must not introduce per-frame closures or collection allocations.
 | `PlayMusic` / `StopMusic` | Two-channel intro/loop crossfade subsystem; music does not consume SFX slots. |
 | `SfxVoices` | Fixed pool capacity. Per-definition limits steal the oldest matching voice; a full global pool steals its oldest voice. |
 | `MaxInstances` / `Cooldown` | Definition-scoped concurrency limit and minimum retrigger seconds; zero disables the respective restriction. |
-| `DistanceAttenuation` | Disable distance gain independently of direction. Basic output uses a flat rolloff when disabled. |
-| `AttenuationProfile` | Native distance curve. Basic AudioSource output uses its rolloff and MinDistance/MaxDistance instead. |
+| `Acoustics` | Shared/local acoustic selection on a SoundDef, or within its selected spatial profile. |
+| `DistanceAttenuation` | Disable distance gain independently of direction. Basic AudioSource output uses a flat rolloff when disabled. |
+| `AttenuationProfile` | Native distance curve. Basic AudioSource output uses resolved MinDistance/MaxDistance instead. |
 | `SpatialBlendProfile` | Native path-distance mono/full-width transition, independent of distance volume. |
 | `VolumeGroup` / `GroupGain` | Live logical gain; does not create a mixer group or network synchronization. |
 
