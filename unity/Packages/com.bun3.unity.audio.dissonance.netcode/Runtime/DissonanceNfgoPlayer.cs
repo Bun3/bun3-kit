@@ -78,7 +78,11 @@ namespace Bun3.Unity.Audio.Dissonance.Netcode
         private void ResolveBinding()
         {
             if (_comms != null) return;
-            if (_explicitComms != null) { BindComms(_explicitComms); return; }
+            if (_explicitComms != null)
+            {
+                BindComms(_explicitComms);
+                return;
+            }
             if (!DissonanceNfgoSessionScope.TryResolve(NetworkManager, out var session) || session.Comms == null) return;
             _session = session;
             session.Attach(this);
@@ -103,7 +107,8 @@ namespace Bun3.Unity.Audio.Dissonance.Netcode
 
         private void PublishLocalIdentity()
         {
-            if (!IsSpawned || !isActiveAndEnabled || !IsOwner || _comms == null || Time.unscaledTimeAsDouble < _nextPublication) return;
+            if (!IsSpawned || !isActiveAndEnabled || !IsOwner || _comms == null) return;
+            if (Time.unscaledTimeAsDouble < _nextPublication) return;
             string name = _comms.LocalPlayerName;
             if (!IsValidIdentity(name) || string.Equals(name, _playerId, StringComparison.Ordinal)) return;
             _nextPublication = Time.unscaledTimeAsDouble + 1;
@@ -113,19 +118,23 @@ namespace Bun3.Unity.Audio.Dissonance.Netcode
         [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Owner)]
         private void SetIdentityRpc(string playerName, RpcParams args = default)
         {
-            if (!IsServer || !IsSpawned || !isActiveAndEnabled || args.Receive.SenderClientId != OwnerClientId || !IsValidIdentity(playerName)) return;
+            if (!IsServer || !IsSpawned || !isActiveAndEnabled) return;
+            if (args.Receive.SenderClientId != OwnerClientId || !IsValidIdentity(playerName)) return;
             if (_session != null && !_session.IsNameAvailable(this, playerName)) return;
             _identity.Value = new DissonancePlayerIdentity(OwnerClientId, playerName);
         }
 
         internal static bool IsValidIdentity(string name)
         {
-            if (name == null || name.Length == 0 || name.Length > FixedString128Bytes.UTF8MaxLengthInBytes || string.IsNullOrWhiteSpace(name)) return false;
+            if (string.IsNullOrEmpty(name) || name.Length > FixedString128Bytes.UTF8MaxLengthInBytes) return false;
+            if (string.IsNullOrWhiteSpace(name)) return false;
             for (int i = 0; i < name.Length; i++)
             {
                 if (char.IsControl(name[i])) return false;
                 if (!char.IsSurrogate(name[i])) continue;
-                if (!char.IsHighSurrogate(name[i]) || i + 1 >= name.Length || !char.IsLowSurrogate(name[++i])) return false;
+                if (!char.IsHighSurrogate(name[i]) || i + 1 >= name.Length) return false;
+                i++;
+                if (!char.IsLowSurrogate(name[i])) return false;
             }
             return Encoding.UTF8.GetByteCount(name) <= FixedString128Bytes.UTF8MaxLengthInBytes;
         }
@@ -145,7 +154,8 @@ namespace Bun3.Unity.Audio.Dissonance.Netcode
 
         private void RefreshTracking()
         {
-            if (_registration != null || !IsSpawned || !isActiveAndEnabled || _comms == null || !_identity.Value.IsForOwner(OwnerClientId) || !IsValidIdentity(_playerId)) return;
+            if (_registration != null || !IsSpawned || !isActiveAndEnabled || _comms == null) return;
+            if (!_identity.Value.IsForOwner(OwnerClientId) || !IsValidIdentity(_playerId)) return;
             if (!DissonancePlayerRegistrationScope.CanRegister(_comms, _playerId)) return;
             var type = string.Equals(_playerId, _comms.LocalPlayerName, StringComparison.Ordinal) ? NetworkPlayerType.Local : NetworkPlayerType.Remote;
             _registration = new DissonancePlayerRegistrationScope(_comms, _playerId, transform, type);
@@ -177,7 +187,8 @@ namespace Bun3.Unity.Audio.Dissonance.Netcode
 
         private void ClearRegistration()
         {
-            var registration = _registration; _registration = null;
+            var registration = _registration;
+            _registration = null;
             registration?.Dispose();
         }
         private void ClearBinding()

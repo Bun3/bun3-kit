@@ -1,6 +1,6 @@
 {
   "name": "com.bun3.unity.audio.dissonance.netcode",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "displayName": "Bun3 Dissonance Netcode Adapter",
   "description": "Explicit official NGO transport binding and pooled player identity tracking.",
   "unity": "6000.3",
