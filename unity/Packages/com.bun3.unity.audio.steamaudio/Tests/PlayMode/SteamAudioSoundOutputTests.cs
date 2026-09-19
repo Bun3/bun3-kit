@@ -3,6 +3,7 @@ using Is = NUnit.Framework.Is;
 using System;
 using System.Collections;
 using System.Reflection;
+using Bun3.Unity.Acoustics;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.Audio;
@@ -33,6 +34,16 @@ namespace Bun3.Unity.Audio.SteamAudio.Tests
         {
             right = new SA.Vector3 { x = 1 }, up = new SA.Vector3 { y = 1 }, ahead = new SA.Vector3 { z = -1 }
         });
+
+        private sealed class WorldSettings : PlanarAcousticSettings
+        {
+            public override int SourceCapacity => 1;
+            public override float OcclusionRadius => 0;
+            public override int OcclusionSamples => 1;
+            public override float ObstructedPathGain => 1;
+            public override float MonoDistance => 1;
+            public override float FullSpatialDistance => 3;
+        }
 
         static AudioClip Clip(int frames = 4800, int channels = 2)
         {
@@ -210,6 +221,8 @@ namespace Bun3.Unity.Audio.SteamAudio.Tests
                 output = new SteamAudioSoundOutput(source, cache) { StartBlocked = false };
                 def.Spatial = SpatialMode.None; def.Loop = true;
                 spatial.Spatial = SpatialMode.Positional;
+                blend.MonoDistance = 100;
+                blend.FullSpatialDistance = 101;
                 acoustic.Settings = new SoundAcousticSettings
                 {
                     DistanceAttenuation = false,
@@ -217,8 +230,8 @@ namespace Bun3.Unity.Audio.SteamAudio.Tests
                     MaxDistance = 18,
                     InheritSpatialBlend = false,
                     SpatialBlendProfile = blend,
-                    MonoDistance = 0,
-                    FullSpatialDistance = 6,
+                    MonoDistance = 100,
+                    FullSpatialDistance = 101,
                 };
                 spatial.Acoustics.Profile = acoustic;
                 def.SpatialProfile = spatial;
@@ -228,39 +241,82 @@ namespace Bun3.Unity.Audio.SteamAudio.Tests
                 Assert.That(output.DistanceAttenuation, Is.False);
                 Assert.That(output.InheritSpatialBlend, Is.False);
                 Assert.That(output.SpatialBlendProfile, Is.SameAs(blend));
-                long generation = output.CurrentParameters.Generation;
-                var changed = acoustic.Settings;
-                changed.MinDistance = 4;
-                changed.MaxDistance = 22;
-                changed.MonoDistance = 2;
-                acoustic.Settings = changed;
-                Assert.That(output.Acoustics.MinDistance, Is.EqualTo(4));
-                Assert.That(output.Acoustics.MaxDistance, Is.EqualTo(22));
-                Assert.That(output.Acoustics.MonoDistance, Is.EqualTo(2));
-                Assert.That(output.CurrentParameters.Generation, Is.EqualTo(generation),
-                    "Shared profile edits must update the active native generation without restarting playback.");
-                float observed = 0;
-                Assert.That(() =>
-                {
-                    for (int i = 0; i < 1000; i++) observed += output.Acoustics.MinDistance;
-                }, UnityEngine.TestTools.Constraints.Is.Not.AllocatingGCMemory());
-                Assert.That(observed, Is.EqualTo(4000));
-                var lease = output.CurrentParameters;
-                Assert.That(lease.TryPublish(Coefficients, new PathRenderSettings(Settings.Listener, spatialBlend: 0)), Is.True);
                 var process = (Action<float[], int>)Delegate.CreateDelegate(typeof(Action<float[], int>), output,
                     typeof(SteamAudioSoundOutput).GetMethod("Process", BindingFlags.NonPublic | BindingFlags.Instance));
                 var block = new float[2048];
-                for (int n = 0; n < 4; n++) { Array.Fill(block, 1f); process(block, 2); }
-                double energy = 0;
-                for (int i = 0; i < block.Length; i += 2)
+                SteamAudioAcousticAsset asset = null;
+                PlanarAcousticMap map = null;
+                var context = new SA.Context();
+                try
                 {
-                    Assert.That(block[i], Is.EqualTo(block[i + 1]));
-                    energy += block[i] * block[i];
+                    asset = CreateAcousticAsset(context);
+                    map = CreateAcousticMap(asset);
+                    using var world = new PlanarAcousticWorld(map, new WorldSettings());
+                    using var binding = new PlanarAcousticSfxBinding(source, output);
+                    binding.Prepare(world);
+                    world.Tick(new Vector2(2, 0), 0);
+                    var handle = binding.SourceHandle;
+                    Assert.That(binding.GetSpatialBlend(world), Is.Zero);
+                    binding.Publish(world);
+                    for (int n = 0; n < 4; n++) { Array.Fill(block, 1f); process(block, 2); }
+                    for (int i = 0; i < block.Length; i += 2)
+                        Assert.That(block[i], Is.EqualTo(block[i + 1]));
+                    long generation = output.CurrentParameters.Generation;
+                    var changed = acoustic.Settings;
+                    changed.MinDistance = 4;
+                    changed.MaxDistance = 22;
+                    changed.SpatialBlendProfile = null;
+                    changed.MonoDistance = 0;
+                    changed.FullSpatialDistance = 0;
+                    acoustic.Settings = changed;
+                    binding.Prepare(world);
+                    world.Tick(new Vector2(2, 0), 1);
+                    binding.Publish(world);
+                    Assert.That(output.Acoustics.MinDistance, Is.EqualTo(4));
+                    Assert.That(output.Acoustics.MaxDistance, Is.EqualTo(22));
+                    Assert.That(output.Acoustics.MonoDistance, Is.Zero);
+                    Assert.That(output.CurrentParameters.Generation, Is.EqualTo(generation),
+                        "Shared profile edits must update the active native generation without restarting playback.");
+                    Assert.That(binding.SourceHandle, Is.EqualTo(handle));
+                    Assert.That(binding.GetSpatialBlend(world), Is.EqualTo(1),
+                        "The active binding must consume the live shared width settings without a new generation.");
+                    float stereoDifference = 0;
+                    for (int n = 0; n < 4; n++)
+                    {
+                        Array.Fill(block, 1f);
+                        process(block, 2);
+                        for (int i = 0; i < block.Length; i += 2)
+                            stereoDifference = Mathf.Max(stereoDifference, Mathf.Abs(block[i] - block[i + 1]));
+                    }
+                    Assert.That(stereoDifference, Is.GreaterThan(1e-6f),
+                        "Publish must update the same active generation from mono to native spatial stereo.");
+                    float observed = 0;
+                    Assert.That(() =>
+                    {
+                        for (int i = 0; i < 1000; i++) observed += output.Acoustics.MinDistance;
+                    }, UnityEngine.TestTools.Constraints.Is.Not.AllocatingGCMemory());
+                    Assert.That(observed, Is.EqualTo(4000));
+                    var lease = output.CurrentParameters;
+                    Assert.That(lease.TryPublish(Coefficients,
+                        new PathRenderSettings(Settings.Listener, spatialBlend: 0)), Is.True);
+                    for (int n = 0; n < 4; n++) { Array.Fill(block, 1f); process(block, 2); }
+                    double energy = 0;
+                    for (int i = 0; i < block.Length; i += 2)
+                    {
+                        Assert.That(block[i], Is.EqualTo(block[i + 1]));
+                        energy += block[i] * block[i];
+                    }
+                    Assert.That(energy, Is.GreaterThan(1e-8));
+                    lease.TrySetBlocked(true);
+                    Array.Fill(block, 1f); process(block, 2);
+                    Assert.That(block, Is.All.EqualTo(0));
                 }
-                Assert.That(energy, Is.GreaterThan(1e-8));
-                lease.TrySetBlocked(true);
-                Array.Fill(block, 1f); process(block, 2);
-                Assert.That(block, Is.All.EqualTo(0));
+                finally
+                {
+                    if (map != null) UnityEngine.Object.DestroyImmediate(map);
+                    if (asset != null) UnityEngine.Object.DestroyImmediate(asset);
+                    context.Release();
+                }
             }
             finally
             {
@@ -272,6 +328,24 @@ namespace Bun3.Unity.Audio.SteamAudio.Tests
             yield return null;
             yield return null;
         }
+
+        static SteamAudioAcousticAsset CreateAcousticAsset(SA.Context context) => SteamAudioAcousticBaker.Bake(context,
+            new[] { V(-5, -2, -10), V(-5, 2, -10), V(5, 2, -10), V(5, -2, -10) },
+            new[] { new SA.Triangle { index0 = 0, index1 = 1, index2 = 2 },
+                new SA.Triangle { index0 = 0, index1 = 2, index2 = 3 } },
+            new[] { 0, 0 }, new[] { new SA.Material() },
+            new[] { Sphere(-2), Sphere(0), Sphere(2) }, SteamAudioPathBakeSettings.Default, "shared-sfx-settings");
+
+        static PlanarAcousticMap CreateAcousticMap(SteamAudioAcousticAsset asset)
+        {
+            var map = ScriptableObject.CreateInstance<PlanarAcousticMap>();
+            map.Initialize(asset, new bool[5, 1],
+                new AcousticGridFrame(new Vector3(-2.5f, 0, .5f), Vector3.right, Vector3.back, Vector3.up), -1, 1, 0);
+            return map;
+        }
+
+        static SA.Vector3 V(float x, float y, float z) => new() { x = x, y = y, z = z };
+        static SA.Sphere Sphere(float x) => new() { center = V(x, 0, 0), radius = .6f };
 
         [UnityTest]
         public IEnumerator LogicalPitchChangesRenderedFrequencyAndCompletionRate()
