@@ -39,9 +39,7 @@ namespace Bun3.Unity.SoundEvents
             if (double.IsNaN(reportInterval) || double.IsInfinity(reportInterval) || reportInterval <= 0)
                 throw new ArgumentOutOfRangeException(nameof(reportInterval));
             if (hadActivation) _pendingActivation = true;
-            bool stop = _reportedActive && !active;
-            if ((!stop && now < _nextReport) || (!active && !_pendingActivation && !_reportedActive) ||
-                _sequence == ulong.MaxValue)
+            if (!IsReportDue(now, active) || _sequence == ulong.MaxValue)
             {
                 report = default;
                 return false;
@@ -51,6 +49,13 @@ namespace Bun3.Unity.SoundEvents
             _pendingActivation = false;
             _nextReport = now + reportInterval;
             return true;
+        }
+
+        private bool IsReportDue(double now, bool active)
+        {
+            bool stoppedSinceLastReport = _reportedActive && !active;
+            if (!stoppedSinceLastReport && now < _nextReport) return false;
+            return active || _pendingActivation || _reportedActive;
         }
     }
 

@@ -124,43 +124,64 @@ namespace Bun3.Unity.SoundEvents
             _busy = true;
             try
             {
-                for (int e = 0; e < _events.Length; e++)
-                {
-                    ref var entry = ref _events[e];
-                    if (!entry.Active) continue;
-                    if (entry.Snapshot.IsSustained && entry.Snapshot.ExpiresAt <= now)
-                    { End(e); continue; }
-                    entry.Evaluated = true;
-                    for (int l = 0; l < _listeners.Length; l++)
-                    {
-                        ref var listener = ref _listeners[l];
-                        if (listener.Receiver == null) continue;
-                        int index = e * _listeners.Length + l;
-                        if (entry.CapturedPulse)
-                        {
-                            bool captured = _reached[index];
-                            _reached[index] = false;
-                            if (captured) Notify(l, in entry.Snapshot, SoundEventPhase.Pulse);
-                            continue;
-                        }
-                        bool reaches;
-                        try { reaches = _policy.CanReach(in entry.Snapshot, listener.Position, listener.Radius); }
-                        catch (Exception error) { _callbackError ??= error; continue; }
-                        bool prior = _reached[index];
-                        if (!entry.Snapshot.IsSustained)
-                        {
-                            if (reaches) Notify(l, in entry.Snapshot, SoundEventPhase.Pulse);
-                            continue;
-                        }
-                        _reached[index] = reaches;
-                        if (reaches) Notify(l, in entry.Snapshot, prior ? SoundEventPhase.Update : SoundEventPhase.Enter);
-                        else if (prior) Notify(l, in entry.Snapshot, SoundEventPhase.Exit);
-                    }
-                    if (!entry.Snapshot.IsSustained) entry.Active = false;
-                }
+                for (int eventSlot = 0; eventSlot < _events.Length; eventSlot++)
+                    DeliverEvent(eventSlot, now);
             }
             finally { _busy = false; }
             ThrowCallbackError();
+        }
+
+        private void DeliverEvent(int eventSlot, double now)
+        {
+            ref var entry = ref _events[eventSlot];
+            if (!entry.Active) return;
+            if (entry.Snapshot.IsSustained && entry.Snapshot.ExpiresAt <= now)
+            {
+                End(eventSlot);
+                return;
+            }
+
+            entry.Evaluated = true;
+            for (int listenerSlot = 0; listenerSlot < _listeners.Length; listenerSlot++)
+            {
+                if (_listeners[listenerSlot].Receiver != null)
+                    DeliverToListener(eventSlot, listenerSlot);
+            }
+            if (!entry.Snapshot.IsSustained) entry.Active = false;
+        }
+
+        private void DeliverToListener(int eventSlot, int listenerSlot)
+        {
+            ref var entry = ref _events[eventSlot];
+            ref var listener = ref _listeners[listenerSlot];
+            int reachIndex = eventSlot * _listeners.Length + listenerSlot;
+            if (entry.CapturedPulse)
+            {
+                bool captured = _reached[reachIndex];
+                _reached[reachIndex] = false;
+                if (captured) Notify(listenerSlot, in entry.Snapshot, SoundEventPhase.Pulse);
+                return;
+            }
+
+            bool reaches;
+            try { reaches = _policy.CanReach(in entry.Snapshot, listener.Position, listener.Radius); }
+            catch (Exception error)
+            {
+                _callbackError ??= error;
+                return;
+            }
+            if (!entry.Snapshot.IsSustained)
+            {
+                if (reaches) Notify(listenerSlot, in entry.Snapshot, SoundEventPhase.Pulse);
+                return;
+            }
+
+            bool previouslyReached = _reached[reachIndex];
+            _reached[reachIndex] = reaches;
+            if (reaches)
+                Notify(listenerSlot, in entry.Snapshot, previouslyReached ? SoundEventPhase.Update : SoundEventPhase.Enter);
+            else if (previouslyReached)
+                Notify(listenerSlot, in entry.Snapshot, SoundEventPhase.Exit);
         }
 
         /// <summary>Ends all events from a source, returning the number removed.</summary>

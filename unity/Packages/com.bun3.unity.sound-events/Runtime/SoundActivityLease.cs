@@ -48,7 +48,7 @@ namespace Bun3.Unity.SoundEvents
             SoundActivityData hostData, bool preserveUnevaluated)
         {
             EnsureMutable(now);
-            var validatedData = Payload(hostData, 0, 0);
+            var validatedData = CreatePayload(hostData, 0, 0);
             SoundEventWorld.ValidateData(validatedData);
             bool fresh = !HasAcceptedReport || sequence > LastSequence;
             if (!fresh && allowed) return SoundActivityReportResult.Stale;
@@ -59,28 +59,25 @@ namespace Bun3.Unity.SoundEvents
             try
             {
                 _now = now;
-                if (fresh) { HasAcceptedReport = true; LastSequence = sequence; }
-                if (!allowed) { EndCurrent(); return SoundActivityReportResult.Denied; }
+                if (fresh)
+                {
+                    HasAcceptedReport = true;
+                    LastSequence = sequence;
+                }
+                if (!allowed)
+                {
+                    EndCurrent();
+                    return SoundActivityReportResult.Denied;
+                }
                 if (!active)
                 {
                     EndCurrent(preserveUnevaluated && now < _expiresAt);
                     return SoundActivityReportResult.Stopped;
                 }
                 if (IsActive && (now >= _expiresAt || _revision == uint.MaxValue)) EndCurrent();
-                if (IsActive)
-                {
-                    uint revision = _revision + 1;
-                    _handle.Update(Payload(hostData, _eventId, revision), expiresAt);
-                    _revision = revision;
-                    _expiresAt = expiresAt;
-                    return SoundActivityReportResult.Renewed;
-                }
-                _handle = default;
-                ulong eventId = _allocateEventId();
-                if (!_world.TryStart(Payload(hostData, eventId, 0), expiresAt, out _handle))
-                    return SoundActivityReportResult.CapacityUnavailable;
-                _eventId = eventId; _revision = 0; _expiresAt = expiresAt;
-                return SoundActivityReportResult.Started;
+                return IsActive
+                    ? RenewCurrent(hostData, expiresAt)
+                    : StartCurrent(hostData, expiresAt);
             }
             finally { _busy = false; }
         }
@@ -105,7 +102,28 @@ namespace Bun3.Unity.SoundEvents
             finally { _busy = false; }
         }
 
-        private SoundEventData Payload(SoundActivityData data, ulong eventId, uint revision) =>
+        private SoundActivityReportResult RenewCurrent(SoundActivityData hostData, double expiresAt)
+        {
+            uint revision = _revision + 1;
+            _handle.Update(CreatePayload(hostData, _eventId, revision), expiresAt);
+            _revision = revision;
+            _expiresAt = expiresAt;
+            return SoundActivityReportResult.Renewed;
+        }
+
+        private SoundActivityReportResult StartCurrent(SoundActivityData hostData, double expiresAt)
+        {
+            _handle = default;
+            ulong eventId = _allocateEventId();
+            if (!_world.TryStart(CreatePayload(hostData, eventId, 0), expiresAt, out _handle))
+                return SoundActivityReportResult.CapacityUnavailable;
+            _eventId = eventId;
+            _revision = 0;
+            _expiresAt = expiresAt;
+            return SoundActivityReportResult.Started;
+        }
+
+        private SoundEventData CreatePayload(SoundActivityData data, ulong eventId, uint revision) =>
             new SoundEventData(_sessionId, eventId, _sourceId, data.KindId, data.Position, data.Intensity, data.Radius, data.HostTick, revision);
 
         private bool EndCurrent(bool preserveUnevaluated = false)

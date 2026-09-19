@@ -94,13 +94,7 @@ namespace Bun3.Unity.SoundEvents
             Exception error = null;
             try
             {
-                for (int i = 0; i < _receivers.Length; i++)
-                {
-                    var receiver = _receivers[i];
-                    if (!receiver.Handle.IsValid || receiver.Live == null) continue;
-                    try { receiver.Live.BeginSoundTick(); receiver.Began = true; }
-                    catch (Exception caught) { error ??= caught; }
-                }
+                BeginListenerTicks(ref error);
                 try { World.Tick(now); }
                 catch (Exception caught) { error ??= caught; }
             }
@@ -108,18 +102,34 @@ namespace Bun3.Unity.SoundEvents
             {
                 try
                 {
-                    for (int i = 0; i < _receivers.Length; i++)
-                    {
-                        var receiver = _receivers[i];
-                        if (!receiver.Began) continue;
-                        receiver.Began = false;
-                        try { receiver.Live.EndSoundTick(); }
-                        catch (Exception caught) { error ??= caught; }
-                    }
+                    EndListenerTicks(ref error);
                 }
                 finally { _ticking = false; }
             }
             if (error != null) ExceptionDispatchInfo.Capture(error).Throw();
+        }
+
+        private void BeginListenerTicks(ref Exception error)
+        {
+            for (int i = 0; i < _receivers.Length; i++)
+            {
+                var receiver = _receivers[i];
+                if (!receiver.Handle.IsValid || receiver.Live == null) continue;
+                try { receiver.Live.BeginSoundTick(); receiver.Began = true; }
+                catch (Exception caught) { error ??= caught; }
+            }
+        }
+
+        private void EndListenerTicks(ref Exception error)
+        {
+            for (int i = 0; i < _receivers.Length; i++)
+            {
+                var receiver = _receivers[i];
+                if (!receiver.Began) continue;
+                receiver.Began = false;
+                try { receiver.Live.EndSoundTick(); }
+                catch (Exception caught) { error ??= caught; }
+            }
         }
 
         /// <summary>Ends all events and invalidates all listeners.</summary>

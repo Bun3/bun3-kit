@@ -65,12 +65,15 @@ namespace Bun3.Unity.SoundEvents
             bool allowed, SoundActivityData hostData)
         {
             bool fresh = !_gate.HasSeenReport || sequence > _gate.LastSequence;
-            bool accepted = _gate.TryAccept(sequence, now, !allowed || (!active && !hadActivation));
+            bool requiresImmediateCleanup = !allowed || (!active && !hadActivation);
+            bool accepted = _gate.TryAccept(sequence, now, requiresImmediateCleanup);
             if (!allowed) _lease.Tick(now, false);
             if (!fresh) return false;
             if (!active || !allowed)
-                _lease.Report(sequence, false, allowed, now, hostData,
-                    preserveUnevaluated: allowed && (!accepted || !hadActivation));
+            {
+                bool preserveUnevaluated = allowed && (!accepted || !hadActivation);
+                _lease.Report(sequence, false, allowed, now, hostData, preserveUnevaluated);
+            }
             if (!accepted || !allowed) return false;
             if (active)
             {
@@ -78,6 +81,11 @@ namespace Bun3.Unity.SoundEvents
                 return result == SoundActivityReportResult.Started || result == SoundActivityReportResult.Renewed;
             }
             if (!hadActivation) return true;
+            return EmitShortActivation(hostData);
+        }
+
+        private bool EmitShortActivation(SoundActivityData hostData)
+        {
             return _session.EmitPulse(new SoundEventData(_session.SessionId, _session.AllocateEventId(),
                 _ownerId, hostData.KindId, hostData.Position, hostData.Intensity, hostData.Radius,
                 hostData.HostTick, 0));
