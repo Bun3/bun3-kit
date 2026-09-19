@@ -90,7 +90,13 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio
         public string PlayerName
         {
             get => _playerName;
-            set { if (_playerName == value) return; RetireOutput(); _playerName = value; ApplyIdentity(); }
+            set
+            {
+                if (_playerName == value) return;
+                RetireOutput();
+                _playerName = value;
+                ApplyIdentity();
+            }
         }
         /// <inheritdoc/>
         public CodecSettings CodecSettings
@@ -99,7 +105,9 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio
             set
             {
                 if (_codec.Codec == value.Codec && _codec.FrameSize == value.FrameSize && _codec.SampleRate == value.SampleRate) return;
-                RetireOutput(); _codec = value; ApplyIdentity();
+                RetireOutput();
+                _codec = value;
+                ApplyIdentity();
             }
         }
         /// <inheritdoc/>
@@ -132,6 +140,12 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio
                 _decoder = host.AddComponent<DissonanceDecoderHost>();
             }
             _decoder.Setup(priority, volume);
+            ConfigureOutputSource();
+            ApplyIdentity();
+        }
+
+        private void ConfigureOutputSource()
+        {
             _source = GetComponent<AudioSource>();
             if (_source == null) _source = gameObject.AddComponent<AudioSource>();
             _source.playOnAwake = false;
@@ -143,7 +157,6 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio
             _source.mute = false;
             _source.priority = 0;
             _source.ignoreListenerPause = true;
-            ApplyIdentity();
         }
 
         private void ApplyIdentity()
@@ -184,20 +197,47 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio
             ApplyIdentity();
             int rate = AudioSettings.outputSampleRate;
             AudioSettings.GetDSPBufferSize(out int frame, out _);
-            if (_clip != null && (_rate != rate || _frame != frame)) { RetireOutput(); return; }
+            if (_clip != null && (_rate != rate || _frame != frame))
+            {
+                RetireOutput();
+                return;
+            }
+
             var current = _decoder.Pump;
             if (current != null)
             {
-                if (current.Fault != null) { _fault = current.Fault; RetireOutput(); return; }
-                // The previous frame's LateUpdate publishes the initial acoustic parameters.
-                if (_startPending) { _startPending = false; _monitor.StartOutput(); _source.Play(); }
-                if (!current.HasOutputDrained) return;
-                _decoder.Retire(false);
-                _source.Stop();
-                _source.clip = null;
-                _monitor?.Unbind();
+                UpdateCurrentOutput(current);
                 return;
             }
+            BeginNextOutput(rate, frame);
+        }
+
+        private void UpdateCurrentOutput(DissonancePathPlayback current)
+        {
+            if (current.Fault != null)
+            {
+                _fault = current.Fault;
+                RetireOutput();
+                return;
+            }
+
+            // The previous frame's LateUpdate publishes the initial acoustic parameters.
+            if (_startPending)
+            {
+                _startPending = false;
+                _monitor.StartOutput();
+                _source.Play();
+            }
+            if (!current.HasOutputDrained) return;
+
+            _decoder.Retire(false);
+            _source.Stop();
+            _source.clip = null;
+            _monitor?.Unbind();
+        }
+
+        private void BeginNextOutput(int rate, int frame)
+        {
             var session = _decoder.Dequeue(rate);
             if (!session.HasValue) return;
             try
@@ -207,7 +247,8 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio
                 pump.Parameters.TrySetBlocked(pump.Generation, StartBlocked);
                 _lastPlayback = pump;
                 _decoder.Publish(session.Value, pump);
-                _rate = rate; _frame = frame;
+                _rate = rate;
+                _frame = frame;
                 if (_monitor == null) _monitor = gameObject.AddComponent<DissonanceOutputMonitor>();
                 _monitor.Bind(pump);
                 // A silent driver avoids streaming-clip prefetch consuming the live decoder ahead of DSP time.
@@ -226,7 +267,11 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio
         {
             _startPending = false;
             _decoder?.Retire(true);
-            if (_source != null) { _source.Stop(); _source.clip = null; }
+            if (_source != null)
+            {
+                _source.Stop();
+                _source.clip = null;
+            }
             if (_clip != null) Destroy(_clip);
             _clip = null;
             if (_monitor != null) Destroy(_monitor);

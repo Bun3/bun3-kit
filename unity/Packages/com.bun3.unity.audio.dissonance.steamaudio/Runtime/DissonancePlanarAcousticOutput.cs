@@ -67,16 +67,12 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio
         {
             var parameters = playback != null ? playback.Parameters : null;
             bool active = playback != null && playback.IsSpeaking && !playback.IsRetiring && parameters != null;
-            PrepareBinding(world, active, settings);
+            binding.Prepare(world, playback.transform.position, active && settings != null && settings.IsAvailable);
+            if (active && settings != null && settings.IsAvailable)
+                binding.ApplyDistanceProfile(settings.DistanceAttenuation, settings.AttenuationProfile);
+
             // Capacity failure retries on the normal interval, without forcing a native tick every frame.
             preparedGeneration = active ? parameters.Generation : 0;
-        }
-
-        void PrepareBinding(PlanarAcousticWorld world, bool active, IPlanarVoiceSettings config)
-        {
-            binding.Prepare(world, playback.transform.position, active && config != null && config.IsAvailable);
-            if (!active || config == null || !config.IsAvailable) return;
-            binding.ApplyDistanceProfile(config.DistanceAttenuation, config.AttenuationProfile);
         }
 
         /// <inheritdoc/>
@@ -84,15 +80,15 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio
         {
             var parameters = playback != null ? playback.Parameters : null;
             if (parameters == null) return;
-            var config = settings;
-            if (config == null || !config.IsAvailable || !binding.TryGet(world, out var path))
+            if (settings == null || !settings.IsAvailable || !binding.TryGet(world, out var path))
             {
                 parameters.TrySetBlocked(parameters.Generation, true);
                 return;
             }
             var result = path.SimulationResult;
-            bool published = parameters.TryPublish(parameters.Generation, binding.Coefficients,
-                new PathPlaybackSettings(path.Listener, result.EqLow, result.EqMid, result.EqHigh, path.Gain, result.NormalizeEq, GetSpatialBlend(world)));
+            var pathSettings = new PathPlaybackSettings(path.Listener, result.EqLow, result.EqMid,
+                result.EqHigh, path.Gain, result.NormalizeEq, GetSpatialBlend(world));
+            bool published = parameters.TryPublish(parameters.Generation, binding.Coefficients, pathSettings);
             parameters.TrySetBlocked(parameters.Generation, !published);
         }
 

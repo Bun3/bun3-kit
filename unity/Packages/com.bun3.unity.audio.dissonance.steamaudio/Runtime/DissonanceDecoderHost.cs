@@ -13,11 +13,11 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio
     // Kept outside the playback hierarchy so its main-thread reaper survives source disable/destruction.
     internal sealed class DissonanceDecoderHost : BaseVoicePlayback
     {
-        private SpeechSession? _current;
+        private SpeechSession? _activeSession;
         private DissonancePathPlayback _pump;
         private bool _retiring;
-        private bool _resetStream;
-        private bool _releaseOwner;
+        private bool _resetStreamOnReclaim;
+        private bool _destroyHostOnReclaim;
         private bool _inputOpen;
         private DissonancePlaybackResources _resources;
         private Action<List<RemoteChannel>> _captureChannels;
@@ -31,7 +31,7 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio
         protected override SpeechSession? TryGetActiveSession()
         {
             var pump = Pump;
-            return pump != null && !pump.IsInputComplete ? _current : null;
+            return pump != null && !pump.IsInputComplete ? _activeSession : null;
         }
 
         internal SpeechSession? Dequeue(int rate) => _retiring ? null : TryDequeueSession(rate);
@@ -45,7 +45,7 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio
 
         internal void Publish(SpeechSession session, DissonancePathPlayback pump)
         {
-            _current = session;
+            _activeSession = session;
             Volatile.Write(ref _pump, pump);
             _captureChannels ??= CaptureChannels;
             pump.SetChannelCapture(_captureChannels, _channelCapacity);
@@ -60,7 +60,11 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio
 
         internal void StartInput()
         {
-            if (_retiring || _releaseOwner || PlayerName == null) { DroppedCommands++; return; }
+            if (_retiring || _destroyHostOnReclaim || PlayerName == null)
+            {
+                DroppedCommands++;
+                return;
+            }
             if (_inputOpen) ((IVoicePlaybackInternal)this).StopPlayback();
             ((IVoicePlaybackInternal)this).StartPlayback();
             _inputOpen = true;
@@ -68,7 +72,11 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio
 
         internal void StopInput()
         {
-            if (_retiring) { DroppedCommands++; return; }
+            if (_retiring)
+            {
+                DroppedCommands++;
+                return;
+            }
             if (!_inputOpen) return;
             ((IVoicePlaybackInternal)this).StopPlayback();
             _inputOpen = false;
@@ -76,7 +84,11 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio
 
         internal void Receive(VoicePacket packet)
         {
-            if (_retiring || !_inputOpen || _releaseOwner) { DroppedCommands++; return; }
+            if (_retiring || !_inputOpen || _destroyHostOnReclaim)
+            {
+                DroppedCommands++;
+                return;
+            }
             _channelCapacity = Math.Max(_channelCapacity, packet.Channels?.Count ?? 0);
             Pump?.ReserveChannelCapacity(_channelCapacity);
             ((IVoicePlaybackInternal)this).ReceiveAudioPacket(packet);
@@ -84,8 +96,8 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio
 
         internal void Retire(bool resetStream, bool releaseOwner = false)
         {
-            _releaseOwner |= releaseOwner;
-            _resetStream |= resetStream;
+            _destroyHostOnReclaim |= releaseOwner;
+            _resetStreamOnReclaim |= resetStream;
             if (resetStream && _inputOpen)
             {
                 ((IVoicePlaybackInternal)this).StopPlayback();
@@ -93,31 +105,31 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio
             }
             _retiring = true;
             Pump?.RequestRetirement();
-            Reclaim();
+            ReclaimRetiredOutput();
         }
 
-        private void Reclaim()
+        private void ReclaimRetiredOutput()
         {
             if (!_retiring) return;
             var pump = Pump;
             if (pump != null && !pump.TryReclaimRetired(false)) return;
-            if (_resetStream)
+            if (_resetStreamOnReclaim)
             {
                 _resources?.Dispose();
                 _resources = null;
             }
             Volatile.Write(ref _pump, null);
-            _current = null;
+            _activeSession = null;
             _channels.Clear();
-            if (_resetStream) ((IVoicePlaybackInternal)this).ForceReset();
-            _resetStream = false;
+            if (_resetStreamOnReclaim) ((IVoicePlaybackInternal)this).ForceReset();
+            _resetStreamOnReclaim = false;
             _retiring = false;
-            if (_releaseOwner) Destroy(gameObject);
+            if (_destroyHostOnReclaim) Destroy(gameObject);
         }
 
         protected override void Update()
         {
-            Reclaim();
+            ReclaimRetiredOutput();
             Pump?.ReserveChannelCapacity(_channelCapacity);
         }
 
@@ -126,7 +138,11 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio
         internal void ReadChannels(List<RemoteChannel> output)
         {
             var pump = Pump;
-            if (pump == null) { output.Clear(); return; }
+            if (pump == null)
+            {
+                output.Clear();
+                return;
+            }
             pump.TryCopyChannels(_channels);
             output.Clear();
             output.AddRange(_channels);

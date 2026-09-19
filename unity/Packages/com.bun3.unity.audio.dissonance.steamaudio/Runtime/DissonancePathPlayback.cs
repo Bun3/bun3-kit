@@ -15,6 +15,12 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio
     /// </summary>
     public sealed class DissonancePathPlayback
     {
+        private const int Open = 0;
+        private const int ReaderActive = 1;
+        private const int Retired = 2;
+        private const int RetiredReader = ReaderActive | Retired;
+        private const int Reclaimed = 4;
+
         private readonly DissonancePlaybackResources _resources;
         private readonly SteamAudioPathRenderer _renderer;
         private readonly float[] _mono;
@@ -25,7 +31,6 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio
         private int _offset;
         private bool _inputComplete;
         private int _complete;
-        // 0: open, 1: reader, 2: retired, 3: retired reader, 4: reclaimed.
         private int _state;
         private int _metadataState;
         private int _requiredChannelCapacity;
@@ -147,59 +152,26 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio
             Array.Clear(output, 0, output.Length);
             Interlocked.Increment(ref _readCalls);
             long firstFrame = Interlocked.Add(ref _requestedFrames, output.Length / channels) - output.Length / channels;
-            if (Interlocked.CompareExchange(ref _state, 1, 0) != 0) return;
+            if (Interlocked.CompareExchange(ref _state, ReaderActive, Open) != Open) return;
             try
             {
                 if (output.Length > _largestCallback) Volatile.Write(ref _largestCallback, output.Length);
                 int written = 0;
-                while (written < output.Length && Volatile.Read(ref _state) == 1)
+                while (written < output.Length && Volatile.Read(ref _state) == ReaderActive)
                 {
                     if (_offset == _stereo.Length)
                     {
-                        if (Parameters.TryRead(_coefficients, out var settings)) _settings = settings;
-                        if (_inputComplete)
+                        if (!TryRenderNextFrame())
                         {
-                            if (_renderer.TailSamplesRemaining == 0)
-                            {
-                                Interlocked.CompareExchange(ref _completionFrame, firstFrame + written / channels, -1);
-                                Volatile.Write(ref _complete, 1);
-                                Volatile.Write(ref _amplitude, 0);
-                                break;
-                            }
-                            _renderer.RenderTail(_stereo, _settings.Gain);
-                        }
-                        else
-                        {
-                            bool positional = AllowPositionalPlayback && _session.PlaybackOptions.IsPositional;
-                            CaptureChannels();
-                            // SDK Read returns true on completion and immediately recycles its decoder.
-                            bool complete = _session.Read(new ArraySegment<float>(_mono));
-                            Volatile.Write(ref _inputComplete, complete);
-                            if (complete) _session = default;
-                            else Volatile.Write(ref _priority, (int)_session.PlaybackOptions.Priority);
-                            float sum = 0;
-                            for (int i = 0; i < _mono.Length; i++) sum += Math.Abs(_mono[i]);
-                            Volatile.Write(ref _amplitude, sum / _mono.Length);
-                            if (_amplitude > _peakDecoded) Volatile.Write(ref _peakDecoded, _amplitude);
-                            if (positional != _lastPositional) _renderer.Reset();
-                            _lastPositional = positional;
-                            if (positional) _renderer.RenderSpatial(_mono, _stereo, _coefficients, _settings.EqLow, _settings.EqMid,
-                                _settings.EqHigh, _settings.Listener, _settings.Gain, _settings.NormalizeEq, _settings.SpatialBlend);
-                            else for (int i = 0; i < _mono.Length; i++) _stereo[2 * i] = _stereo[2 * i + 1] = _mono[i];
-                            float difference = _peakStereoDifference;
-                            for (int i = 0; i < _stereo.Length; i += 2) difference = Math.Max(difference, Math.Abs(_stereo[i] - _stereo[i + 1]));
-                            Volatile.Write(ref _peakStereoDifference, difference);
+                            Interlocked.CompareExchange(ref _completionFrame, firstFrame + written / channels, -1);
+                            Volatile.Write(ref _complete, 1);
+                            Volatile.Write(ref _amplitude, 0);
+                            break;
                         }
                         _offset = 0;
                     }
                     int frames = Math.Min((output.Length - written) / channels, (_stereo.Length - _offset) / 2);
-                    if (channels == 2) Array.Copy(_stereo, _offset, output, written, frames * 2);
-                    else for (int i = 0; i < frames; i++)
-                    {
-                        float left = _stereo[_offset + i * 2], right = _stereo[_offset + i * 2 + 1];
-                        output[written + i * channels] = channels == 1 ? (left + right) * 0.5f : left;
-                        if (channels > 1) output[written + i * channels + 1] = right;
-                    }
+                    CopyOutputFrames(_stereo, _offset, output, written, channels, frames);
                     _offset += frames * 2;
                     written += frames * channels;
                 }
@@ -212,12 +184,84 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio
             finally
             {
                 if (Parameters.IsBlocked) Array.Clear(output, 0, output.Length);
-                if (Interlocked.CompareExchange(ref _state, 0, 1) == 3)
+                if (Interlocked.CompareExchange(ref _state, Open, ReaderActive) == RetiredReader)
                 {
                     Array.Clear(output, 0, output.Length);
                     Volatile.Write(ref _amplitude, 0);
-                    Volatile.Write(ref _state, 2);
+                    Volatile.Write(ref _state, Retired);
                 }
+            }
+        }
+
+        private bool TryRenderNextFrame()
+        {
+            if (Parameters.TryRead(_coefficients, out var settings)) _settings = settings;
+            if (_inputComplete)
+            {
+                if (_renderer.TailSamplesRemaining == 0) return false;
+                _renderer.RenderTail(_stereo, _settings.Gain);
+                return true;
+            }
+
+            bool positional = AllowPositionalPlayback && _session.PlaybackOptions.IsPositional;
+            CaptureChannels();
+            // SDK Read returns true on completion and immediately recycles its decoder.
+            bool complete = _session.Read(new ArraySegment<float>(_mono));
+            Volatile.Write(ref _inputComplete, complete);
+            if (complete) _session = default;
+            else Volatile.Write(ref _priority, (int)_session.PlaybackOptions.Priority);
+
+            float amplitude = CalculateRectifiedAmplitude(_mono);
+            Volatile.Write(ref _amplitude, amplitude);
+            if (_amplitude > _peakDecoded) Volatile.Write(ref _peakDecoded, _amplitude);
+
+            if (positional != _lastPositional) _renderer.Reset();
+            _lastPositional = positional;
+            if (positional)
+            {
+                _renderer.RenderSpatial(_mono, _stereo, _coefficients, _settings.EqLow, _settings.EqMid,
+                    _settings.EqHigh, _settings.Listener, _settings.Gain, _settings.NormalizeEq, _settings.SpatialBlend);
+            }
+            else
+            {
+                for (int i = 0; i < _mono.Length; i++)
+                    _stereo[2 * i] = _stereo[2 * i + 1] = _mono[i];
+            }
+
+            Volatile.Write(ref _peakStereoDifference, CalculatePeakStereoDifference(_stereo, _peakStereoDifference));
+            return true;
+        }
+
+        private static float CalculateRectifiedAmplitude(float[] samples)
+        {
+            float sum = 0;
+            for (int i = 0; i < samples.Length; i++) sum += Math.Abs(samples[i]);
+            return sum / samples.Length;
+        }
+
+        private static float CalculatePeakStereoDifference(float[] stereo, float previousPeak)
+        {
+            float peak = previousPeak;
+            for (int i = 0; i < stereo.Length; i += 2)
+                peak = Math.Max(peak, Math.Abs(stereo[i] - stereo[i + 1]));
+            return peak;
+        }
+
+        private static void CopyOutputFrames(float[] stereo, int sourceOffset, float[] output,
+            int outputOffset, int channels, int frames)
+        {
+            if (channels == 2)
+            {
+                Array.Copy(stereo, sourceOffset, output, outputOffset, frames * 2);
+                return;
+            }
+
+            for (int i = 0; i < frames; i++)
+            {
+                float left = stereo[sourceOffset + i * 2];
+                float right = stereo[sourceOffset + i * 2 + 1];
+                output[outputOffset + i * channels] = channels == 1 ? (left + right) * 0.5f : left;
+                if (channels > 1) output[outputOffset + i * channels + 1] = right;
             }
         }
 
@@ -230,8 +274,8 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio
             do
             {
                 state = Volatile.Read(ref _state);
-                if (state >= 2) return;
-            } while (Interlocked.CompareExchange(ref _state, state | 2, state) != state);
+                if (state >= Retired) return;
+            } while (Interlocked.CompareExchange(ref _state, state | Retired, state) != state);
         }
 
         /// <summary>
@@ -243,10 +287,10 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio
 
         internal bool TryReclaimRetired(bool disposeResources)
         {
-            if (Volatile.Read(ref _metadataState) != 2) return false;
-            int state = Interlocked.CompareExchange(ref _state, 4, 2);
-            if (state == 4) return true;
-            if (state != 2) return false;
+            if (Volatile.Read(ref _metadataState) != Retired) return false;
+            int state = Interlocked.CompareExchange(ref _state, Reclaimed, Retired);
+            if (state == Reclaimed) return true;
+            if (state != Retired) return false;
             _session = default;
             if (disposeResources) _resources.Dispose();
             return true;
@@ -296,10 +340,10 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio
             finally { ReleaseMetadata(); }
         }
 
-        internal bool TryClaimMetadata() => Interlocked.CompareExchange(ref _metadataState, 1, 0) == 0;
+        internal bool TryClaimMetadata() => Interlocked.CompareExchange(ref _metadataState, ReaderActive, Open) == Open;
         internal void ReleaseMetadata()
         {
-            if (Interlocked.CompareExchange(ref _metadataState, 0, 1) == 3) Volatile.Write(ref _metadataState, 2);
+            if (Interlocked.CompareExchange(ref _metadataState, Open, ReaderActive) == RetiredReader) Volatile.Write(ref _metadataState, Retired);
         }
 
         private void RetireMetadata()
@@ -308,8 +352,8 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio
             do
             {
                 state = Volatile.Read(ref _metadataState);
-                if (state >= 2) return;
-            } while (Interlocked.CompareExchange(ref _metadataState, state | 2, state) != state);
+                if (state >= Retired) return;
+            } while (Interlocked.CompareExchange(ref _metadataState, state | Retired, state) != state);
         }
 
         internal void RecordDeliveredFrames(int frames)
