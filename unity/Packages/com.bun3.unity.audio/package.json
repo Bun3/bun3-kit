@@ -1,7 +1,7 @@
 {
   "name": "com.bun3.unity.audio",
   "displayName": "Bun3 Unity Audio",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "unity": "6000.3",
   "unityRelease": "14f1",
   "description": "Sound manager for Unity: pooled AudioSources, generation-validated handles, coroutine-free fades, voice limits, cooldowns, pitch/volume variation, and UniTask-based playback awaiting.",

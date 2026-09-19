@@ -1,3 +1,5 @@
+using UnityEngine.TestTools.Constraints;
+using Is = NUnit.Framework.Is;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
@@ -23,9 +25,52 @@ namespace Bun3.Unity.Audio.Tests
                 Assert.That(first.Evaluate(5), Is.EqualTo(.5f).Within(.00001f));
                 Assert.That(second.Evaluate(5), Is.Zero);
                 Assert.That(profile.GetSnapshot(), Is.SameAs(second));
-                long before = System.GC.GetAllocatedBytesForCurrentThread();
-                for (int i = 0; i < 100; i++) { profile.GetSnapshot(); second.Evaluate(2); }
-                Assert.That(System.GC.GetAllocatedBytesForCurrentThread() - before, Is.Zero);
+                Assert.That(() => System.GC.KeepAlive(new byte[1024]),
+                    UnityEngine.TestTools.Constraints.Is.AllocatingGCMemory(),
+                    "GC allocation recorder must detect a known allocation before measuring this path.");
+                Assert.That(() =>
+                {
+                    for (int i = 0; i < 100; i++) { profile.GetSnapshot(); second.Evaluate(2); }
+                }, UnityEngine.TestTools.Constraints.Is.Not.AllocatingGCMemory());
+            }
+            finally { Object.DestroyImmediate(profile); }
+        }
+
+        [TestCase(0)]
+        [TestCase(1)]
+        [TestCase(2)]
+        [TestCase(3)]
+        [TestCase(4)]
+        [TestCase(5)]
+        [TestCase(6)]
+        [TestCase(7)]
+        [TestCase(8)]
+        public void InPlaceKeyAndWrapEditsRefreshSnapshotWithoutMutatingPriorSnapshot(int edit)
+        {
+            var profile = ScriptableObject.CreateInstance<DistanceAttenuationProfile>();
+            try
+            {
+                profile.VolumeByDistance = new AnimationCurve(new Keyframe(0, 1, 0, 0), new Keyframe(10, 0, 0, 0));
+                var first = profile.GetSnapshot();
+                var curve = profile.VolumeByDistance;
+                var key = curve[0];
+                switch (edit)
+                {
+                    case 0: key.time = 1; break;
+                    case 1: key.value = .5f; break;
+                    case 2: key.inTangent = .3f; break;
+                    case 3: key.outTangent = -.3f; break;
+                    case 4: key.inWeight = .2f; break;
+                    case 5: key.outWeight = .2f; break;
+                    case 6: key.weightedMode = WeightedMode.Both; break;
+                    case 7: curve.preWrapMode = WrapMode.PingPong; break;
+                    case 8: curve.postWrapMode = WrapMode.Loop; break;
+                }
+                if (edit < 7) curve.MoveKey(0, key);
+                var second = profile.GetSnapshot();
+                Assert.That(second, Is.Not.SameAs(first));
+                Assert.That(profile.GetSnapshot(), Is.SameAs(second));
+                Assert.That(first.Evaluate(2), Is.EqualTo(.896f).Within(.00001f));
             }
             finally { Object.DestroyImmediate(profile); }
         }

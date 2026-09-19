@@ -1,3 +1,5 @@
+using UnityEngine.TestTools.Constraints;
+using Is = NUnit.Framework.Is;
 using System;
 using System.Collections;
 using NUnit.Framework;
@@ -267,12 +269,16 @@ namespace Bun3.Unity.Audio.Tests
                 {
                     var handle = system.Play(_def); handle.SetPitch(.5f); system.Tick(.01f); handle.Stop(); system.Tick(.01f);
                 }
-                var before = GC.GetAllocatedBytesForCurrentThread();
-                for (var i = 0; i < 64; i++)
+                Assert.That(() => System.GC.KeepAlive(new byte[1024]),
+                    UnityEngine.TestTools.Constraints.Is.AllocatingGCMemory(),
+                    "GC allocation recorder must detect a known allocation before measuring this path.");
+                Assert.That(() =>
                 {
-                    var handle = system.Play(_def); handle.SetPitch(.5f); system.Tick(.01f); handle.Stop(); system.Tick(.01f);
-                }
-                Assert.That(GC.GetAllocatedBytesForCurrentThread() - before, Is.Zero);
+                    for (var i = 0; i < 64; i++)
+                    {
+                        var handle = system.Play(_def); handle.SetPitch(.5f); system.Tick(.01f); handle.Stop(); system.Tick(.01f);
+                    }
+                }, UnityEngine.TestTools.Constraints.Is.Not.AllocatingGCMemory());
             }
             yield return null;
         }

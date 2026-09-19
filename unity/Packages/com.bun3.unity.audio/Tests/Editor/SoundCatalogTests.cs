@@ -1,3 +1,5 @@
+using UnityEngine.TestTools.Constraints;
+using Is = NUnit.Framework.Is;
 using System;
 using NUnit.Framework;
 using UnityEngine;
@@ -19,10 +21,15 @@ namespace Bun3.Unity.Audio.Tests
             Assert.That(catalog.Get("CUSTOM.new.effect"), Is.Null);
             Assert.That(catalog.Get(null), Is.Null);
             for (int i = 0; i < 100; i++) catalog.Get("custom.new.effect");
-            long before = GC.GetAllocatedBytesForCurrentThread();
-            for (int i = 0; i < 1000; i++) catalog.Get("custom.new.effect");
-            long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
-            Assert.That(allocated, Is.Zero);
+            Assert.That(() => System.GC.KeepAlive(new byte[1024]),
+                UnityEngine.TestTools.Constraints.Is.AllocatingGCMemory(),
+                "GC allocation recorder must detect a known allocation before measuring this path.");
+            TestDelegate warmLookup = () =>
+            {
+                for (int i = 0; i < 1000; i++) catalog.Get("custom.new.effect");
+            };
+            warmLookup();
+            Assert.That(warmLookup, UnityEngine.TestTools.Constraints.Is.Not.AllocatingGCMemory());
         }
         [Test] public void InvalidReplacementLeavesPreviousMappingsIntact()
         {

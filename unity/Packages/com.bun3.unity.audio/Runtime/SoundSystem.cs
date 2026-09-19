@@ -29,6 +29,10 @@ namespace Bun3.Unity.Audio
 
         internal readonly VoiceTable Table;
         private readonly AudioSource[] _sources;
+        private readonly AudioRolloffMode[] _sourceRolloffModes;
+        private readonly AnimationCurve[] _sourceRolloffCurves;
+        private readonly bool[] _distanceAttenuationDisabled;
+        private readonly AnimationCurve _flatRolloff = AnimationCurve.Linear(0f, 1f, 1f, 1f);
         private readonly ISoundVoiceOutput[] _outputs;
         private readonly bool[] _outputActive;
         private readonly List<(int Slot, uint Generation, Cysharp.Threading.Tasks.AutoResetUniTaskCompletionSource Completion, Action<SoundHandle> Callback)> _completedScratch;
@@ -83,6 +87,9 @@ namespace Bun3.Unity.Audio
                 : new System.Random();
             Table = new VoiceTable(config.SfxVoices, _rng, config.OcclusionSmoothingSeconds);
             _sources = new AudioSource[config.SfxVoices];
+            _sourceRolloffModes = new AudioRolloffMode[config.SfxVoices];
+            _sourceRolloffCurves = new AnimationCurve[config.SfxVoices];
+            _distanceAttenuationDisabled = new bool[config.SfxVoices];
             _outputs = new ISoundVoiceOutput[config.SfxVoices];
             _outputActive = new bool[config.SfxVoices];
             // At most one completion per slot per tick; preallocate to that bound so the
@@ -102,6 +109,9 @@ namespace Bun3.Unity.Audio
                     _sources[i] = go.AddComponent<AudioSource>();
                     _sources[i].playOnAwake = false;
                     config.OnSourceCreated?.Invoke(_sources[i]);
+                    _sourceRolloffModes[i] = _sources[i].rolloffMode;
+                    if (_sourceRolloffModes[i] == AudioRolloffMode.Custom)
+                        _sourceRolloffCurves[i] = _sources[i].GetCustomCurve(AudioSourceCurveType.CustomRolloff);
                     _outputs[i] = config.CreateVoiceOutput?.Invoke(_sources[i]);
                 }
                 for (var i = 0; i < MusicChannelCount; i++)
@@ -184,6 +194,14 @@ namespace Bun3.Unity.Audio
         public SoundHandle Play(SoundDef def, Vector3 position, SpatialMode spatial, float volumeScale = 1f, float fadeIn = 0f)
             => PlayCore(def, position, null, fadeIn, spatial, volumeScale);
 
+        /// <summary>Prepares one definition for cooldown tracking before its first hot-path playback.</summary>
+        public void Prepare(SoundDef definition)
+        {
+            if (_disposed) throw new ObjectDisposedException(nameof(SoundSystem));
+            if (definition == null) throw new ArgumentNullException(nameof(definition));
+            Table.Prepare(definition);
+        }
+
         /// <summary>Prepares catalog definitions for cooldown tracking before hot-path playback.</summary>
         public void Prepare(SoundCatalog catalog)
         {
@@ -245,6 +263,7 @@ namespace Bun3.Unity.Audio
             source.spatialBlend = (spatial ?? def.EffectiveSpatial) == SpatialMode.None ? 0f : 1f;
             source.minDistance = def.EffectiveMinDistance;
             source.maxDistance = def.EffectiveMaxDistance;
+            ConfigureDistanceAttenuation(slot, def.EffectiveDistanceAttenuation);
             source.transform.position = position;
             var generation = voice.Generation;
             var accepted = true;
@@ -286,6 +305,24 @@ namespace Bun3.Unity.Audio
             }
 
             return accepted ? new SoundHandle(this, slot, generation) : SoundHandle.Invalid;
+        }
+
+        private void ConfigureDistanceAttenuation(int slot, bool enabled)
+        {
+            if (_distanceAttenuationDisabled[slot] == !enabled) return;
+            var source = _sources[slot];
+            if (enabled)
+            {
+                if (_sourceRolloffCurves[slot] != null)
+                    source.SetCustomCurve(AudioSourceCurveType.CustomRolloff, _sourceRolloffCurves[slot]);
+                source.rolloffMode = _sourceRolloffModes[slot];
+            }
+            else
+            {
+                source.SetCustomCurve(AudioSourceCurveType.CustomRolloff, _flatRolloff);
+                source.rolloffMode = AudioRolloffMode.Custom;
+            }
+            _distanceAttenuationDisabled[slot] = !enabled;
         }
 
         private AudioSource CreateMusicSource(string name)

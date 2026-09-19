@@ -81,6 +81,8 @@ namespace Bun3.Unity.Audio
         /// <summary>
         /// Invoked once per prewarmed SFX source during construction, after play-on-awake
         /// is disabled. Prepare reusable components here without playback-time allocation.
+        /// The configured rolloff mode and custom curve are retained as the attenuation-enabled
+        /// defaults when a pooled source switches back from a sound with distance attenuation disabled.
         /// Music sources are excluded. A thrown exception aborts construction and destroys
         /// the partial pool before any player-loop registration is made.
         /// </summary>

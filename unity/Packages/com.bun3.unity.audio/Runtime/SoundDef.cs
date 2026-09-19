@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Audio;
 
@@ -166,6 +167,12 @@ namespace Bun3.Unity.Audio
         /// Populated by preloading (or manually for runtime-created defs).
         /// </summary>
         [System.NonSerialized] internal AudioClip[] RuntimeClips;
+
+        /// <summary>
+        /// Gets the effective playback clips without copying: loaded runtime clips take precedence
+        /// over authored clips. Returns null when neither source is assigned.
+        /// </summary>
+        public IReadOnlyList<AudioClip> PlaybackClips => EffectiveClips;
 
         internal AudioClip[] EffectiveClips => RuntimeClips ?? Clips;
     }

@@ -8,16 +8,32 @@ namespace Bun3.Unity.Audio
     public sealed class DistanceAttenuationCurve
     {
         readonly AnimationCurve curve;
+        readonly Keyframe[] keys;
         /// <summary>Gets the last key distance; distances at or beyond it are silent.</summary>
         public float MaximumDistance { get; }
         /// <summary>Copies all keys, tangents and weights. Construction is a cold operation.</summary>
         public DistanceAttenuationCurve(AnimationCurve source)
         {
-            curve = source == null ? new AnimationCurve() : new AnimationCurve(source.keys);
+            keys = source == null ? Array.Empty<Keyframe>() : source.keys;
+            curve = new AnimationCurve(keys);
             if (source != null) { curve.preWrapMode = source.preWrapMode; curve.postWrapMode = source.postWrapMode; }
             MaximumDistance = curve.length == 0 ? 0 : curve[curve.length - 1].time;
         }
-        internal bool Matches(AnimationCurve source) => curve.Equals(source);
+        internal bool Matches(AnimationCurve source)
+        {
+            if (source == null || source.length != keys.Length ||
+                source.preWrapMode != curve.preWrapMode || source.postWrapMode != curve.postWrapMode) return false;
+            for (int i = 0; i < keys.Length; i++)
+            {
+                var expected = keys[i];
+                var actual = source[i];
+                if (!expected.time.Equals(actual.time) || !expected.value.Equals(actual.value) ||
+                    !expected.inTangent.Equals(actual.inTangent) || !expected.outTangent.Equals(actual.outTangent) ||
+                    !expected.inWeight.Equals(actual.inWeight) || !expected.outWeight.Equals(actual.outWeight) ||
+                    expected.weightedMode != actual.weightedMode) return false;
+            }
+            return true;
+        }
         /// <summary>Evaluates distance with nonfinite input rejected and output clamped to [0,1]. Empty curves are silent.</summary>
         public float Evaluate(float distance)
         {
