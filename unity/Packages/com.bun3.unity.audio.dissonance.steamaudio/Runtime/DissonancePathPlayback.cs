@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using global::Dissonance;
 using System.Threading;
 using Bun3.Unity.Audio.SteamAudio;
 using global::Dissonance.Audio.Playback;
@@ -13,6 +15,7 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio
     /// </summary>
     public sealed class DissonancePathPlayback
     {
+        private readonly DissonancePlaybackResources _resources;
         private readonly SteamAudioPathRenderer _renderer;
         private readonly float[] _mono;
         private readonly float[] _stereo;
@@ -24,6 +27,9 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio
         private int _complete;
         // 0: open, 1: reader, 2: retired, 3: retired reader, 4: reclaimed.
         private int _state;
+        private int _metadataState;
+        private int _requiredChannelCapacity;
+        private Action<List<RemoteChannel>> _captureChannels;
         private Exception _fault;
         private float _amplitude;
         private int _priority;
@@ -45,18 +51,31 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio
         /// </summary>
         public DissonancePathPlayback(SpeechSession session, SteamAudioPathRenderer renderer, long generation,
             float[] coefficients, SA.CoordinateSpace3 listener)
+            : this(session, new DissonancePlaybackResources(renderer), generation, coefficients, listener) { }
+
+        internal DissonancePathPlayback(SpeechSession session, DissonancePlaybackResources resources, long generation,
+            float[] coefficients, SA.CoordinateSpace3 listener)
         {
+            var renderer = resources.Renderer;
             if (renderer == null) throw new ArgumentNullException(nameof(renderer));
             if (generation <= 0) throw new ArgumentOutOfRangeException(nameof(generation));
             if (coefficients == null || coefficients.Length != renderer.CoefficientCount)
                 throw new ArgumentException("Coefficient count must match the renderer.", nameof(coefficients));
             if (session.OutputWaveFormat.SampleRate != renderer.SampleRate)
                 throw new ArgumentException("Prepared session and renderer sample rates must match.", nameof(session));
-            _mono = new float[renderer.FrameSize];
-            _stereo = new float[renderer.FrameSize * 2];
+            _resources = resources;
+            resources.Channels.Clear();
+            _mono = resources.Mono;
+            _stereo = resources.Stereo;
+            Array.Clear(_mono, 0, _mono.Length);
+            Array.Clear(_stereo, 0, _stereo.Length);
             _coefficients = (float[])coefficients.Clone();
             // Validate native parameters and warm processing outside the audio callback.
-            renderer.Render(_mono, _stereo, _coefficients, 1, 1, 1, listener);
+            if (!resources.Warmed)
+            {
+                renderer.Render(_mono, _stereo, _coefficients, 1, 1, 1, listener);
+                resources.Warmed = true;
+            }
             renderer.Reset();
             _renderer = renderer;
             _session = session;
@@ -152,6 +171,7 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio
                         else
                         {
                             bool positional = AllowPositionalPlayback && _session.PlaybackOptions.IsPositional;
+                            CaptureChannels();
                             // SDK Read returns true on completion and immediately recycles its decoder.
                             bool complete = _session.Read(new ArraySegment<float>(_mono));
                             Volatile.Write(ref _inputComplete, complete);
@@ -205,6 +225,7 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio
         public void RequestRetirement()
         {
             Parameters.Retire();
+            RetireMetadata();
             int state;
             do
             {
@@ -218,20 +239,77 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio
         /// Repeated success is harmless. A successful return is the barrier permitting SDK reset or reassignment.
         /// No subsequent audio callback is needed to make an idle retired generation reclaimable.
         /// </summary>
-        public bool TryDisposeRetired()
+        public bool TryDisposeRetired() => TryReclaimRetired(true);
+
+        internal bool TryReclaimRetired(bool disposeResources)
         {
+            if (Volatile.Read(ref _metadataState) != 2) return false;
             int state = Interlocked.CompareExchange(ref _state, 4, 2);
             if (state == 4) return true;
             if (state != 2) return false;
             _session = default;
-            _renderer.Dispose();
+            if (disposeResources) _resources.Dispose();
             return true;
         }
 
-        internal bool TryClaimMetadata() => Interlocked.CompareExchange(ref _state, 1, 0) == 0;
+        internal void SetChannelCapture(Action<List<RemoteChannel>> capture, int capacity)
+        {
+            _captureChannels = capture;
+            ReserveChannelCapacity(capacity);
+            CaptureChannels();
+        }
+
+        internal void ReserveChannelCapacity(int capacity)
+        {
+            Volatile.Write(ref _requiredChannelCapacity, Math.Max(capacity, _requiredChannelCapacity));
+            if (_resources.Channels.Capacity >= _requiredChannelCapacity) return;
+            if (!TryClaimMetadata()) return;
+            try
+            {
+                if (_resources.Channels.Capacity < _requiredChannelCapacity)
+                    _resources.Channels.Capacity = _requiredChannelCapacity;
+            }
+            finally { ReleaseMetadata(); }
+        }
+
+        private void CaptureChannels()
+        {
+            if (_captureChannels == null || !TryClaimMetadata()) return;
+            try
+            {
+                // Packet receipt reserves capacity on the control thread. Skip a snapshot until that reservation succeeds.
+                if (_resources.Channels.Capacity >= Volatile.Read(ref _requiredChannelCapacity))
+                    _captureChannels(_resources.Channels);
+            }
+            finally { ReleaseMetadata(); }
+        }
+
+        internal bool TryCopyChannels(List<RemoteChannel> output)
+        {
+            if (!TryClaimMetadata()) return false;
+            try
+            {
+                output.Clear();
+                if (!IsInputComplete) output.AddRange(_resources.Channels);
+                return true;
+            }
+            finally { ReleaseMetadata(); }
+        }
+
+        internal bool TryClaimMetadata() => Interlocked.CompareExchange(ref _metadataState, 1, 0) == 0;
         internal void ReleaseMetadata()
         {
-            if (Interlocked.CompareExchange(ref _state, 0, 1) == 3) Volatile.Write(ref _state, 2);
+            if (Interlocked.CompareExchange(ref _metadataState, 0, 1) == 3) Volatile.Write(ref _metadataState, 2);
+        }
+
+        private void RetireMetadata()
+        {
+            int state;
+            do
+            {
+                state = Volatile.Read(ref _metadataState);
+                if (state >= 2) return;
+            } while (Interlocked.CompareExchange(ref _metadataState, state | 2, state) != state);
         }
 
         internal void RecordDeliveredFrames(int frames)
@@ -245,4 +323,24 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio
             } while (Interlocked.CompareExchange(ref _largestOutputBlock, frames, observed) != observed);
         }
     }
+
+    internal sealed class DissonancePlaybackResources : IDisposable
+    {
+        internal readonly SteamAudioPathRenderer Renderer;
+        internal readonly float[] Mono;
+        internal readonly float[] Stereo;
+        internal bool Warmed;
+        internal readonly List<RemoteChannel> Channels = new();
+
+        internal DissonancePlaybackResources(SteamAudioPathRenderer renderer)
+        {
+            Renderer = renderer ?? throw new ArgumentNullException(nameof(renderer));
+            Mono = new float[renderer.FrameSize];
+            Stereo = new float[renderer.FrameSize * 2];
+        }
+
+        /// <inheritdoc/>
+        public void Dispose() => Renderer.Dispose();
+    }
+
 }

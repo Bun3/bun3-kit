@@ -85,7 +85,13 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio.Tests
         [UnityTest]
         public IEnumerator ImmediateGateSilencesQueuedStereoAfterTheSourceMonitor() => Exercise(false, false, false, true);
 
-        static IEnumerator Exercise(bool overlapReset, bool destroyWhileReading, bool completeInput = false, bool testGate = false, bool delayedPath = false, bool paced = false)
+        [UnityTest]
+        public IEnumerator NaturalSpeechRestartReusesNativeRendererAndDriver() => Exercise(false, false, true, reuse: true);
+
+        [UnityTest]
+        public IEnumerator ChannelSnapshotRemainsAvailableWhileDecoderReadIsHeld() => Exercise(true, false, metadata: true);
+
+        static IEnumerator Exercise(bool overlapReset, bool destroyWhileReading, bool completeInput = false, bool testGate = false, bool delayedPath = false, bool paced = false, bool reuse = false, bool metadata = false)
         {
             var type = PlaybackType();
             var context = new SA.Context();
@@ -99,8 +105,10 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio.Tests
             using var volume = new DissonancePathPlaybackTests.BlockingVolume();
             try
             {
+                int factoryCalls = 0;
                 Func<int, int, SteamAudioPathRenderer> factory = (rate, frame) =>
                 {
+                    factoryCalls++;
                     var hrtf = new SA.HRTF(context, new SA.AudioSettings { samplingRate = rate, frameSize = frame }, null, null, 0, SA.HRTFNormType.None);
                     try { return new SteamAudioPathRenderer(context, hrtf, rate, frame); }
                     finally { hrtf.Release(); }
@@ -159,6 +167,9 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio.Tests
                 Assert.That(type.GetProperty("Fault").GetValue(component), Is.Null, "A renderer or decoder fault must not be mistaken for missing callbacks.");
                 Assert.That((float)type.GetProperty("PeakDecodedAmplitude").GetValue(component), Is.GreaterThan(0), "Real Unity clip callbacks must consume SDK-decoded input.");
                 Assert.That((float)type.GetProperty("PeakStereoDifference").GetValue(component), Is.GreaterThan(1e-6f), "Real streaming callbacks must process native directional stereo.");
+                var firstClip = source.clip;
+                var firstMonitor = type.GetField("_monitor", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(component);
+                var firstPump = type.GetField("_lastPlayback", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(component);
                 if (completeInput)
                 {
                     deadline = Time.realtimeSinceStartup + 2;
@@ -172,6 +183,26 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio.Tests
                     Assert.That(source.clip, Is.Null);
                     Assert.That(playback.IsSpeaking, Is.False);
                     Assert.That(playback.Priority, Is.EqualTo(ChannelPriority.None));
+                    if (reuse)
+                    {
+                        playback.StartPlayback();
+                        for (uint packet = 0; packet < 30; packet++)
+                            playback.ReceiveAudioPacket(new VoicePacket(playback.PlayerName, ChannelPriority.Default, 1, true,
+                                new ArraySegment<byte>(bytes), packet, channels));
+                        deadline = Time.realtimeSinceStartup + 5;
+                        while ((parameters.GetValue(component) == null || !source.isPlaying) && Time.realtimeSinceStartup < deadline) yield return null;
+                        Assert.That(parameters.GetValue(component), Is.Not.Null);
+                        Assert.That(factoryCalls, Is.EqualTo(1), "Natural speech restarts must retain the native context, HRTF and effect.");
+                        Assert.That(source.clip, Is.SameAs(firstClip));
+                        Assert.That(type.GetField("_monitor", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(component), Is.SameAs(firstMonitor));
+                        var secondPump = type.GetField("_lastPlayback", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(component);
+                        Assert.That(secondPump, Is.Not.SameAs(firstPump), "Generation admission must remain immutable.");
+                        var pcm = firstPump.GetType().GetField("_stereo", BindingFlags.Instance | BindingFlags.NonPublic);
+                        Assert.That(pcm.GetValue(secondPump), Is.SameAs(pcm.GetValue(firstPump)), "Retired PCM storage is reused only after reader quiescence.");
+                        var late = new float[128];
+                        ((DissonancePathPlayback)firstPump).ReadStereo(late);
+                        Assert.That(late, Is.All.Zero, "A delayed retired generation must never read reused PCM.");
+                    }
                     yield break;
                 }
                 Assert.That(source.isPlaying, Is.True);
@@ -281,6 +312,12 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio.Tests
                         deadline = Time.realtimeSinceStartup + 5;
                         while (!volume.Entered.IsSet && Time.realtimeSinceStartup < deadline) yield return null;
                         Assert.That(volume.Entered.IsSet, Is.True);
+                        if (metadata)
+                        {
+                            playback.GetRemoteChannels(reportedChannels);
+                            Assert.That(reportedChannels.Count, Is.EqualTo(1), "A held PCM read must not suppress the SDK's independent channel snapshot.");
+                            Assert.That(reportedChannels[0].TargetName, Is.EqualTo("native-test-room"));
+                        }
                         playback.ForceReset();
                         playback.PlayerName = "replacement-player";
                         playback.StartPlayback();

@@ -1,3 +1,5 @@
+using UnityEngine.TestTools.Constraints;
+using Is = NUnit.Framework.Is;
 using System;
 using System.Threading;
 using System.Threading.Tasks;
@@ -85,10 +87,13 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio.Tests
             Assert.That(mailbox.TryPublish(1, input, settings), Is.True);
             Assert.That(mailbox.TryRead(output, out _), Is.True);
             for (int i = 0; i < 100; i++) { mailbox.TryPublish(1, input, settings); mailbox.TryRead(output, out _); }
-            long before = GC.GetAllocatedBytesForCurrentThread();
-            for (int i = 0; i < 10000; i++) { mailbox.TryPublish(1, input, settings); mailbox.TryRead(output, out _); }
-            long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
-            Assert.That(allocated, Is.Zero);
+            Assert.That(() => System.GC.KeepAlive(new byte[1024]),
+                UnityEngine.TestTools.Constraints.Is.AllocatingGCMemory(),
+                "GC allocation recorder must detect a known allocation before measuring this path.");
+            Assert.That(() =>
+            {
+                for (int i = 0; i < 10000; i++) { mailbox.TryPublish(1, input, settings); mailbox.TryRead(output, out _); }
+            }, UnityEngine.TestTools.Constraints.Is.Not.AllocatingGCMemory());
         }
 
         [Test]

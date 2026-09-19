@@ -1,3 +1,5 @@
+using UnityEngine.TestTools.Constraints;
+using Is = NUnit.Framework.Is;
 using System;
 using System.Collections;
 using System.Reflection;
@@ -70,7 +72,13 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio.Tests
         [UnityTest]
         public IEnumerator LiveParametersChangeNativeOutputWithoutReplacingTheDecodedSession() => ExerciseSession(false, false, true);
 
-        static IEnumerator ExerciseSession(bool retireBeforeRead, bool overlapRetirement = false, bool liveParameters = false)
+        [UnityTest]
+        public IEnumerator MetadataSnapshotClaimDoesNotMuteCachedPcm() => ExerciseSession(false, metadata: true);
+
+        [UnityTest]
+        public IEnumerator BoundMonitorWaitsForSourceStartBeforeReadingDecoder() => ExerciseSession(false, monitorStart: true);
+
+        static IEnumerator ExerciseSession(bool retireBeforeRead, bool overlapRetirement = false, bool liveParameters = false, bool metadata = false, bool monitorStart = false)
         {
             var type = PumpType();
             var go = new GameObject("Decoded speech pump test");
@@ -109,6 +117,41 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio.Tests
                     new[] { 0.2820948f, 0.4886025f, 0f, 0f }, Listener);
                 var read = (Action<float[]>)Delegate.CreateDelegate(typeof(Action<float[]>), pump, type.GetMethod("ReadStereo"));
                 var output = new float[384]; // Callback size deliberately differs from the native frame size.
+                if (monitorStart)
+                {
+                    var monitorType = type.Assembly.GetType("Bun3.Unity.Audio.Dissonance.SteamAudio.DissonanceOutputMonitor");
+                    var monitor = go.AddComponent(monitorType);
+                    monitorType.GetMethod("Bind", BindingFlags.Instance | BindingFlags.NonPublic).Invoke(monitor, new[] { pump });
+                    var callback = (Action<float[], int>)Delegate.CreateDelegate(typeof(Action<float[], int>), monitor,
+                        monitorType.GetMethod("OnAudioFilterRead", BindingFlags.Instance | BindingFlags.NonPublic));
+                    callback(output, 2);
+                    Assert.That(((DissonancePathPlayback)pump).ReadCalls, Is.Zero,
+                        "Binding before initial acoustic publication must not admit a stopped-source callback.");
+                    Assert.That(output, Is.All.Zero);
+                    yield break;
+                }
+                if (metadata)
+                {
+                    output = new float[128];
+                    read(output);
+                    var claim = type.GetMethod("TryClaimMetadata", BindingFlags.Instance | BindingFlags.NonPublic);
+                    var release = type.GetMethod("ReleaseMetadata", BindingFlags.Instance | BindingFlags.NonPublic);
+                    Assert.That(claim.Invoke(pump, null), Is.True);
+                    try
+                    {
+                        read(output);
+                        double metadataEnergy = 0;
+                        for (int i = 0; i < output.Length; i++) metadataEnergy += output[i] * output[i];
+                        Assert.That(metadataEnergy, Is.GreaterThan(1e-8), "Reading channel metadata must never mute cached PCM.");
+                        ((DissonancePathPlayback)pump).RequestRetirement();
+                        Assert.That(((DissonancePathPlayback)pump).TryDisposeRetired(), Is.False,
+                            "Resource reuse must wait for a held metadata snapshot as well as PCM readers.");
+                    }
+                    finally { release.Invoke(pump, null); }
+                    Assert.That(((DissonancePathPlayback)pump).TryDisposeRetired(), Is.True);
+                    Assert.That(claim.Invoke(pump, null), Is.False, "A retired snapshot must not claim storage reused by a later generation.");
+                    yield break;
+                }
                 if (liveParameters)
                 {
                     var parameters = type.GetProperty("Parameters");
@@ -135,10 +178,15 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio.Tests
                     Assert.That(updatedEnergy, Is.GreaterThan(1e-8));
                     for (int i = 0; i < output.Length; i += 2)
                         Assert.That(output[i], Is.EqualTo(output[i + 1]), "Near-field decoded speech must reach both ears identically after its width ramp.");
-                    long before = GC.GetAllocatedBytesForCurrentThread();
-                    for (int n = 0; n < 4; n++) read(output);
-                    Assert.That(GC.GetAllocatedBytesForCurrentThread() - before, Is.Zero,
+                    Assert.That(() => System.GC.KeepAlive(new byte[1024]),
+                        UnityEngine.TestTools.Constraints.Is.AllocatingGCMemory(),
+                        "GC allocation recorder must detect a known allocation before measuring this path.");
+                    Assert.That(() =>
+                    {
+                        for (int n = 0; n < 4; n++) read(output);
+                    }, UnityEngine.TestTools.Constraints.Is.Not.AllocatingGCMemory(),
                         "Warm live native decoding/rendering must not allocate on its processing owner.");
+
                     Assert.That(type.GetProperty("Generation").GetValue(pump), Is.EqualTo(1L));
                     Assert.That(type.GetProperty("Fault").GetValue(pump), Is.Null);
                     yield break;

@@ -190,40 +190,33 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio
             {
                 if (current.Fault != null) { _fault = current.Fault; RetireOutput(); return; }
                 // The previous frame's LateUpdate publishes the initial acoustic parameters.
-                if (_startPending) { _startPending = false; _source.Play(); }
+                if (_startPending) { _startPending = false; _monitor.StartOutput(); _source.Play(); }
                 if (!current.HasOutputDrained) return;
                 _decoder.Retire(false);
                 _source.Stop();
                 _source.clip = null;
-                if (_clip != null) Destroy(_clip);
-                _clip = null;
-                if (_monitor != null) Destroy(_monitor);
-                _monitor = null;
+                _monitor?.Unbind();
                 return;
             }
             var session = _decoder.Dequeue(rate);
             if (!session.HasValue) return;
-            SteamAudioPathRenderer renderer = null;
             try
             {
-                renderer = _factory(rate, frame);
-                var pump = new DissonancePathPlayback(session.Value, renderer, checked(++_generation), _coefficients, _listener);
-                renderer = null;
+                var pump = _decoder.CreatePump(session.Value, _factory, rate, frame, checked(++_generation), _coefficients, _listener);
                 pump.AllowPositionalPlayback = _positional;
                 pump.Parameters.TrySetBlocked(pump.Generation, StartBlocked);
                 _lastPlayback = pump;
                 _decoder.Publish(session.Value, pump);
                 _rate = rate; _frame = frame;
-                _monitor = gameObject.AddComponent<DissonanceOutputMonitor>();
+                if (_monitor == null) _monitor = gameObject.AddComponent<DissonanceOutputMonitor>();
                 _monitor.Bind(pump);
                 // A silent driver avoids streaming-clip prefetch consuming the live decoder ahead of DSP time.
-                _clip = AudioClip.Create("Bun3 stereo speech", checked(frame * 4), 2, rate, false);
+                if (_clip == null) _clip = AudioClip.Create("Bun3 stereo speech", checked(frame * 4), 2, rate, false);
                 _source.clip = _clip;
                 _startPending = true;
             }
             catch (Exception error)
             {
-                renderer?.Dispose();
                 _fault = error;
                 RetireOutput();
             }

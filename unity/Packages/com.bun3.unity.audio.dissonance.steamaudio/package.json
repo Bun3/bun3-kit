@@ -1,11 +1,11 @@
 {
   "name": "com.bun3.unity.audio.dissonance.steamaudio",
   "displayName": "Bun3 Dissonance Steam Audio Playback",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "unity": "6000.3",
   "description": "Optional decoded speech to native stereo path playback bridge.",
   "dependencies": {
     "com.bun3.unity.audio.dissonance": "0.2.0",
-    "com.bun3.unity.audio.steamaudio": "0.4.0"
+    "com.bun3.unity.audio.steamaudio": "0.4.1"
   }
 }

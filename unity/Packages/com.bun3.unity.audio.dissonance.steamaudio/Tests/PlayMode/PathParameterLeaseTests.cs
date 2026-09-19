@@ -1,3 +1,5 @@
+using UnityEngine.TestTools.Constraints;
+using Is = NUnit.Framework.Is;
 using System;
 using System.Threading;
 using System.Threading.Tasks;
@@ -62,15 +64,19 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio.Tests
             Assert.That(lease.TryPublish(input, settings), Is.True);
             Assert.That(storage.TryRead(1, output, out _), Is.True);
             storage.Retire(1);
-            long before = GC.GetAllocatedBytesForCurrentThread();
-            for (int i = 2; i < 10002; i++)
+            Assert.That(() => System.GC.KeepAlive(new byte[1024]),
+                UnityEngine.TestTools.Constraints.Is.AllocatingGCMemory(),
+                "GC allocation recorder must detect a known allocation before measuring this path.");
+            Assert.That(() =>
             {
-                lease = storage.BeginGeneration(i);
-                lease.TryPublish(input, settings);
-                storage.TryRead(i, output, out _);
-                storage.Retire(i);
-            }
-            Assert.That(GC.GetAllocatedBytesForCurrentThread() - before, Is.Zero);
+                for (int i = 2; i < 10002; i++)
+                {
+                    lease = storage.BeginGeneration(i);
+                    lease.TryPublish(input, settings);
+                    storage.TryRead(i, output, out _);
+                    storage.Retire(i);
+                }
+            }, UnityEngine.TestTools.Constraints.Is.Not.AllocatingGCMemory());
         }
 
         [Test]
