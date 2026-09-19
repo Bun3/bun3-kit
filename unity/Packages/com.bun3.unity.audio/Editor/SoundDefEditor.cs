@@ -25,7 +25,7 @@ namespace Bun3.Unity.Audio.Editor
         private static MethodInfo PlayPreviewClipMethod;
         private static MethodInfo StopAllPreviewClipsMethod;
 
-        private readonly UnityEditor.Editor[] _profileEditors = new UnityEditor.Editor[5];
+        private readonly UnityEditor.Editor[] _profileEditors = new UnityEditor.Editor[4];
 
         private void OnDisable()
         {
@@ -49,28 +49,31 @@ namespace Bun3.Unity.Audio.Editor
             }
             foreach (var field in fields)
                 EditorGUILayout.PropertyField(settings.FindProperty(field), true);
-            if (profileName == nameof(SoundDef.SpatialProfile)) DrawSpatialBlendFields(settings);
             if (settings != serializedObject) settings.ApplyModifiedProperties();
         }
 
-        private void DrawSpatialBlendFields(SerializedObject settings)
+        private void DrawSpatialGroup()
         {
-            var inherit = settings.FindProperty(nameof(SoundDef.InheritSpatialBlend));
-            EditorGUILayout.PropertyField(inherit);
-            if (inherit.boolValue) return;
-            var profile = settings.FindProperty(nameof(SoundDef.SpatialBlendProfile));
+            EditorGUILayout.Space();
+            EditorGUILayout.LabelField("Spatial", EditorStyles.boldLabel);
+            var profile = serializedObject.FindProperty(nameof(SoundDef.SpatialProfile));
             EditorGUILayout.PropertyField(profile);
+            var settings = serializedObject;
             if (profile.objectReferenceValue != null)
             {
-                EditorGUILayout.HelpBox("Editing shared near-field blend settings.", MessageType.Info);
-                CreateCachedEditor(profile.objectReferenceValue, null, ref _profileEditors[4]);
-                _profileEditors[4].OnInspectorGUI();
+                EditorGUILayout.HelpBox("Shared settings: edits affect every sound using this profile. Clear the profile to use the preserved local settings.", MessageType.Info);
+                var spatialProfile = (SoundSpatialProfile)profile.objectReferenceValue;
+                spatialProfile.UpgradeAcoustics();
+                CreateCachedEditor(spatialProfile, null, ref _profileEditors[3]);
+                settings = _profileEditors[3].serializedObject;
+                settings.Update();
             }
-            else
-            {
-                EditorGUILayout.PropertyField(settings.FindProperty(nameof(SoundDef.MonoDistance)));
-                EditorGUILayout.PropertyField(settings.FindProperty(nameof(SoundDef.FullSpatialDistance)));
-            }
+
+            EditorGUILayout.PropertyField(settings.FindProperty(nameof(SoundDef.Spatial)));
+            EditorGUILayout.PropertyField(settings.FindProperty("_acoustics"), new GUIContent("Acoustics"), true);
+            EditorGUILayout.PropertyField(settings.FindProperty(nameof(SoundDef.Occlusion)));
+            EditorGUILayout.PropertyField(settings.FindProperty(nameof(SoundDef.OcclusionVolumeAtFull)));
+            if (settings != serializedObject) settings.ApplyModifiedProperties();
         }
 
         static SoundDefEditor()
@@ -98,6 +101,8 @@ namespace Bun3.Unity.Audio.Editor
 
         public override void OnInspectorGUI()
         {
+            foreach (var inspectedTarget in targets)
+                ((SoundDef)inspectedTarget).UpgradeAcoustics();
             serializedObject.Update();
             using (new EditorGUI.DisabledScope(true))
                 EditorGUILayout.PropertyField(serializedObject.FindProperty("m_Script"));
@@ -111,10 +116,7 @@ namespace Bun3.Unity.Audio.Editor
                 nameof(SoundDef.MixerGroup), nameof(SoundDef.VolumeGroup));
             DrawGroup("Concurrency", nameof(SoundDef.ConcurrencyProfile), 2,
                 nameof(SoundDef.MaxInstances), nameof(SoundDef.Cooldown));
-            DrawGroup("Spatial", nameof(SoundDef.SpatialProfile), 3,
-                nameof(SoundDef.Spatial), nameof(SoundDef.MinDistance), nameof(SoundDef.MaxDistance),
-                nameof(SoundDef.DistanceAttenuation), nameof(SoundDef.AttenuationProfile),
-                nameof(SoundDef.Occlusion), nameof(SoundDef.OcclusionVolumeAtFull));
+            DrawSpatialGroup();
             serializedObject.ApplyModifiedProperties();
 
             DrawPreview((SoundDef)target);

@@ -40,6 +40,7 @@ namespace Bun3.Unity.Audio.Tests
                 Assert.That(def.EffectiveSpatialBlendProfile, Is.Null);
                 Assert.That(def.EffectiveMonoDistance, Is.EqualTo(1f));
                 Assert.That(def.EffectiveFullSpatialDistance, Is.EqualTo(3f));
+                Assert.That(def.EffectiveAcoustics.MinDistance, Is.EqualTo(1f));
                 Assert.That(def.EffectiveVolumeGroup, Is.EqualTo("sfx"));
                 def.SpatialProfile = null;
                 def.RoutingProfile = null;
@@ -54,6 +55,7 @@ namespace Bun3.Unity.Audio.Tests
                 Assert.That(def.EffectiveSpatialBlendProfile, Is.SameAs(blend));
                 Assert.That(def.EffectiveMonoDistance, Is.EqualTo(2f));
                 Assert.That(def.EffectiveFullSpatialDistance, Is.EqualTo(6f));
+                Assert.That(def.EffectiveAcoustics.MinDistance, Is.EqualTo(5f));
                 Assert.That(def.EffectiveVolumeGroup, Is.EqualTo("local"));
             }
             finally
