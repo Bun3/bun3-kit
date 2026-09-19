@@ -6,7 +6,7 @@ using SA = global::SteamAudio;
 namespace Bun3.Unity.Audio.SteamAudio
 {
     /// <summary>Optional positional SoundSystem output. Prepare clips and native resources before playing.</summary>
-    public sealed class SteamAudioSoundOutput : ISpatialSoundVoiceOutput
+    public sealed class SteamAudioSoundOutput : ISpatialSoundVoiceOutput, IResolvedSoundAcousticSettings
     {
         private readonly AudioSource _source;
         private readonly SteamAudioClipCache _clips;
@@ -81,19 +81,25 @@ namespace Bun3.Unity.Audio.SteamAudio
         }
 
         SoundDef _definition;
+        /// <inheritdoc/>
+        public bool IsAvailable => _definition != null;
+        /// <inheritdoc/>
+        public SoundAcousticSettings Acoustics => _definition != null
+            ? _definition.EffectiveAcoustics
+            : SoundAcousticSettings.Default;
         /// <summary>Gets the active sound's distance-attenuation option.</summary>
-        public bool DistanceAttenuation => _definition != null && _definition.EffectiveDistanceAttenuation;
+        public bool DistanceAttenuation => _definition != null && Acoustics.DistanceAttenuation;
         /// <summary>Gets the active sound's native distance profile.</summary>
-        public DistanceAttenuationProfile AttenuationProfile => _definition != null ? _definition.EffectiveAttenuationProfile : null;
+        public DistanceAttenuationProfile AttenuationProfile => _definition != null ? Acoustics.AttenuationProfile : null;
 
         /// <summary>Whether this sound follows the owning acoustic world's stereo-width defaults.</summary>
-        public bool InheritSpatialBlend => _definition == null || _definition.EffectiveInheritSpatialBlend;
+        public bool InheritSpatialBlend => _definition == null || Acoustics.InheritSpatialBlend;
         /// <summary>Live sound-specific stereo-width profile, used when inheritance is disabled.</summary>
-        public SpatialBlendProfile SpatialBlendProfile => _definition != null ? _definition.EffectiveSpatialBlendProfile : null;
+        public SpatialBlendProfile SpatialBlendProfile => _definition != null ? Acoustics.SpatialBlendProfile : null;
         /// <summary>Sound-specific inline mono distance when no profile is selected.</summary>
-        public float MonoDistance => _definition != null ? _definition.EffectiveMonoDistance : 0;
+        public float MonoDistance => _definition != null ? Acoustics.MonoDistance : 0;
         /// <summary>Sound-specific inline full spatial distance when no profile is selected.</summary>
-        public float FullSpatialDistance => _definition != null ? _definition.EffectiveFullSpatialDistance : 0;
+        public float FullSpatialDistance => _definition != null ? Acoustics.FullSpatialDistance : 0;
 
         /// <summary>Blocks each new positional generation before the first source-filter invocation.</summary>
         public bool StartBlocked { get; set; } = true;

@@ -20,13 +20,13 @@ namespace Bun3.Unity.Audio.SteamAudio
         /// <inheritdoc/>
         public bool IsBlocked => output.CurrentParameters.IsBlocked;
         /// <inheritdoc/>
-        public bool DistanceAttenuation => output.DistanceAttenuation;
+        public bool DistanceAttenuation => output.Acoustics.DistanceAttenuation;
         /// <inheritdoc/>
-        public DistanceAttenuationProfile AttenuationProfile => output.AttenuationProfile;
+        public DistanceAttenuationProfile AttenuationProfile => output.Acoustics.AttenuationProfile;
         /// <inheritdoc/>
-        public float MinimumDistance => output.MinDistance;
+        public float MinimumDistance => output.Acoustics.MinDistance;
         /// <inheritdoc/>
-        public float MaximumDistance => output.MaxDistance;
+        public float MaximumDistance => output.Acoustics.MaxDistance;
 
         /// <summary>Whether the active native output generation has not been prepared yet.</summary>
         public bool RequiresSimulation => output.CurrentParameters.IsValid && output.CurrentParameters.Generation != preparedGeneration;
@@ -43,9 +43,13 @@ namespace Bun3.Unity.Audio.SteamAudio
         public void Prepare(PlanarAcousticWorld world)
         {
             var parameters = output.CurrentParameters;
+            var acoustic = output.Acoustics;
+            bool available = output.IsAvailable;
             binding.Prepare(world, source != null ? (Vector2)source.transform.position : Vector2.zero,
-                source != null && parameters.IsValid);
-            if (parameters.IsValid) binding.ApplyDistanceProfile(output.DistanceAttenuation, output.AttenuationProfile, output.MinDistance, output.MaxDistance);
+                source != null && parameters.IsValid && available);
+            if (parameters.IsValid && available)
+                binding.ApplyDistanceProfile(acoustic.DistanceAttenuation, acoustic.AttenuationProfile,
+                    acoustic.MinDistance, acoustic.MaxDistance);
             preparedGeneration = parameters.IsValid ? parameters.Generation : 0;
         }
 
@@ -54,21 +58,25 @@ namespace Bun3.Unity.Audio.SteamAudio
         {
             var parameters = output.CurrentParameters;
             if (!parameters.IsValid) return;
-            if (!binding.TryGet(world, out var path))
+            var acoustic = output.Acoustics;
+            if (!output.IsAvailable || !binding.TryGet(world, out var path))
             {
                 parameters.TrySetBlocked(true);
                 return;
             }
             var result = path.SimulationResult;
             bool published = parameters.TryPublish(binding.Coefficients,
-                new PathRenderSettings(path.Listener, result.EqLow, result.EqMid, result.EqHigh, path.Gain, result.NormalizeEq, GetSpatialBlend(world)));
+                new PathRenderSettings(path.Listener, result.EqLow, result.EqMid, result.EqHigh, path.Gain, result.NormalizeEq,
+                    GetSpatialBlend(world, acoustic)));
             parameters.TrySetBlocked(!published);
         }
 
         /// <inheritdoc/>
-        public float GetSpatialBlend(PlanarAcousticWorld world) => output.InheritSpatialBlend
+        public float GetSpatialBlend(PlanarAcousticWorld world) => GetSpatialBlend(world, output.Acoustics);
+
+        float GetSpatialBlend(PlanarAcousticWorld world, SoundAcousticSettings acoustic) => acoustic.InheritSpatialBlend
             ? world.GetSpatialBlend(binding.Handle)
-            : world.GetSpatialBlend(binding.Handle, output.SpatialBlendProfile, output.MonoDistance, output.FullSpatialDistance);
+            : world.GetSpatialBlend(binding.Handle, acoustic.SpatialBlendProfile, acoustic.MonoDistance, acoustic.FullSpatialDistance);
 
         /// <summary>Immediately gates sources without current connectivity and probe coverage.</summary>
         public void Gate(PlanarAcousticWorld world, Vector2 listener)

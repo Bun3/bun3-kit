@@ -200,6 +200,7 @@ namespace Bun3.Unity.Audio.SteamAudio.Tests
             var clip = Clip();
             var def = ScriptableObject.CreateInstance<SoundDef>();
             var spatial = ScriptableObject.CreateInstance<SoundSpatialProfile>();
+            var acoustic = ScriptableObject.CreateInstance<SoundAcousticProfile>();
             var blend = ScriptableObject.CreateInstance<SpatialBlendProfile>();
             using var cache = new SteamAudioClipCache(100000);
             SteamAudioSoundOutput output = null;
@@ -209,16 +210,41 @@ namespace Bun3.Unity.Audio.SteamAudio.Tests
                 output = new SteamAudioSoundOutput(source, cache) { StartBlocked = false };
                 def.Spatial = SpatialMode.None; def.Loop = true;
                 spatial.Spatial = SpatialMode.Positional;
-                spatial.MinDistance = 5; spatial.MaxDistance = 20;
-                spatial.DistanceAttenuation = false;
-                spatial.InheritSpatialBlend = false; spatial.SpatialBlendProfile = blend;
+                acoustic.Settings = new SoundAcousticSettings
+                {
+                    DistanceAttenuation = false,
+                    MinDistance = 3,
+                    MaxDistance = 18,
+                    InheritSpatialBlend = false,
+                    SpatialBlendProfile = blend,
+                    MonoDistance = 0,
+                    FullSpatialDistance = 6,
+                };
+                spatial.Acoustics.Profile = acoustic;
                 def.SpatialProfile = spatial;
                 Assert.That(output.TryStart(def, clip, 1), Is.EqualTo(VoiceOutputStartResult.Started));
-                Assert.That(output.MinDistance, Is.EqualTo(5));
-                Assert.That(output.MaxDistance, Is.EqualTo(20));
+                Assert.That(output.Acoustics.MinDistance, Is.EqualTo(3));
+                Assert.That(output.Acoustics.MaxDistance, Is.EqualTo(18));
                 Assert.That(output.DistanceAttenuation, Is.False);
                 Assert.That(output.InheritSpatialBlend, Is.False);
                 Assert.That(output.SpatialBlendProfile, Is.SameAs(blend));
+                long generation = output.CurrentParameters.Generation;
+                var changed = acoustic.Settings;
+                changed.MinDistance = 4;
+                changed.MaxDistance = 22;
+                changed.MonoDistance = 2;
+                acoustic.Settings = changed;
+                Assert.That(output.Acoustics.MinDistance, Is.EqualTo(4));
+                Assert.That(output.Acoustics.MaxDistance, Is.EqualTo(22));
+                Assert.That(output.Acoustics.MonoDistance, Is.EqualTo(2));
+                Assert.That(output.CurrentParameters.Generation, Is.EqualTo(generation),
+                    "Shared profile edits must update the active native generation without restarting playback.");
+                float observed = 0;
+                Assert.That(() =>
+                {
+                    for (int i = 0; i < 1000; i++) observed += output.Acoustics.MinDistance;
+                }, UnityEngine.TestTools.Constraints.Is.Not.AllocatingGCMemory());
+                Assert.That(observed, Is.EqualTo(4000));
                 var lease = output.CurrentParameters;
                 Assert.That(lease.TryPublish(Coefficients, new PathRenderSettings(Settings.Listener, spatialBlend: 0)), Is.True);
                 var process = (Action<float[], int>)Delegate.CreateDelegate(typeof(Action<float[], int>), output,
@@ -240,7 +266,8 @@ namespace Bun3.Unity.Audio.SteamAudio.Tests
             {
                 output?.Dispose(); UnityEngine.Object.Destroy(go);
                 UnityEngine.Object.Destroy(clip); UnityEngine.Object.Destroy(def);
-                UnityEngine.Object.Destroy(spatial); UnityEngine.Object.Destroy(blend);
+                UnityEngine.Object.Destroy(spatial); UnityEngine.Object.Destroy(acoustic);
+                UnityEngine.Object.Destroy(blend);
             }
             yield return null;
             yield return null;
