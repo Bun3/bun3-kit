@@ -21,7 +21,10 @@ namespace Bun3.Unity.SoundEvents
             _lease = session.CreateActivityLease(ownerId, leaseSeconds);
         }
 
-        /// <summary>Validates transport identity, ordering, throttling, and host policy before updating activity.</summary>
+        /// <summary>
+        /// Validates transport identity, ordering, throttling, and host policy before updating activity.
+        /// Accepted stops preserve speech that has not reached a world tick as a single pulse.
+        /// </summary>
         public bool Report(ulong senderId, ulong sessionId, ulong sequence, bool active,
             bool hadActivation, double now, bool allowed, SoundActivityData hostData)
         {
@@ -65,7 +68,9 @@ namespace Bun3.Unity.SoundEvents
             bool accepted = _gate.TryAccept(sequence, now, !allowed || (!active && !hadActivation));
             if (!allowed) _lease.Tick(now, false);
             if (!fresh) return false;
-            if (!active || !allowed) _lease.Report(sequence, false, allowed, now, hostData);
+            if (!active || !allowed)
+                _lease.Report(sequence, false, allowed, now, hostData,
+                    preserveUnevaluated: allowed && (!accepted || !hadActivation));
             if (!accepted || !allowed) return false;
             if (active)
             {

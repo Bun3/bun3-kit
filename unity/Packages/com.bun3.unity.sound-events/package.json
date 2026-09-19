@@ -1,7 +1,7 @@
 {
   "name": "com.bun3.unity.sound-events",
   "displayName": "Bun3 Unity Sound Events",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "unity": "6000.3",
   "description": "Deterministic bounded sound event delivery without audio or networking dependencies.",
   "author": { "name": "Bun3" }

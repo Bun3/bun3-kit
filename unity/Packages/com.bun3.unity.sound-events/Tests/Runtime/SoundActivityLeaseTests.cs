@@ -1,3 +1,5 @@
+using UnityEngine.TestTools.Constraints;
+using Is = NUnit.Framework.Is;
 using System;
 using System.Collections.Generic;
 using NUnit.Framework;
@@ -143,10 +145,13 @@ namespace Bun3.Unity.SoundEvents.Tests
             using var lease = new SoundActivityLease(world, 1, 2, 2, () => { allocations++; return 3; });
             lease.Report(0, true, true, 0, Data);
             for (ulong i = 1; i < 100; i++) lease.Report(i, true, true, i * 0.01, Data);
-            long before = GC.GetAllocatedBytesForCurrentThread();
-            for (ulong i = 100; i < 1100; i++) lease.Report(i, true, true, i * 0.01, Data);
-            long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
-            Assert.That(allocated, Is.Zero);
+            Assert.That(() => System.GC.KeepAlive(new byte[1024]),
+                UnityEngine.TestTools.Constraints.Is.AllocatingGCMemory(),
+                "GC allocation recorder must detect a known allocation before measuring this path.");
+            Assert.That(() =>
+            {
+                for (ulong i = 100; i < 1100; i++) lease.Report(i, true, true, i * 0.01, Data);
+            }, UnityEngine.TestTools.Constraints.Is.Not.AllocatingGCMemory());
             Assert.That(allocations, Is.EqualTo(1));
         }
 

@@ -1,3 +1,5 @@
+using UnityEngine.TestTools.Constraints;
+using Is = NUnit.Framework.Is;
 using System;
 using NUnit.Framework;
 
@@ -44,10 +46,13 @@ namespace Bun3.Unity.SoundEvents.Tests
         {
             var gate = new SoundActivityReportGate(0);
             gate.TryAccept(0, 0);
-            long before = GC.GetAllocatedBytesForCurrentThread();
-            for (ulong i = 1; i < 1000; i++) gate.TryAccept(i, i);
-            long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
-            Assert.That(allocated, Is.Zero);
+            Assert.That(() => System.GC.KeepAlive(new byte[1024]),
+                UnityEngine.TestTools.Constraints.Is.AllocatingGCMemory(),
+                "GC allocation recorder must detect a known allocation before measuring this path.");
+            Assert.That(() =>
+            {
+                for (ulong i = 1; i < 1000; i++) gate.TryAccept(i, i);
+            }, UnityEngine.TestTools.Constraints.Is.Not.AllocatingGCMemory());
             Assert.That(gate.TryAccept(ulong.MaxValue, 1000), Is.True);
             Assert.That(gate.TryAccept(0, 1001), Is.False);
         }

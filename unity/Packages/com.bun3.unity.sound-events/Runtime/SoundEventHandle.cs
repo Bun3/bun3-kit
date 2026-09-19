@@ -12,6 +12,7 @@ namespace Bun3.Unity.SoundEvents
         public bool IsValid => _world != null && _world.IsEventValid(_slot, _generation);
         /// <summary>Ends this event. Returns false for an already-ended registration.</summary>
         public bool Stop() => _world != null && _world.Stop(_slot, _generation);
+        internal bool Complete() => _world != null && _world.Stop(_slot, _generation, preserveUnevaluated: true);
         /// <summary>Updates a sustained event's payload and absolute expiry. Its identity must stay unchanged.</summary>
         public bool Update(SoundEventData data, double expiresAt) =>
             _world != null && _world.UpdateEvent(_slot, _generation, data, expiresAt);

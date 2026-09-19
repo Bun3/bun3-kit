@@ -27,6 +27,76 @@ namespace Bun3.Unity.SoundEvents.Tests
         }
 
         [Test]
+        public void BatchedStartAndStopDeliverOnePulseWithoutExtraCapacity()
+        {
+            using var session = new SoundEventSession(7, 1, 1);
+            using var source = new ValidatedSoundActivitySource(session, 8, 1.25, .1);
+            var listener = new Listener(); session.Listen(Vector3.zero, 0, listener);
+            var outgoing = new OutgoingSoundActivityState(); outgoing.Reset(7);
+            Assert.That(outgoing.TryBuildReport(0, .2, true, true, out var start), Is.True);
+            Assert.That(outgoing.TryBuildReport(.05, .2, false, false, out var stop), Is.True);
+            Assert.That(source.Report(8, 7, start.Sequence, start.Active, start.HadActivation, 1, true, Data), Is.True);
+            Assert.That(source.Report(8, 7, stop.Sequence, stop.Active, stop.HadActivation, 1, true, Data), Is.True);
+            session.Tick(1);
+            session.Tick(1.1);
+            Assert.That(listener.Phases, Is.EqualTo(new[] { SoundEventPhase.Pulse }));
+        }
+
+        [Test]
+        public void ThrottledNewActivationDoesNotErasePreviouslyAcceptedSpeech()
+        {
+            using var session = new SoundEventSession(7, 1, 1);
+            using var source = new ValidatedSoundActivitySource(session, 8, 1.25, .1);
+            var listener = new Listener(); session.Listen(Vector3.zero, 0, listener);
+            Assert.That(source.Report(8, 7, 1, true, true, 0, true, Data), Is.True);
+            Assert.That(source.Report(8, 7, 2, false, true, .01, true, Data), Is.False);
+            session.Tick(.02);
+            Assert.That(listener.Phases, Is.EqualTo(new[] { SoundEventPhase.Pulse }));
+        }
+
+        [Test]
+        public void TickedSpeechStopsWithoutAnAdditionalPulse()
+        {
+            using var session = new SoundEventSession(7, 1, 1);
+            using var source = new ValidatedSoundActivitySource(session, 8, 1.25, .1);
+            var listener = new Listener(); session.Listen(Vector3.zero, 0, listener);
+            source.Report(8, 7, 1, true, true, 0, true, Data);
+            session.Tick(0);
+            source.Report(8, 7, 2, true, false, .2, true, Data);
+            session.Tick(.2);
+            source.Report(8, 7, 3, false, false, .21, true, Data);
+            session.Tick(.3);
+            Assert.That(listener.Phases, Is.EqualTo(new[]
+                { SoundEventPhase.Enter, SoundEventPhase.Update, SoundEventPhase.End }));
+        }
+
+        [TestCase(false)]
+        [TestCase(true)]
+        public void PolicyRevocationBeforeFirstTickCancelsUndeliveredSpeech(bool revokeWithTick)
+        {
+            using var session = new SoundEventSession(7, 1, 1);
+            using var source = new ValidatedSoundActivitySource(session, 8, 1.25, .1);
+            var listener = new Listener(); session.Listen(Vector3.zero, 0, listener);
+            source.Report(8, 7, 1, true, true, 0, true, Data);
+            if (revokeWithTick) source.Tick(.01, false);
+            else source.Report(8, 7, 2, false, false, .01, false, Data);
+            session.Tick(.02);
+            Assert.That(listener.Phases, Is.Empty);
+        }
+
+        [Test]
+        public void StopAfterLeaseExpiryDoesNotReviveUndeliveredSpeech()
+        {
+            using var session = new SoundEventSession(7, 1, 1);
+            using var source = new ValidatedSoundActivitySource(session, 8, 1.25, .1);
+            var listener = new Listener(); session.Listen(Vector3.zero, 0, listener);
+            source.Report(8, 7, 1, true, true, 0, true, Data);
+            source.Report(8, 7, 2, false, false, 1.25, true, Data);
+            session.Tick(1.25);
+            Assert.That(listener.Phases, Is.Empty);
+        }
+
+        [Test]
         public void IdentityMismatchDoesNotConsumeSequenceAndFreshStopBypassesThrottle()
         {
             using var session = new SoundEventSession(7, 4, 1);

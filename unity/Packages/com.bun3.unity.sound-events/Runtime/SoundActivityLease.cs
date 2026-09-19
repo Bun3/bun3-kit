@@ -42,6 +42,10 @@ namespace Bun3.Unity.SoundEvents
         /// A fresh denied, inactive, or capacity-rejected report consumes its sequence. Invalid input consumes nothing.
         /// </summary>
         public SoundActivityReportResult Report(ulong sequence, bool active, bool allowed, double now, SoundActivityData hostData)
+            => Report(sequence, active, allowed, now, hostData, preserveUnevaluated: false);
+
+        internal SoundActivityReportResult Report(ulong sequence, bool active, bool allowed, double now,
+            SoundActivityData hostData, bool preserveUnevaluated)
         {
             EnsureMutable(now);
             var validatedData = Payload(hostData, 0, 0);
@@ -57,7 +61,11 @@ namespace Bun3.Unity.SoundEvents
                 _now = now;
                 if (fresh) { HasAcceptedReport = true; LastSequence = sequence; }
                 if (!allowed) { EndCurrent(); return SoundActivityReportResult.Denied; }
-                if (!active) { EndCurrent(); return SoundActivityReportResult.Stopped; }
+                if (!active)
+                {
+                    EndCurrent(preserveUnevaluated && now < _expiresAt);
+                    return SoundActivityReportResult.Stopped;
+                }
                 if (IsActive && (now >= _expiresAt || _revision == uint.MaxValue)) EndCurrent();
                 if (IsActive)
                 {
@@ -100,12 +108,12 @@ namespace Bun3.Unity.SoundEvents
         private SoundEventData Payload(SoundActivityData data, ulong eventId, uint revision) =>
             new SoundEventData(_sessionId, eventId, _sourceId, data.KindId, data.Position, data.Intensity, data.Radius, data.HostTick, revision);
 
-        private bool EndCurrent()
+        private bool EndCurrent(bool preserveUnevaluated = false)
         {
             var handle = _handle;
             _handle = default;
             _eventId = 0;
-            return handle.Stop();
+            return preserveUnevaluated ? handle.Complete() : handle.Stop();
         }
 
         private void EnsureNotBusy()

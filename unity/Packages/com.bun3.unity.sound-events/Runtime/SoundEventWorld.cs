@@ -12,6 +12,7 @@ namespace Bun3.Unity.SoundEvents
             internal ulong Generation;
             internal SoundEventSnapshot Snapshot;
             internal bool CapturedPulse;
+            internal bool Evaluated;
         }
         private struct ListenerSlot
         {
@@ -79,6 +80,7 @@ namespace Bun3.Unity.SoundEvents
                 entry.Active = true;
                 entry.Snapshot = new SoundEventSnapshot(data, sustained, expiresAt);
                 entry.CapturedPulse = false;
+                entry.Evaluated = false;
                 handle = new SoundEventHandle(this, i, entry.Generation);
                 slot = i;
                 return true;
@@ -128,6 +130,7 @@ namespace Bun3.Unity.SoundEvents
                     if (!entry.Active) continue;
                     if (entry.Snapshot.IsSustained && entry.Snapshot.ExpiresAt <= now)
                     { End(e); continue; }
+                    entry.Evaluated = true;
                     for (int l = 0; l < _listeners.Length; l++)
                     {
                         ref var listener = ref _listeners[l];
@@ -196,10 +199,16 @@ namespace Bun3.Unity.SoundEvents
         internal bool IsEventValid(int slot, ulong generation) => !_disposed && _events[slot].Active && _events[slot].Generation == generation;
         internal bool IsListenerValid(int slot, ulong generation) => !_disposed && _listeners[slot].Receiver != null && _listeners[slot].Generation == generation;
 
-        internal bool Stop(int slot, ulong generation)
+        internal bool Stop(int slot, ulong generation, bool preserveUnevaluated = false)
         {
             EnsureNotBusy();
             if (!IsEventValid(slot, generation)) return false;
+            ref var entry = ref _events[slot];
+            if (preserveUnevaluated && entry.Snapshot.IsSustained && !entry.Evaluated)
+            {
+                entry.Snapshot = new SoundEventSnapshot(entry.Snapshot.Data, false, 0);
+                return true;
+            }
             _busy = true;
             try { End(slot); }
             finally { _busy = false; }

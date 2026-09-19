@@ -1,3 +1,5 @@
+using UnityEngine.TestTools.Constraints;
+using Is = NUnit.Framework.Is;
 using System;
 using System.Collections.Generic;
 using NUnit.Framework;
@@ -299,9 +301,13 @@ namespace Bun3.Unity.SoundEvents.Tests
             var receiver = new Counter();
             var registered = world.RegisterListener(Vector3.zero, 0, receiver);
             Assert.That(world.TryRegisterListener(Vector3.zero, 0, receiver, out _), Is.False);
-            long before = GC.GetAllocatedBytesForCurrentThread();
-            for (int i = 0; i < 1000; i++) world.TryRegisterListener(Vector3.zero, 0, receiver, out _);
-            Assert.That(GC.GetAllocatedBytesForCurrentThread() - before, Is.Zero);
+            Assert.That(() => System.GC.KeepAlive(new byte[1024]),
+                UnityEngine.TestTools.Constraints.Is.AllocatingGCMemory(),
+                "GC allocation recorder must detect a known allocation before measuring this path.");
+            Assert.That(() =>
+            {
+                for (int i = 0; i < 1000; i++) world.TryRegisterListener(Vector3.zero, 0, receiver, out _);
+            }, UnityEngine.TestTools.Constraints.Is.Not.AllocatingGCMemory());
             registered.Release();
             Assert.That(world.TryRegisterListener(Vector3.zero, 0, receiver, out var next), Is.True);
             Assert.That(next.IsValid, Is.True);
@@ -395,10 +401,13 @@ namespace Bun3.Unity.SoundEvents.Tests
             world.RegisterListener(Vector3.zero, 0, receiver);
             world.TryStart(Data(), 10000, out _);
             for (int i = 0; i < 100; i++) world.Tick(i);
-            long before = GC.GetAllocatedBytesForCurrentThread();
-            for (int i = 100; i < 1100; i++) world.Tick(i);
-            long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
-            Assert.That(allocated, Is.Zero);
+            Assert.That(() => System.GC.KeepAlive(new byte[1024]),
+                UnityEngine.TestTools.Constraints.Is.AllocatingGCMemory(),
+                "GC allocation recorder must detect a known allocation before measuring this path.");
+            Assert.That(() =>
+            {
+                for (int i = 100; i < 1100; i++) world.Tick(i);
+            }, UnityEngine.TestTools.Constraints.Is.Not.AllocatingGCMemory());
             Assert.That(receiver.Count, Is.EqualTo(1100));
         }
     }
