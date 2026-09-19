@@ -73,8 +73,16 @@ namespace Bun3.Unity.Audio.SteamAudio
         {
             if (_disposed) throw new ObjectDisposedException(nameof(SteamAudioClipCache));
             if (clips == null) throw new ArgumentNullException(nameof(clips));
+            var unique = CollectUnpreparedClips(clips, out long bytes);
+            var prepared = DecodeClips(unique);
+            foreach (var pair in prepared) _clips.Add(pair.Key, pair.Value);
+            DecodedBytes = bytes;
+        }
+
+        private HashSet<AudioClip> CollectUnpreparedClips(IReadOnlyList<AudioClip> clips, out long bytes)
+        {
             var unique = new HashSet<AudioClip>();
-            long bytes = DecodedBytes;
+            bytes = DecodedBytes;
             for (int i = 0; i < clips.Count; i++)
             {
                 var clip = clips[i];
@@ -87,10 +95,14 @@ namespace Bun3.Unity.Audio.SteamAudio
                 bytes = checked(bytes + (long)clip.samples * clip.channels * sizeof(float));
                 if (bytes > _maximum) throw new InvalidOperationException("Prepared clip PCM exceeds the configured byte budget.");
             }
-            var prepared = new List<KeyValuePair<AudioClip, Pcm>>(unique.Count);
-            foreach (var clip in unique) prepared.Add(new KeyValuePair<AudioClip, Pcm>(clip, new Pcm(clip)));
-            foreach (var pair in prepared) _clips.Add(pair.Key, pair.Value);
-            DecodedBytes = bytes;
+            return unique;
+        }
+
+        private static List<KeyValuePair<AudioClip, Pcm>> DecodeClips(HashSet<AudioClip> clips)
+        {
+            var prepared = new List<KeyValuePair<AudioClip, Pcm>>(clips.Count);
+            foreach (var clip in clips) prepared.Add(new KeyValuePair<AudioClip, Pcm>(clip, new Pcm(clip)));
+            return prepared;
         }
 
         internal bool TryGet(AudioClip clip, out Pcm pcm)

@@ -62,15 +62,14 @@ namespace Bun3.Unity.Audio.SteamAudio
             owner.SetSourceDistanceAttenuationEnabled(handle, enabled);
             owner.SetSourceDistanceCurve(handle, profile != null ? profile.GetSnapshot() : null);
             if (profile != null) return;
-            float minimum = fallbackMinimum;
-            float maximum = fallbackMaximum;
-            float fade = .2f;
-            if (float.IsNaN(minimum) || float.IsInfinity(minimum)) minimum = 0;
-            if (float.IsNaN(maximum) || float.IsInfinity(maximum)) maximum = .01f;
-            if (float.IsNaN(fade) || float.IsInfinity(fade)) fade = .2f;
+            float minimum = SanitizeFallbackDistance(fallbackMinimum, 0);
+            float maximum = SanitizeFallbackDistance(fallbackMaximum, .01f);
             SetSourceMinimumDistance(Mathf.Max(0, minimum));
-            SetSourceDistanceRange(Mathf.Max(.01f, maximum), Mathf.Clamp(fade, .01f, 1));
+            SetSourceDistanceRange(Mathf.Max(.01f, maximum), .2f);
         }
+
+        static float SanitizeFallbackDistance(float distance, float fallback) =>
+            float.IsNaN(distance) || float.IsInfinity(distance) ? fallback : distance;
 
         /// <summary>Releases the source if its owning world is still live.</summary>
         public void Detach()

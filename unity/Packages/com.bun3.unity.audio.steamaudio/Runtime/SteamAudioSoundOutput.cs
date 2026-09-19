@@ -230,25 +230,7 @@ namespace Bun3.Unity.Audio.SteamAudio
                     Volatile.Write(ref _complete, 1);
                     return;
                 }
-                int written = 0;
-                while (written < samples.Length && Volatile.Read(ref _state) == 2)
-                {
-                    if (_offset == _stereo.Length)
-                    {
-                        if (!RenderNextFrame())
-                        {
-                            _terminal = true;
-                            Array.Clear(samples, written, samples.Length - written);
-                            break;
-                        }
-                        _offset = 0;
-                    }
-                    int count = Math.Min(samples.Length - written, _stereo.Length - _offset);
-                    // Preserve the incoming flatline driver envelope (Unity source/mixer gain) exactly once.
-                    for (int i = 0; i < count; i++) samples[written + i] *= _stereo[_offset + i];
-                    written += count;
-                    _offset += count;
-                }
+                MixRenderedFrames(samples);
             }
             catch (Exception error)
             {
@@ -263,6 +245,29 @@ namespace Bun3.Unity.Audio.SteamAudio
             }
         }
 
+        private void MixRenderedFrames(float[] samples)
+        {
+            int written = 0;
+            while (written < samples.Length && Volatile.Read(ref _state) == 2)
+            {
+                if (_offset == _stereo.Length)
+                {
+                    if (!RenderNextFrame())
+                    {
+                        _terminal = true;
+                        Array.Clear(samples, written, samples.Length - written);
+                        break;
+                    }
+                    _offset = 0;
+                }
+                int count = Math.Min(samples.Length - written, _stereo.Length - _offset);
+                // Preserve the incoming flatline driver envelope (Unity source/mixer gain) exactly once.
+                for (int i = 0; i < count; i++) samples[written + i] *= _stereo[_offset + i];
+                written += count;
+                _offset += count;
+            }
+        }
+
         private bool RenderNextFrame()
         {
             if (_mailbox.TryRead(_generation, _coefficients, out var settings)) _settings = settings;
@@ -272,25 +277,42 @@ namespace Bun3.Unity.Audio.SteamAudio
                 _renderer.RenderTail(_stereo, _settings.Gain);
                 return true;
             }
+            FillPitchedMonoFrame();
+            _renderer.RenderSpatial(_mono, _stereo, _coefficients, _settings.EqLow, _settings.EqMid, _settings.EqHigh,
+                _settings.Listener, _settings.Gain, _settings.NormalizeEq, _settings.SpatialBlend);
+            return true;
+        }
+
+        private void FillPitchedMonoFrame()
+        {
             double step = (double)_pcm.Rate / _rate * Volatile.Read(ref _pitch);
             for (int i = 0; i < _mono.Length; i++)
             {
                 if (_position >= _pcm.Frames)
                 {
                     if (_loop) _position %= _pcm.Frames;
-                    else { Array.Clear(_mono, i, _mono.Length - i); _inputEnded = true; break; }
+                    else
+                    {
+                        Array.Clear(_mono, i, _mono.Length - i);
+                        _inputEnded = true;
+                        break;
+                    }
                 }
                 int frame = (int)_position;
                 int next = frame + 1;
-                float a = ReadMono(frame);
-                float b = next < _pcm.Frames ? ReadMono(next) : _loop ? ReadMono(0) : 0;
-                _mono[i] = a + (b - a) * (float)(_position - frame);
+                float currentSample = ReadMono(frame);
+                float nextSample = ReadNextMonoSample(next);
+                float fraction = (float)(_position - frame);
+                _mono[i] = currentSample + (nextSample - currentSample) * fraction;
                 _position += step;
             }
             if (!_loop && _position >= _pcm.Frames) _inputEnded = true;
-            _renderer.RenderSpatial(_mono, _stereo, _coefficients, _settings.EqLow, _settings.EqMid, _settings.EqHigh,
-                _settings.Listener, _settings.Gain, _settings.NormalizeEq, _settings.SpatialBlend);
-            return true;
+        }
+
+        private float ReadNextMonoSample(int nextFrame)
+        {
+            if (nextFrame < _pcm.Frames) return ReadMono(nextFrame);
+            return _loop ? ReadMono(0) : 0;
         }
 
         private float ReadMono(int frame)

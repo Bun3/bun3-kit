@@ -61,21 +61,17 @@ namespace Bun3.Unity.Audio.SteamAudio
             {
                 if (float.IsNaN(interval) || float.IsInfinity(interval) || interval <= 0)
                     throw new ArgumentOutOfRangeException(nameof(interval));
-                if (listener != null && !listener.isActiveAndEnabled) { listener = null; nextListenerSearch = 0; }
-                if (listener == null && now >= nextListenerSearch)
-                {
-                    nextListenerSearch = now + 1f;
-                    var candidates = UnityEngine.Object.FindObjectsByType<AudioListener>(FindObjectsSortMode.None);
-                    for (int i = 0; i < candidates.Length; i++)
-                        if (candidates[i].isActiveAndEnabled) { listener = candidates[i]; break; }
-                }
+                RefreshListener(now);
                 if (listener == null) { outputs.Detach(); return; }
-                bool changed = updateGeometry != null && updateGeometry();
-                bool initial = false;
+                bool geometryChanged = updateGeometry != null && updateGeometry();
+                bool needsInitialSimulation = false;
                 var items = outputs.Items;
                 for (int i = 0; i < items.Count; i++)
-                { items[i].Gate(World, listener.transform.position); initial |= items[i].RequiresSimulation; }
-                if (now < nextTick && !changed && !initial) return;
+                {
+                    items[i].Gate(World, listener.transform.position);
+                    needsInitialSimulation |= items[i].RequiresSimulation;
+                }
+                if (now < nextTick && !geometryChanged && !needsInitialSimulation) return;
                 nextTick = now + interval;
                 for (int i = 0; i < items.Count; i++) items[i].Prepare(World);
                 World.Tick(listener.transform.position, simulationTime);
@@ -83,6 +79,18 @@ namespace Bun3.Unity.Audio.SteamAudio
             }
             catch { ReleaseWorld(); throw; }
         }
+        private void RefreshListener(float now)
+        {
+            if (listener != null && !listener.isActiveAndEnabled) { listener = null; nextListenerSearch = 0; }
+            if (listener == null && now >= nextListenerSearch)
+            {
+                nextListenerSearch = now + 1f;
+                var candidates = UnityEngine.Object.FindObjectsByType<AudioListener>(FindObjectsSortMode.None);
+                for (int i = 0; i < candidates.Length; i++)
+                    if (candidates[i].isActiveAndEnabled) { listener = candidates[i]; break; }
+            }
+        }
+
         /// <summary>Releases the current world and retries construction while retaining the enabled session's device subscription.</summary>
         public bool TryReinitialize()
         {

@@ -45,17 +45,32 @@ namespace Bun3.Unity.Audio.SteamAudio
         struct Quad
         {
             public Vector2 A, B, C, D;
-            public bool Overlaps(Quad other) => Axis(other, B - A) && Axis(other, D - A) && other.Axis(this, other.B - other.A) && other.Axis(this, other.D - other.A);
-            bool Axis(Quad other, Vector2 edge)
+            public bool Overlaps(Quad other) =>
+                OverlapsOnAxis(other, B - A) && OverlapsOnAxis(other, D - A) &&
+                other.OverlapsOnAxis(this, other.B - other.A) && other.OverlapsOnAxis(this, other.D - other.A);
+
+            bool OverlapsOnAxis(Quad other, Vector2 edge)
             {
                 var axis = new Vector2(-edge.y, edge.x);
-                float a = Vector2.Dot(A, axis), b = Vector2.Dot(B, axis), c = Vector2.Dot(C, axis), d = Vector2.Dot(D, axis);
-                float e = Vector2.Dot(other.A, axis), f = Vector2.Dot(other.B, axis), g = Vector2.Dot(other.C, axis), h = Vector2.Dot(other.D, axis);
+                ProjectOnto(axis, out float minimum, out float maximum);
+                other.ProjectOnto(axis, out float otherMinimum, out float otherMaximum);
+                float overlapEnd = Mathf.Min(maximum, otherMaximum);
+                float overlapStart = Mathf.Max(minimum, otherMinimum);
                 // Boundary contact alone must not close an adjacent cell.
-                return Mathf.Min(Mathf.Max(Mathf.Max(a, b), Mathf.Max(c, d)), Mathf.Max(Mathf.Max(e, f), Mathf.Max(g, h))) >
-                    Mathf.Max(Mathf.Min(Mathf.Min(a, b), Mathf.Min(c, d)), Mathf.Min(Mathf.Min(e, f), Mathf.Min(g, h))) + 0.000001f * axis.magnitude;
+                return overlapEnd > overlapStart + 0.000001f * axis.magnitude;
+            }
+
+            void ProjectOnto(Vector2 axis, out float minimum, out float maximum)
+            {
+                float a = Vector2.Dot(A, axis);
+                float b = Vector2.Dot(B, axis);
+                float c = Vector2.Dot(C, axis);
+                float d = Vector2.Dot(D, axis);
+                minimum = Mathf.Min(Mathf.Min(a, b), Mathf.Min(c, d));
+                maximum = Mathf.Max(Mathf.Max(a, b), Mathf.Max(c, d));
             }
         }
+
         sealed class Door
         {
             public Matrix4x4 Matrix;
@@ -284,14 +299,7 @@ namespace Bun3.Unity.Audio.SteamAudio
             Door replacement = null;
             if (shapeChanged)
             {
-                var half = size * .5f;
-                var polygon = new Quad
-                {
-                    A = matrix.MultiplyPoint3x4(offset + new Vector2(-half.x, -half.y)),
-                    B = matrix.MultiplyPoint3x4(offset + new Vector2(half.x, -half.y)),
-                    C = matrix.MultiplyPoint3x4(offset + new Vector2(half.x, half.y)),
-                    D = matrix.MultiplyPoint3x4(offset + new Vector2(-half.x, half.y))
-                };
+                var polygon = CreateDoorPolygon(matrix, offset, size);
                 if (Mathf.Abs(Cross(polygon.B - polygon.A, polygon.D - polygon.A)) < 0.0000001f) throw new ArgumentException("Door world shape is degenerate.", nameof(collider));
                 replacement = new Door { Matrix = matrix, Offset = offset, Size = size, Polygon = polygon };
                 replacement.Mesh = CreateDoorMesh(polygon);
@@ -324,6 +332,18 @@ namespace Bun3.Unity.Audio.SteamAudio
             CommitDoors(); return true;
         }
 
+        static Quad CreateDoorPolygon(Matrix4x4 matrix, Vector2 offset, Vector2 size)
+        {
+            var half = size * .5f;
+            return new Quad
+            {
+                A = matrix.MultiplyPoint3x4(offset + new Vector2(-half.x, -half.y)),
+                B = matrix.MultiplyPoint3x4(offset + new Vector2(half.x, -half.y)),
+                C = matrix.MultiplyPoint3x4(offset + new Vector2(half.x, half.y)),
+                D = matrix.MultiplyPoint3x4(offset + new Vector2(-half.x, half.y))
+            };
+        }
+
         void Invalidate()
         {
             if (geometryRevision == ulong.MaxValue) throw new InvalidOperationException("Geometry revision cannot wrap.");
@@ -333,18 +353,31 @@ namespace Bun3.Unity.Audio.SteamAudio
         {
             scene.Scene.Commit();
             var frame = map.Frame;
-            for (int y = 0; y < map.Height; y++) for (int x = 0; x < map.Width; x++)
+            for (int y = 0; y < map.Height; y++)
             {
-                bool blocked = map.IsBlocked(x, y);
-                if (!blocked)
+                for (int x = 0; x < map.Width; x++)
                 {
-                    Vector3 corner = frame.Origin + frame.CellX * x + frame.CellY * y;
-                    var cell = new Quad { A = GamePoint(corner), B = GamePoint(corner + frame.CellX),
-                        C = GamePoint(corner + frame.CellX + frame.CellY), D = GamePoint(corner + frame.CellY) };
-                    foreach (var pair in doors) if (pair.Value.Closed && cell.Overlaps(pair.Value.Polygon)) { blocked = true; break; }
+                    bool blocked = map.IsBlocked(x, y) || IsCellBlockedByDoor(frame, x, y);
+                    query.SetBlocked(x, y, blocked);
                 }
-                query.SetBlocked(x, y, blocked);
             }
+        }
+
+        bool IsCellBlockedByDoor(AcousticGridFrame frame, int x, int y)
+        {
+            Vector3 corner = frame.Origin + frame.CellX * x + frame.CellY * y;
+            var cell = new Quad
+            {
+                A = GamePoint(corner),
+                B = GamePoint(corner + frame.CellX),
+                C = GamePoint(corner + frame.CellX + frame.CellY),
+                D = GamePoint(corner + frame.CellY)
+            };
+            foreach (var pair in doors)
+            {
+                if (pair.Value.Closed && cell.Overlaps(pair.Value.Polygon)) return true;
+            }
+            return false;
         }
 
         SteamAudioMeshScope CreateDoorMesh(Quad polygon)

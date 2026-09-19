@@ -39,17 +39,7 @@ namespace Bun3.Unity.Audio.SteamAudio
                 if (batch.Get() == IntPtr.Zero) throw new InvalidOperationException("Steam Audio could not create a probe batch.");
                 for (int i = 0; i < probes.Length; i++) batch.AddProbe(probes[i]);
                 batch.Commit();
-                var parameters = new SA.PathBakeParams
-                {
-                    scene = scene.Get(), probeBatch = batch.Get(),
-                    identifier = new SA.BakedDataIdentifier { type = SA.BakedDataType.Pathing, variation = SA.BakedDataVariation.Dynamic },
-                    numSamples = settings.VisibilitySamples, radius = settings.VisibilityRadius,
-                    threshold = settings.VisibilityThreshold, visRange = settings.VisibilityRange,
-                    pathRange = settings.PathRange, numThreads = settings.Threads
-                };
-                SA.API.iplPathBakerBake(context.Get(), ref parameters, Progress, IntPtr.Zero);
-                if (batch.GetDataSize(parameters.identifier).ToUInt64() == 0)
-                    throw new InvalidOperationException("Steam Audio did not produce a pathing data layer.");
+                BakePathing(context, scene, batch, settings);
                 byte[] sceneBytes = Serialize(context, scene.Get(), true);
                 byte[] probeBytes = Serialize(context, batch.Get(), false);
                 asset = ScriptableObject.CreateInstance<SteamAudioAcousticAsset>();
@@ -67,6 +57,21 @@ namespace Bun3.Unity.Audio.SteamAudio
                 if (mesh != IntPtr.Zero) SA.API.iplStaticMeshRelease(ref mesh);
                 scene?.Release();
             }
+        }
+
+        static void BakePathing(SA.Context context, SA.Scene scene, SA.ProbeBatch batch, SteamAudioPathBakeSettings settings)
+        {
+            var parameters = new SA.PathBakeParams
+            {
+                scene = scene.Get(), probeBatch = batch.Get(),
+                identifier = new SA.BakedDataIdentifier { type = SA.BakedDataType.Pathing, variation = SA.BakedDataVariation.Dynamic },
+                numSamples = settings.VisibilitySamples, radius = settings.VisibilityRadius,
+                threshold = settings.VisibilityThreshold, visRange = settings.VisibilityRange,
+                pathRange = settings.PathRange, numThreads = settings.Threads
+            };
+            SA.API.iplPathBakerBake(context.Get(), ref parameters, Progress, IntPtr.Zero);
+            if (batch.GetDataSize(parameters.identifier).ToUInt64() == 0)
+                throw new InvalidOperationException("Steam Audio did not produce a pathing data layer.");
         }
 
         static byte[] Serialize(SA.Context context, IntPtr value, bool scene)
@@ -132,20 +137,28 @@ namespace Bun3.Unity.Audio.SteamAudio
                 if (!Finite(vertices[i].x) || !Finite(vertices[i].y) || !Finite(vertices[i].z)) throw new ArgumentException("Mesh vertices must be finite.", nameof(vertices));
             for (int i = 0; i < triangles.Length; i++)
             {
-                var t = triangles[i];
-                if (t.index0 < 0 || t.index0 >= vertices.Length || t.index1 < 0 || t.index1 >= vertices.Length ||
-                    t.index2 < 0 || t.index2 >= vertices.Length || t.index0 == t.index1 || t.index1 == t.index2 || t.index0 == t.index2 ||
-                    indices[i] < 0 || indices[i] >= materials.Length)
+                var triangle = triangles[i];
+                bool validVertices = IsVertexIndex(triangle.index0, vertices.Length) &&
+                    IsVertexIndex(triangle.index1, vertices.Length) && IsVertexIndex(triangle.index2, vertices.Length);
+                bool distinctVertices = triangle.index0 != triangle.index1 && triangle.index1 != triangle.index2 &&
+                    triangle.index0 != triangle.index2;
+                bool validMaterial = indices[i] >= 0 && indices[i] < materials.Length;
+                if (!validVertices || !distinctVertices || !validMaterial)
                     throw new ArgumentException("Mesh topology or material indices are invalid.", nameof(triangles));
             }
             for (int i = 0; i < materials.Length; i++)
             {
-                var m = materials[i];
-                if (!Unit(m.absorptionLow) || !Unit(m.absorptionMid) || !Unit(m.absorptionHigh) || !Unit(m.scattering) ||
-                    !Unit(m.transmissionLow) || !Unit(m.transmissionMid) || !Unit(m.transmissionHigh))
+                if (!HasValidCoefficients(materials[i]))
                     throw new ArgumentException("Acoustic material coefficients must be within zero and one.", nameof(materials));
             }
         }
+        static bool IsVertexIndex(int index, int vertexCount) => index >= 0 && index < vertexCount;
+
+        static bool HasValidCoefficients(SA.Material material) =>
+            Unit(material.absorptionLow) && Unit(material.absorptionMid) && Unit(material.absorptionHigh) &&
+            Unit(material.scattering) && Unit(material.transmissionLow) && Unit(material.transmissionMid) &&
+            Unit(material.transmissionHigh);
+
         static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
         static bool Unit(float value) => Finite(value) && value >= 0 && value <= 1;
     }

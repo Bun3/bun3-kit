@@ -102,9 +102,7 @@ namespace Bun3.Unity.Audio.SteamAudio
         static float EvaluateDistance(float distance, IntPtr userData)
         {
             var state = (DistanceState)GCHandle.FromIntPtr(userData).Target;
-            float gain = !state.AttenuationEnabled ? (Finite(distance) && distance >= 0 ? 1 : 0) :
-                state.Curve != null ? state.Curve.Evaluate(distance) :
-                Bun3.Unity.Audio.DistanceAttenuationProfile.Evaluate(distance, state.Minimum, state.Maximum, state.FadeFraction);
+            float gain = EvaluateDistanceGain(distance, state);
             if (state.CapturePathDistances && Finite(distance) && distance >= 0)
             {
                 state.PathCount++;
@@ -113,6 +111,13 @@ namespace Bun3.Unity.Audio.SteamAudio
                 state.Longest = Math.Max(state.Longest, distance);
             }
             return gain;
+        }
+
+        static float EvaluateDistanceGain(float distance, DistanceState state)
+        {
+            if (!state.AttenuationEnabled) return Finite(distance) && distance >= 0 ? 1 : 0;
+            if (state.Curve != null) return state.Curve.Evaluate(distance);
+            return DistanceAttenuationProfile.Evaluate(distance, state.Minimum, state.Maximum, state.FadeFraction);
         }
 
         struct Slot
@@ -388,22 +393,44 @@ namespace Bun3.Unity.Audio.SteamAudio
                 throw new ArgumentOutOfRangeException(nameof(simulationTime));
             if (!hasListener) throw new InvalidOperationException("A listener must be configured before simulation.");
             time = simulationTime;
+            PrepareSimulationInputs();
+            SA.API.iplSimulatorRunDirect(simulator);
+            BeginPathDistanceCapture();
+            RunPathingWithDiagnostics();
+            MarkDistanceModelsConsumed();
+            CopySimulationResults();
+        }
+
+        void PrepareSimulationInputs()
+        {
             for (int i = 0; i < slots.Length; i++)
                 if (slots[i].Active) ClearResult(i, SteamAudioPathSimulationStatus.Failed);
-            if (needsCommit) { SA.API.iplSimulatorCommit(simulator); needsCommit = false; }
+            if (needsCommit)
+            {
+                SA.API.iplSimulatorCommit(simulator);
+                needsCommit = false;
+            }
             NativePathSimulation.SetSharedInputs(simulator, Flags, ref shared);
             for (int i = 0; i < slots.Length; i++)
                 if (slots[i].Active) NativePathSimulation.SetInputs(slots[i].Source, Flags, ref slots[i].Inputs);
-            SA.API.iplSimulatorRunDirect(simulator);
+        }
+
+        void BeginPathDistanceCapture()
+        {
             debugCapture?.Clear();
             for (int i = 0; i < slots.Length; i++)
             {
                 var state = slots[i].Distance;
                 state.PathCount = state.NonzeroPathCount = 0;
                 state.Diagnostics?.Clear();
-                state.Shortest = float.PositiveInfinity; state.Longest = 0;
+                state.Shortest = float.PositiveInfinity;
+                state.Longest = 0;
                 state.CapturePathDistances = slots[i].Active;
             }
+        }
+
+        void RunPathingWithDiagnostics()
+        {
             try
             {
                 if (diagnosticsEnabled) bun3SteamAudioSetPathDiagnosticCallbackV1(DiagnosticPointer);
@@ -414,17 +441,22 @@ namespace Bun3.Unity.Audio.SteamAudio
                 if (diagnosticsEnabled) bun3SteamAudioSetPathDiagnosticCallbackV1(IntPtr.Zero);
                 for (int i = 0; i < slots.Length; i++) slots[i].Distance.CapturePathDistances = false;
             }
+        }
+
+        void MarkDistanceModelsConsumed()
+        {
             // Both synchronous runs have consumed the callback curve change.
             for (int i = 0; i < slots.Length; i++)
                 if (slots[i].Active) slots[i].Inputs.Distance.Dirty = 0;
+        }
+
+        void CopySimulationResults()
+        {
             for (int i = 0; i < slots.Length; i++)
             {
                 if (!slots[i].Active) continue;
                 NativePathSimulation.GetOutputs(slots[i].Source, Flags, out var output);
-                if (!Finite(output.Direct.DistanceAttenuation) || !Finite(output.Direct.Occlusion) ||
-                    !Finite(output.Direct.AirLow) || !Finite(output.Direct.AirMid) || !Finite(output.Direct.AirHigh) ||
-                    !Finite(output.Pathing.EqLow) || !Finite(output.Pathing.EqMid) || !Finite(output.Pathing.EqHigh) ||
-                    output.Pathing.Coefficients == IntPtr.Zero) continue;
+                if (!HasReadableOutput(output)) continue;
                 int offset = i * CoefficientCount;
                 Marshal.Copy(output.Pathing.Coefficients, coefficients, offset, CoefficientCount);
                 bool valid = true, signal = false;
@@ -434,10 +466,22 @@ namespace Bun3.Unity.Audio.SteamAudio
                     valid &= Finite(value);
                     signal |= value != 0;
                 }
-                if (!valid) { ClearResult(i, SteamAudioPathSimulationStatus.Failed); continue; }
+                if (!valid)
+                {
+                    ClearResult(i, SteamAudioPathSimulationStatus.Failed);
+                    continue;
+                }
                 signal &= output.Pathing.EqLow != 0 || output.Pathing.EqMid != 0 || output.Pathing.EqHigh != 0;
                 slots[i].Result = new SteamAudioPathSimulationResult(SteamAudioPathSimulationStatus.Valid, revision, time, output, signal);
             }
+        }
+
+        static bool HasReadableOutput(in NativePathSimulation.Outputs output)
+        {
+            return Finite(output.Direct.DistanceAttenuation) && Finite(output.Direct.Occlusion) &&
+                Finite(output.Direct.AirLow) && Finite(output.Direct.AirMid) && Finite(output.Direct.AirHigh) &&
+                Finite(output.Pathing.EqLow) && Finite(output.Pathing.EqMid) && Finite(output.Pathing.EqHigh) &&
+                output.Pathing.Coefficients != IntPtr.Zero;
         }
 
         /// <summary>

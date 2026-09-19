@@ -87,15 +87,7 @@ namespace Bun3.Unity.Audio.SteamAudio
             if (generation != Generation || (Volatile.Read(ref _gate) & 2) != 0) return false;
             ValidateBuffer(coefficients);
             for (int i = 0; i < coefficients.Length; i++) Finite(coefficients[i]);
-            Nonnegative(settings.EqLow); Nonnegative(settings.EqMid); Nonnegative(settings.EqHigh); Nonnegative(settings.Gain);
-            Finite(settings.SpatialBlend);
-            if (settings.SpatialBlend < 0 || settings.SpatialBlend > 1) throw new ArgumentOutOfRangeException(nameof(settings));
-            var listener = settings.Listener;
-            Finite(listener.origin.x); Finite(listener.origin.y); Finite(listener.origin.z);
-            if (!(Math.Abs(Dot(listener.right, listener.right) - 1) < .001 && Math.Abs(Dot(listener.up, listener.up) - 1) < .001 &&
-                Math.Abs(Dot(listener.ahead, listener.ahead) - 1) < .001 && Math.Abs(Dot(listener.right, listener.up)) < .001 &&
-                Math.Abs(Dot(listener.right, listener.ahead)) < .001 && Math.Abs(Dot(listener.up, listener.ahead)) < .001))
-                throw new ArgumentException("Listener axes must be finite and orthonormal.", nameof(settings));
+            ValidateSettings(settings);
             int published = Volatile.Read(ref _published);
             int pinned = Volatile.Read(ref _pinned);
             int target = 0;
@@ -175,6 +167,32 @@ namespace Bun3.Unity.Audio.SteamAudio
 
         internal bool IsCurrent(long generation) => generation == Generation && (Volatile.Read(ref _gate) & 2) == 0;
         internal bool IsBlockedFor(long generation) => generation != Generation || IsBlocked;
+
+        private static void ValidateSettings(PathRenderSettings settings)
+        {
+            Nonnegative(settings.EqLow);
+            Nonnegative(settings.EqMid);
+            Nonnegative(settings.EqHigh);
+            Nonnegative(settings.Gain);
+            Finite(settings.SpatialBlend);
+            if (settings.SpatialBlend < 0 || settings.SpatialBlend > 1) throw new ArgumentOutOfRangeException(nameof(settings));
+            var listener = settings.Listener;
+            Finite(listener.origin.x);
+            Finite(listener.origin.y);
+            Finite(listener.origin.z);
+            if (!HasUnitAxes(listener) || !HasPerpendicularAxes(listener))
+                throw new ArgumentException("Listener axes must be finite and orthonormal.", nameof(settings));
+        }
+
+        private static bool HasUnitAxes(SA.CoordinateSpace3 listener) =>
+            Math.Abs(Dot(listener.right, listener.right) - 1) < .001 &&
+            Math.Abs(Dot(listener.up, listener.up) - 1) < .001 &&
+            Math.Abs(Dot(listener.ahead, listener.ahead) - 1) < .001;
+
+        private static bool HasPerpendicularAxes(SA.CoordinateSpace3 listener) =>
+            Math.Abs(Dot(listener.right, listener.up)) < .001 &&
+            Math.Abs(Dot(listener.right, listener.ahead)) < .001 &&
+            Math.Abs(Dot(listener.up, listener.ahead)) < .001;
 
         private void ValidateBuffer(float[] coefficients)
         {

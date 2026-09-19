@@ -182,19 +182,31 @@ namespace Bun3.Unity.Audio.SteamAudio
             Marshal.Copy(_rightSamples, _right, 0, FrameSize);
             for (int i = 0; i < FrameSize; i++)
             {
-                float step = 1f / Math.Max(1, SampleRate * .02f);
-                if (_spatialBlend < _targetSpatialBlend) _spatialBlend = Math.Min(_targetSpatialBlend, _spatialBlend + step);
-                else if (_spatialBlend > _targetSpatialBlend) _spatialBlend = Math.Max(_targetSpatialBlend, _spatialBlend - step);
-                float left = _left[i], right = _right[i];
-                if (_spatialBlend != 1)
-                {
-                    float mid = (left + right) * .5f;
-                    float side = (left - right) * (.5f * _spatialBlend);
-                    left = mid + side; right = mid - side;
-                }
+                AdvanceSpatialBlend();
+                float left = _left[i];
+                float right = _right[i];
+                ApplyStereoWidth(ref left, ref right, _spatialBlend);
                 interleavedStereo[2 * i] = gain == 0 ? 0 : left * gain;
                 interleavedStereo[2 * i + 1] = gain == 0 ? 0 : right * gain;
             }
+        }
+
+        private void AdvanceSpatialBlend()
+        {
+            float step = 1f / Math.Max(1, SampleRate * .02f);
+            if (_spatialBlend < _targetSpatialBlend)
+                _spatialBlend = Math.Min(_targetSpatialBlend, _spatialBlend + step);
+            else if (_spatialBlend > _targetSpatialBlend)
+                _spatialBlend = Math.Max(_targetSpatialBlend, _spatialBlend - step);
+        }
+
+        private static void ApplyStereoWidth(ref float left, ref float right, float width)
+        {
+            if (width == 1) return;
+            float mid = (left + right) * .5f;
+            float side = (left - right) * (.5f * width);
+            left = mid + side;
+            right = mid - side;
         }
 
         /// <summary>Clears native filter and convolution history. Call only from the processing owner.</summary>

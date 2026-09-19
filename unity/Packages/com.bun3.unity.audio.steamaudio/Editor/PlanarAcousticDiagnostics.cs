@@ -89,23 +89,29 @@ namespace Bun3.Unity.Audio.SteamAudio.Editor
                 if (!(outputs[i] is IPlanarAcousticDiagnostics source)) continue;
                 var handle = source.SourceHandle;
                 if (!handle.IsValid) continue;
-                var profile = source.AttenuationProfile;
-                bool measured = world.TryGetNativePathDistances(handle, out float min, out float max, out int count, out int positive);
-                var nativePaths = ReadPaths(world, handle, out int dropped);
-                voices.Add(new Voice
-                {
-                    name = source.Label, position = source.Position, nativeDistancesAvailable = measured,
-                    paths = nativePaths, droppedPaths = dropped, nativeMin = min, nativeMax = max,
-                    nativeCount = count, nativeNonzeroCount = positive, spatialBlend = source is IPlanarSpatialBlendDiagnostics width ? width.GetSpatialBlend(world) : world.GetSpatialBlend(handle),
-                    maximum = profile != null ? profile.GetSnapshot().MaximumDistance : source.MaximumDistance,
-                    curve = profile != null ? profile.VolumeByDistance : DistanceAttenuationProfile.CreateLegacyCurve(source.MinimumDistance, source.MaximumDistance, .2f),
-                    attenuationEnabled = source.DistanceAttenuation,
-                    hasPath = world.TryGetPath(handle, coefficients, out _), blocked = source.IsBlocked,
-                    routeCovered = world.IsRouteCovered(source.Position, listener)
-                });
+                voices.Add(CaptureVoice(world, source, handle, listener, coefficients));
             }
             return new Snapshot { ticks = DateTime.UtcNow.Ticks, scene = scene, listener = listener,
                 voices = voices.ToArray(), nativePathExtension = world.SupportsNativePathDiagnostics };
         }
+        static Voice CaptureVoice(PlanarAcousticWorld world, IPlanarAcousticDiagnostics source,
+            PlanarAcousticSourceHandle handle, Vector2 listener, float[] coefficients)
+        {
+            var profile = source.AttenuationProfile;
+            bool measured = world.TryGetNativePathDistances(handle, out float min, out float max, out int count, out int positive);
+            var nativePaths = ReadPaths(world, handle, out int dropped);
+            return new Voice
+            {
+                name = source.Label, position = source.Position, nativeDistancesAvailable = measured,
+                paths = nativePaths, droppedPaths = dropped, nativeMin = min, nativeMax = max,
+                nativeCount = count, nativeNonzeroCount = positive, spatialBlend = source is IPlanarSpatialBlendDiagnostics width ? width.GetSpatialBlend(world) : world.GetSpatialBlend(handle),
+                maximum = profile != null ? profile.GetSnapshot().MaximumDistance : source.MaximumDistance,
+                curve = profile != null ? profile.VolumeByDistance : DistanceAttenuationProfile.CreateLegacyCurve(source.MinimumDistance, source.MaximumDistance, .2f),
+                attenuationEnabled = source.DistanceAttenuation,
+                hasPath = world.TryGetPath(handle, coefficients, out _), blocked = source.IsBlocked,
+                routeCovered = world.IsRouteCovered(source.Position, listener)
+            };
+        }
+
     }
 }

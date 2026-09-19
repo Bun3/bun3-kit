@@ -57,15 +57,30 @@ namespace Bun3.Unity.Audio.SteamAudio
             if (baked == null || width <= 0 || height <= 0 || blocked == null || blocked.Length != checked(width * height))
                 throw new InvalidOperationException("Acoustic map data is incomplete.");
             if (!Finite(earHeight) || !(floorHeight < earHeight && earHeight < ceilingHeight)) throw new InvalidOperationException("Acoustic ear height is invalid.");
+            var mask = CopyOccupancy();
+            var probes = CopyProbes();
+            return new AcousticGridQuery(mask, Frame, floorHeight, ceilingHeight, probes, 8);
+        }
+
+        bool[,] CopyOccupancy()
+        {
             var mask = new bool[width, height];
-            for (int y = 0; y < height; y++) for (int x = 0; x < width; x++) mask[x, y] = blocked[y * width + x];
+            for (int y = 0; y < height; y++)
+                for (int x = 0; x < width; x++)
+                    mask[x, y] = blocked[y * width + x];
+            return mask;
+        }
+
+        AcousticProbe[] CopyProbes()
+        {
             var probes = new AcousticProbe[baked.ProbeCount];
             for (int i = 0; i < probes.Length; i++)
             {
-                var p = baked.GetProbe(i);
-                probes[i] = new AcousticProbe(new Vector3(p.center.x, p.center.y, p.center.z), p.radius);
+                var sphere = baked.GetProbe(i);
+                var center = new Vector3(sphere.center.x, sphere.center.y, sphere.center.z);
+                probes[i] = new AcousticProbe(center, sphere.radius);
             }
-            return new AcousticGridQuery(mask, Frame, floorHeight, ceilingHeight, probes, 8);
+            return probes;
         }
         static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
     }
