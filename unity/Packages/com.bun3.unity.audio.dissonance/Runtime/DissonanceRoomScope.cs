@@ -45,22 +45,25 @@ namespace Bun3.Unity.Audio.Dissonance
                 CurrentRoom = roomName;
             }
 
-            if (transmit)
+            if (!transmit)
             {
-                if (!_channel.HasValue || !_channel.Value.IsOpen)
-                    _channel = _channels.Open(roomName, positional);
-                else
-                {
-                    var channel = _channel.Value;
-                    channel.Positional = positional;
-                }
+                CloseTransmitChannel();
+                return;
             }
+            if (!_channel.HasValue || !_channel.Value.IsOpen)
+                _channel = _channels.Open(roomName, positional);
             else
             {
-                var channel = _channel;
-                _channel = null;
-                if (channel.HasValue) channel.Value.Dispose();
+                var channel = _channel.Value;
+                channel.Positional = positional;
             }
+        }
+
+        private void CloseTransmitChannel()
+        {
+            var channel = _channel;
+            _channel = null;
+            if (channel.HasValue) channel.Value.Dispose();
         }
 
         /// <summary>Closes only the owned transmitting channel and releases one owned receiving membership.</summary>

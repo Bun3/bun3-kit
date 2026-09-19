@@ -12,10 +12,11 @@ namespace Bun3.Unity.Audio.Dissonance
     /// </remarks>
     public sealed class DissonanceVoiceActivityScope : IDisposable, IVoiceActivationListener
     {
+        private const int ActivationCountShift = 2;
         private const long Active = 1;
         private const long Disposed = 2;
         private const long CountIncrement = 4;
-        private const long MaximumCount = long.MaxValue >> 2;
+        private const long MaximumCount = long.MaxValue >> ActivationCountShift;
         private readonly Action<IVoiceActivationListener> _unsubscribe;
         private long _state;
 
@@ -39,7 +40,7 @@ namespace Bun3.Unity.Audio.Dissonance
         public DissonanceVoiceActivitySnapshot Poll()
         {
             var state = Interlocked.Read(ref _state);
-            return new DissonanceVoiceActivitySnapshot((state & Active) != 0, state >> 2);
+            return new DissonanceVoiceActivitySnapshot((state & Active) != 0, state >> ActivationCountShift);
         }
 
         /// <summary>Unsubscribes once and prevents synchronous or late callbacks from publishing more activity.</summary>
@@ -61,9 +62,16 @@ namespace Bun3.Unity.Audio.Dissonance
             {
                 var state = Interlocked.Read(ref _state);
                 if ((state & (Active | Disposed)) != 0) return;
-                var next = ((state >> 2) == MaximumCount ? state : state + CountIncrement) | Active;
+                long next = WithNewActivation(state);
                 if (Interlocked.CompareExchange(ref _state, next, state) == state) return;
             }
+        }
+
+        private static long WithNewActivation(long state)
+        {
+            long count = state >> ActivationCountShift;
+            long incremented = count == MaximumCount ? state : state + CountIncrement;
+            return incremented | Active;
         }
 
         void IVoiceActivationListener.VoiceActivationStop()
