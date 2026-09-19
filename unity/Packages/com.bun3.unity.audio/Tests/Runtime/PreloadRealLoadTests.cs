@@ -10,6 +10,7 @@ using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.AddressableAssets;
 using UnityEngine.AddressableAssets.ResourceLocators;
+using UnityEngine.ResourceManagement;
 using UnityEngine.ResourceManagement.AsyncOperations;
 using UnityEngine.ResourceManagement.ResourceLocations;
 using UnityEngine.ResourceManagement.ResourceProviders;
@@ -25,6 +26,7 @@ namespace Bun3.Unity.Audio.Tests
         private ClipProvider _provider;
         private SoundSystem _system;
         private SoundDef _definition;
+        private ExpectedLoadFailureScope _expectedFailure;
         private readonly List<Task> _pending = new List<Task>();
 
         [UnitySetUp]
@@ -64,6 +66,8 @@ namespace Bun3.Unity.Audio.Tests
             }
             finally
             {
+                _expectedFailure?.Dispose();
+                _expectedFailure = null;
                 _pending.Clear();
                 _system?.Dispose();
                 if (_definition != null)
@@ -104,10 +108,14 @@ namespace Bun3.Unity.Audio.Tests
         [UnityTest]
         public IEnumerator Preload_InvalidGuid_WarnsAndStaysUnpreloaded()
         {
-            _definition.AddressableClips = new[] { new AssetReferenceT<AudioClip>(Guid.NewGuid().ToString("N")) };
-            LogAssert.Expect(LogType.Error, new Regex("InvalidKeyException"));
+            var missingKey = Guid.NewGuid().ToString("N");
+            _definition.AddressableClips = new[] { new AssetReferenceT<AudioClip>(missingKey) };
+            using var expectedFailure = CaptureExpectedFailure(exception =>
+                exception is InvalidKeyException invalidKey &&
+                Equals(invalidKey.Key, missingKey) && invalidKey.Type == typeof(AudioClip));
             LogAssert.Expect(LogType.Warning, new Regex("SoundSystem.PreloadAsync: failed to load"));
             yield return Observe(StartPreload());
+            Assert.That(expectedFailure.CaptureCount, Is.EqualTo(1));
             Assert.IsFalse(_system.IsPreloaded(_definition));
             Assert.IsNull(_definition.RuntimeClips);
         }
@@ -117,21 +125,39 @@ namespace Bun3.Unity.Audio.Tests
         {
             var failedKey = Guid.NewGuid().ToString("N");
             var failedLocation = new ResourceLocationBase(failedKey, failedKey, _provider.ProviderId, typeof(AudioClip));
-            failedLocation.Data = "fail";
+            var failure = new InvalidOperationException("Controlled preload failure");
+            failedLocation.Data = failure;
             _locator.Add(failedKey, failedLocation);
             _definition.AddressableClips = new[]
             {
                 _definition.AddressableClips[0],
                 new AssetReferenceT<AudioClip>(failedKey),
             };
-            LogAssert.Expect(LogType.Error, new Regex("Controlled preload failure"));
+            using var expectedFailure = CaptureExpectedFailure(exception => ReferenceEquals(exception, failure));
             LogAssert.Expect(LogType.Warning, new Regex("SoundSystem.PreloadAsync: failed to load"));
             var pending = StartPreload();
             _provider.CompletePending();
             yield return Observe(pending);
+            Assert.That(expectedFailure.CaptureCount, Is.EqualTo(1));
             Assert.IsFalse(_system.IsPreloaded(_definition));
             Assert.IsNull(_definition.RuntimeClips);
             Assert.That(_provider.ReleaseCount, Is.EqualTo(1), "A failed later clip must release the earlier successful load.");
+            Assert.IsTrue(_provider.Clip == null);
+        }
+
+        [UnityTest]
+        public IEnumerator Preload_InvalidReference_ReleasesEarlierClipsBeforePropagatingException()
+        {
+            _definition.AddressableClips = new[] { _definition.AddressableClips[0], null };
+            var pending = StartPreload();
+            _provider.CompletePending();
+            while (!pending.IsCompleted)
+                yield return null;
+
+            Assert.Throws<NullReferenceException>(() => pending.GetAwaiter().GetResult());
+            Assert.IsFalse(_system.IsPreloaded(_definition));
+            Assert.IsNull(_definition.RuntimeClips);
+            Assert.That(_provider.ReleaseCount, Is.EqualTo(1), "An unexpected exception must release earlier successful loads.");
             Assert.IsTrue(_provider.Clip == null);
         }
 
@@ -186,6 +212,42 @@ namespace Bun3.Unity.Audio.Tests
             Assert.IsTrue(_provider.Clip == null);
         }
 
+        [Test]
+        public void ExpectedFailureScope_ForwardsUnexpectedErrors_AndRestoresHandlerOnException()
+        {
+            var originalHandler = ResourceManager.ExceptionHandler;
+            var expected = new InvalidOperationException("Expected fixture failure");
+            var unexpected = new InvalidOperationException("Unexpected fixture failure");
+            Exception forwarded = null;
+            Action<AsyncOperationHandle, Exception> previousHandler = (_, exception) => forwarded = exception;
+            ResourceManager.ExceptionHandler = previousHandler;
+            try
+            {
+                Assert.Throws<InvalidOperationException>(() =>
+                {
+                    using var scope = new ExpectedLoadFailureScope(exception => ReferenceEquals(exception, expected));
+                    ResourceManager.ExceptionHandler(default, expected);
+                    Assert.That(scope.CaptureCount, Is.EqualTo(1));
+                    Assert.That(forwarded, Is.Null);
+                    ResourceManager.ExceptionHandler(default, unexpected);
+                    Assert.That(forwarded, Is.SameAs(unexpected));
+                    Assert.That(scope.CaptureCount, Is.EqualTo(1));
+                    throw new InvalidOperationException("Exit the scope early");
+                });
+                Assert.That(ResourceManager.ExceptionHandler, Is.SameAs(previousHandler));
+            }
+            finally
+            {
+                ResourceManager.ExceptionHandler = originalHandler;
+            }
+        }
+
+        private ExpectedLoadFailureScope CaptureExpectedFailure(Func<Exception, bool> matches)
+        {
+            _expectedFailure = new ExpectedLoadFailureScope(matches);
+            return _expectedFailure;
+        }
+
         private Task StartPreload(CancellationToken cancellation = default)
         {
             var pending = _system.PreloadAsync(_definition, cancellation).AsTask();
@@ -200,6 +262,39 @@ namespace Bun3.Unity.Audio.Tests
             pending.GetAwaiter().GetResult();
         }
 
+        // LogAssert accepts expected errors but still prints them in the Editor Console.
+        private sealed class ExpectedLoadFailureScope : IDisposable
+        {
+            private readonly Action<AsyncOperationHandle, Exception> _previousHandler;
+            private readonly Func<Exception, bool> _matches;
+            private bool _disposed;
+
+            internal int CaptureCount { get; private set; }
+
+            internal ExpectedLoadFailureScope(Func<Exception, bool> matches)
+            {
+                _matches = matches;
+                _previousHandler = ResourceManager.ExceptionHandler;
+                ResourceManager.ExceptionHandler = HandleException;
+            }
+
+            private void HandleException(AsyncOperationHandle operation, Exception exception)
+            {
+                if (_matches(exception))
+                    CaptureCount++;
+                else
+                    _previousHandler?.Invoke(operation, exception);
+            }
+
+            public void Dispose()
+            {
+                if (_disposed)
+                    return;
+                ResourceManager.ExceptionHandler = _previousHandler;
+                _disposed = true;
+            }
+        }
+
         private sealed class ClipProvider : ResourceProviderBase, IDisposable
         {
             private readonly List<ProvideHandle> _pending = new List<ProvideHandle>();
@@ -210,9 +305,9 @@ namespace Bun3.Unity.Audio.Tests
 
             public override void Provide(ProvideHandle provideHandle)
             {
-                if (Equals(provideHandle.Location.Data, "fail"))
+                if (provideHandle.Location.Data is Exception failure)
                 {
-                    provideHandle.Complete<AudioClip>(null, false, new InvalidOperationException("Controlled preload failure"));
+                    provideHandle.Complete<AudioClip>(null, false, failure);
                     return;
                 }
                 Clip = AudioClip.Create("Addressables preload fixture", 4800, 1, 48000, false);
