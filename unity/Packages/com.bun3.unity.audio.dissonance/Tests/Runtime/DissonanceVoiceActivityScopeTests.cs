@@ -1,3 +1,5 @@
+using UnityEngine.TestTools.Constraints;
+using Is = NUnit.Framework.Is;
 using System;
 using System.Reflection;
 using System.Threading.Tasks;
@@ -111,14 +113,17 @@ namespace Bun3.Unity.Audio.Dissonance.Tests
                 scope.Listener.VoiceActivationStart();
                 scope.Listener.VoiceActivationStop();
             }
-            long before = GC.GetAllocatedBytesForCurrentThread();
-            for (int i = 0; i < 1024; i++)
+            Assert.That(() => System.GC.KeepAlive(new byte[1024]),
+                UnityEngine.TestTools.Constraints.Is.AllocatingGCMemory(),
+                "GC allocation recorder must detect a known allocation before measuring this path.");
+            Assert.That(() =>
             {
-                scope.Listener.VoiceActivationStart();
-                scope.Listener.VoiceActivationStop();
-            }
-            long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
-            Assert.That(allocated, Is.Zero);
+                for (int i = 0; i < 1024; i++)
+                {
+                    scope.Listener.VoiceActivationStart();
+                    scope.Listener.VoiceActivationStop();
+                }
+            }, UnityEngine.TestTools.Constraints.Is.Not.AllocatingGCMemory());
         }
     }
 }

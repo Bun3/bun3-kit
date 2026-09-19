@@ -1,3 +1,5 @@
+using UnityEngine.TestTools.Constraints;
+using Is = NUnit.Framework.Is;
 using System;
 using System.Collections;
 using System.Reflection;
@@ -100,12 +102,17 @@ namespace Bun3.Unity.Audio.Dissonance.Netcode.Tests
             using var registration = (IDisposable)Activator.CreateInstance(type, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance,
                 null, new object[] { comms, "collision", root.transform, NetworkPlayerType.Local }, null);
             for (int i = 0; i < 8; i++) canRegister(comms, "collision");
-            long before = GC.GetAllocatedBytesForCurrentThread();
             bool rejected = true;
-            for (int i = 0; i < 1000; i++) rejected &= !canRegister(comms, "collision");
-            long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+            Assert.That(() => System.GC.KeepAlive(new byte[1024]),
+                UnityEngine.TestTools.Constraints.Is.AllocatingGCMemory(),
+                "GC allocation recorder must detect a known allocation before measuring this path.");
+            TestDelegate warmLookup = () =>
+            {
+                for (int i = 0; i < 1000; i++) rejected &= !canRegister(comms, "collision");
+            };
+            warmLookup();
+            Assert.That(warmLookup, UnityEngine.TestTools.Constraints.Is.Not.AllocatingGCMemory());
             Assert.That(rejected, Is.True);
-            Assert.That(allocated, Is.Zero);
         }
 
         [Test]
