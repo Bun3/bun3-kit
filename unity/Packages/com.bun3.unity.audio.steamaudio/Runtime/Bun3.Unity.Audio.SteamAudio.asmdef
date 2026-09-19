@@ -1,14 +1,21 @@
 {
-    "name": "Bun3.Unity.Audio.SteamAudio",
-    "rootNamespace": "Bun3.Unity.Audio.SteamAudio",
-    "references": [ "Bun3.Unity.Audio", "SteamAudioUnity" ],
-    "includePlatforms": [],
-    "excludePlatforms": [],
-    "allowUnsafeCode": false,
-    "overrideReferences": false,
-    "precompiledReferences": [],
-    "autoReferenced": true,
-    "defineConstraints": [ "STEAMAUDIO_ENABLED" ],
-    "versionDefines": [],
-    "noEngineReferences": false
+  "name": "Bun3.Unity.Audio.SteamAudio",
+  "rootNamespace": "Bun3.Unity.Audio.SteamAudio",
+  "references": [
+    "Bun3.Unity.Audio",
+    "SteamAudioUnity",
+    "Bun3.Unity.Acoustics"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [
+    "STEAMAUDIO_ENABLED",
+    "BUN3_STEAMAUDIO"
+  ],
+  "versionDefines": [],
+  "noEngineReferences": false
 }

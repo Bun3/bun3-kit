@@ -20,6 +20,28 @@ namespace Bun3.Unity.Audio.SteamAudio.Tests
         }
 
         [UnityTest]
+        public IEnumerator RequestModeOverridesDefinitionWithoutChangingItsAsset()
+        {
+            var def = Def(SpatialMode.Positional, true);
+            try
+            {
+                using var sys = new SoundSystem(SteamAudioSoundSetup.Apply(new SoundSystemConfig { SfxVoices = 1 }));
+                sys.Play(def, Vector3.zero, SpatialMode.None);
+                var source = sys.SourceForTest(0);
+                Assert.IsFalse(source.spatialize);
+                Assert.IsFalse(source.TryGetComponent<SteamAudioSourceComponent>(out _));
+                Assert.That(def.Spatial, Is.EqualTo(SpatialMode.Positional));
+                sys.Play(def, Vector3.one, SpatialMode.Positional);
+                Assert.IsTrue(source.spatialize);
+                sys.Play(def, Vector3.zero, SpatialMode.None);
+                Assert.IsFalse(source.spatialize);
+                Assert.IsFalse(source.GetComponent<SteamAudioSourceComponent>().enabled);
+            }
+            finally { Object.DestroyImmediate(def.Clips[0]); Object.DestroyImmediate(def); }
+            yield break;
+        }
+
+        [UnityTest]
         public IEnumerator Occluded3D_GetsSteamAudioSource_NoCoreLpf()
         {
             using var sys = new SoundSystem(SteamAudioSoundSetup.Apply(new SoundSystemConfig { SfxVoices = 2 }));

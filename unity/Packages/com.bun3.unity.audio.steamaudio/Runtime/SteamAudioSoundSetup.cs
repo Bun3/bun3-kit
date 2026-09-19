@@ -55,8 +55,7 @@ namespace Bun3.Unity.Audio.SteamAudio
         /// <summary>
         /// Per-play voice binder. Defensive no-op on a null <paramref name="source"/>
         /// or <paramref name="def"/> (chained hooks may be invoked with either null
-        /// in tests). 2D voices (<see cref="SoundDef.Spatial"/> is
-        /// <see cref="SpatialMode.None"/>) never get a
+        /// in tests). 2D voices (the configured source has zero spatial blend) never get a
         /// <see cref="global::SteamAudio.SteamAudioSource"/> attached — attaching one
         /// triggers native Steam Audio simulator registration on <c>Awake</c>, which
         /// a 2D-only voice never needs; an already-attached component (from a pooled
@@ -75,7 +74,7 @@ namespace Bun3.Unity.Audio.SteamAudio
                 return;
             }
 
-            if (def.Spatial == SpatialMode.None)
+            if (source.spatialBlend <= 0f)
             {
                 source.spatialize = false;
                 if (source.TryGetComponent<global::SteamAudio.SteamAudioSource>(out var existing))
@@ -93,7 +92,7 @@ namespace Bun3.Unity.Audio.SteamAudio
             }
 
             steamSource.enabled = true;
-            steamSource.occlusion = def.Occlusion;
+            steamSource.occlusion = def.EffectiveOcclusion;
         }
     }
 }
