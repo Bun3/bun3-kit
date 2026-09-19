@@ -1,5 +1,45 @@
 # Changelog
 
+## [0.3.0] - 2026-09-13
+
+- Add SDK-independent Editor setup commands to explicitly synchronize installed optional adapters or disable them before SDK removal on Standalone, Android, iOS and WebGL.
+
+
+## [0.2.0] - 2026-09-12
+
+### Added
+
+- Optional prewarmed `ISoundVoiceOutput` owners through `SoundSystemConfig.CreateVoiceOutput`.
+  Owners can replace SFX processing and driver configuration while the core retains gain,
+  fades and mixer routing. Native output completion can include processing tails.
+- Explicit Unsupported/Started/Unavailable start results prevent handled failures from
+  falling back to dry clips. Retirement precedes source reuse, stop and disposal; logical
+  pitch updates reach the owner without modifying its driver pitch.
+- Owned spatial processing bypasses the core's occlusion queries, low-pass and occlusion
+  gain. Null/unsupported owners preserve ordinary playback and music behavior.
+
+## [0.1.2] - 2026-09-12
+
+### Added
+
+- `SoundSystemConfig.OnSourceCreated` prepares each pooled SFX source once at
+  construction. Callback failure destroys the partial pool before registration.
+
+## [0.1.1] - 2026-09-11
+
+### Added
+
+- Fixed-capacity external playback registrations with generation-safe handles,
+  explicit gain, mixer routing and existing low-pass filter ownership, and
+  restoration on release or disposal without changing playback state.
+
+### Fixed
+
+- A reentrant stolen-voice completion callback can no longer make an outer
+  `Play` call return a handle belonging to the callback's replacement voice.
+- A reentrant source-configuration callback can no longer make the outer `Play`
+  restart a replacement voice occupying the same pool slot.
+
 ## [0.1.0] - 2026-09-04
 
 ### Added

@@ -25,6 +25,54 @@ namespace Bun3.Unity.Audio.Editor
         private static MethodInfo PlayPreviewClipMethod;
         private static MethodInfo StopAllPreviewClipsMethod;
 
+        private readonly UnityEditor.Editor[] _profileEditors = new UnityEditor.Editor[5];
+
+        private void OnDisable()
+        {
+            foreach (var editor in _profileEditors)
+                if (editor != null) DestroyImmediate(editor);
+        }
+
+        private void DrawGroup(string heading, string profileName, int editorIndex, params string[] fields)
+        {
+            EditorGUILayout.Space();
+            EditorGUILayout.LabelField(heading, EditorStyles.boldLabel);
+            var profile = serializedObject.FindProperty(profileName);
+            EditorGUILayout.PropertyField(profile);
+            var settings = serializedObject;
+            if (profile.objectReferenceValue != null)
+            {
+                EditorGUILayout.HelpBox("Shared settings: edits affect every sound using this profile. Clear the profile to use the preserved local settings.", MessageType.Info);
+                CreateCachedEditor(profile.objectReferenceValue, null, ref _profileEditors[editorIndex]);
+                settings = _profileEditors[editorIndex].serializedObject;
+                settings.Update();
+            }
+            foreach (var field in fields)
+                EditorGUILayout.PropertyField(settings.FindProperty(field), true);
+            if (profileName == nameof(SoundDef.SpatialProfile)) DrawSpatialBlendFields(settings);
+            if (settings != serializedObject) settings.ApplyModifiedProperties();
+        }
+
+        private void DrawSpatialBlendFields(SerializedObject settings)
+        {
+            var inherit = settings.FindProperty(nameof(SoundDef.InheritSpatialBlend));
+            EditorGUILayout.PropertyField(inherit);
+            if (inherit.boolValue) return;
+            var profile = settings.FindProperty(nameof(SoundDef.SpatialBlendProfile));
+            EditorGUILayout.PropertyField(profile);
+            if (profile.objectReferenceValue != null)
+            {
+                EditorGUILayout.HelpBox("Editing shared near-field blend settings.", MessageType.Info);
+                CreateCachedEditor(profile.objectReferenceValue, null, ref _profileEditors[4]);
+                _profileEditors[4].OnInspectorGUI();
+            }
+            else
+            {
+                EditorGUILayout.PropertyField(settings.FindProperty(nameof(SoundDef.MonoDistance)));
+                EditorGUILayout.PropertyField(settings.FindProperty(nameof(SoundDef.FullSpatialDistance)));
+            }
+        }
+
         static SoundDefEditor()
         {
             try
@@ -50,7 +98,24 @@ namespace Bun3.Unity.Audio.Editor
 
         public override void OnInspectorGUI()
         {
-            DrawDefaultInspector();
+            serializedObject.Update();
+            using (new EditorGUI.DisabledScope(true))
+                EditorGUILayout.PropertyField(serializedObject.FindProperty("m_Script"));
+            EditorGUILayout.PropertyField(serializedObject.FindProperty(nameof(SoundDef.Clips)), true);
+#if BUN3_ADDRESSABLES
+            EditorGUILayout.PropertyField(serializedObject.FindProperty(nameof(SoundDef.AddressableClips)), true);
+#endif
+            DrawGroup("Playback", nameof(SoundDef.PlaybackProfile), 0,
+                nameof(SoundDef.Volume), nameof(SoundDef.Pitch), nameof(SoundDef.Loop));
+            DrawGroup("Routing", nameof(SoundDef.RoutingProfile), 1,
+                nameof(SoundDef.MixerGroup), nameof(SoundDef.VolumeGroup));
+            DrawGroup("Concurrency", nameof(SoundDef.ConcurrencyProfile), 2,
+                nameof(SoundDef.MaxInstances), nameof(SoundDef.Cooldown));
+            DrawGroup("Spatial", nameof(SoundDef.SpatialProfile), 3,
+                nameof(SoundDef.Spatial), nameof(SoundDef.MinDistance), nameof(SoundDef.MaxDistance),
+                nameof(SoundDef.DistanceAttenuation), nameof(SoundDef.AttenuationProfile),
+                nameof(SoundDef.Occlusion), nameof(SoundDef.OcclusionVolumeAtFull));
+            serializedObject.ApplyModifiedProperties();
 
             var def = (SoundDef)target;
             EditorGUILayout.Space();
@@ -76,8 +141,8 @@ namespace Bun3.Unity.Audio.Editor
             }
 
             EditorGUILayout.LabelField(
-                $"Volume [{def.Volume.Min:0.##}, {def.Volume.Max:0.##}]  " +
-                $"Pitch [{def.Pitch.Min:0.##}, {def.Pitch.Max:0.##}] " +
+                $"Volume [{def.EffectiveVolume.Min:0.##}, {def.EffectiveVolume.Max:0.##}]  " +
+                $"Pitch [{def.EffectivePitch.Min:0.##}, {def.EffectivePitch.Max:0.##}] " +
                 "(preview plays the raw clip; rolled ranges are not applied)",
                 EditorStyles.miniLabel);
 

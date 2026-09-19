@@ -47,9 +47,9 @@ namespace Bun3.Unity.Audio
             {
                 return false;
             }
-            if (def.Cooldown > 0f
+            if (def.EffectiveCooldown > 0f
                 && _lastPlayTime.TryGetValue(def, out var last)
-                && _time - last < def.Cooldown)
+                && _time - last < def.EffectiveCooldown)
             {
                 return false;
             }
@@ -66,11 +66,13 @@ namespace Bun3.Unity.Audio
             slot.Def = def;
             slot.Elapsed = 0f;
             slot.ClipLength = clipLength;
-            slot.Loop = def.Loop;
+            slot.Loop = def.EffectiveLoop;
+            slot.ExternalCompletion = false;
+            slot.OutputComplete = false;
             slot.Fade.SetInstant(1f);
-            slot.BaseVolume = def.Volume.Roll(_rng);
+            slot.BaseVolume = def.EffectiveVolume.Roll(_rng);
             slot.VolumeScale = 1f;
-            slot.Pitch = def.Pitch.Roll(_rng);
+            slot.Pitch = def.EffectivePitch.Roll(_rng);
             slot.PlaybackRate = Mathf.Max(0f, slot.Pitch);
             slot.StartTime = _time;
             slot.Follow = null;
@@ -78,11 +80,16 @@ namespace Bun3.Unity.Audio
             slot.CompletionCallback = null;
             slot.OcclusionCurrent = 0f;
             slot.OcclusionTarget = 0f;
-            if (def.Cooldown > 0f)
+            if (def.EffectiveCooldown > 0f)
             {
                 _lastPlayTime[def] = _time;
             }
             return true;
+        }
+
+        internal void Prepare(SoundDef def)
+        {
+            if (!_lastPlayTime.ContainsKey(def)) _lastPlayTime.Add(def, float.NegativeInfinity);
         }
 
         /// <summary>True when the slot is active and its generation matches.</summary>
@@ -94,6 +101,8 @@ namespace Bun3.Unity.Audio
         {
             ref var s = ref Slots[slot];
             s.State = VoiceState.Idle;
+            s.ExternalCompletion = false;
+            s.OutputComplete = false;
             s.Generation++;
             s.Def = null;
             s.Follow = null;
@@ -177,7 +186,7 @@ namespace Bun3.Unity.Audio
                     s.State = VoiceState.Playing;
                 }
 
-                if (!s.Loop && s.Elapsed >= s.ClipLength)
+                if (s.ExternalCompletion ? s.OutputComplete : !s.Loop && s.Elapsed >= s.ClipLength)
                 {
                     var generation = s.Generation;
                     var completion = s.Completion;
@@ -190,7 +199,7 @@ namespace Bun3.Unity.Audio
 
         private int FindSlot(SoundDef def, ref int stolenSlot)
         {
-            if (def.MaxInstances > 0)
+            if (def.EffectiveMaxInstances > 0)
             {
                 var count = 0;
                 var oldestOfDef = -1;
@@ -209,7 +218,7 @@ namespace Bun3.Unity.Audio
                         oldestOfDef = i;
                     }
                 }
-                if (count >= def.MaxInstances)
+                if (count >= def.EffectiveMaxInstances)
                 {
                     stolenSlot = oldestOfDef;
                     return oldestOfDef;

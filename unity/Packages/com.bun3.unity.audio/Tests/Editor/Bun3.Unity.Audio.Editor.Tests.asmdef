@@ -1,0 +1,10 @@
+﻿{
+  "name": "Bun3.Unity.Audio.Editor.Tests",
+  "rootNamespace": "Bun3.Unity.Audio.Tests",
+  "references": ["Bun3.Unity.Audio", "UnityEngine.TestRunner", "UnityEditor.TestRunner"],
+  "includePlatforms": ["Editor"],
+  "overrideReferences": true,
+  "precompiledReferences": ["nunit.framework.dll"],
+  "autoReferenced": false,
+  "defineConstraints": ["UNITY_INCLUDE_TESTS"]
+}

@@ -15,6 +15,9 @@ namespace Bun3.Unity.Audio
         /// </summary>
         public AudioMixer Mixer;
 
+        /// <summary>Optional live gain by logical volume group, evaluated at play and on each tick. Must not allocate or throw.</summary>
+        public Func<string, float> GroupGain;
+
         /// <summary>
         /// Fallback group for defs without an explicit MixerGroup.
         /// May be populated in place by SoundSystem's constructor from the bundled mixer when left null.
@@ -74,6 +77,22 @@ namespace Bun3.Unity.Audio
         /// <c>Time.timeScale = 0</c> leaves newly started sounds silent rather than paused.
         /// </summary>
         public bool PitchWithTimescale;
+
+        /// <summary>
+        /// Invoked once per prewarmed SFX source during construction, after play-on-awake
+        /// is disabled. Prepare reusable components here without playback-time allocation.
+        /// Music sources are excluded. A thrown exception aborts construction and destroys
+        /// the partial pool before any player-loop registration is made.
+        /// </summary>
+        public Action<AudioSource> OnSourceCreated;
+
+        /// <summary>
+        /// Creates an optional reusable output owner once per prewarmed SFX source, after OnSourceCreated.
+        /// Null preserves ordinary playback. Started owners control spatial DSP, driver pitch and completion;
+        /// the system retains source gain, fades and mixer routing. Music is excluded. Construction failure
+        /// disposes owners already created. Returned owners must not reenter this sound system from control methods.
+        /// </summary>
+        public Func<AudioSource, ISoundVoiceOutput> CreateVoiceOutput;
 
         /// <summary>
         /// Invoked once per play after the SFX source is fully configured, just before Play.

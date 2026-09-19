@@ -25,6 +25,9 @@ namespace Bun3.Unity.Audio
         {
             _completedScratch.Clear();
             EvaluateOcclusion();
+            for (var i = 0; i < _outputs.Length; i++)
+                if (_outputActive[i] && Table.Slots[i].State != VoiceState.Idle)
+                    Table.Slots[i].OutputComplete = _outputs[i].IsComplete;
             Table.Tick(dt, _completedScratch);
 
             // Two-pass: stop every completed source before firing any continuation. A
@@ -33,7 +36,9 @@ namespace Bun3.Unity.Audio
             // a later iteration of this same batch's stop pass.
             for (var i = 0; i < _completedScratch.Count; i++)
             {
-                _sources[_completedScratch[i].Slot].Stop();
+                var slot = _completedScratch[i].Slot;
+                RetireVoiceOutput(slot);
+                _sources[slot].Stop();
             }
             for (var i = 0; i < _completedScratch.Count; i++)
             {
@@ -49,7 +54,7 @@ namespace Bun3.Unity.Audio
                 {
                     continue;
                 }
-                _sources[i].volume = Table.CurrentVolume(i) * OcclusionVolumeMultiplier(i);
+                _sources[i].volume = Table.CurrentVolume(i) * GroupGain(voice.Def) * OcclusionVolumeMultiplier(i);
                 ApplyOcclusionFilter(i);
                 if (voice.Follow != null)
                 {
@@ -67,8 +72,7 @@ namespace Bun3.Unity.Audio
                     {
                         if (Table.Slots[i].State != VoiceState.Idle)
                         {
-                            _sources[i].pitch = Table.Slots[i].Pitch * scale;
-                            Table.Slots[i].PlaybackRate = _sources[i].pitch;
+                            SetSourcePitch(i, Table.Slots[i].Pitch);
                         }
                     }
                 }

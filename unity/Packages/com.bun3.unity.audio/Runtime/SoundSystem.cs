@@ -29,6 +29,8 @@ namespace Bun3.Unity.Audio
 
         internal readonly VoiceTable Table;
         private readonly AudioSource[] _sources;
+        private readonly ISoundVoiceOutput[] _outputs;
+        private readonly bool[] _outputActive;
         private readonly List<(int Slot, uint Generation, Cysharp.Threading.Tasks.AutoResetUniTaskCompletionSource Completion, Action<SoundHandle> Callback)> _completedScratch;
         private readonly SoundSystemConfig _config;
         private readonly AudioMixer _mixer;
@@ -81,6 +83,8 @@ namespace Bun3.Unity.Audio
                 : new System.Random();
             Table = new VoiceTable(config.SfxVoices, _rng, config.OcclusionSmoothingSeconds);
             _sources = new AudioSource[config.SfxVoices];
+            _outputs = new ISoundVoiceOutput[config.SfxVoices];
+            _outputActive = new bool[config.SfxVoices];
             // At most one completion per slot per tick; preallocate to that bound so the
             // hot Tick path never grows this list (List.Add would allocate on growth).
             _completedScratch = new(config.SfxVoices);
@@ -89,19 +93,32 @@ namespace Bun3.Unity.Audio
             {
                 UnityEngine.Object.DontDestroyOnLoad(_root);
             }
-            for (var i = 0; i < _sources.Length; i++)
+            try
             {
-                var go = new GameObject("Voice");
-                go.transform.SetParent(_root.transform, false);
-                _sources[i] = go.AddComponent<AudioSource>();
-                _sources[i].playOnAwake = false;
+                for (var i = 0; i < _sources.Length; i++)
+                {
+                    var go = new GameObject("Voice");
+                    go.transform.SetParent(_root.transform, false);
+                    _sources[i] = go.AddComponent<AudioSource>();
+                    _sources[i].playOnAwake = false;
+                    config.OnSourceCreated?.Invoke(_sources[i]);
+                    _outputs[i] = config.CreateVoiceOutput?.Invoke(_sources[i]);
+                }
+                for (var i = 0; i < MusicChannelCount; i++)
+                {
+                    MusicIntroSources[i] = CreateMusicSource("MusicIntro");
+                    MusicLoopSources[i] = CreateMusicSource("MusicLoop");
+                }
+                InitializeOcclusion();
             }
-            for (var i = 0; i < MusicChannelCount; i++)
+            catch
             {
-                MusicIntroSources[i] = CreateMusicSource("MusicIntro");
-                MusicLoopSources[i] = CreateMusicSource("MusicLoop");
+                DisposeVoiceOutputs();
+                if (Application.isPlaying) { UnityEngine.Object.Destroy(_root); }
+                else { UnityEngine.Object.DestroyImmediate(_root); }
+                _root = null;
+                throw;
             }
-            InitializeOcclusion();
 
             // Checks actual player-loop insertion rather than Live.Count: with domain reload
             // disabled, Application.quitting can remove the tick while stale entries survive
@@ -163,7 +180,26 @@ namespace Bun3.Unity.Audio
             return !_disposed && handle.Owner == this && Table.IsValid(slot, handle.Generation);
         }
 
-        private SoundHandle PlayCore(SoundDef def, Vector3 position, Transform follow, float fadeIn)
+        /// <summary>Plays with a request-local spatial mode and gain without modifying the shared definition.</summary>
+        public SoundHandle Play(SoundDef def, Vector3 position, SpatialMode spatial, float volumeScale = 1f, float fadeIn = 0f)
+            => PlayCore(def, position, null, fadeIn, spatial, volumeScale);
+
+        /// <summary>Prepares catalog definitions for cooldown tracking before hot-path playback.</summary>
+        public void Prepare(SoundCatalog catalog)
+        {
+            if (catalog == null) throw new ArgumentNullException(nameof(catalog));
+            catalog.ValidateOrThrow();
+            for (int i = 0; i < catalog.Entries.Count; i++) Table.Prepare(catalog.Entries[i].Definition);
+        }
+
+        private float GroupGain(SoundDef def)
+        {
+            float gain = _config.GroupGain != null ? _config.GroupGain(def.EffectiveVolumeGroup) : 1f;
+            return float.IsNaN(gain) || float.IsInfinity(gain) ? 0f : Mathf.Max(0f, gain);
+        }
+
+        private SoundHandle PlayCore(SoundDef def, Vector3 position, Transform follow, float fadeIn,
+            SpatialMode? spatial = null, float volumeScale = 1f)
         {
             if (_disposed)
             {
@@ -177,21 +213,23 @@ namespace Bun3.Unity.Audio
                 return SoundHandle.Invalid;
             }
 
+            if (float.IsNaN(volumeScale) || float.IsInfinity(volumeScale) || volumeScale < 0f)
+                return SoundHandle.Invalid;
             var clip = PickClip(def);
+            if (clip == null) return SoundHandle.Invalid;
             if (!Table.TryAllocate(def, clip.length, out var slot, out var stolen, out var stolenSignal))
             {
                 return SoundHandle.Invalid;
             }
-            if (stolen >= 0)
-            {
-                _sources[stolen].Stop();
-            }
+            RetireVoiceOutput(slot);
+            _sources[slot].Stop();
             // A stolen (or reused) slot's filter may still be muffled from the voice it just
             // replaced; clear it before the new source plays so the new voice starts open.
             ResetOcclusionFilter(slot);
 
             ref var voice = ref Table.Slots[slot];
             voice.Follow = follow;
+            voice.VolumeScale = volumeScale;
             if (fadeIn > 0f)
             {
                 Table.BeginFadeIn(slot, fadeIn);
@@ -199,17 +237,44 @@ namespace Bun3.Unity.Audio
 
             var source = _sources[slot];
             source.clip = clip;
-            source.loop = def.Loop;
+            source.loop = def.EffectiveLoop;
             source.pitch = _config.PitchWithTimescale ? voice.Pitch * _lastTimeScale : voice.Pitch;
             voice.PlaybackRate = source.pitch;
-            source.volume = Table.CurrentVolume(slot); // reflects Fade.Factor 0 when fading in
-            source.outputAudioMixerGroup = def.MixerGroup != null ? def.MixerGroup : _config.SfxGroup;
-            source.spatialBlend = def.Spatial == SpatialMode.None ? 0f : 1f;
-            source.minDistance = def.MinDistance;
-            source.maxDistance = def.MaxDistance;
+            source.volume = Table.CurrentVolume(slot) * GroupGain(def); // reflects Fade.Factor 0 when fading in
+            source.outputAudioMixerGroup = def.EffectiveMixerGroup != null ? def.EffectiveMixerGroup : _config.SfxGroup;
+            source.spatialBlend = (spatial ?? def.EffectiveSpatial) == SpatialMode.None ? 0f : 1f;
+            source.minDistance = def.EffectiveMinDistance;
+            source.maxDistance = def.EffectiveMaxDistance;
             source.transform.position = position;
+            var generation = voice.Generation;
+            var accepted = true;
             _config.OnVoiceConfigured?.Invoke(source, def);
-            source.Play();
+            if (!_disposed && Table.IsValid(slot, generation))
+            {
+                var output = _outputs[slot];
+                var result = output is ISpatialSoundVoiceOutput spatialOutput
+                    ? spatialOutput.TryStart(def, clip, voice.PlaybackRate, spatial ?? def.EffectiveSpatial)
+                    : output != null ? output.TryStart(def, clip, voice.PlaybackRate) : VoiceOutputStartResult.Unsupported;
+                if (result == VoiceOutputStartResult.Started)
+                {
+                    _outputActive[slot] = true;
+                    voice.ExternalCompletion = true;
+                    ResetOcclusionFilter(slot);
+                    source.Play();
+                }
+                else if (result == VoiceOutputStartResult.Unsupported)
+                {
+                    source.Play();
+                }
+                else
+                {
+                    output?.Retire();
+                    source.Stop();
+                    source.clip = null;
+                    Table.Release(slot);
+                    accepted = false;
+                }
+            }
 
             // Fired only after the new source is fully configured and playing: a continuation
             // may re-enter PlayCore (this is a stolen voice's awaiter) and must never observe
@@ -220,7 +285,7 @@ namespace Bun3.Unity.Audio
                 stolenSignal.Callback?.Invoke(new SoundHandle(this, stolen, stolenSignal.Generation));
             }
 
-            return new SoundHandle(this, slot, voice.Generation);
+            return accepted ? new SoundHandle(this, slot, generation) : SoundHandle.Invalid;
         }
 
         private AudioSource CreateMusicSource(string name)
@@ -263,6 +328,7 @@ namespace Bun3.Unity.Audio
                 return;
             }
             _disposed = true;
+            DisposeVoiceOutputs();
 
             // Two-phase, same discipline as Tick: capture every active slot's awaiter before
             // releasing (Release nulls Completion), finish all teardown, then fire the
@@ -330,8 +396,17 @@ namespace Bun3.Unity.Audio
 
         internal void SetSourcePitch(int slot, float pitch)
         {
-            _sources[slot].pitch = _config.PitchWithTimescale ? pitch * _lastTimeScale : pitch;
-            Table.Slots[slot].PlaybackRate = _sources[slot].pitch;
+            var effective = _config.PitchWithTimescale ? pitch * _lastTimeScale : pitch;
+            if (_outputActive[slot])
+            {
+                _outputs[slot].SetPitch(effective);
+                Table.Slots[slot].PlaybackRate = Mathf.Max(0, effective);
+            }
+            else
+            {
+                _sources[slot].pitch = effective;
+                Table.Slots[slot].PlaybackRate = _sources[slot].pitch;
+            }
         }
 
         internal void SetSourcePosition(int slot, Vector3 position) => _sources[slot].transform.position = position;

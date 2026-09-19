@@ -60,8 +60,8 @@ namespace Bun3.Unity.Audio
                 var i = _occlusionCursor;
                 _occlusionCursor = (_occlusionCursor + 1) % slots.Length;
                 ref var s = ref slots[i];
-                if (s.State == VoiceState.Idle || s.Def == null || !s.Def.Occlusion
-                    || s.Def.Spatial == SpatialMode.None)
+                if (s.State == VoiceState.Idle || s.ExternalCompletion || s.Def == null || !s.Def.EffectiveOcclusion
+                    || _sources[i].spatialBlend <= 0f)
                 {
                     continue;
                 }
@@ -74,13 +74,18 @@ namespace Bun3.Unity.Audio
         /// <summary>Volume multiplier for the slot's current occlusion (1 = open).</summary>
         internal float OcclusionVolumeMultiplier(int slot)
         {
+            if (_outputActive[slot]) return 1f;
             var occ = Table.Slots[slot].OcclusionCurrent;
-            return occ <= 0f ? 1f : Mathf.Lerp(1f, _config.OcclusionVolumeAtFull, occ);
+            var definition = Table.Slots[slot].Def;
+            float gain = definition != null && definition.EffectiveOcclusionVolumeAtFull >= 0f
+                ? Mathf.Clamp01(definition.EffectiveOcclusionVolumeAtFull) : _config.OcclusionVolumeAtFull;
+            return occ <= 0f ? 1f : Mathf.Lerp(1f, gain, occ);
         }
 
         /// <summary>Mirrors the slot's occlusion onto its low-pass filter (enabled only when occluded).</summary>
         internal void ApplyOcclusionFilter(int slot)
         {
+            if (_outputActive[slot]) { ResetOcclusionFilter(slot); return; }
             if (_lowPassFilters == null)
             {
                 return;

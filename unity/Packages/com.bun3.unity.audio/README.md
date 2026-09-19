@@ -164,12 +164,94 @@ group routing work out of the box:
   parameter permanently takes it out of snapshot control until
   `AudioMixer.ClearFloat` is called.
 
+### Preparing pooled sources
+
+Set `SoundSystemConfig.OnSourceCreated` before construction to add reusable
+components to each SFX source once. The hook runs after `playOnAwake` is disabled
+and excludes music sources. If it throws, construction destroys the partial
+pool without registering a player-loop tick. Use `OnVoiceConfigured` for values
+that need resetting on every play. When another component owns filtering, set
+`OcclusionChecksPerFrame = 0` so the built-in filter does not overwrite it.
+
+### External playback ownership
+
+`ExternalAudioRegistry` controls selected properties of sources played by another
+system without adding those sources to the SFX pool. Create and use it on Unity's
+main thread, and dispose it when its session ends.
+
+```csharp
+var external = new ExternalAudioRegistry(capacity: 32);
+var handle = external.Register(sdkSource, new ExternalAudioSettings(
+    gain: 1f, overrideMixerGroup: true, mixerGroup: voiceGroup));
+handle.SetGain(0.5f);
+handle.Release(); // Restores the original source volume and mixer route.
+external.Dispose(); // Releases every remaining registration; safe to repeat.
+```
+
+Default settings own nothing. A non-null `gain` explicitly owns source volume;
+`SetGain` accepts finite values in [0,1] and throws when volume was not opted into.
+This value is a direct source gain. Apply user volume once through the shared
+mixer rather than multiplying it into this gain as well. Mixer routing is owned
+only when `overrideMixerGroup` is true; a null group then explicitly clears it.
+
+For low-pass control, supply an existing `AudioLowPassFilter` on the same
+GameObject through `lowPassFilter`, optionally with `lowPassCutoff` in [10,22000]
+hertz. Registration enables the filter; `SetLowPassCutoff` updates it. Release
+restores its original enabled state and cutoff. The registry never creates or
+removes components or changes filter resonance.
+
+Keep each source in one live registry and give that registration exclusive write
+access to the selected properties until release. Other properties remain under
+external control: the registry never plays, stops, pauses, mutes, or changes clip,
+loop, pitch, spatial blend, playback position, or transform. SDKs that overwrite
+source volume should leave `gain` null and use mixer control instead.
+
+Duplicate sources or shared owned filters in a registry and capacity exhaustion
+throw without stealing registrations. Destroyed sources are invalid and their slots are reclaimed on
+the next registration. Stale/default handles cannot affect reused slots and
+silently ignore mutations and release. Hot control updates allocate no managed
+memory after registration. Release/disposal restores only explicitly owned
+properties; it tolerates source or filter destruction.
+
+### Custom SFX output ownership
+
+Set `SoundSystemConfig.CreateVoiceOutput` to a cached factory returning one
+`ISoundVoiceOutput` per SFX source. Construction invokes it after `OnSourceCreated`;
+music sources are excluded. A null factory or null owner keeps ordinary playback.
+Owner creation failure disposes owners already prepared and tears down the partial pool.
+
+The core configures a stopped source and invokes `OnVoiceConfigured`, then calls
+`TryStart(definition, selectedClip, logicalPitch)` before source Play:
+
+- `Unsupported` permits ordinary clip playback, only after previous owned processing
+  is quiescent.
+- `Started` delegates driver clip/loop/pitch and spatial DSP to the owner. The core
+  still calls source Play and owns volume, fades, followed position and mixer routing.
+- `Unavailable` releases the request and clears its clip without dry fallback.
+
+Started voices complete through `IsComplete`, including any output tail, rather
+than elapsed clip time. Pitch changes, including timescale changes, go through
+`SetPitch`; zero pitch must pause progress while preserving an active voice.
+Built-in occlusion queries, low-pass and occlusion gain are bypassed for owned voices
+so spatial attenuation is applied once. Explicit stop and fade completion still end
+the voice.
+
+`Retire` gates the old generation before source Stop or reconfiguration and never
+waits for an audio reader. `TryStart` returns Unavailable while a reader prevents
+reuse. Implementations must retain their own deferred cleanup mechanism after
+source Stop/destruction; core does not reset or dispose reader-owned native state.
+Owner Dispose requests final cleanup and must remain safe after Retire. Control
+methods run on the sound-system thread, must not reenter the system, and expected
+start failures must return Unavailable. Playback, pitch updates, retirement and
+completion polling must not allocate managed memory.
+
 ### Addressable clips
 
 Requires [com.unity.addressables](https://docs.unity3d.com/Packages/com.unity.addressables@latest)
-installed; without it, `SoundDef.AddressableClips` and every API below compile
-out entirely (gated by the package's own `versionDefines` → `BUN3_ADDRESSABLES`)
-— the rest of the package works exactly as before.
+installed. The current runtime and test assembly definitions directly reference
+Addressables assemblies, so this package currently requires that dependency even
+when only non-Addressable playback is used. `BUN3_ADDRESSABLES` gates the related
+source API but does not make those assembly references optional.
 
 `SoundDef.AddressableClips` is an alternative to `Clips`: assign an
 `AssetReferenceT<AudioClip>[]` instead of direct clip references, then preload
@@ -214,3 +296,51 @@ ranges, loop/spatial settings, max instances, and cooldown. Music tracks are
 authored as `MusicDef` assets (`Assets > Create > Bun3 > Audio > Music Def`),
 which hold the optional intro clip, the required loop clip, volume, and the
 default fade duration.
+
+## Optional SDK activation
+
+Adapters are disabled by default. Import the required SDKs and let Unity finish compiling, then run **Tools > Bun3 > Audio > Sync Installed Adapters**. The SDK-independent `Bun3.Unity.Audio.Editor.SoundSdkSetup.SyncInstalledAdapters` method is also available through Unity `-executeMethod` or Editor automation. It checks SDK assembly-definition assets and required loaded types before enabling adapters on Standalone, Android, iOS and WebGL, preserving unrelated scripting defines.
+
+Dissonance requires `BUN3_DISSONANCE`; the official NGO binding additionally requires `BUN3_DISSONANCE_NFGO`. Steam Audio requires both `BUN3_STEAMAUDIO` and the SDK's `STEAMAUDIO_ENABLED`. Combined voice path playback requires both SDKs. A leftover `STEAMAUDIO_ENABLED` alone does not activate Bun3 adapters. Runtime, Editor and test assemblies share these gates.
+
+Before removing SDK assets, remove or guard application references to adapter types, then run **Tools > Bun3 > Audio > Disable Adapters** (`Bun3.Unity.Audio.Editor.SoundSdkSetup.DisableAdapters`) and let compilation finish. This removes the three Bun3 symbols on the four supported targets and preserves the SDK-owned `STEAMAUDIO_ENABLED` flag; optional packages can remain installed. Synchronize again after installing or removing SDK components. Activation is explicit and does not run automatically on domain reload. Deleting SDK files outside the Editor while old activation symbols remain is not an automatically recoverable cold-start workflow; restore the SDK or clear the managed symbols before reopening.
+
+
+### String catalogs and request-local playback
+
+`SoundCatalog` maps ordinal, case-sensitive string keys to `SoundDef` assets. Create it through **Bun3/Audio/Sound Catalog**. Definitions remain the single source of playback settings; catalogs contain no duplicate clip, gain, or cooldown fields. `ValidateOrThrow()` rejects blank/duplicate keys and missing definitions. `TryGet` returns false for unknown keys. `SetEntries` validates atomically; warm lookup allocates no managed memory.
+
+```csharp
+system.Prepare(catalog); // Validate and prewarm cooldown tracking.
+var footstep = catalog.Get("player.footstep");
+system.Play(footstep, position);
+system.Play(footstep, position, SpatialMode.None, volumeScale: 0.5f);
+```
+
+The spatial/gain overload overrides a single request without editing the asset. Cooldown and instance limits remain shared by definition. Optional output owners implement `ISpatialSoundVoiceOutput` to receive the effective request mode; legacy owners retain their existing interface.
+
+`SoundDef.VolumeGroup` is an optional logical string group. `SoundSystemConfig.GroupGain` resolves its live gain at play and on each tick, independent of `MixerGroup` routing. Cache the callback and avoid allocations or exceptions. Catalogs and groups have no game-specific enums or network IDs.
+
+
+## Shared definition profiles
+
+`SoundDef` optionally references four independently shared assets: `SoundPlaybackProfile` (volume, pitch, loop), `SoundRoutingProfile` (mixer and logical volume group), `SoundConcurrencyProfile` (per-definition limits/cooldown), and `SoundSpatialProfile` (positioning, attenuation, occlusion, near-field selection). A non-null profile replaces its entire group; null uses the definition's retained inline fields. Clips and sound identity stay on the definition. Sharing a concurrency profile does not combine active voice counts or cooldown state between definitions.
+
+Use `Effective*` getters in custom consumers. The public serialized fields remain local authoring values for compatibility, even when a profile is selected. The Inspector distinguishes shared editing from local editing and retains local values when references are assigned or removed. Duplicate a profile for a sound-specific variation, or clear its reference and author the local group. No per-field override mask is applied.
+
+`SpatialBlendProfile` is a reusable mono/full-width native-distance range. With `EffectiveInheritSpatialBlend` enabled, native adapters use their world default. Otherwise the selected blend profile wins, with inline mono/full distances as fallback. A shared spatial profile can select the same blend profile for many sounds. Zero/invalid full-width ranges retain spatial output. The blend asset is SDK-independent; actual path-distance evaluation is provided by the native adapter.
+
+```csharp
+sound.PlaybackProfile = sharedPlayback;
+sound.SpatialProfile = sharedSpatial;
+// Per-sound spatial settings instead of the shared group:
+sound.SpatialProfile = null;
+sound.InheritSpatialBlend = false;
+sound.SpatialBlendProfile = speechAndFootstepBlend;
+// To use inline distances instead:
+sound.SpatialBlendProfile = null;
+sound.MonoDistance = 1;
+sound.FullSpatialDistance = 3;
+```
+
+Playback parameters are primarily consumed when starting a voice. Native adapters continue reading effective attenuation and width profiles on the control thread during simulation. No profile allocation occurs on a warm playback or audio-processing path.

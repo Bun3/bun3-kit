@@ -24,6 +24,72 @@ namespace Bun3.Unity.Audio
     [CreateAssetMenu(menuName = "Bun3/Audio/Sound Def", fileName = "SoundDef")]
     public sealed class SoundDef : ScriptableObject
     {
+        /// <summary>Optional shared playback settings; null preserves the local group.</summary>
+        public SoundPlaybackProfile PlaybackProfile;
+
+        /// <summary>Optional shared routing settings; null preserves the local group.</summary>
+        public SoundRoutingProfile RoutingProfile;
+
+        /// <summary>Optional shared concurrency settings; null preserves the local group.</summary>
+        public SoundConcurrencyProfile ConcurrencyProfile;
+
+        /// <summary>Optional shared spatial settings; null preserves the local group.</summary>
+        public SoundSpatialProfile SpatialProfile;
+
+        /// <summary>Resolved Volume from the shared playback profile or local settings.</summary>
+        public FloatRange EffectiveVolume => PlaybackProfile != null ? PlaybackProfile.Volume : Volume;
+
+        /// <summary>Resolved Pitch from the shared playback profile or local settings.</summary>
+        public FloatRange EffectivePitch => PlaybackProfile != null ? PlaybackProfile.Pitch : Pitch;
+
+        /// <summary>Resolved Loop from the shared playback profile or local settings.</summary>
+        public bool EffectiveLoop => PlaybackProfile != null ? PlaybackProfile.Loop : Loop;
+
+        /// <summary>Resolved MixerGroup from the shared routing profile or local settings.</summary>
+        public AudioMixerGroup EffectiveMixerGroup => RoutingProfile != null ? RoutingProfile.MixerGroup : MixerGroup;
+
+        /// <summary>Resolved VolumeGroup from the shared routing profile or local settings.</summary>
+        public string EffectiveVolumeGroup => RoutingProfile != null ? RoutingProfile.VolumeGroup : VolumeGroup;
+
+        /// <summary>Resolved MaxInstances from the shared concurrency profile or local settings.</summary>
+        public int EffectiveMaxInstances => ConcurrencyProfile != null ? ConcurrencyProfile.MaxInstances : MaxInstances;
+
+        /// <summary>Resolved Cooldown from the shared concurrency profile or local settings.</summary>
+        public float EffectiveCooldown => ConcurrencyProfile != null ? ConcurrencyProfile.Cooldown : Cooldown;
+
+        /// <summary>Resolved Spatial from the shared spatial profile or local settings.</summary>
+        public SpatialMode EffectiveSpatial => SpatialProfile != null ? SpatialProfile.Spatial : Spatial;
+
+        /// <summary>Resolved MinDistance from the shared spatial profile or local settings.</summary>
+        public float EffectiveMinDistance => SpatialProfile != null ? SpatialProfile.MinDistance : MinDistance;
+
+        /// <summary>Resolved MaxDistance from the shared spatial profile or local settings.</summary>
+        public float EffectiveMaxDistance => SpatialProfile != null ? SpatialProfile.MaxDistance : MaxDistance;
+
+        /// <summary>Resolved DistanceAttenuation from the shared spatial profile or local settings.</summary>
+        public bool EffectiveDistanceAttenuation => SpatialProfile != null ? SpatialProfile.DistanceAttenuation : DistanceAttenuation;
+
+        /// <summary>Resolved AttenuationProfile from the shared spatial profile or local settings.</summary>
+        public DistanceAttenuationProfile EffectiveAttenuationProfile => SpatialProfile != null ? SpatialProfile.AttenuationProfile : AttenuationProfile;
+
+        /// <summary>Resolved Occlusion from the shared spatial profile or local settings.</summary>
+        public bool EffectiveOcclusion => SpatialProfile != null ? SpatialProfile.Occlusion : Occlusion;
+
+        /// <summary>Resolved OcclusionVolumeAtFull from the shared spatial profile or local settings.</summary>
+        public float EffectiveOcclusionVolumeAtFull => SpatialProfile != null ? SpatialProfile.OcclusionVolumeAtFull : OcclusionVolumeAtFull;
+
+        /// <summary>Resolved InheritSpatialBlend from the shared spatial profile or local settings.</summary>
+        public bool EffectiveInheritSpatialBlend => SpatialProfile != null ? SpatialProfile.InheritSpatialBlend : InheritSpatialBlend;
+
+        /// <summary>Resolved SpatialBlendProfile from the shared spatial profile or local settings.</summary>
+        public SpatialBlendProfile EffectiveSpatialBlendProfile => SpatialProfile != null ? SpatialProfile.SpatialBlendProfile : SpatialBlendProfile;
+
+        /// <summary>Resolved MonoDistance from the shared spatial profile or local settings.</summary>
+        public float EffectiveMonoDistance => SpatialProfile != null ? SpatialProfile.MonoDistance : MonoDistance;
+
+        /// <summary>Resolved FullSpatialDistance from the shared spatial profile or local settings.</summary>
+        public float EffectiveFullSpatialDistance => SpatialProfile != null ? SpatialProfile.FullSpatialDistance : FullSpatialDistance;
+
         /// <summary>Candidate clips; one is chosen per play, avoiding the previous pick.</summary>
         public AudioClip[] Clips;
 
@@ -38,6 +104,10 @@ namespace Bun3.Unity.Audio
 
         /// <summary>Target mixer group; null falls back to the system's SFX group.</summary>
         public AudioMixerGroup MixerGroup;
+
+        /// <summary>Optional logical group passed to the system gain resolver; independent of mixer routing.</summary>
+        [Tooltip("Logical volume group interpreted by the game's gain resolver, e.g. sfx or ui.")]
+        public string VolumeGroup = "sfx";
 
         /// <summary>Max simultaneous voices for this def; 0 = unlimited. Exceeding steals the oldest.</summary>
         public int MaxInstances;
@@ -54,8 +124,31 @@ namespace Bun3.Unity.Audio
         /// <summary>3D attenuation maximum distance (used when Spatial != None).</summary>
         public float MaxDistance = 30f;
 
+        /// <summary>Enables distance attenuation independently of positioning and occlusion.</summary>
+        [Tooltip("Disable distance gain while keeping spatial direction and occlusion.")]
+        public bool DistanceAttenuation = true;
+
+        /// <summary>Optional shared curve for native adapters; null uses the definition's minimum and maximum.</summary>
+        [Tooltip("Native distance curve. Null uses MinDistance and MaxDistance with a 20% edge fade.")]
+        public DistanceAttenuationProfile AttenuationProfile;
+
         /// <summary>Whether this sound participates in occlusion evaluation (3D sounds only).</summary>
         public bool Occlusion;
+
+        /// <summary>Optional full-obstruction gain override; a negative value uses system settings.</summary>
+        public float OcclusionVolumeAtFull = -1f;
+
+        /// <summary>Whether native adapters use their configured default near-field blend.</summary>
+        public bool InheritSpatialBlend = true;
+
+        /// <summary>Optional shared near-field blend when inheritance is disabled.</summary>
+        public SpatialBlendProfile SpatialBlendProfile;
+
+        /// <summary>Distance up to which native playback is centered when no blend profile is assigned.</summary>
+        public float MonoDistance = 1f;
+
+        /// <summary>Distance at which native playback becomes fully spatial when no blend profile is assigned.</summary>
+        public float FullSpatialDistance = 3f;
 
         /// <summary>Round-robin memory: index of the clip chosen on the previous play.</summary>
         [System.NonSerialized] internal int LastClipIndex = -1;
