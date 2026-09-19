@@ -19,11 +19,7 @@ namespace Bun3.Unity.Acoustics
                 throw new ArgumentException("Masks must have matching positive dimensions within mesh index capacity.");
             frame.Validate();
             settings.Validate();
-            for (var cornerY = 0; cornerY <= 1; cornerY++)
-                for (var cornerX = 0; cornerX <= 1; cornerX++)
-                    if (!AcousticGridFrame.Finite(frame.Point(cornerX * width, cornerY * height, settings.CeilingHeight)) ||
-                        !AcousticGridFrame.Finite(frame.Point(cornerX * width, cornerY * height, settings.FloorHeight)))
-                        throw new ArgumentException("Grid bounds exceed finite world coordinates.");
+            ValidateWorldBounds(width, height, frame, settings);
 
             var vertices = new List<Vector3>();
             var triangles = new List<int>();
@@ -31,20 +27,37 @@ namespace Bun3.Unity.Acoustics
                 for (var x = 0; x < width; x++)
                 {
                     if (blocked[x, y]) continue;
-                    var a = frame.Point(x, y, settings.FloorHeight);
-                    var b = frame.Point(x + 1, y, settings.FloorHeight);
-                    var c = frame.Point(x + 1, y + 1, settings.FloorHeight);
-                    var d = frame.Point(x, y + 1, settings.FloorHeight);
-                    var rise = frame.HeightAxis * (settings.CeilingHeight - settings.FloorHeight);
-                    AddQuad(vertices, triangles, a, b, c, d, frame.HeightAxis);
-                    if (roofed[x, y]) AddQuad(vertices, triangles, a + rise, b + rise, c + rise, d + rise, -frame.HeightAxis);
-                    if (x > 0 && blocked[x - 1, y]) AddQuad(vertices, triangles, a, d, d + rise, a + rise, frame.CellX);
-                    if (x + 1 < width && blocked[x + 1, y]) AddQuad(vertices, triangles, b, c, c + rise, b + rise, -frame.CellX);
-                    if (y > 0 && blocked[x, y - 1]) AddQuad(vertices, triangles, a, b, b + rise, a + rise, frame.CellY);
-                    if (y + 1 < height && blocked[x, y + 1]) AddQuad(vertices, triangles, d, c, c + rise, d + rise, -frame.CellY);
+                    AddCellSurfaces(blocked, roofed[x, y], x, y, frame, settings, vertices, triangles);
                 }
             var probes = new ProbeBuilder(blocked, frame, settings).Build();
             return new AcousticGridData(vertices.ToArray(), triangles.ToArray(), probes);
+        }
+
+        private static void ValidateWorldBounds(int width, int height, AcousticGridFrame frame, AcousticGridSettings settings)
+        {
+            for (var cornerY = 0; cornerY <= 1; cornerY++)
+                for (var cornerX = 0; cornerX <= 1; cornerX++)
+                    if (!AcousticGridFrame.Finite(frame.Point(cornerX * width, cornerY * height, settings.CeilingHeight)) ||
+                        !AcousticGridFrame.Finite(frame.Point(cornerX * width, cornerY * height, settings.FloorHeight)))
+                        throw new ArgumentException("Grid bounds exceed finite world coordinates.");
+        }
+
+        private static void AddCellSurfaces(bool[,] blocked, bool roofed, int x, int y,
+            AcousticGridFrame frame, AcousticGridSettings settings, List<Vector3> vertices, List<int> triangles)
+        {
+            int width = blocked.GetLength(0);
+            int height = blocked.GetLength(1);
+            var a = frame.Point(x, y, settings.FloorHeight);
+            var b = frame.Point(x + 1, y, settings.FloorHeight);
+            var c = frame.Point(x + 1, y + 1, settings.FloorHeight);
+            var d = frame.Point(x, y + 1, settings.FloorHeight);
+            var rise = frame.HeightAxis * (settings.CeilingHeight - settings.FloorHeight);
+            AddQuad(vertices, triangles, a, b, c, d, frame.HeightAxis);
+            if (roofed) AddQuad(vertices, triangles, a + rise, b + rise, c + rise, d + rise, -frame.HeightAxis);
+            if (x > 0 && blocked[x - 1, y]) AddQuad(vertices, triangles, a, d, d + rise, a + rise, frame.CellX);
+            if (x + 1 < width && blocked[x + 1, y]) AddQuad(vertices, triangles, b, c, c + rise, b + rise, -frame.CellX);
+            if (y > 0 && blocked[x, y - 1]) AddQuad(vertices, triangles, a, b, b + rise, a + rise, frame.CellY);
+            if (y + 1 < height && blocked[x, y + 1]) AddQuad(vertices, triangles, d, c, c + rise, d + rise, -frame.CellY);
         }
 
         private static void AddQuad(List<Vector3> vertices, List<int> triangles, Vector3 a, Vector3 b, Vector3 c, Vector3 d, Vector3 normal)
@@ -86,30 +99,30 @@ namespace Bun3.Unity.Acoustics
                     {
                         if (_blocked[x, y] || _covered[y * _width + x]) continue;
                         probes.Add(_frame.Point(x + .5f, y + .5f, _settings.EarHeight));
-                        Cover(x, y);
+                        CoverVisibleCells(x, y);
                     }
                 return probes.ToArray();
             }
 
-            private void Cover(int sourceX, int sourceY)
+            private void CoverVisibleCells(int sourceX, int sourceY)
             {
                 _generation++;
                 _count = 0;
-                Visit(sourceX, sourceY, 0);
+                RelaxDistance(sourceX, sourceY, 0);
                 while (_count > 0)
                 {
-                    var id = Pop();
+                    var id = PopNearestCell();
                     var x = id % _width;
                     var y = id / _width;
-                    if (!_covered[id] && Visible(sourceX, sourceY, x, y)) _covered[id] = true;
-                    Visit(x - 1, y, _distance[id] + _stepX);
-                    Visit(x + 1, y, _distance[id] + _stepX);
-                    Visit(x, y - 1, _distance[id] + _stepY);
-                    Visit(x, y + 1, _distance[id] + _stepY);
+                    if (!_covered[id] && HasClearLineOfSight(sourceX, sourceY, x, y)) _covered[id] = true;
+                    RelaxDistance(x - 1, y, _distance[id] + _stepX);
+                    RelaxDistance(x + 1, y, _distance[id] + _stepX);
+                    RelaxDistance(x, y - 1, _distance[id] + _stepY);
+                    RelaxDistance(x, y + 1, _distance[id] + _stepY);
                 }
             }
 
-            private void Visit(int x, int y, float distance)
+            private void RelaxDistance(int x, int y, float distance)
             {
                 if (x < 0 || y < 0 || x >= _width || y >= _height || _blocked[x, y] || distance > _settings.ProbeSpacing) return;
                 var id = y * _width + x;
@@ -125,10 +138,15 @@ namespace Bun3.Unity.Acoustics
                     position = _count++;
                 }
                 _distance[id] = distance;
+                MoveUpHeap(id, position);
+            }
+
+            private void MoveUpHeap(int id, int position)
+            {
                 while (position > 0)
                 {
                     var parent = (position - 1) / 2;
-                    if (!Less(id, _heap[parent])) break;
+                    if (!PrecedesInHeap(id, _heap[parent])) break;
                     _heap[position] = _heap[parent];
                     _positions[_heap[position]] = position;
                     position = parent;
@@ -137,7 +155,7 @@ namespace Bun3.Unity.Acoustics
                 _positions[id] = position;
             }
 
-            private int Pop()
+            private int PopNearestCell()
             {
                 var result = _heap[0];
                 var last = _heap[--_count];
@@ -145,8 +163,8 @@ namespace Bun3.Unity.Acoustics
                 while (position * 2 + 1 < _count)
                 {
                     var child = position * 2 + 1;
-                    if (child + 1 < _count && Less(_heap[child + 1], _heap[child])) child++;
-                    if (!Less(_heap[child], last)) break;
+                    if (child + 1 < _count && PrecedesInHeap(_heap[child + 1], _heap[child])) child++;
+                    if (!PrecedesInHeap(_heap[child], last)) break;
                     _heap[position] = _heap[child];
                     _positions[_heap[position]] = position;
                     position = child;
@@ -155,26 +173,37 @@ namespace Bun3.Unity.Acoustics
                 return result;
             }
 
-            private bool Less(int a, int b) => _distance[a] < _distance[b] || (_distance[a] == _distance[b] && a < b);
+            private bool PrecedesInHeap(int a, int b) => _distance[a] < _distance[b] || (_distance[a] == _distance[b] && a < b);
 
-            private bool Visible(int x, int y, int targetX, int targetY)
+            private bool HasClearLineOfSight(int x, int y, int targetX, int targetY)
             {
-                var dx = Math.Abs(targetX - x);
-                var dy = Math.Abs(targetY - y);
-                var sx = Math.Sign(targetX - x);
-                var sy = Math.Sign(targetY - y);
-                var ix = 0;
-                var iy = 0;
-                while (ix < dx || iy < dy)
+                var distanceX = Math.Abs(targetX - x);
+                var distanceY = Math.Abs(targetY - y);
+                var directionX = Math.Sign(targetX - x);
+                var directionY = Math.Sign(targetY - y);
+                var crossedX = 0;
+                var crossedY = 0;
+                while (crossedX < distanceX || crossedY < distanceY)
                 {
-                    var crossing = (long)(1 + 2 * ix) * dy - (long)(1 + 2 * iy) * dx;
+                    var crossing = (long)(1 + 2 * crossedX) * distanceY - (long)(1 + 2 * crossedY) * distanceX;
                     if (crossing == 0)
                     {
-                        if (_blocked[x + sx, y] || _blocked[x, y + sy]) return false;
-                        x += sx; y += sy; ix++; iy++;
+                        if (_blocked[x + directionX, y] || _blocked[x, y + directionY]) return false;
+                        x += directionX;
+                        y += directionY;
+                        crossedX++;
+                        crossedY++;
                     }
-                    else if (crossing < 0) { x += sx; ix++; }
-                    else { y += sy; iy++; }
+                    else if (crossing < 0)
+                    {
+                        x += directionX;
+                        crossedX++;
+                    }
+                    else
+                    {
+                        y += directionY;
+                        crossedY++;
+                    }
                     if (_blocked[x, y]) return false;
                 }
                 return true;

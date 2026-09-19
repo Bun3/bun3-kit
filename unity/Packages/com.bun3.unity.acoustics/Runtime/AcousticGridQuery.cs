@@ -70,10 +70,10 @@ namespace Bun3.Unity.Acoustics
         public AcousticGridQueryResult Query(Vector3 source, Vector3 listener)
         {
             EnsureThread();
-            var sourceValid = TryPoint(source, out var sx, out var sy, out var sourceCell);
-            var listenerValid = TryPoint(listener, out var lx, out var ly, out var listenerCell);
-            var sourceCoverage = Coverage(source, sx, sy, sourceValid);
-            var listenerCoverage = Coverage(listener, lx, ly, listenerValid);
+            var sourceValid = TryLocateWalkablePoint(source, out var sx, out var sy, out var sourceCell);
+            var listenerValid = TryLocateWalkablePoint(listener, out var lx, out var ly, out var listenerCell);
+            var sourceCoverage = EvaluateCoverage(source, sx, sy, sourceValid);
+            var listenerCoverage = EvaluateCoverage(listener, lx, ly, listenerValid);
             var reach = AcousticGridReachability.InvalidEndpoint;
             if (sourceValid && listenerValid)
             {
@@ -92,20 +92,35 @@ namespace Bun3.Unity.Acoustics
         public Vector3[] CreateDebugRoute(Vector3 source, Vector3 listener)
         {
             EnsureThread();
-            if (!TryPoint(source, out _, out _, out var start) ||
-                !TryPoint(listener, out _, out _, out var end)) return Array.Empty<Vector3>();
+            if (!TryLocateWalkablePoint(source, out _, out _, out var start) ||
+                !TryLocateWalkablePoint(listener, out _, out _, out var end)) return Array.Empty<Vector3>();
             var parents = new int[_blocked.Length];
             Array.Fill(parents, -1);
-            var head = 0; var tail = 1;
+            var head = 0;
+            var tail = 1;
             _queue[0] = start; parents[start] = start;
             while (head < tail && parents[end] < 0)
             {
                 var cell = _queue[head++];
-                var x = cell % _width; var y = cell / _width;
+                var x = cell % _width;
+                var y = cell / _width;
                 Visit(x - 1, y, cell); Visit(x + 1, y, cell);
                 Visit(x, y - 1, cell); Visit(x, y + 1, cell);
             }
             if (parents[end] < 0) return Array.Empty<Vector3>();
+            return BuildDebugRoute(source, listener, start, end, parents);
+
+            void Visit(int x, int y, int parent)
+            {
+                if (x < 0 || y < 0 || x >= _width || y >= _height) return;
+                var index = y * _width + x;
+                if (_blocked[index] || parents[index] >= 0) return;
+                parents[index] = parent; _queue[tail++] = index;
+            }
+        }
+
+        private Vector3[] BuildDebugRoute(Vector3 source, Vector3 listener, int start, int end, int[] parents)
+        {
             var count = 1;
             for (var cell = end; cell != start; cell = parents[cell]) count++;
             var route = new Vector3[count + 2];
@@ -119,14 +134,6 @@ namespace Bun3.Unity.Acoustics
                 current = parents[current];
             }
             return route;
-
-            void Visit(int x, int y, int parent)
-            {
-                if (x < 0 || y < 0 || x >= _width || y >= _height) return;
-                var index = y * _width + x;
-                if (_blocked[index] || parents[index] >= 0) return;
-                parents[index] = parent; _queue[tail++] = index;
-            }
         }
 
         /// <summary>Returns a baked probe by index for inspecting endpoint coverage evidence.</summary>
@@ -136,7 +143,7 @@ namespace Bun3.Unity.Acoustics
             return _probes[index];
         }
 
-        private AcousticEndpointCoverage Coverage(Vector3 position, double x, double y, bool valid)
+        private AcousticEndpointCoverage EvaluateCoverage(Vector3 position, double x, double y, bool valid)
         {
             if (!valid) return new AcousticEndpointCoverage(AcousticEndpointCoverageStatus.InvalidEndpoint, -1, 0, 0);
             var containing = 0;
@@ -145,22 +152,33 @@ namespace Bun3.Unity.Acoustics
             for (var i = 0; i < _probes.Length; i++)
             {
                 var probe = _probes[i];
-                var dx = (double)position.x - probe.Center.x;
-                var dy = (double)position.y - probe.Center.y;
-                var dz = (double)position.z - probe.Center.z;
-                if (dx * dx + dy * dy + dz * dz > (double)probe.Radius * probe.Radius) continue;
+                if (!ContainsPoint(probe, position)) continue;
                 containing++;
-                if (!TryPoint(probe.Center, out var px, out var py, out _) || !Visible(x, y, px, py)) continue;
+                if (!TryLocateWalkablePoint(probe.Center, out var px, out var py, out _) || !HasClearLineOfSight(x, y, px, py)) continue;
                 visible++;
                 if (index < 0) index = i;
             }
-            var status = visible == 0 ? AcousticEndpointCoverageStatus.None :
-                containing <= _selectionLimit || containing - visible < _selectionLimit
-                    ? AcousticEndpointCoverageStatus.GridVisible : AcousticEndpointCoverageStatus.SelectionUncertain;
-            return new AcousticEndpointCoverage(status, index, containing, visible);
+            return new AcousticEndpointCoverage(ClassifyCoverage(containing, visible), index, containing, visible);
         }
 
-        private bool TryPoint(Vector3 position, out double x, out double y, out int index)
+        private AcousticEndpointCoverageStatus ClassifyCoverage(int containing, int visible)
+        {
+            if (visible == 0) return AcousticEndpointCoverageStatus.None;
+            bool selectionMustIncludeVisibleProbe = containing <= _selectionLimit || containing - visible < _selectionLimit;
+            return selectionMustIncludeVisibleProbe
+                ? AcousticEndpointCoverageStatus.GridVisible
+                : AcousticEndpointCoverageStatus.SelectionUncertain;
+        }
+
+        private static bool ContainsPoint(AcousticProbe probe, Vector3 position)
+        {
+            var dx = (double)position.x - probe.Center.x;
+            var dy = (double)position.y - probe.Center.y;
+            var dz = (double)position.z - probe.Center.z;
+            return !(dx * dx + dy * dy + dz * dz > (double)probe.Radius * probe.Radius);
+        }
+
+        private bool TryLocateWalkablePoint(Vector3 position, out double x, out double y, out int index)
         {
             x = y = 0; index = -1;
             if (!AcousticGridFrame.Finite(position)) return false;
@@ -174,48 +192,63 @@ namespace Bun3.Unity.Acoustics
             if (x < 0 || y < 0 || x >= _width || y >= _height) return false;
             var cx = (int)Math.Floor(x);
             var cy = (int)Math.Floor(y);
-            if (!ClearCell(cx, cy, x == cx, y == cy)) return false;
+            if (!IsCellAndBoundaryClear(cx, cy, x == cx, y == cy)) return false;
             index = cy * _width + cx;
             return true;
         }
 
-        private bool Visible(double startX, double startY, double endX, double endY)
+        private bool HasClearLineOfSight(double startX, double startY, double endX, double endY)
         {
-            var x = (int)Math.Floor(startX); var y = (int)Math.Floor(startY);
-            var targetX = (int)Math.Floor(endX); var targetY = (int)Math.Floor(endY);
-            var dx = endX - startX; var dy = endY - startY;
-            var sx = Math.Sign(dx); var sy = Math.Sign(dy);
-            var alongX = sx == 0 && startX == x;
-            var alongY = sy == 0 && startY == y;
-            var stepX = sx == 0 ? double.PositiveInfinity : 1 / Math.Abs(dx);
-            var stepY = sy == 0 ? double.PositiveInfinity : 1 / Math.Abs(dy);
-            var nextX = sx == 0 ? double.PositiveInfinity : ((sx > 0 ? x + 1 : x) - startX) / dx;
-            var nextY = sy == 0 ? double.PositiveInfinity : ((sy > 0 ? y + 1 : y) - startY) / dy;
-            var remaining = (long)Math.Abs(targetX - x) + Math.Abs(targetY - y) + 2;
+            var x = (int)Math.Floor(startX);
+            var y = (int)Math.Floor(startY);
+            var targetX = (int)Math.Floor(endX);
+            var targetY = (int)Math.Floor(endY);
+            var deltaX = endX - startX;
+            var deltaY = endY - startY;
+            var directionX = Math.Sign(deltaX);
+            var directionY = Math.Sign(deltaY);
+            var onVerticalBoundary = directionX == 0 && startX == x;
+            var onHorizontalBoundary = directionY == 0 && startY == y;
+            var crossingIntervalX = directionX == 0 ? double.PositiveInfinity : 1 / Math.Abs(deltaX);
+            var crossingIntervalY = directionY == 0 ? double.PositiveInfinity : 1 / Math.Abs(deltaY);
+            var nextCrossingX = directionX == 0 ? double.PositiveInfinity : ((directionX > 0 ? x + 1 : x) - startX) / deltaX;
+            var nextCrossingY = directionY == 0 ? double.PositiveInfinity : ((directionY > 0 ? y + 1 : y) - startY) / deltaY;
+            var remainingCrossings = (long)Math.Abs(targetX - x) + Math.Abs(targetY - y) + 2;
             while (x != targetX || y != targetY)
             {
-                // Endpoint boundary neighbors were checked by TryPoint; never step beyond that endpoint.
-                if (Math.Min(nextX, nextY) >= 1) return true;
-                if (remaining-- == 0) return false;
-                if (Math.Abs(nextX - nextY) <= 1e-10)
+                // Endpoint boundary neighbors were checked by TryLocateWalkablePoint; never step beyond that endpoint.
+                if (Math.Min(nextCrossingX, nextCrossingY) >= 1) return true;
+                if (remainingCrossings-- == 0) return false;
+                if (Math.Abs(nextCrossingX - nextCrossingY) <= 1e-10)
                 {
-                    if (Blocked(x + sx, y) || Blocked(x, y + sy)) return false;
-                    x += sx; y += sy; nextX += stepX; nextY += stepY;
+                    if (IsBlocked(x + directionX, y) || IsBlocked(x, y + directionY)) return false;
+                    x += directionX;
+                    y += directionY;
+                    nextCrossingX += crossingIntervalX;
+                    nextCrossingY += crossingIntervalY;
                 }
-                else if (nextX < nextY) { x += sx; nextX += stepX; }
-                else { y += sy; nextY += stepY; }
-                if (!ClearCell(x, y, alongX, alongY)) return false;
+                else if (nextCrossingX < nextCrossingY)
+                {
+                    x += directionX;
+                    nextCrossingX += crossingIntervalX;
+                }
+                else
+                {
+                    y += directionY;
+                    nextCrossingY += crossingIntervalY;
+                }
+                if (!IsCellAndBoundaryClear(x, y, onVerticalBoundary, onHorizontalBoundary)) return false;
             }
             return true;
         }
 
-        private bool ClearCell(int x, int y, bool onX, bool onY)
+        private bool IsCellAndBoundaryClear(int x, int y, bool onX, bool onY)
         {
-            return !Blocked(x, y) && (!onX || !Blocked(x - 1, y)) && (!onY || !Blocked(x, y - 1)) &&
-                (!onX || !onY || !Blocked(x - 1, y - 1));
+            return !IsBlocked(x, y) && (!onX || !IsBlocked(x - 1, y)) && (!onY || !IsBlocked(x, y - 1)) &&
+                (!onX || !onY || !IsBlocked(x - 1, y - 1));
         }
 
-        private bool Blocked(int x, int y) => x >= 0 && y >= 0 && x < _width && y < _height && _blocked[y * _width + x];
+        private bool IsBlocked(int x, int y) => x >= 0 && y >= 0 && x < _width && y < _height && _blocked[y * _width + x];
 
         private void RebuildComponents()
         {
@@ -225,20 +258,29 @@ namespace Bun3.Unity.Acoustics
             {
                 if (_blocked[i] || _labels[i] != 0) continue;
                 label++;
-                var head = 0; var tail = 1;
-                _queue[0] = i; _labels[i] = label;
-                while (head < tail)
-                {
-                    var cell = _queue[head++];
-                    var x = cell % _width; var y = cell / _width;
-                    Enqueue(x - 1, y, label, ref tail); Enqueue(x + 1, y, label, ref tail);
-                    Enqueue(x, y - 1, label, ref tail); Enqueue(x, y + 1, label, ref tail);
-                }
+                LabelConnectedCells(i, label);
             }
             _dirty = false;
         }
 
-        private void Enqueue(int x, int y, int label, ref int tail)
+        private void LabelConnectedCells(int startCell, int label)
+        {
+            var head = 0;
+            var tail = 1;
+            _queue[0] = startCell; _labels[startCell] = label;
+            while (head < tail)
+            {
+                var cell = _queue[head++];
+                var x = cell % _width;
+                var y = cell / _width;
+                EnqueueUnlabeledCell(x - 1, y, label, ref tail);
+                EnqueueUnlabeledCell(x + 1, y, label, ref tail);
+                EnqueueUnlabeledCell(x, y - 1, label, ref tail);
+                EnqueueUnlabeledCell(x, y + 1, label, ref tail);
+            }
+        }
+
+        private void EnqueueUnlabeledCell(int x, int y, int label, ref int tail)
         {
             if (x < 0 || y < 0 || x >= _width || y >= _height) return;
             var cell = y * _width + x;
