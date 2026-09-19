@@ -2,6 +2,7 @@
   "name": "Bun3.Unity.Audio.Dissonance.SteamAudio.Tests",
   "references": [
     "Bun3.Unity.Audio",
+    "Bun3.Unity.Acoustics",
     "Bun3.Unity.Audio.Dissonance.SteamAudio",
     "Bun3.Unity.Audio.SteamAudio",
     "DissonanceVoip",
