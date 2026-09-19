@@ -4,7 +4,7 @@ The Unity Core package (`com.bun3.unity.core`) bundles general-purpose utilities
 
 # Installing Unity Core
 
-Install via the [Package Manager](https://docs.unity3d.com/Manual/upm-ui.html). The package depends on `com.mackysoft.serializereference-extensions` (declared as a git URL dependency); Unity resolves it automatically when the package is imported.
+Install via the [Package Manager](https://docs.unity3d.com/Manual/upm-ui.html). The package declares a version dependency on `com.mackysoft.serializereference-extensions`. Install its Git source in the consuming project first: `https://github.com/Bun3/Unity-SerializeReferenceExtensions.git?path=Assets/MackySoft/MackySoft.SerializeReferenceExtensions`. This separate compatibility fork supports Unity 6.5; commit the consuming project's `Packages/packages-lock.json` to retain the resolved revision.
 
 # Using Unity Core
 

@@ -11,10 +11,14 @@ Bun3 shared toolkit for Unity. General-purpose utilities used across Bun3 packag
 ## Requirements
 
 - Unity 6000.3 (6.0) or later
-- `com.mackysoft.serializereference-extensions` (declared as git dependency)
+- `com.mackysoft.serializereference-extensions` 1.7.0 or compatible (install its Git source in the consuming project)
 - `com.bun3.common` 0.1.0 (declared as a package dependency)
 
 ## Installation
+
+Install SerializeReference Extensions through Package Manager's Git URL option first:
+`https://github.com/Bun3/Unity-SerializeReferenceExtensions.git?path=Assets/MackySoft/MackySoft.SerializeReferenceExtensions`.
+This separate upstream fork contains the Unity 6.5 Editor compatibility fix. Its original package identity and license are preserved. Commit the consuming project's `Packages/packages-lock.json` to retain the resolved revision.
 
 Install via the Unity Package Manager:
 
