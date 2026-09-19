@@ -1,7 +1,7 @@
 {
   "name": "com.bun3.unity.acoustics",
   "displayName": "Bun3 Unity Acoustics",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "unity": "6000.3",
   "description": "Deterministic grid acoustic geometry and conservative probe placement without a simulation SDK dependency.",
   "author": { "name": "Bun3" }
