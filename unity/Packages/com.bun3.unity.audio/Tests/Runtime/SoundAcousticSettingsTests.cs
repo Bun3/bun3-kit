@@ -51,11 +51,17 @@ namespace Bun3.Unity.Audio.Tests
             local.MaxDistance = 73f;
             selection.Local = local;
             var profile = ScriptableObject.CreateInstance<SoundAcousticProfile>();
-            selection.Profile = profile;
+            try
+            {
+                selection.Profile = profile;
+                UnityEngine.Object.DestroyImmediate(profile);
 
-            UnityEngine.Object.DestroyImmediate(profile);
-
-            Assert.That(selection.Resolve().MaxDistance, Is.EqualTo(73f));
+                Assert.That(selection.Resolve().MaxDistance, Is.EqualTo(73f));
+            }
+            finally
+            {
+                if (profile != null) UnityEngine.Object.DestroyImmediate(profile);
+            }
         }
 
         [Test]

@@ -3,6 +3,7 @@ using UnityEditor;
 namespace Bun3.Unity.Audio.Editor
 {
     [CustomEditor(typeof(SoundAcousticProfile))]
+    [CanEditMultipleObjects]
     internal sealed class SoundAcousticProfileEditor : UnityEditor.Editor
     {
         public override void OnInspectorGUI()
