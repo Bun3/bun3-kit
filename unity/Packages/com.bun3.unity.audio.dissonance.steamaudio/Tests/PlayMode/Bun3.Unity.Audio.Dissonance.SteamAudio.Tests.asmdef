@@ -1,0 +1,18 @@
+{
+  "name": "Bun3.Unity.Audio.Dissonance.SteamAudio.Tests",
+  "references": [
+    "Bun3.Unity.Audio.Dissonance.SteamAudio",
+    "Bun3.Unity.Audio.SteamAudio",
+    "DissonanceVoip",
+    "SteamAudioUnity"
+  ],
+  "optionalUnityReferences": [
+    "TestAssemblies"
+  ],
+  "defineConstraints": [
+    "UNITY_INCLUDE_TESTS",
+    "STEAMAUDIO_ENABLED",
+    "BUN3_DISSONANCE",
+    "BUN3_STEAMAUDIO"
+  ]
+}

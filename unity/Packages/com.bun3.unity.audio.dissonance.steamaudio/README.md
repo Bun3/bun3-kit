@@ -1,0 +1,25 @@
+# Dissonance Steam Audio playback
+
+Optional integration requiring Dissonance 9.0.9, Steam Audio 4.8.1 and the Bun3 adapters named in `package.json`. SDK assets are installed separately. Runtime and test assemblies require `BUN3_DISSONANCE`, `BUN3_STEAMAUDIO` and `STEAMAUDIO_ENABLED`.
+
+`DissonanceSteamAudioPlayback` implements the SDK playback-pool interface with a DSP output generator, a silent driver clip and a separate decoder host. Configure every pooled instance with a main-thread renderer factory, path coefficients and listener coordinates before accepting voice. Application prefab/bootstrap wiring is separate.
+
+The generation-bound output filter pulls decoded samples only at DSP playback time. Streaming-clip prefetch must not consume live speech. The driver starts on the following Update, giving the application's LateUpdate one opportunity to publish initial acoustic parameters before the first read. Blocked output still consumes live speech after startup.
+
+The pump takes ownership of its renderer only after successful construction. Each pump represents one session generation. An audio callback reads interleaved stereo through `ReadStereo`. Control code calls `RequestRetirement` before stopping the source or changing decoder ownership, and polls `TryDisposeRetired` before resetting/reusing the SDK decoder or native effect. Reclamation does not require another callback after the source stops. Concurrent audio consumers are unsupported and receive silence when they cannot claim the pump.
+
+The active `Parameters` mailbox accepts copied SH, listener coordinates, three-band EQ, EQ normalization and additional path gain as one coherent snapshot. No SDK-native coefficient pointer is retained. Set `StartBlocked=true` before activation when coverage/simulation must be validated first, then publish and explicitly unblock the current generation. A final source-filter gate also silences already queued PCM. Path gain must exclude SDK user/bus volume and distance attenuation already represented by SH coefficients.
+
+The facade polls the output sample rate and DSP frame size, retiring an incompatible generation before constructing a matching renderer and clip. The output source bypasses Unity spatialization and distance attenuation; SDK volume/priority processing remains upstream. Packet-loss reporting is currently unavailable.
+
+Reset, disable, destruction and identity/codec changes retire readers before SDK reset. The detached host survives an outstanding reader and reclaims on the main thread even without another audio callback. Commands received during retirement are dropped; a fresh `StartPlayback` is required afterward. Natural completion preserves queued SDK sessions and waits for the final native tail to pass the source filter before stopping. A bind-once monitor records delivery for its own generation, including callbacks delayed beyond replacement.
+
+Validation uses generated Identity-codec packets through the actual SDK decoder and native path effect. PlayMode tests exercise DSP callbacks, short speech with initial path publication, paced continuous packets, directional stereo at the downstream source filter, native tails, held-reader reset/destruction, coherent concurrent publication, live native gain changes and warm managed allocation. This does not establish microphone capture, Opus decoding, network transport, hardware audibility or end-to-end latency. Producing valid simulation snapshots and device-change regression coverage remain separate work.
+
+## Optional SDK activation
+
+Adapters are disabled by default. Import the required SDKs and let Unity finish compiling, then run **Tools > Bun3 > Audio > Sync Installed Adapters**. The SDK-independent `Bun3.Unity.Audio.Editor.SoundSdkSetup.SyncInstalledAdapters` method is also available through Unity `-executeMethod` or Editor automation. It checks SDK assembly-definition assets and required loaded types before enabling adapters on Standalone, Android, iOS and WebGL, preserving unrelated scripting defines.
+
+Dissonance requires `BUN3_DISSONANCE`; the official NGO binding additionally requires `BUN3_DISSONANCE_NFGO`. Steam Audio requires both `BUN3_STEAMAUDIO` and the SDK's `STEAMAUDIO_ENABLED`. Combined voice path playback requires both SDKs. A leftover `STEAMAUDIO_ENABLED` alone does not activate Bun3 adapters. Runtime, Editor and test assemblies share these gates.
+
+Before removing SDK assets, remove or guard application references to adapter types, then run **Tools > Bun3 > Audio > Disable Adapters** (`Bun3.Unity.Audio.Editor.SoundSdkSetup.DisableAdapters`) and let compilation finish. This removes the three Bun3 symbols on the four supported targets and preserves the SDK-owned `STEAMAUDIO_ENABLED` flag; optional packages can remain installed. Synchronize again after installing or removing SDK components. Activation is explicit and does not run automatically on domain reload. Deleting SDK files outside the Editor while old activation symbols remain is not an automatically recoverable cold-start workflow; restore the SDK or clear the managed symbols before reopening.

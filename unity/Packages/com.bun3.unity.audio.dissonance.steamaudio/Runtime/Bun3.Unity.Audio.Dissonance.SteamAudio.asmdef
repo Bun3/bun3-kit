@@ -1,0 +1,16 @@
+{
+  "name": "Bun3.Unity.Audio.Dissonance.SteamAudio",
+  "rootNamespace": "Bun3.Unity.Audio.Dissonance.SteamAudio",
+  "references": [
+    "Bun3.Unity.Audio.SteamAudio",
+    "DissonanceVoip",
+    "SteamAudioUnity",
+    "Bun3.Unity.Audio"
+  ],
+  "defineConstraints": [
+    "STEAMAUDIO_ENABLED",
+    "BUN3_DISSONANCE",
+    "BUN3_STEAMAUDIO"
+  ],
+  "autoReferenced": true
+}
