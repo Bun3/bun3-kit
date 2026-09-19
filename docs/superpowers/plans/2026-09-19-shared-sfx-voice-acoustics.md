@@ -1,6 +1,6 @@
 # Shared SFX and Voice Acoustics Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Give SFX and voice the same shared-profile/local-input acoustic settings without changing existing audible behavior.
 
@@ -51,7 +51,7 @@ Use `{"mode":"editor","filter":"SoundAcousticSettingsTests","async_tests":true}`
 
 **Interfaces:** Serializable value `SoundAcousticSettings` contains `bool DistanceAttenuation`, `DistanceAttenuationProfile AttenuationProfile`, `float MinDistance`, `float MaxDistance`, `bool InheritSpatialBlend`, `SpatialBlendProfile SpatialBlendProfile`, `float MonoDistance`, `float FullSpatialDistance`. `SoundAcousticSettings.Default` returns the old SFX defaults (true/null/1/30/true/null/1/3). Serializable class `SoundAcousticSelection` exposes `SoundAcousticProfile Profile`, `SoundAcousticSettings Local`, and `SoundAcousticSettings Resolve()`. Profile exposes `SoundAcousticSettings Settings` and cannot reference another acoustic profile.
 
-- [ ] Add profile-precedence/local-retention tests using actual assets and destroyed-reference fallback. Destroy created assets in finally/teardown.
+- [x] Add profile-precedence/local-retention tests using actual assets and destroyed-reference fallback. Destroy created assets in finally/teardown.
 
 ```csharp
 var selection = new SoundAcousticSelection();
@@ -70,9 +70,9 @@ try
 finally { Object.DestroyImmediate(profile); }
 ```
 
-- [ ] Implement resolution as `return Profile != null ? Profile.Settings : Local;`. Defaults must be explicit because default(struct) does not create the required distance values. Test warmed resolution with `GC.GetAllocatedBytesForCurrentThread` across repeated calls, retaining the result outside the measured loop and expecting zero bytes.
-- [ ] Implement the shared PropertyDrawer via `FindPropertyRelative("Profile")`/`FindPropertyRelative("Local")`. Show a profile slot and local controls only when no profile is assigned. Use SerializedProperty for Undo/multi-object editing; do not allocate or modify a profile while repainting. Profile editor draws its Settings fields with the same labels and conditional visibility. Avoid recursive cached profile editors.
-- [ ] Verify through SerializedObject that editing Profile leaves Local unchanged; test Undo for local edits and mixed profile selection. Run fixture and import compilation, then commit this package change with gitmoji/trailer.
+- [x] Implement resolution as `return Profile != null ? Profile.Settings : Local;`. Defaults must be explicit because default(struct) does not create the required distance values. Test warmed resolution with `GC.GetAllocatedBytesForCurrentThread` across repeated calls, retaining the result outside the measured loop and expecting zero bytes.
+- [x] Implement the shared PropertyDrawer via `FindPropertyRelative("Profile")`/`FindPropertyRelative("Local")`. Show a profile slot and local controls only when no profile is assigned. Use SerializedProperty for Undo/multi-object editing; do not allocate or modify a profile while repainting. Profile editor draws its Settings fields with the same labels and conditional visibility. Avoid recursive cached profile editors.
+- [x] Verify through SerializedObject that editing Profile leaves Local unchanged; test Undo for local edits and mixed profile selection. Run fixture and import compilation, then commit this package change with gitmoji/trailer.
 
 ## Task 2: SoundDef and shared spatial-profile migration
 
@@ -80,8 +80,8 @@ finally { Object.DestroyImmediate(profile); }
 
 **Interfaces:** Both SoundDef and SoundSpatialProfile expose `SoundAcousticSelection Acoustics`. SoundDef exposes `SoundAcousticSettings EffectiveAcoustics`, resolving its selected spatial owner first. Both expose idempotent `bool UpgradeAcoustics()` (true only when conversion occurs). Existing public acoustic names remain forwarding properties so existing source callers compile. Existing Effective* accessors delegate to EffectiveAcoustics.
 
-- [ ] Create serialized legacy fixtures in code using the old field names with custom values: Min=3, Max=18, attenuation=false, mono=2/6. Include shared SoundSpatialProfile with different local settings and references to actual curve/width assets. Import/deserialize and assert effective values before and after explicit upgrade.
-- [ ] Keep private serialized legacy storage with `[FormerlySerializedAs("MinDistance")]` and equivalent attributes for every moved field. Hide it in Inspector. Keep serialization version zero for legacy data; resolve/upgrade legacy values without loading or creating ScriptableObjects in serialization callbacks. New code writes through forwarding properties into the new local selection. Do not mark migrated assets dirty from DSP or runtime code.
+- [x] Create serialized legacy fixtures in code using the old field names with custom values: Min=3, Max=18, attenuation=false, mono=2/6. Include shared SoundSpatialProfile with different local settings and references to actual curve/width assets. Import/deserialize and assert effective values before and after explicit upgrade.
+- [x] Keep private serialized legacy storage with `[FormerlySerializedAs("MinDistance")]` and equivalent attributes for every moved field. Hide it in Inspector. Keep serialization version zero for legacy data; resolve/upgrade legacy values without loading or creating ScriptableObjects in serialization callbacks. New code writes through forwarding properties into the new local selection. Do not mark migrated assets dirty from DSP or runtime code.
 
 ```csharp
 public SoundAcousticSettings EffectiveAcoustics => SpatialProfile != null
@@ -89,18 +89,18 @@ public SoundAcousticSettings EffectiveAcoustics => SpatialProfile != null
     : Acoustics.Resolve();
 ```
 
-- [ ] Test `UpgradeAcoustics()` twice, profile identity, inactive local values, no-profile values and false attenuation. Test old property writes after upgrade; setters must update local settings without detaching a shared profile.
-- [ ] Replace old acoustic controls in SoundDefEditor with the shared selection drawer. Keep Spatial mode and AudioSource-specific occlusion controls outside Acoustics. Add Inspector serialization/Undo coverage and rerun SoundProfileTests.
-- [ ] Commit after tests pass. Do not reserialize JP authored assets until Task 4 has the migration entry point.
+- [x] Test `UpgradeAcoustics()` twice, profile identity, inactive local values, no-profile values and false attenuation. Test old property writes after upgrade; setters must update local settings without detaching a shared profile.
+- [x] Replace old acoustic controls in SoundDefEditor with the shared selection drawer. Keep Spatial mode and AudioSource-specific occlusion controls outside Acoustics. Add Inspector serialization/Undo coverage and rerun SoundProfileTests.
+- [x] Commit after tests pass. Do not reserialize JP authored assets until Task 4 has the migration entry point.
 
 ## Task 3: Shared native adapter input and old voice compatibility
 
 **Files:** Modify `unity/Packages/com.bun3.unity.audio.steamaudio/Runtime/SteamAudioSoundOutput.cs`, `Runtime/PlanarAcousticSfxBinding.cs`; modify `unity/Packages/com.bun3.unity.audio.dissonance.steamaudio/Runtime/DissonancePlanarAcousticOutput.cs`. Add `Tests/Editor/SharedAcousticSettingsTests.cs` to the Steam Audio package and relevant gated tests to the Dissonance/Steam Audio package's existing test directory.
 
-**Interfaces:** Add audio-core `IResolvedSoundAcousticSettings` in `Runtime/SoundAcousticSettings.cs` with `bool IsAvailable { get; }` and `SoundAcousticSettings Acoustics { get; }`. Add a DissonancePlanarAcousticOutput constructor accepting this interface; retain the old constructor/interfaces through a one-time compatibility wrapper. SteamAudioSoundOutput exposes current `SoundAcousticSettings Acoustics`, resolving its active SoundDef live on the main thread.
+**Interfaces:** Add audio-core `IResolvedSoundAcousticSettings` in `Runtime/SoundAcousticSettings.cs` with `bool IsAvailable { get; }` and `SoundAcousticSettings Acoustics { get; }`. Add DissonancePlanarAcousticOutput.FromAcoustics accepting this interface; retain the old constructor/interfaces through a one-time compatibility wrapper. The named factory preserves existing literal-null constructor calls. SteamAudioSoundOutput exposes current `SoundAcousticSettings Acoustics`, resolving its active SoundDef live on the main thread.
 
-- [ ] Add tests for old voice interface behavior (null profile=1/15m and world mono inheritance), new settings (custom 3/18m, disabled attenuation, explicit mono=0), and live shared-profile mutation. Ensure unavailable settings still gate silent.
-- [ ] Read each resolved value once per Prepare/Publish phase and pass its fields to the existing binding methods. Do not change decoder/pump/retirement internals.
+- [x] Add tests for old voice interface behavior (null profile=1/15m and world mono inheritance), new settings (custom 3/18m, disabled attenuation, explicit mono=0), and live shared-profile mutation. Ensure unavailable settings still gate silent.
+- [x] Read each resolved value once per Prepare/Publish phase and pass its fields to the existing binding methods. Do not change decoder/pump/retirement internals.
 
 ```csharp
 var acoustic = settings.Acoustics;
@@ -108,8 +108,8 @@ binding.ApplyDistanceProfile(acoustic.DistanceAttenuation,
     acoustic.AttenuationProfile, acoustic.MinDistance, acoustic.MaxDistance);
 ```
 
-- [ ] Route width consistently: inherit uses `world.GetSpatialBlend(handle)`; otherwise use `world.GetSpatialBlend(handle, acoustic.SpatialBlendProfile, acoustic.MonoDistance, acoustic.FullSpatialDistance)`. Same logic applies to SFX and voice. Preserve existing blocking paths even when attenuation is disabled.
-- [ ] Run new tests, PlanarAcousticRuntimeTests, NearFieldSpatialTests and existing gated native voice playback tests. Include an active-generation update assertion instead of only comparing struct fields. Verify profile resolution adds no warm allocations. Commit each affected package independently after the dependent change passes.
+- [x] Route width consistently: inherit uses `world.GetSpatialBlend(handle)`; otherwise use `world.GetSpatialBlend(handle, acoustic.SpatialBlendProfile, acoustic.MonoDistance, acoustic.FullSpatialDistance)`. Same logic applies to SFX and voice. Preserve existing blocking paths even when attenuation is disabled.
+- [x] Run new tests, PlanarAcousticRuntimeTests, NearFieldSpatialTests and existing gated native voice playback tests. Include an active-generation update assertion instead of only comparing struct fields. Verify profile resolution adds no warm allocations. Commit each affected package independently after the dependent change passes.
 
 ## Task 4: JP authoring, migration and SoloVoice
 
@@ -117,10 +117,10 @@ binding.ApplyDistanceProfile(acoustic.DistanceAttenuation,
 
 **Interfaces:** GameConfig exposes `SoundAcousticSelection VoiceAcoustics`, `SoundAcousticSettings EffectiveVoiceAcoustics`, and idempotent `bool UpgradeVoiceAcoustics()`. Preserve old voice public names as forwarding accessors and hidden serialized legacy fields. JP settings adapter implements `IResolvedSoundAcousticSettings`. Editor `SoundAcousticMigration.Run()` upgrades/saves SoundDef, SoundSpatialProfile and GameConfig assets without replacing GUIDs.
 
-- [ ] Test voice migration using enabled=false, a non-default curve reference, separate common and voice mono profiles. Assert old no-voice-profile inheritance, null attenuation fallback 1/15m, and repeated migration. Test an already-authored new profile survives M1 setup.
-- [ ] Implement JP adapter properties: `IsAvailable => GameConfig.I != null`, `Acoustics => GameConfig.I.EffectiveVoiceAcoustics`; pass it to the new voice output constructor. Keep volume and room code unchanged.
-- [ ] Update setup assignments to new local/shared settings; invoke idempotent migration before saving. Increment GeneratedAssetVersion based on its current value, not a remembered literal. Serialize existing authored assets through Unity and compare effective acoustic values and GUID references against a captured pre-migration inventory. Preserve false attenuation in WorldSpatial.
-- [ ] Update SoloVoice message to transmit resolved attenuation enable, curve and fallback Min/Max, plus resolved mono distances. On receive, use a temporary selection/curve with inheritance disabled because distances are already resolved. Save the original selection object and restore it exactly on Stop/stale/role change. Never write into its Profile.Settings.
+- [x] Test voice migration using enabled=false, a non-default curve reference, separate common and voice mono profiles. Assert old no-voice-profile inheritance, null attenuation fallback 1/15m, and repeated migration. Test an already-authored new profile survives M1 setup.
+- [x] Implement JP adapter properties: `IsAvailable => GameConfig.I != null`, `Acoustics => GameConfig.I.EffectiveVoiceAcoustics`; pass it to the FromAcoustics voice output factory. Keep volume and room code unchanged.
+- [x] Update setup assignments to new local/shared settings; invoke idempotent migration before saving. Increment GeneratedAssetVersion based on its current value, not a remembered literal. Serialize existing authored assets through Unity and compare effective acoustic values and GUID references against a captured pre-migration inventory. Preserve false attenuation in WorldSpatial.
+- [x] Update SoloVoice message to transmit resolved attenuation enable, curve and fallback Min/Max, plus resolved mono distances. On receive, use a temporary selection/curve with inheritance disabled because distances are already resolved. Save the original selection object and restore it exactly on Stop/stale/role change. Never write into its Profile.Settings.
 
 ```csharp
 // Assertions to add around the existing sync fixture's send/receive/Stop calls:
@@ -130,8 +130,8 @@ sync.Stop();
 Assert.That(target.VoiceAcoustics, Is.SameAs(originalSelection));
 ```
 
-- [ ] Extend existing SoloVoiceAudioSyncTests to check stale (>2s) restore, repeated receive without curve replacement, custom fallback range, disabled attenuation, profile replacement, and explicit mono collapse disabled. Use fixture-owned temporary files and controlled timestamps; no real mic needed.
-- [ ] Run JP migration/authoring, SoloVoice and SoundOutputPlayModeTests. Commit JP code separately from migrated assets when each diff is reviewable; preserve unrelated dirty assets.
+- [x] Extend existing SoloVoiceAudioSyncTests to check stale (>2s) restore, repeated receive without curve replacement, custom fallback range, disabled attenuation, profile replacement, and explicit mono collapse disabled. Use fixture-owned temporary files and controlled timestamps; no real mic needed.
+- [x] Run JP migration/authoring, SoloVoice and SoundOutputPlayModeTests. Commit JP code separately from migrated assets when each diff is reviewable; preserve unrelated dirty assets.
 
 ## Task 5: Integration validation, documentation and publication
 
@@ -141,22 +141,23 @@ Assert.That(target.VoiceAcoustics, Is.SameAs(originalSelection));
 - [x] Verify optional SDK gates using a separate temporary Unity project or existing package compile fixture without proprietary SDK assemblies. Include audio core's required common/core/UniTask/Addressables dependencies; do not delete SDK assets from either working project.
 - [x] Verify migration/setup idempotence by two Unity authoring runs and normalized serialized comparisons. Assert existing key order/content and unrelated tuning unchanged. Check shared-profile UI through SerializedObject/Inspector tooling and preserve Undo behavior.
 - [x] Update the English package examples and Korean guide to show the same AcousticSelection control for SoundDef and Voice Acoustics. Remove obsolete voice field instructions and label basic AudioSource-only settings. Check links/fences and compile any complete changed examples.
-- [ ] Bump every changed package version, commit/push by package, and resolve JP's nine bun3 branch Git URLs via UPM API. Never commit a local `file:` path. Verify actual PackageInfo source, hashes, compiler state and targeted JP audio tests after the switch.
-- [ ] Commit/push JP package lock, migration assets, guide and branch history. Report exact test results, preserved tuning and remaining user microphone verification. Do not claim perceptual quality from automated tests.
+- [x] Bump every changed package version, commit/push by package, and resolve JP's nine bun3 branch Git URLs via UPM API. Never commit a local `file:` path. Verify actual PackageInfo source, hashes, compiler state and targeted JP audio tests after the switch.
+- [x] Commit/push JP package lock, migration assets, guide and branch history. Report exact test results, preserved tuning and remaining user microphone verification. Do not claim perceptual quality from automated tests.
 
 ### Task 5 verification notes (2026-09-20)
 
-- Local-source full suites: EditMode 1,223/1,223 and PlayMode 281/281, total 1,504/1,504 with no failures or skips. Result files: `E:/Temp/shared-acoustics-full-editmode.json` and `E:/Temp/shared-acoustics-full-playmode.json`.
-- SDK-free production compile fixture completed with process exit 0 and no compiler errors: `E:/Temp/shared-acoustics-no-sdk-final.log` and `E:/Temp/shared-acoustics-no-sdk-result.txt`.
+- Local-source full suites: EditMode 1,223/1,223 and PlayMode 281/281, total 1,504/1,504 with no failures or skips. Result files: `E:/Temp/shared-acoustics-full-editor.json` and `E:/Temp/shared-acoustics-full-playmode.json`.
+- SDK-free production compile fixture completed with process exit 0 and no compiler errors: `E:/Temp/shared-acoustics-no-sdk-release.log` and `E:/Temp/shared-acoustics-no-sdk-result.txt`.
 - Two authoring passes produced normalized-equal results for 19 SoundDefs plus GameConfig. The 32-asset invariant comparison preserved all content outside the moved acoustic blocks, including the existing WorldSpatial disabled attenuation, AI/room meanings and unrelated tuning. Shared-profile Inspector selection, retained local values and Undo were covered by the passing Editor tests.
 - Task 4 review passed. The accepted nonblocking note was that one test does not assert the exact stale selection directly; common restore coverage verifies the behavior.
 - Package versions prepared: `com.bun3.unity.audio` 0.3.6, `com.bun3.unity.audio.steamaudio` 0.4.4 with audio >=0.3.6, and `com.bun3.unity.audio.dissonance.steamaudio` 0.2.4 with explicit audio >=0.3.6 and Steam Audio adapter >=0.4.4.
 - The changed complete `PlanarVoiceOwner` README example compiled in a temporary JP Editor assembly with compiler errors `[]`; the loaded assembly contained the expected type. The fixture was removed through AssetDatabase after verification. Changed Markdown links, fences and package JSON also passed static checks.
-- Final package commits/push, JP Git UPM resolution/lock and post-switch verification remain controller-owned. User microphone/headphone verification remains manual; automated results make no perceptual-quality claim.
+- Published the reviewed bun3 release at `35035294cc582bd2a7b9770159b44b9f8839e5d7`. JP pins all nine Bun3 Git dependencies to that commit on the approved integration branch. PackageInfo confirms Git sources and the expected versions; post-switch SoloVoice 4/4 and JP sound playback 6/6 passed with no compiler errors. JP integration and lock changes were pushed as `b568b663`. Final cross-repository review and its scoped documentation re-review have no remaining findings. This final plan-record commit changes no package content, so the verified release lock remains unchanged.
+- User microphone/headphone verification remains manual; automated results make no perceptual-quality claim.
 
 ## Self-review
 
 - Common settings/Inspector: Task 1; nested precedence and serialization: Task 2; shared native interpretation and legacy callers: Task 3; JP/temporary test settings: Task 4; docs, SDK absence and publication: Task 5.
 - Review Focus 1–5 each has explicit owning tests above. Existing playback ownership and gain paths have no planned modifications.
 - Constructor/interface names are shared across Tasks 1–4. Profile stores Settings, Selection stores Profile/Local, consumers read resolved Acoustics.
-- This is an implementation plan awaiting user review, not a record of completed code or tests.
+- Implementation, migration, automated validation, documentation and publication are complete. The checkboxes and verification notes record the executed work.
