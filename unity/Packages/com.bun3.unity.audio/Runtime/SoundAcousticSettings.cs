@@ -2,6 +2,16 @@ using System;
 
 namespace Bun3.Unity.Audio
 {
+    /// <summary>Provides live resolved acoustic settings to native playback adapters.</summary>
+    public interface IResolvedSoundAcousticSettings
+    {
+        /// <summary>Whether the settings owner is currently available for playback.</summary>
+        bool IsAvailable { get; }
+
+        /// <summary>Gets the currently resolved acoustic settings.</summary>
+        SoundAcousticSettings Acoustics { get; }
+    }
+
     /// <summary>Distance attenuation and stereo-width settings shared by sound and voice playback.</summary>
     [Serializable]
     public struct SoundAcousticSettings
