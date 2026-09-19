@@ -4,7 +4,7 @@ Optional integration requiring Dissonance 9.0.9, Steam Audio 4.8.1 and the Bun3 
 
 ## Installation and dependencies
 
-The package requires Unity **6000.3** or later. Its manifest declares `com.bun3.unity.audio.dissonance` **0.2.0** and `com.bun3.unity.audio.steamaudio` **0.4.1**. The Steam Audio adapter also needs the audio core and acoustics packages. Merge these Git entries into the project's existing `Packages/manifest.json` dependencies:
+The package requires Unity **6000.3** or later. Its manifest declares `com.bun3.unity.audio` **0.3.6**, `com.bun3.unity.audio.dissonance` **0.2.0**, and `com.bun3.unity.audio.steamaudio` **0.4.4**. The Steam Audio adapter also needs the acoustics package. Merge these Git entries into the project's existing `Packages/manifest.json` dependencies:
 
 ```json
 {
@@ -52,25 +52,21 @@ using Bun3.Unity.Audio;
 using Bun3.Unity.Audio.Dissonance.SteamAudio;
 using Bun3.Unity.Audio.SteamAudio;
 
-public sealed class PlanarVoiceOwner : IPlanarVoiceSettings,
-    IPlanarVoiceSpatialSettings, IDisposable
+public sealed class PlanarVoiceOwner : IResolvedSoundAcousticSettings, IDisposable
 {
     private readonly PlanarAcousticOutputs outputs;
     private readonly DissonancePlanarAcousticOutput output;
 
     public bool IsAvailable { get; set; } = true;
-    public bool DistanceAttenuation { get; set; } = true;
-    public DistanceAttenuationProfile AttenuationProfile { get; set; }
-    public SpatialBlendProfile SpatialBlendProfile { get; set; }
+    public SoundAcousticSettings Acoustics { get; set; }
 
     public PlanarVoiceOwner(PlanarAcousticOutputs outputs,
         DissonanceSteamAudioPlayback playback,
-        DistanceAttenuationProfile distance, SpatialBlendProfile width = null)
+        SoundAcousticSettings acoustics)
     {
         this.outputs = outputs;
-        AttenuationProfile = distance;
-        SpatialBlendProfile = width;
-        output = new DissonancePlanarAcousticOutput(playback, this);
+        Acoustics = acoustics;
+        output = DissonancePlanarAcousticOutput.FromAcoustics(playback, this);
         outputs.Register(output);
     }
 
@@ -86,19 +82,21 @@ Dispose/unregister this owner on the main thread before destroying its playback 
 
 ## Distance and stereo-width profiles
 
-Create shared assets through **Assets > Create > Bun3 > Audio > Distance Attenuation Profile** and **Spatial Blend Profile**. These asset types live in the audio core; this package consumes them through the settings interfaces.
+Create a shared acoustic asset through **Assets > Create > Bun3 > Audio > Sound Acoustic Profile**. Its settings may reference **Distance Attenuation Profile** and **Spatial Blend Profile** assets. These types live in the audio core; this package consumes their resolved value through `IResolvedSoundAcousticSettings`.
 
 | Setting | Behavior |
 |---|---|
-| `IPlanarVoiceSettings.IsAvailable` | False keeps output blocked when tuning/context is unavailable. |
-| `DistanceAttenuation` | Enables/disables the native distance gain. It does not bypass coverage gating or path occlusion. |
-| `AttenuationProfile` | Live distance-in-metres/volume curve using native path distance. The last key is the hard silence distance; put it at zero gain for a smooth end. Empty curves are silent. |
-| Null attenuation profile | Uses the binding's fallback range: minimum 1 m, maximum 15 m, edge fade fraction 0.2. |
-| `IPlanarVoiceSpatialSettings.SpatialBlendProfile` | Optional per-voice width profile; null or absence of the interface inherits the world's profile/range. |
+| `IResolvedSoundAcousticSettings.IsAvailable` | False keeps output blocked when tuning/context is unavailable. |
+| `Acoustics.DistanceAttenuation` | Enables/disables the native distance gain. It does not bypass coverage gating or path occlusion. |
+| `Acoustics.AttenuationProfile` | Live distance-in-metres/volume curve using native path distance. The last key is the hard silence distance; put it at zero gain for a smooth end. Empty curves are silent. |
+| Null attenuation profile | Uses `Acoustics.MinDistance` and `MaxDistance` with edge fade fraction 0.2. |
+| `Acoustics.InheritSpatialBlend` | True inherits the world's profile/range. False uses the selected profile or inline mono/full distances. |
 | `SpatialBlendProfile.MonoDistance` | At/below this native path distance, output is processed dual mono. Default asset value: 1 m. |
 | `SpatialBlendProfile.FullSpatialDistance` | At/above this distance, output retains full native binaural width. Default asset value: 3 m. A value at/below `MonoDistance` disables collapse. |
 
 Width interpolates smoothly between the two distances. It changes processed stereo width while retaining native occlusion, EQ, and attenuation; it is distinct from `AudioSource.spatialBlend`, which remains zero for the custom output. Authored distance-curve edits create a new immutable snapshot on the control thread. Avoid recreating curves/profiles each frame. SDK user volume, mixer volume, native attenuation, and additional `PathPlaybackSettings.Gain` each need a single owner to avoid multiplying the same gain twice.
+
+`FromAcoustics` is the preferred factory for new integrations. The public constructor taking `IPlanarVoiceSettings` remains for compatibility; its null curve fallback stays at 1 m minimum and 15 m maximum, and its optional `IPlanarVoiceSpatialSettings` profile keeps the previous width behavior.
 
 ## Manual parameter publication
 
