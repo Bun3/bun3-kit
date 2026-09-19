@@ -25,7 +25,7 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio
     {
         readonly PlanarAcousticBinding binding = new();
         readonly DissonanceSteamAudioPlayback playback;
-        readonly IPlanarVoiceSettings settings;
+        readonly IResolvedSoundAcousticSettings settings;
         long preparedGeneration;
         /// <inheritdoc/>
         public PlanarAcousticSourceHandle SourceHandle => binding.Handle;
@@ -36,19 +36,29 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio
         /// <inheritdoc/>
         public bool IsBlocked => playback == null || playback.Parameters == null || playback.Parameters.IsBlocked;
         /// <inheritdoc/>
-        public bool DistanceAttenuation => settings.DistanceAttenuation;
+        public bool DistanceAttenuation => ResolvedAcoustics.DistanceAttenuation;
         /// <inheritdoc/>
-        public DistanceAttenuationProfile AttenuationProfile => settings.AttenuationProfile;
+        public DistanceAttenuationProfile AttenuationProfile => ResolvedAcoustics.AttenuationProfile;
         /// <inheritdoc/>
-        public float MinimumDistance => 1;
+        public float MinimumDistance => ResolvedAcoustics.MinDistance;
         /// <inheritdoc/>
-        public float MaximumDistance => 15;
+        public float MaximumDistance => ResolvedAcoustics.MaxDistance;
         /// <inheritdoc/>
         public bool RequiresSimulation => playback != null && playback.IsSpeaking && !playback.IsRetiring &&
             playback.Parameters != null && playback.Parameters.Generation != preparedGeneration;
 
         /// <summary>Configures the retained native playback and begins a detached source binding.</summary>
         public DissonancePlanarAcousticOutput(DissonanceSteamAudioPlayback playback, IPlanarVoiceSettings settings)
+            : this(playback, new LegacyResolvedSettings(settings))
+        {
+        }
+
+        /// <summary>Creates an output backed by the shared resolved acoustic settings contract.</summary>
+        public static DissonancePlanarAcousticOutput FromAcoustics(
+            DissonanceSteamAudioPlayback playback, IResolvedSoundAcousticSettings settings) =>
+            new(playback, settings);
+
+        DissonancePlanarAcousticOutput(DissonanceSteamAudioPlayback playback, IResolvedSoundAcousticSettings settings)
         {
             this.playback = playback != null ? playback : throw new System.ArgumentNullException(nameof(playback));
             this.settings = settings ?? throw new System.ArgumentNullException(nameof(settings));
@@ -67,9 +77,14 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio
         {
             var parameters = playback != null ? playback.Parameters : null;
             bool active = playback != null && playback.IsSpeaking && !playback.IsRetiring && parameters != null;
-            binding.Prepare(world, playback.transform.position, active && settings != null && settings.IsAvailable);
-            if (active && settings != null && settings.IsAvailable)
-                binding.ApplyDistanceProfile(settings.DistanceAttenuation, settings.AttenuationProfile);
+            bool available = settings != null && settings.IsAvailable;
+            binding.Prepare(world, playback.transform.position, active && available);
+            if (active && available)
+            {
+                var acoustic = settings.Acoustics;
+                binding.ApplyDistanceProfile(acoustic.DistanceAttenuation, acoustic.AttenuationProfile,
+                    acoustic.MinDistance, acoustic.MaxDistance);
+            }
 
             // Capacity failure retries on the normal interval, without forcing a native tick every frame.
             preparedGeneration = active ? parameters.Generation : 0;
@@ -80,14 +95,21 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio
         {
             var parameters = playback != null ? playback.Parameters : null;
             if (parameters == null) return;
-            if (settings == null || !settings.IsAvailable || !binding.TryGet(world, out var path))
+            bool available = settings != null && settings.IsAvailable;
+            if (!available)
+            {
+                parameters.TrySetBlocked(parameters.Generation, true);
+                return;
+            }
+            var acoustic = settings.Acoustics;
+            if (!binding.TryGet(world, out var path))
             {
                 parameters.TrySetBlocked(parameters.Generation, true);
                 return;
             }
             var result = path.SimulationResult;
             var pathSettings = new PathPlaybackSettings(path.Listener, result.EqLow, result.EqMid,
-                result.EqHigh, path.Gain, result.NormalizeEq, GetSpatialBlend(world));
+                result.EqHigh, path.Gain, result.NormalizeEq, GetSpatialBlend(world, acoustic));
             bool published = parameters.TryPublish(parameters.Generation, binding.Coefficients, pathSettings);
             parameters.TrySetBlocked(parameters.Generation, !published);
         }
@@ -95,9 +117,17 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio
         /// <inheritdoc/>
         public float GetSpatialBlend(PlanarAcousticWorld world)
         {
-            var profile = (settings as IPlanarVoiceSpatialSettings)?.SpatialBlendProfile;
-            return profile != null ? world.GetSpatialBlend(binding.Handle, profile, 0, 0) : world.GetSpatialBlend(binding.Handle);
+            return GetSpatialBlend(world, ResolvedAcoustics);
         }
+
+        float GetSpatialBlend(PlanarAcousticWorld world, SoundAcousticSettings acoustic) => acoustic.InheritSpatialBlend
+            ? world.GetSpatialBlend(binding.Handle)
+            : world.GetSpatialBlend(binding.Handle, acoustic.SpatialBlendProfile,
+                acoustic.MonoDistance, acoustic.FullSpatialDistance);
+
+        SoundAcousticSettings ResolvedAcoustics => settings != null && settings.IsAvailable
+            ? settings.Acoustics
+            : SoundAcousticSettings.Default;
 
         /// <inheritdoc/>
         public void Gate(PlanarAcousticWorld world, Vector2 listener)
@@ -105,6 +135,35 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio
             var config = settings;
             if (config == null || !config.IsAvailable ||
                 !world.IsRouteCovered(playback.transform.position, listener)) Block();
+        }
+
+        sealed class LegacyResolvedSettings : IResolvedSoundAcousticSettings
+        {
+            readonly IPlanarVoiceSettings settings;
+
+            internal LegacyResolvedSettings(IPlanarVoiceSettings settings) =>
+                this.settings = settings ?? throw new ArgumentNullException(nameof(settings));
+
+            public bool IsAvailable => settings.IsAvailable;
+
+            public SoundAcousticSettings Acoustics
+            {
+                get
+                {
+                    var spatialProfile = (settings as IPlanarVoiceSpatialSettings)?.SpatialBlendProfile;
+                    return new SoundAcousticSettings
+                    {
+                        DistanceAttenuation = settings.DistanceAttenuation,
+                        AttenuationProfile = settings.AttenuationProfile,
+                        MinDistance = 1,
+                        MaxDistance = 15,
+                        InheritSpatialBlend = spatialProfile == null,
+                        SpatialBlendProfile = spatialProfile,
+                        MonoDistance = 0,
+                        FullSpatialDistance = 0,
+                    };
+                }
+            }
         }
 
         /// <inheritdoc/>
