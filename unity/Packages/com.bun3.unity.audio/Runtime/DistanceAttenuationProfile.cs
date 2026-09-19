@@ -16,7 +16,11 @@ namespace Bun3.Unity.Audio
         {
             keys = source == null ? Array.Empty<Keyframe>() : source.keys;
             curve = new AnimationCurve(keys);
-            if (source != null) { curve.preWrapMode = source.preWrapMode; curve.postWrapMode = source.postWrapMode; }
+            if (source != null)
+            {
+                curve.preWrapMode = source.preWrapMode;
+                curve.postWrapMode = source.postWrapMode;
+            }
             MaximumDistance = curve.length == 0 ? 0 : curve[curve.length - 1].time;
         }
         internal bool Matches(AnimationCurve source)
@@ -37,10 +41,19 @@ namespace Bun3.Unity.Audio
         /// <summary>Evaluates distance with nonfinite input rejected and output clamped to [0,1]. Empty curves are silent.</summary>
         public float Evaluate(float distance)
         {
-            if (float.IsNaN(distance) || float.IsInfinity(distance) || distance < 0 || curve.length == 0 ||
-                float.IsNaN(MaximumDistance) || float.IsInfinity(MaximumDistance) || distance >= MaximumDistance) return 0;
+            bool validDistance = !float.IsNaN(distance) && !float.IsInfinity(distance) && distance >= 0;
+            bool hasFiniteEnd = !float.IsNaN(MaximumDistance) && !float.IsInfinity(MaximumDistance);
+            if (!validDistance || !hasFiniteEnd || curve.length == 0 || distance >= MaximumDistance)
+            {
+                return 0;
+            }
+
             float gain = curve.Evaluate(distance);
-            return float.IsNaN(gain) || float.IsInfinity(gain) ? 0 : Math.Max(0, Math.Min(1, gain));
+            if (float.IsNaN(gain) || float.IsInfinity(gain))
+            {
+                return 0;
+            }
+            return Math.Max(0, Math.Min(1, gain));
         }
     }
 
@@ -67,14 +80,22 @@ namespace Bun3.Unity.Audio
                 volumeByDistance ??= new AnimationCurve();
                 return volumeByDistance;
             }
-            set { volumeByDistance = value ?? new AnimationCurve(); curveInitialized = true; snapshot = null; }
+            set
+            {
+                volumeByDistance = value ?? new AnimationCurve();
+                curveInitialized = true;
+                snapshot = null;
+            }
         }
 
         /// <summary>Returns an immutable native-callback snapshot, allocating only when the authored curve changes. Control thread only.</summary>
         public DistanceAttenuationCurve GetSnapshot()
         {
             var authored = VolumeByDistance;
-            if (snapshot == null || !snapshot.Matches(authored)) snapshot = new DistanceAttenuationCurve(authored);
+            if (snapshot == null || !snapshot.Matches(authored))
+            {
+                snapshot = new DistanceAttenuationCurve(authored);
+            }
             return snapshot;
         }
 
@@ -127,14 +148,42 @@ namespace Bun3.Unity.Audio
         /// <summary>Evaluates the adapter curve using scalar snapshots, without Unity object access.</summary>
         public static float Evaluate(float distance, float minimum, float maximum, float fadeFraction, bool enabled = true)
         {
-            if (float.IsNaN(distance) || float.IsInfinity(distance) || distance < 0) return 0;
-            if (!enabled) return 1;
-            if (float.IsNaN(minimum) || float.IsInfinity(minimum) || minimum < 0 ||
-                float.IsNaN(maximum) || maximum <= 0 || float.IsNaN(fadeFraction) ||
-                float.IsInfinity(fadeFraction) || fadeFraction <= 0 || fadeFraction > 1) return 0;
-            float gain = distance <= minimum ? 1 : minimum / distance;
-            return float.IsPositiveInfinity(maximum) ? gain : gain * System.Math.Max(0,
-                System.Math.Min(1, (maximum - distance) / (maximum * fadeFraction)));
+            if (!IsFiniteNonNegative(distance))
+            {
+                return 0;
+            }
+            if (!enabled)
+            {
+                return 1;
+            }
+            if (!IsValidLegacyRange(minimum, maximum, fadeFraction))
+            {
+                return 0;
+            }
+
+            float distanceGain = distance <= minimum ? 1 : minimum / distance;
+            if (float.IsPositiveInfinity(maximum))
+            {
+                return distanceGain;
+            }
+
+            float remainingDistance = maximum - distance;
+            float fadeDistance = maximum * fadeFraction;
+            float fadeGain = Math.Max(0, Math.Min(1, remainingDistance / fadeDistance));
+            return distanceGain * fadeGain;
+        }
+
+        private static bool IsFiniteNonNegative(float value)
+        {
+            return !float.IsNaN(value) && !float.IsInfinity(value) && value >= 0;
+        }
+
+        private static bool IsValidLegacyRange(float minimum, float maximum, float fadeFraction)
+        {
+            // Positive infinity is a supported maximum: it disables the end fade.
+            return IsFiniteNonNegative(minimum)
+                && !float.IsNaN(maximum) && maximum > 0
+                && IsFiniteNonNegative(fadeFraction) && fadeFraction > 0 && fadeFraction <= 1;
         }
     }
 }

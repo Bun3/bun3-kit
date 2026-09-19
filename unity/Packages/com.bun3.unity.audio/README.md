@@ -344,3 +344,20 @@ sound.FullSpatialDistance = 3;
 ```
 
 Playback parameters are primarily consumed when starting a voice. Native adapters continue reading effective attenuation and width profiles on the control thread during simulation. No profile allocation occurs on a warm playback or audio-processing path.
+
+## Reading the implementation
+
+Start with `SoundSystem.Play` for a request and `SoundSystem.Tick` for frame updates.
+Tick lists the processing stages in execution order. Completed sources retire before
+callbacks run, because a callback can immediately reuse a voice slot.
+
+Distance evaluation uses scalar inputs and returns a gain without changing playback
+state. Profile snapshots isolate that calculation from live Inspector edits.
+`SoundSystem.Addressables` handles the separate load/release lifecycle: each call
+owns its handles until a successful preload transfers them to the system. A single
+`finally` block releases any batch that did not transfer.
+
+When extending this package, keep calculations separate from Unity operations,
+use named intermediate values and guard clauses, and keep related steps in the
+same file. Hot paths use direct calls and reusable storage; function composition
+must not introduce per-frame closures or collection allocations.
