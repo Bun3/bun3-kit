@@ -137,12 +137,22 @@ Assert.That(target.VoiceAcoustics, Is.SameAs(originalSelection));
 
 **Files:** Changed bun3 package.json files and READMEs; JP `docs/sound-authoring-guide.md`, `docs/playtest-guide.md`, `docs/design/development_task/git_branch_history.md`, `unity/Packages/packages-lock.json`; final verification notes appended to this plan.
 
-- [ ] With local package sources, run full EditMode and PlayMode suites once after focused tests pass. Inspect unexpected Console errors and pending async operations. Investigate failures instead of suppressing logs.
-- [ ] Verify optional SDK gates using a separate temporary Unity project or existing package compile fixture without proprietary SDK assemblies. Include audio core's required common/core/UniTask/Addressables dependencies; do not delete SDK assets from either working project.
-- [ ] Verify migration/setup idempotence by two Unity authoring runs and normalized serialized comparisons. Assert existing key order/content and unrelated tuning unchanged. Check shared-profile UI through SerializedObject/Inspector tooling and preserve Undo behavior.
-- [ ] Update the English package examples and Korean guide to show the same AcousticSelection control for SoundDef and Voice Acoustics. Remove obsolete voice field instructions and label basic AudioSource-only settings. Check links/fences and compile any complete changed examples.
+- [x] With local package sources, run full EditMode and PlayMode suites once after focused tests pass. Inspect unexpected Console errors and pending async operations. Investigate failures instead of suppressing logs.
+- [x] Verify optional SDK gates using a separate temporary Unity project or existing package compile fixture without proprietary SDK assemblies. Include audio core's required common/core/UniTask/Addressables dependencies; do not delete SDK assets from either working project.
+- [x] Verify migration/setup idempotence by two Unity authoring runs and normalized serialized comparisons. Assert existing key order/content and unrelated tuning unchanged. Check shared-profile UI through SerializedObject/Inspector tooling and preserve Undo behavior.
+- [x] Update the English package examples and Korean guide to show the same AcousticSelection control for SoundDef and Voice Acoustics. Remove obsolete voice field instructions and label basic AudioSource-only settings. Check links/fences and compile any complete changed examples.
 - [ ] Bump every changed package version, commit/push by package, and resolve JP's nine bun3 branch Git URLs via UPM API. Never commit a local `file:` path. Verify actual PackageInfo source, hashes, compiler state and targeted JP audio tests after the switch.
 - [ ] Commit/push JP package lock, migration assets, guide and branch history. Report exact test results, preserved tuning and remaining user microphone verification. Do not claim perceptual quality from automated tests.
+
+### Task 5 verification notes (2026-09-20)
+
+- Local-source full suites: EditMode 1,223/1,223 and PlayMode 281/281, total 1,504/1,504 with no failures or skips. Result files: `E:/Temp/shared-acoustics-full-editmode.json` and `E:/Temp/shared-acoustics-full-playmode.json`.
+- SDK-free production compile fixture completed with process exit 0 and no compiler errors: `E:/Temp/shared-acoustics-no-sdk-final.log` and `E:/Temp/shared-acoustics-no-sdk-result.txt`.
+- Two authoring passes produced normalized-equal results for 19 SoundDefs plus GameConfig. The 32-asset invariant comparison preserved all content outside the moved acoustic blocks, including the existing WorldSpatial disabled attenuation, AI/room meanings and unrelated tuning. Shared-profile Inspector selection, retained local values and Undo were covered by the passing Editor tests.
+- Task 4 review passed. The accepted nonblocking note was that one test does not assert the exact stale selection directly; common restore coverage verifies the behavior.
+- Package versions prepared: `com.bun3.unity.audio` 0.3.6, `com.bun3.unity.audio.steamaudio` 0.4.4 with audio >=0.3.6, and `com.bun3.unity.audio.dissonance.steamaudio` 0.2.4 with explicit audio >=0.3.6 and Steam Audio adapter >=0.4.4.
+- The changed complete `PlanarVoiceOwner` README example compiled in a temporary JP Editor assembly with compiler errors `[]`; the loaded assembly contained the expected type. The fixture was removed through AssetDatabase after verification. Changed Markdown links, fences and package JSON also passed static checks.
+- Final package commits/push, JP Git UPM resolution/lock and post-switch verification remain controller-owned. User microphone/headphone verification remains manual; automated results make no perceptual-quality claim.
 
 ## Self-review
 
