@@ -1,0 +1,21 @@
+{
+  "name": "Bun3.Unity.Audio.Dissonance.Netcode.Tests",
+  "references": [
+    "Bun3.Unity.Audio.Dissonance.Netcode",
+    "DissonanceVoip",
+    "Dissonance.Integrations.UnityNfgo",
+    "Unity.Netcode.Runtime",
+    "Unity.Collections"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "optionalUnityReferences": [
+    "TestAssemblies"
+  ],
+  "defineConstraints": [
+    "UNITY_INCLUDE_TESTS",
+    "BUN3_DISSONANCE",
+    "BUN3_DISSONANCE_NFGO"
+  ]
+}

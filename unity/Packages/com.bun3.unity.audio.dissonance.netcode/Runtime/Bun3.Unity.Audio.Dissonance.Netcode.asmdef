@@ -1,0 +1,15 @@
+{
+  "name": "Bun3.Unity.Audio.Dissonance.Netcode",
+  "references": [
+    "Bun3.Unity.Audio.Dissonance",
+    "DissonanceVoip",
+    "Dissonance.Integrations.UnityNfgo",
+    "Unity.Netcode.Runtime",
+    "Unity.Collections"
+  ],
+  "autoReferenced": true,
+  "defineConstraints": [
+    "BUN3_DISSONANCE",
+    "BUN3_DISSONANCE_NFGO"
+  ]
+}
