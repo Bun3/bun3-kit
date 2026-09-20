@@ -63,7 +63,6 @@ namespace Bun3.Unity.Audio.Editor
             {
                 EditorGUILayout.HelpBox("Shared settings: edits affect every sound using this profile. Clear the profile to use the preserved local settings.", MessageType.Info);
                 var spatialProfile = (SoundSpatialProfile)profile.objectReferenceValue;
-                spatialProfile.UpgradeAcoustics();
                 CreateCachedEditor(spatialProfile, null, ref _profileEditors[3]);
                 settings = _profileEditors[3].serializedObject;
                 settings.Update();
@@ -101,8 +100,6 @@ namespace Bun3.Unity.Audio.Editor
 
         public override void OnInspectorGUI()
         {
-            foreach (var inspectedTarget in targets)
-                ((SoundDef)inspectedTarget).UpgradeAcoustics();
             serializedObject.Update();
             using (new EditorGUI.DisabledScope(true))
                 EditorGUILayout.PropertyField(serializedObject.FindProperty("m_Script"));

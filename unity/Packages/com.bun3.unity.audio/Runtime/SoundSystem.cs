@@ -271,9 +271,10 @@ namespace Bun3.Unity.Audio
             source.volume = Table.CurrentVolume(slot) * GroupGain(def); // reflects Fade.Factor 0 when fading in
             source.outputAudioMixerGroup = def.EffectiveMixerGroup != null ? def.EffectiveMixerGroup : _config.SfxGroup;
             source.spatialBlend = (spatial ?? def.EffectiveSpatial) == SpatialMode.None ? 0f : 1f;
-            source.minDistance = def.EffectiveMinDistance;
-            source.maxDistance = def.EffectiveMaxDistance;
-            ConfigureDistanceAttenuation(slot, def.EffectiveDistanceAttenuation);
+            var acoustics = def.EffectiveAcoustics;
+            source.minDistance = acoustics.MinDistance;
+            source.maxDistance = acoustics.MaxDistance;
+            ConfigureDistanceAttenuation(slot, acoustics.DistanceAttenuation);
             source.transform.position = position;
         }
 

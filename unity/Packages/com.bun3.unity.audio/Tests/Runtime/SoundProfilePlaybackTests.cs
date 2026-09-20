@@ -24,7 +24,9 @@ namespace Bun3.Unity.Audio.Tests
                 def.Clips = new[] { clip };
                 def.SpatialProfile = spatial;
                 spatial.Spatial = SpatialMode.Positional;
-                spatial.DistanceAttenuation = false;
+                var acoustics = spatial.Acoustics.Local;
+                acoustics.DistanceAttenuation = false;
+                spatial.Acoustics.Local = acoustics;
                 AudioSource configured = null;
                 using var system = new SoundSystem(new SoundSystemConfig
                 {
@@ -46,7 +48,8 @@ namespace Bun3.Unity.Audio.Tests
                 Assert.That(flat.Evaluate(1), Is.EqualTo(1f));
                 first.Stop();
 
-                spatial.DistanceAttenuation = true;
+                acoustics.DistanceAttenuation = true;
+                spatial.Acoustics.Local = acoustics;
                 var second = system.Play(def);
                 Assert.That(second.IsValid, Is.True);
                 Assert.That(configured.rolloffMode, Is.EqualTo(mode));
@@ -64,7 +67,8 @@ namespace Bun3.Unity.Audio.Tests
                 {
                     for (int i = 0; i < 32; i++)
                     {
-                        spatial.DistanceAttenuation = (i & 1) != 0;
+                        acoustics.DistanceAttenuation = (i & 1) != 0;
+                        spatial.Acoustics.Local = acoustics;
                         system.Play(def).Stop();
                     }
                 }, UnityEngine.TestTools.Constraints.Is.Not.AllocatingGCMemory());
@@ -95,8 +99,10 @@ namespace Bun3.Unity.Audio.Tests
                 playback.Pitch = new FloatRange(1.5f, 1.5f);
                 playback.Loop = true;
                 spatial.Spatial = SpatialMode.Positional;
-                spatial.MinDistance = 2f;
-                spatial.MaxDistance = 12f;
+                var acoustics = spatial.Acoustics.Local;
+                acoustics.MinDistance = 2f;
+                acoustics.MaxDistance = 12f;
+                spatial.Acoustics.Local = acoustics;
                 def.Clips = new[] { clip };
                 def.PlaybackProfile = playback;
                 def.RoutingProfile = routing;

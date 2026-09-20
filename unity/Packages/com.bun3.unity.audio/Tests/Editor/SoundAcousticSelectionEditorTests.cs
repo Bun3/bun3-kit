@@ -9,22 +9,22 @@ namespace Bun3.Unity.Audio.Tests
         [Test]
         public void SerializedProfileAssignment_LeavesLocalSettingsUnchanged()
         {
-            var host = ScriptableObject.CreateInstance<SelectionHost>();
+            var host = ScriptableObject.CreateInstance<SoundDef>();
             var profile = ScriptableObject.CreateInstance<SoundAcousticProfile>();
             try
             {
-                host.Selection.Local = SoundAcousticSettings.Default;
-                var local = host.Selection.Local;
+                host.Acoustics.Local = SoundAcousticSettings.Default;
+                var local = host.Acoustics.Local;
                 local.MonoDistance = 8f;
-                host.Selection.Local = local;
+                host.Acoustics.Local = local;
                 var serialized = new SerializedObject(host);
 
-                serialized.FindProperty(nameof(SelectionHost.Selection))
+                serialized.FindProperty("_acoustics")
                     .FindPropertyRelative(nameof(SoundAcousticSelection.Profile)).objectReferenceValue = profile;
                 serialized.ApplyModifiedPropertiesWithoutUndo();
 
-                Assert.That(host.Selection.Profile, Is.SameAs(profile));
-                Assert.That(host.Selection.Local.MonoDistance, Is.EqualTo(8f));
+                Assert.That(host.Acoustics.Profile, Is.SameAs(profile));
+                Assert.That(host.Acoustics.Local.MonoDistance, Is.EqualTo(8f));
             }
             finally
             {
@@ -36,21 +36,21 @@ namespace Bun3.Unity.Audio.Tests
         [Test]
         public void SerializedLocalEdit_CanBeUndone()
         {
-            var host = ScriptableObject.CreateInstance<SelectionHost>();
+            var host = ScriptableObject.CreateInstance<SoundDef>();
             try
             {
-                host.Selection.Local = SoundAcousticSettings.Default;
+                host.Acoustics.Local = SoundAcousticSettings.Default;
                 var serialized = new SerializedObject(host);
-                var maxDistance = serialized.FindProperty(nameof(SelectionHost.Selection))
+                var maxDistance = serialized.FindProperty("_acoustics")
                     .FindPropertyRelative(nameof(SoundAcousticSelection.Local))
                     .FindPropertyRelative(nameof(SoundAcousticSettings.MaxDistance));
 
                 maxDistance.floatValue = 81f;
                 serialized.ApplyModifiedProperties();
-                Assert.That(host.Selection.Local.MaxDistance, Is.EqualTo(81f));
+                Assert.That(host.Acoustics.Local.MaxDistance, Is.EqualTo(81f));
 
                 Undo.PerformUndo();
-                Assert.That(host.Selection.Local.MaxDistance, Is.EqualTo(30f));
+                Assert.That(host.Acoustics.Local.MaxDistance, Is.EqualTo(30f));
             }
             finally
             {

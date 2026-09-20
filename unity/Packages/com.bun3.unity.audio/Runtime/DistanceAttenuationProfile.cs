@@ -62,28 +62,16 @@ namespace Bun3.Unity.Audio
     public sealed class DistanceAttenuationProfile : ScriptableObject
     {
         [SerializeField, Tooltip("X: native path distance in metres. Y: volume multiplier (0 to 1). At and beyond the last key distance, output is zero. Put the last key at volume zero for a smooth end.")]
-        AnimationCurve volumeByDistance;
-        [SerializeField, HideInInspector] bool curveInitialized;
+        AnimationCurve volumeByDistance = CreateInverseDistanceCurve(1, 15, .2f);
         DistanceAttenuationCurve snapshot;
 
         /// <summary>Gets or replaces the editable distance-in-metres/volume curve. In-place key edits are detected on snapshot access.</summary>
         public AnimationCurve VolumeByDistance
         {
-            get
-            {
-                if (!curveInitialized)
-                {
-                    if (volumeByDistance == null || volumeByDistance.length == 0)
-                        volumeByDistance = CreateLegacyCurve(MinimumDistance, MaximumDistance, FadeFraction);
-                    curveInitialized = true;
-                }
-                volumeByDistance ??= new AnimationCurve();
-                return volumeByDistance;
-            }
+            get => volumeByDistance ??= new AnimationCurve();
             set
             {
                 volumeByDistance = value ?? new AnimationCurve();
-                curveInitialized = true;
                 snapshot = null;
             }
         }
@@ -99,10 +87,8 @@ namespace Bun3.Unity.Audio
             return snapshot;
         }
 
-        void OnEnable() { _ = VolumeByDistance; }
-
-        /// <summary>Converts a legacy inverse-distance profile to editable Hermite keys, including both transition points.</summary>
-        public static AnimationCurve CreateLegacyCurve(float minimum, float maximum, float fadeFraction)
+        /// <summary>Creates editable Hermite keys for inverse-distance attenuation with an edge fade.</summary>
+        public static AnimationCurve CreateInverseDistanceCurve(float minimum, float maximum, float fadeFraction)
         {
             if (float.IsNaN(maximum) || float.IsInfinity(maximum) || maximum <= 0) maximum = 15;
             var times = new List<float>(24) { 0, maximum };
@@ -119,14 +105,14 @@ namespace Bun3.Unity.Audio
                 if (i > 0 && d == times[i - 1]) continue;
                 float epsilon = Math.Max(.000001f, maximum * .000001f);
                 float gain = Evaluate(d, minimum, maximum, fadeFraction);
-                float incoming = LegacySlope(Math.Max(0, d - epsilon), minimum, maximum, fadeFraction);
-                float outgoing = LegacySlope(d + epsilon, minimum, maximum, fadeFraction);
+                float incoming = InverseDistanceSlope(Math.Max(0, d - epsilon), minimum, maximum, fadeFraction);
+                float outgoing = InverseDistanceSlope(d + epsilon, minimum, maximum, fadeFraction);
                 keys.Add(new Keyframe(d, gain, incoming, outgoing));
             }
             return new AnimationCurve(keys.ToArray());
         }
 
-        static float LegacySlope(float distance, float minimum, float maximum, float fade)
+        static float InverseDistanceSlope(float distance, float minimum, float maximum, float fade)
         {
             if (distance >= maximum || fade <= 0) return 0;
             float inverse = distance <= minimum ? 1 : minimum / distance;
@@ -134,16 +120,6 @@ namespace Bun3.Unity.Audio
             float edge = maximum * (1 - fade);
             return distance < edge ? slope : slope * (maximum - distance) / (maximum * fade) - inverse / (maximum * fade);
         }
-
-        /// <summary>Legacy migration input. Edit VolumeByDistance for current profiles.</summary>
-        [HideInInspector]
-        public float MinimumDistance = 1;
-        /// <summary>Legacy migration input for the last key distance.</summary>
-        [HideInInspector]
-        public float MaximumDistance = 15;
-        /// <summary>Legacy migration input for the edge fade.</summary>
-        [HideInInspector]
-        public float FadeFraction = .2f;
 
         /// <summary>Evaluates the adapter curve using scalar snapshots, without Unity object access.</summary>
         public static float Evaluate(float distance, float minimum, float maximum, float fadeFraction, bool enabled = true)
@@ -156,7 +132,7 @@ namespace Bun3.Unity.Audio
             {
                 return 1;
             }
-            if (!IsValidLegacyRange(minimum, maximum, fadeFraction))
+            if (!IsValidRange(minimum, maximum, fadeFraction))
             {
                 return 0;
             }
@@ -178,7 +154,7 @@ namespace Bun3.Unity.Audio
             return !float.IsNaN(value) && !float.IsInfinity(value) && value >= 0;
         }
 
-        private static bool IsValidLegacyRange(float minimum, float maximum, float fadeFraction)
+        private static bool IsValidRange(float minimum, float maximum, float fadeFraction)
         {
             // Positive infinity is a supported maximum: it disables the end fade.
             return IsFiniteNonNegative(minimum)

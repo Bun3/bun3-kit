@@ -9,8 +9,6 @@ namespace Bun3.Unity.Audio.Editor
     {
         public override void OnInspectorGUI()
         {
-            foreach (var inspectedTarget in targets)
-                ((SoundSpatialProfile)inspectedTarget).UpgradeAcoustics();
             serializedObject.Update();
             using (new EditorGUI.DisabledScope(true))
                 EditorGUILayout.PropertyField(serializedObject.FindProperty("m_Script"));

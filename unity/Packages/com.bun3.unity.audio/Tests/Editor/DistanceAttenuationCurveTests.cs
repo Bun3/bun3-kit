@@ -1,7 +1,6 @@
 using UnityEngine.TestTools.Constraints;
 using Is = NUnit.Framework.Is;
 using NUnit.Framework;
-using UnityEditor;
 using UnityEngine;
 
 namespace Bun3.Unity.Audio.Tests
@@ -76,18 +75,12 @@ namespace Bun3.Unity.Audio.Tests
         }
 
         [Test]
-        public void OldSerializedEmptyCurveMigratesButExplicitlyClearedCurveStaysSilent()
+        public void NewProfilesUseVoiceDefaultsAndExplicitlyClearedCurvesStaySilent()
         {
             var profile = ScriptableObject.CreateInstance<DistanceAttenuationProfile>();
             try
             {
-                var serialized = new SerializedObject(profile);
-                serialized.FindProperty("volumeByDistance").animationCurveValue = new AnimationCurve();
-                serialized.FindProperty("curveInitialized").boolValue = false;
-                serialized.FindProperty("MinimumDistance").floatValue = 8;
-                serialized.FindProperty("MaximumDistance").floatValue = 15;
-                serialized.ApplyModifiedPropertiesWithoutUndo();
-                Assert.That(profile.GetSnapshot().Evaluate(8), Is.EqualTo(1));
+                Assert.That(profile.GetSnapshot().Evaluate(1), Is.EqualTo(1));
                 Assert.That(profile.GetSnapshot().MaximumDistance, Is.EqualTo(15));
                 profile.VolumeByDistance = new AnimationCurve();
                 Assert.That(profile.GetSnapshot().Evaluate(0), Is.Zero);
@@ -97,15 +90,15 @@ namespace Bun3.Unity.Audio.Tests
         }
 
         [Test]
-        public void LegacyMigrationPreservesExistingTuning()
+        public void InverseDistanceCurveMatchesScalarEvaluation()
         {
             foreach (float minimum in new[] { 1f, 3f, 8f })
             {
-                var migrated = new DistanceAttenuationCurve(DistanceAttenuationProfile.CreateLegacyCurve(minimum, 15, .2f));
+                var curve = new DistanceAttenuationCurve(DistanceAttenuationProfile.CreateInverseDistanceCurve(minimum, 15, .2f));
                 for (int i = 0; i <= 1500; i++)
                 {
                     float distance = i / 100f;
-                    Assert.That(migrated.Evaluate(distance), Is.EqualTo(DistanceAttenuationProfile.Evaluate(distance, minimum, 15, .2f)).Within(.0005f));
+                    Assert.That(curve.Evaluate(distance), Is.EqualTo(DistanceAttenuationProfile.Evaluate(distance, minimum, 15, .2f)).Within(.0005f));
                 }
             }
         }
