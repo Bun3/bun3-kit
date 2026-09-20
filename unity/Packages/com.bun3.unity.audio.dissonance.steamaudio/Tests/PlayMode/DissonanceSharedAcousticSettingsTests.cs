@@ -18,14 +18,6 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio.Tests
             public SoundAcousticSettings Acoustics { get; set; }
         }
 
-        private sealed class LegacySettings : IPlanarVoiceSettings, IPlanarVoiceSpatialSettings
-        {
-            public bool IsAvailable { get; set; } = true;
-            public bool DistanceAttenuation { get; set; } = true;
-            public DistanceAttenuationProfile AttenuationProfile { get; set; }
-            public SpatialBlendProfile SpatialBlendProfile { get; set; }
-        }
-
         private sealed class UnavailableSettings : IResolvedSoundAcousticSettings
         {
             public bool IsAvailable => false;
@@ -118,35 +110,14 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio.Tests
         }
 
         [Test]
-        public void LegacySettingsPreserveDistanceDefaults()
+        public void ExplicitMonoZeroDisablesInheritedWorldWidthRange()
         {
-            var owner = new GameObject("Legacy voice defaults fixture");
-            try
-            {
-                using var output = new DissonancePlanarAcousticOutput(
-                    owner.AddComponent<DissonanceSteamAudioPlayback>(), new LegacySettings());
-
-                Assert.That(output.MinimumDistance, Is.EqualTo(1));
-                Assert.That(output.MaximumDistance, Is.EqualTo(15));
-            }
-            finally
-            {
-                Object.DestroyImmediate(owner);
-            }
-        }
-
-        [Test]
-        public void WidthRoutingDistinguishesLegacyInheritanceFromExplicitMonoZero()
-        {
-            var legacyOwner = new GameObject("Legacy inherited width fixture");
             var sharedOwner = new GameObject("Shared explicit width fixture");
             SteamAudioAcousticAsset asset = null;
             PlanarAcousticMap map = null;
             try
             {
-                legacyOwner.transform.position = new Vector3(-2, 0, 0);
                 sharedOwner.transform.position = new Vector3(-2, 0, 0);
-                var legacy = new LegacySettings();
                 var shared = new ResolvedSettings
                 {
                     IsAvailable = true,
@@ -160,8 +131,6 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio.Tests
                         FullSpatialDistance = 0,
                     },
                 };
-                using var legacyOutput = new DissonancePlanarAcousticOutput(
-                    legacyOwner.AddComponent<DissonanceSteamAudioPlayback>(), legacy);
                 using var sharedOutput = DissonancePlanarAcousticOutput.FromAcoustics(
                     sharedOwner.AddComponent<DissonanceSteamAudioPlayback>(), shared);
                 var context = new SA.Context();
@@ -171,16 +140,13 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio.Tests
                     map = CreateAcousticMap(asset);
                     var worldSettings = new WorldSettings { Near = 1, Far = 3 };
                     using var world = new PlanarAcousticWorld(map, worldSettings);
-                    AttachForWidthTest(legacyOutput, world, new Vector2(-2, 0));
                     AttachForWidthTest(sharedOutput, world, new Vector2(-2, 0));
                     world.Tick(new Vector2(2, 0), 0);
-                    Assert.That(world.TryGetNativePathDistances(legacyOutput.SourceHandle,
+                    Assert.That(world.TryGetNativePathDistances(sharedOutput.SourceHandle,
                         out float distance, out _, out _, out _), Is.True);
                     worldSettings.Near = distance + 1;
                     worldSettings.Far = distance + 2;
 
-                    Assert.That(legacyOutput.GetSpatialBlend(world), Is.Zero,
-                        "A legacy null width profile must inherit the world's mono range.");
                     Assert.That(sharedOutput.GetSpatialBlend(world), Is.EqualTo(1),
                         "Explicit mono and full-spatial distances of zero must disable the mono range.");
                 }
@@ -193,7 +159,6 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio.Tests
             }
             finally
             {
-                Object.DestroyImmediate(legacyOwner);
                 Object.DestroyImmediate(sharedOwner);
             }
         }
@@ -249,20 +214,5 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio.Tests
         static SA.Vector3 V(float x, float y, float z) => new() { x = x, y = y, z = z };
         static SA.Sphere Sphere(float x) => new() { center = V(x, 0, 0), radius = .6f };
 
-        [Test]
-        public void LegacyConstructorStillAcceptsLiteralNull()
-        {
-            var owner = new GameObject("Legacy voice acoustics fixture");
-            try
-            {
-                var playback = owner.AddComponent<DissonanceSteamAudioPlayback>();
-                Assert.Throws<System.ArgumentNullException>(() =>
-                    new DissonancePlanarAcousticOutput(playback, null));
-            }
-            finally
-            {
-                Object.DestroyImmediate(owner);
-            }
-        }
     }
 }

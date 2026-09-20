@@ -4,7 +4,7 @@ Optional integration requiring Dissonance 9.0.9, Steam Audio 4.8.1 and the Bun3 
 
 ## Installation and dependencies
 
-The package requires Unity **6000.3** or later. Its manifest declares `com.bun3.unity.audio` **0.3.6**, `com.bun3.unity.audio.dissonance` **0.2.0**, and `com.bun3.unity.audio.steamaudio` **0.4.4**. The Steam Audio adapter also needs the acoustics package. Merge these Git entries into the project's existing `Packages/manifest.json` dependencies:
+The package requires Unity **6000.3** or later. Its manifest declares `com.bun3.unity.audio` **0.4.0**, `com.bun3.unity.audio.dissonance` **0.2.0**, and `com.bun3.unity.audio.steamaudio` **0.5.0**. The Steam Audio adapter also needs the acoustics package. Merge these Git entries into the project's existing `Packages/manifest.json` dependencies:
 
 ```json
 {
@@ -96,7 +96,7 @@ Create a shared acoustic asset through **Assets > Create > Bun3 > Audio > Sound 
 
 Width interpolates smoothly between the two distances. It changes processed stereo width while retaining native occlusion, EQ, and attenuation; it is distinct from `AudioSource.spatialBlend`, which remains zero for the custom output. Authored distance-curve edits create a new immutable snapshot on the control thread. Avoid recreating curves/profiles each frame. SDK user volume, mixer volume, native attenuation, and additional `PathPlaybackSettings.Gain` each need a single owner to avoid multiplying the same gain twice.
 
-`FromAcoustics` is the preferred factory for new integrations. The public constructor taking `IPlanarVoiceSettings` remains for compatibility; its null curve fallback stays at 1 m minimum and 15 m maximum, and its optional `IPlanarVoiceSpatialSettings` profile keeps the previous width behavior.
+Create outputs with `FromAcoustics`, passing the application-owned `IResolvedSoundAcousticSettings` implementation.
 
 ## Manual parameter publication
 
