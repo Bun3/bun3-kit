@@ -72,7 +72,9 @@ namespace Bun3.Unity.Audio.SteamAudio.Tests
                 cache.PrepareClips(new[] { clip });
                 def.Clips = new[] { clip };
                 def.Spatial = SpatialMode.Positional;
-                def.MinDistance = 3;
+                var acoustics = def.Acoustics.Local;
+                acoustics.MinDistance = 3;
+                def.Acoustics.Local = acoustics;
                 system = new SoundSystem(new SoundSystemConfig
                 {
                     SfxVoices = 1,
@@ -134,7 +136,9 @@ namespace Bun3.Unity.Audio.SteamAudio.Tests
                 output = new SteamAudioSoundOutput(source, cache) { StartBlocked = false };
                 def.Spatial = SpatialMode.Positional;
                 def.Loop = true;
-                def.MaxDistance = 40;
+                var acoustics = def.Acoustics.Local;
+                acoustics.MaxDistance = 40;
+                def.Acoustics.Local = acoustics;
                 Assert.That(output.TryStart(def, clip, 1), Is.EqualTo(VoiceOutputStartResult.Started));
                 Assert.That(output.CurrentParameters.TryPublish(Coefficients, Settings), Is.True);
                 Assert.That(output.MaxDistance, Is.EqualTo(40));
@@ -500,16 +504,21 @@ namespace Bun3.Unity.Audio.SteamAudio.Tests
                 Assert.That(block, Is.All.EqualTo(.25f), "Unsupported UI/stereo output must pass through unchanged.");
                 Assert.That(output.MinDistance, Is.Zero);
                 def.Spatial = SpatialMode.Positional;
-                def.MinDistance = float.NaN;
+                var acoustics = def.Acoustics.Local;
+                acoustics.MinDistance = float.NaN;
+                def.Acoustics.Local = acoustics;
                 Assert.That(output.TryStart(def, clip, 1), Is.EqualTo(VoiceOutputStartResult.Unavailable));
                 Assert.That(output.Failure, Is.EqualTo(SteamAudioSoundFailure.InvalidRequest));
-                def.MinDistance = -3;
+                acoustics.MinDistance = -3;
+                def.Acoustics.Local = acoustics;
                 Assert.That(output.TryStart(def, clip, 1), Is.EqualTo(VoiceOutputStartResult.Started));
                 Assert.That(output.MinDistance, Is.Zero);
-                def.MinDistance = 3;
+                acoustics.MinDistance = 3;
+                def.Acoustics.Local = acoustics;
                 Assert.That(output.TryStart(def, clip, 1), Is.EqualTo(VoiceOutputStartResult.Started));
                 Assert.That(output.MinDistance, Is.EqualTo(3));
-                def.MinDistance = 8;
+                acoustics.MinDistance = 8;
+                def.Acoustics.Local = acoustics;
                 Assert.That(output.MinDistance, Is.EqualTo(3), "Authored edits take effect on the next ownership request.");
                 var host = (MonoBehaviour)typeof(SteamAudioSoundOutput).GetField("_retirement", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(output);
                 Assert.That(claim.Invoke(output, null), Is.True);

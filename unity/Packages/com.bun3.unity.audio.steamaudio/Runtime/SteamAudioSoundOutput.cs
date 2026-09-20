@@ -139,12 +139,13 @@ namespace Bun3.Unity.Audio.SteamAudio
             if (!FormatMatches()) return Fail(SteamAudioSoundFailure.OutputFormatChanged);
             if (!_clips.TryGet(selectedClip, out var pcm)) return Fail(SteamAudioSoundFailure.ClipNotPrepared);
             if (!Finite(logicalPitch)) return Fail(SteamAudioSoundFailure.InvalidPitch);
-            if (!Finite(definition.EffectiveMinDistance)) return Fail(SteamAudioSoundFailure.InvalidRequest);
+            var acoustics = definition.EffectiveAcoustics;
+            if (!Finite(acoustics.MinDistance)) return Fail(SteamAudioSoundFailure.InvalidRequest);
             _definition = definition;
             _pcm = pcm;
             _loop = definition.EffectiveLoop;
-            _maxDistance = definition.EffectiveMaxDistance;
-            _minDistance = Math.Max(0, definition.EffectiveMinDistance);
+            _maxDistance = acoustics.MaxDistance;
+            _minDistance = Math.Max(0, acoustics.MinDistance);
             _position = 0;
             _offset = _stereo.Length;
             _inputEnded = false;

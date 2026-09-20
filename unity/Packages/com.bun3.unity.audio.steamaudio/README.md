@@ -284,7 +284,7 @@ Before removing SDK assets, remove or guard application references to adapter ty
 
 ### Editable Unity distance curves
 
-Profiles now expose `VolumeByDistance` (AnimationCurve): X is the native evaluated distance in metres, Y is gain clamped to [0,1]. Apply `profile.GetSnapshot()` with `SetSourceDistanceCurve(handle, snapshot)` and independently set attenuation enabled. Snapshots copy keys and weighted tangents only after edits; warm access/evaluation allocates no managed memory. At and beyond the last key's time output is zero regardless of post-wrap mode. Empty curves are silent. Put the final key at zero for a continuous end. Passing null to SetSourceDistanceCurve restores legacy scalar settings. Existing serialized profiles migrate to editable Hermite keys; hidden scalar fields only preserve migration compatibility. Do not apply both scalar attenuation and the authored curve to a path.
+Profiles expose `VolumeByDistance` (AnimationCurve): X is the native evaluated distance in metres, Y is gain clamped to [0,1]. Apply `profile.GetSnapshot()` with `SetSourceDistanceCurve(handle, snapshot)` and independently set attenuation enabled. Snapshots copy keys and weighted tangents only after edits; warm access/evaluation allocates no managed memory. At and beyond the last key's time output is zero regardless of post-wrap mode. Empty curves are silent. Put the final key at zero for a continuous end. Passing null to `SetSourceDistanceCurve` restores scalar range evaluation. New profiles default to the 1 m/15 m inverse-distance curve with a 0.2 edge fade. `CreateInverseDistanceCurve` creates the same editable curve for another range. Do not apply both scalar attenuation and the authored curve to a path.
 
 
 ## Planar acoustic runtime
@@ -295,7 +295,7 @@ Create `PlanarAcousticOutputs`, register `PlanarAcousticSfxBinding` instances, t
 
 World settings are supplied through `PlanarAcousticSettings`; applications may override its getters for live tuning. Dynamic obstacles use stable integer IDs and BoxCollider2D geometry. Game-specific door discovery, map authoring and balance policy remain application responsibilities.
 
-The optional combined Dissonance adapter provides `DissonancePlanarAcousticOutput` and `IPlanarVoiceSettings` for the same registry. In the Editor, `PlanarAcousticDiagnostics.Capture` reads typed `IPlanarAcousticDiagnostics` sources without reflection, and `PlanarAcousticDiagnosticView` draws snapshots. Snapshot capture allocates and is intended for opt-in editor diagnostics, never audio callbacks. Applications own remote-editor transport and capture toggles.
+The optional combined Dissonance adapter provides `DissonancePlanarAcousticOutput` for the same registry and consumes `IResolvedSoundAcousticSettings`. In the Editor, `PlanarAcousticDiagnostics.Capture` reads typed `IPlanarAcousticDiagnostics` sources without reflection, and `PlanarAcousticDiagnosticView` draws snapshots. Snapshot capture allocates and is intended for opt-in editor diagnostics, never audio callbacks. Applications own remote-editor transport and capture toggles.
 
 
 ## Near-field mono output
@@ -309,7 +309,7 @@ Override `PlanarAcousticSettings.MonoDistance` and `FullSpatialDistance` to coll
 
 ### Shared and per-output width profiles
 
-`PlanarAcousticSettings.SpatialBlendProfile` optionally supplies the world default; its inline distances remain the null-profile fallback. SFX bindings honor the resolved SoundDef acoustics: inherit world defaults, or select a shared blend profile/inline range. Voice bindings created with `DissonancePlanarAcousticOutput.FromAcoustics` use the same `IResolvedSoundAcousticSettings` contract. The legacy `IPlanarVoiceSettings` constructor remains compatible and keeps its 1 m/15 m attenuation fallback plus optional `IPlanarVoiceSpatialSettings`; new integrations should use the shared contract. Diagnostics read the output's effective width rather than assuming the world default.
+`PlanarAcousticSettings.SpatialBlendProfile` optionally supplies the world default; its inline distances remain the null-profile fallback. SFX bindings honor the resolved SoundDef acoustics: inherit world defaults, or select a shared blend profile/inline range. Voice bindings created with `DissonancePlanarAcousticOutput.FromAcoustics` use the same `IResolvedSoundAcousticSettings` contract. Diagnostics read the output's effective width rather than assuming the world default.
 
 ### Definition preparation
 

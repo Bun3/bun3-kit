@@ -106,7 +106,7 @@ namespace Bun3.Unity.Audio.SteamAudio.Editor
                 paths = nativePaths, droppedPaths = dropped, nativeMin = min, nativeMax = max,
                 nativeCount = count, nativeNonzeroCount = positive, spatialBlend = source is IPlanarSpatialBlendDiagnostics width ? width.GetSpatialBlend(world) : world.GetSpatialBlend(handle),
                 maximum = profile != null ? profile.GetSnapshot().MaximumDistance : source.MaximumDistance,
-                curve = profile != null ? profile.VolumeByDistance : DistanceAttenuationProfile.CreateLegacyCurve(source.MinimumDistance, source.MaximumDistance, .2f),
+                curve = profile != null ? profile.VolumeByDistance : DistanceAttenuationProfile.CreateInverseDistanceCurve(source.MinimumDistance, source.MaximumDistance, .2f),
                 attenuationEnabled = source.DistanceAttenuation,
                 hasPath = world.TryGetPath(handle, coefficients, out _), blocked = source.IsBlocked,
                 routeCovered = world.IsRouteCovered(source.Position, listener)
