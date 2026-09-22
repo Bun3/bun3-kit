@@ -1,0 +1,10 @@
+{
+  "name": "Bun3.Unity.Acoustics.Tests",
+  "rootNamespace": "Bun3.Unity.Acoustics.Tests",
+  "references": ["Bun3.Unity.Acoustics", "UnityEngine.TestRunner", "UnityEditor.TestRunner"],
+  "includePlatforms": ["Editor"],
+  "overrideReferences": true,
+  "precompiledReferences": ["nunit.framework.dll"],
+  "autoReferenced": false,
+  "defineConstraints": ["UNITY_INCLUDE_TESTS"]
+}

@@ -1,0 +1,4 @@
+{
+  "name": "Dissonance.Integrations.UnityNfgo.Demo",
+  "references": ["Dissonance.Integrations.UnityNfgo", "DissonanceVoip", "Unity.Netcode.Runtime", "Unity.Collections"]
+}

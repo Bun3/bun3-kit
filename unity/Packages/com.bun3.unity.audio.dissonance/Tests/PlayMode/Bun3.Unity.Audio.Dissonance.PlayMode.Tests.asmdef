@@ -1,0 +1,16 @@
+{
+  "name": "Bun3.Unity.Audio.Dissonance.PlayMode.Tests",
+  "rootNamespace": "Bun3.Unity.Audio.Dissonance.Tests.PlayMode",
+  "references": [
+    "Bun3.Unity.Audio",
+    "Bun3.Unity.Audio.Dissonance",
+    "DissonanceVoip"
+  ],
+  "optionalUnityReferences": [
+    "TestAssemblies"
+  ],
+  "autoReferenced": false,
+  "defineConstraints": [
+    "BUN3_DISSONANCE"
+  ]
+}

@@ -1,0 +1,96 @@
+diff --git a/core/src/core/path_simulator.cpp b/core/src/core/path_simulator.cpp
+index 11a0074..abadeec 100644
+--- a/core/src/core/path_simulator.cpp
++++ b/core/src/core/path_simulator.cpp
+@@ -23,6 +23,25 @@
+ #include "profiler.h"
+ #include "propagation_medium.h"
+ 
++// Bun3 optional diagnostic ABI v1. Synchronous, thread-local, opt-in, no simulation policy changes.
++#include "phonon.h"
++struct Bun3PathDiagnosticV1 {
++    float source[3], listener[3], virtualSource[3];
++    float distance, distanceGain, weight;
++    int pointCount, truncated;
++    const float* points;
++    void* sourceUserData;
++};
++typedef void (IPLCALL *Bun3PathCallbackV1)(const Bun3PathDiagnosticV1*);
++static thread_local Bun3PathCallbackV1 bun3PathCallback = nullptr;
++static thread_local float bun3PathPoints[64][1024 * 3];
++static thread_local int bun3PathPointCounts[64], bun3PathTruncated[64];
++extern "C" IPLAPI int IPLCALL bun3SteamAudioSetPathDiagnosticCallbackV1(Bun3PathCallbackV1 callback)
++{
++    bun3PathCallback = callback;
++    return 1;
++}
++
+ namespace ipl {
+ 
+ // --------------------------------------------------------------------------------------------------------------------
+@@ -152,6 +171,10 @@ bool PathSimulator::findPaths(const Vector3f& source,
+     const int kMaxPaths = 64;
+ 
+     int numPaths = 0;
++    if (bun3PathCallback) {
++        memset(bun3PathPointCounts, 0, sizeof(bun3PathPointCounts));
++        memset(bun3PathTruncated, 0, sizeof(bun3PathTruncated));
++    }
+     SoundPath paths[kMaxPaths];
+     float pathWeights[kMaxPaths];
+     int starts[kMaxPaths];
+@@ -278,9 +301,10 @@ void PathSimulator::findPathsFromSourceProbeToListenerProbe(const IScene& scene,
+     auto listenerProbeIndex = listenerProbes.probeIndices[listenerProbeNeighborhoodIndex];
+ 
+     SoundPath soundPath;
++    ProbePath debugProbePath;
+     auto tryRealTime = false;
+ 
+-    soundPath = bakedPathData.lookupShortestPath(sourceProbeIndex, listenerProbeIndex, nullptr);
++    soundPath = bakedPathData.lookupShortestPath(sourceProbeIndex, listenerProbeIndex, bun3PathCallback ? &debugProbePath : nullptr);
+     if (soundPath.isValid())
+     {
+         if (isPathOccluded(soundPath, scene, probes, radius, threshold, sourceProbeIndex,
+@@ -301,10 +325,23 @@ void PathSimulator::findPathsFromSourceProbeToListenerProbe(const IScene& scene,
+                                                  threshold, visRange, simplifyPaths, realTimeVis);
+ 
+         soundPath = SoundPath(probePath, probes);
++        if (bun3PathCallback) debugProbePath = probePath;
+     }
+ 
+     if (soundPath.isValid())
+     {
++        if (bun3PathCallback && numPaths < 64) {
++            auto append = [&](int probe) {
++                int& count = bun3PathPointCounts[numPaths];
++                if (count >= 1024) { bun3PathTruncated[numPaths] = 1; return; }
++                const auto& p = probes[probe].influence.center;
++                for (int axis = 0; axis < 3; ++axis) bun3PathPoints[numPaths][count * 3 + axis] = p[axis];
++                ++count;
++            };
++            append(sourceProbeIndex);
++            for (auto node : debugProbePath.nodes) append(node);
++            append(listenerProbeIndex);
++        }
+         paths[numPaths] = soundPath;
+         pathWeights[numPaths] = sourceProbeWeight * listenerProbes.weights[listenerProbeNeighborhoodIndex];
+         starts[numPaths] = sourceProbeIndex;
+@@ -404,6 +441,18 @@ void PathSimulator::calcAmbisonicsCoeffsForPaths(const Vector3f& source,
+ 
+             auto distanceAttenuation = distanceAttenuationModel.evaluate(distance);
+             auto gain = weights[i] * distanceAttenuation;
++            if (bun3PathCallback) {
++                Bun3PathDiagnosticV1 record{};
++                for (int axis = 0; axis < 3; ++axis) {
++                    record.source[axis] = source[axis]; record.listener[axis] = listener[axis];
++                    record.virtualSource[axis] = virtualSource[axis];
++                }
++                record.distance = distance; record.distanceGain = distanceAttenuation; record.weight = weights[i];
++                record.pointCount = bun3PathPointCounts[i]; record.truncated = bun3PathTruncated[i];
++                record.points = bun3PathPoints[i]; record.sourceUserData = distanceAttenuationModel.userData;
++                bun3PathCallback(&record);
++            }
++
+ 
+             auto direction = Vector3f::unitVector(virtualSource - listener);
+             SphericalHarmonics::projectSinglePointAndUpdate(direction, order, gain, coeffs);

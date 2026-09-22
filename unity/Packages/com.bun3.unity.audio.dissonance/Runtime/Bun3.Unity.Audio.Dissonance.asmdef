@@ -1,0 +1,12 @@
+{
+  "name": "Bun3.Unity.Audio.Dissonance",
+  "rootNamespace": "Bun3.Unity.Audio.Dissonance",
+  "references": [
+    "Bun3.Unity.Audio",
+    "DissonanceVoip"
+  ],
+  "autoReferenced": true,
+  "defineConstraints": [
+    "BUN3_DISSONANCE"
+  ]
+}

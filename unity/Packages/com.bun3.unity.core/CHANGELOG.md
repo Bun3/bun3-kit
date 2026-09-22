@@ -5,6 +5,12 @@ All notable changes to this package will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.2] - 2026-09-14
+
+### Fixed
+
+- Declare SerializeReference Extensions as a version dependency. Consuming projects resolve its Git URL in their manifest; Unity 6.5 consumers use the separate Bun3 compatibility fork instead of a vendored toolkit copy.
+
 ## [0.4.0] - 2026-08-04
 
 ### Added

@@ -46,61 +46,56 @@ namespace Bun3.Unity.Audio
                 return;
             }
 
-            var refs = def.AddressableClips;
-            var handles = new AsyncOperationHandle<AudioClip>[refs.Length];
-            var clips = new AudioClip[refs.Length];
+            var references = def.AddressableClips;
+            var handles = new AsyncOperationHandle<AudioClip>[references.Length];
+            var clips = new AudioClip[references.Length];
             var loadedCount = 0;
+            var ownershipTransferred = false;
 
-            for (var i = 0; i < refs.Length; i++)
+            try
             {
-                if (ct.IsCancellationRequested)
+                for (var i = 0; i < references.Length; i++)
                 {
-                    ReleaseHandles(handles, loadedCount);
+                    ct.ThrowIfCancellationRequested();
+
+                    // Key-based loads give concurrent callers independent references.
+                    // AssetReference.LoadAssetAsync instead shares a single cached operation.
+                    var handle = Addressables.LoadAssetAsync<AudioClip>(references[i].RuntimeKey);
+                    handles[i] = handle;
+                    loadedCount++;
+                    await handle.Task;
+
+                    if (handle.Status != AsyncOperationStatus.Succeeded)
+                    {
+#if DEVELOPMENT_BUILD || UNITY_EDITOR
+                        Debug.LogWarning($"SoundSystem.PreloadAsync: failed to load an AddressableClip on '{def.name}'; preload skipped.");
+#endif
+                        return;
+                    }
+
+                    clips[i] = handle.Result;
                     ct.ThrowIfCancellationRequested();
                 }
 
-                // Load by RuntimeKey, not refs[i].LoadAssetAsync(): AssetReference's own
-                // LoadAssetAsync is single-flight per INSTANCE (a second concurrent call on
-                // the same instance — the production shape, since instances live on the def
-                // asset — logs an Error and returns an invalid handle whose .Task throws,
-                // breaking the silent-skip contract). Key-based loads are independent,
-                // separately ref-counted handles that never touch the instance's cache.
-                handles[i] = Addressables.LoadAssetAsync<AudioClip>(refs[i].RuntimeKey);
-                loadedCount = i + 1;
-                await handles[i].Task;
-
-                if (handles[i].Status != AsyncOperationStatus.Succeeded)
+                // Disposal or another preload can finish while this call awaits a load.
+                if (_disposed || (_preloaded != null && _preloaded.ContainsKey(def)))
                 {
-                    ReleaseHandles(handles, loadedCount);
-#if DEVELOPMENT_BUILD || UNITY_EDITOR
-                    Debug.LogWarning($"SoundSystem.PreloadAsync: failed to load an AddressableClip on '{def.name}'; preload skipped.");
-#endif
                     return;
                 }
-                clips[i] = handles[i].Result;
 
-                if (ct.IsCancellationRequested)
+                _preloaded ??= new Dictionary<SoundDef, AsyncOperationHandle<AudioClip>[]>();
+                _preloaded.Add(def, handles);
+                def.RuntimeClips = clips;
+                ownershipTransferred = true;
+            }
+            finally
+            {
+                // Until committed, this call owns the batch on every exit path.
+                if (!ownershipTransferred)
                 {
                     ReleaseHandles(handles, loadedCount);
-                    ct.ThrowIfCancellationRequested();
                 }
             }
-
-            _preloaded ??= new Dictionary<SoundDef, AsyncOperationHandle<AudioClip>[]>();
-            // Two races land here: entry-time IsPreloaded/_disposed is TOCTOU under (a)
-            // concurrent PreloadAsync(def) calls — both can pass the guard and load in
-            // parallel, so the loser releases its own (redundant but harmless) batch instead
-            // of orphaning it when it would overwrite the winner's tracking entry — and
-            // (b) Dispose() racing a load — completing after Dispose must not commit handles
-            // into a dead system (they'd never be released) or leave RuntimeClips set on a
-            // disposed system.
-            if (_disposed || _preloaded.ContainsKey(def))
-            {
-                ReleaseHandles(handles, handles.Length);
-                return;
-            }
-            _preloaded[def] = handles;
-            def.RuntimeClips = clips;
         }
 
         /// <summary>True when <paramref name="def"/> is tracked as preloaded with RuntimeClips set.</summary>

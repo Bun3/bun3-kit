@@ -25,6 +25,56 @@ namespace Bun3.Unity.Audio.Editor
         private static MethodInfo PlayPreviewClipMethod;
         private static MethodInfo StopAllPreviewClipsMethod;
 
+        private readonly UnityEditor.Editor[] _profileEditors = new UnityEditor.Editor[4];
+
+        private void OnDisable()
+        {
+            foreach (var editor in _profileEditors)
+                if (editor != null) DestroyImmediate(editor);
+        }
+
+        private void DrawGroup(string heading, string profileName, int editorIndex, params string[] fields)
+        {
+            EditorGUILayout.Space();
+            EditorGUILayout.LabelField(heading, EditorStyles.boldLabel);
+            var profile = serializedObject.FindProperty(profileName);
+            EditorGUILayout.PropertyField(profile);
+            var settings = serializedObject;
+            if (profile.objectReferenceValue != null)
+            {
+                EditorGUILayout.HelpBox("Shared settings: edits affect every sound using this profile. Clear the profile to use the preserved local settings.", MessageType.Info);
+                CreateCachedEditor(profile.objectReferenceValue, null, ref _profileEditors[editorIndex]);
+                settings = _profileEditors[editorIndex].serializedObject;
+                settings.Update();
+            }
+            foreach (var field in fields)
+                EditorGUILayout.PropertyField(settings.FindProperty(field), true);
+            if (settings != serializedObject) settings.ApplyModifiedProperties();
+        }
+
+        private void DrawSpatialGroup()
+        {
+            EditorGUILayout.Space();
+            EditorGUILayout.LabelField("Spatial", EditorStyles.boldLabel);
+            var profile = serializedObject.FindProperty(nameof(SoundDef.SpatialProfile));
+            EditorGUILayout.PropertyField(profile);
+            var settings = serializedObject;
+            if (profile.objectReferenceValue != null)
+            {
+                EditorGUILayout.HelpBox("Shared settings: edits affect every sound using this profile. Clear the profile to use the preserved local settings.", MessageType.Info);
+                var spatialProfile = (SoundSpatialProfile)profile.objectReferenceValue;
+                CreateCachedEditor(spatialProfile, null, ref _profileEditors[3]);
+                settings = _profileEditors[3].serializedObject;
+                settings.Update();
+            }
+
+            EditorGUILayout.PropertyField(settings.FindProperty(nameof(SoundDef.Spatial)));
+            EditorGUILayout.PropertyField(settings.FindProperty("_acoustics"), new GUIContent("Acoustics"), true);
+            EditorGUILayout.PropertyField(settings.FindProperty(nameof(SoundDef.Occlusion)));
+            EditorGUILayout.PropertyField(settings.FindProperty(nameof(SoundDef.OcclusionVolumeAtFull)));
+            if (settings != serializedObject) settings.ApplyModifiedProperties();
+        }
+
         static SoundDefEditor()
         {
             try
@@ -50,9 +100,27 @@ namespace Bun3.Unity.Audio.Editor
 
         public override void OnInspectorGUI()
         {
-            DrawDefaultInspector();
+            serializedObject.Update();
+            using (new EditorGUI.DisabledScope(true))
+                EditorGUILayout.PropertyField(serializedObject.FindProperty("m_Script"));
+            EditorGUILayout.PropertyField(serializedObject.FindProperty(nameof(SoundDef.Clips)), true);
+#if BUN3_ADDRESSABLES
+            EditorGUILayout.PropertyField(serializedObject.FindProperty(nameof(SoundDef.AddressableClips)), true);
+#endif
+            DrawGroup("Playback", nameof(SoundDef.PlaybackProfile), 0,
+                nameof(SoundDef.Volume), nameof(SoundDef.Pitch), nameof(SoundDef.Loop));
+            DrawGroup("Routing", nameof(SoundDef.RoutingProfile), 1,
+                nameof(SoundDef.MixerGroup), nameof(SoundDef.VolumeGroup));
+            DrawGroup("Concurrency", nameof(SoundDef.ConcurrencyProfile), 2,
+                nameof(SoundDef.MaxInstances), nameof(SoundDef.Cooldown));
+            DrawSpatialGroup();
+            serializedObject.ApplyModifiedProperties();
 
-            var def = (SoundDef)target;
+            DrawPreview((SoundDef)target);
+        }
+
+        private static void DrawPreview(SoundDef def)
+        {
             EditorGUILayout.Space();
             EditorGUILayout.LabelField("Preview", EditorStyles.boldLabel);
 
@@ -76,8 +144,8 @@ namespace Bun3.Unity.Audio.Editor
             }
 
             EditorGUILayout.LabelField(
-                $"Volume [{def.Volume.Min:0.##}, {def.Volume.Max:0.##}]  " +
-                $"Pitch [{def.Pitch.Min:0.##}, {def.Pitch.Max:0.##}] " +
+                $"Volume [{def.EffectiveVolume.Min:0.##}, {def.EffectiveVolume.Max:0.##}]  " +
+                $"Pitch [{def.EffectivePitch.Min:0.##}, {def.EffectivePitch.Max:0.##}] " +
                 "(preview plays the raw clip; rolled ranges are not applied)",
                 EditorStyles.miniLabel);
 

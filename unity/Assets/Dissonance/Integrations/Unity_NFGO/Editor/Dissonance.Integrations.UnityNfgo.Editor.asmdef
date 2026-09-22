@@ -1,0 +1,5 @@
+{
+  "name": "Dissonance.Integrations.UnityNfgo.Editor",
+  "references": ["Dissonance.Integrations.UnityNfgo", "DissonanceVoip", "DissonanceVoipEditor", "Unity.Netcode.Runtime", "Unity.Collections"],
+  "includePlatforms": ["Editor"]
+}

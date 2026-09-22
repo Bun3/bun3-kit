@@ -25,6 +25,8 @@ namespace Bun3.Unity.Audio
         public float Elapsed;
         public float ClipLength;
         public bool Loop;
+        public bool ExternalCompletion;
+        public bool OutputComplete;
         public FadeState Fade;
         public float BaseVolume;
         public float VolumeScale;

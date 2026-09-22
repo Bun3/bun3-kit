@@ -1,0 +1,16 @@
+{
+  "name": "Bun3.Unity.Audio.SteamAudio.PlayMode.Tests",
+  "references": [
+    "Bun3.Unity.Audio",
+    "Bun3.Unity.Acoustics",
+    "Bun3.Unity.Audio.SteamAudio",
+    "SteamAudioUnity"
+  ],
+  "optionalUnityReferences": [
+    "TestAssemblies"
+  ],
+  "defineConstraints": [
+    "STEAMAUDIO_ENABLED",
+    "BUN3_STEAMAUDIO"
+  ]
+}

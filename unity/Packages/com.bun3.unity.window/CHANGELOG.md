@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.4.3] - 2026-09-14
+
+### Fixed
+
+- Declare SerializeReference Extensions as a version dependency; consuming projects select its Git source in their manifest.
+
 All notable changes to this package will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),

@@ -50,42 +50,43 @@ namespace Bun3.Unity.Audio
                 fade = def.DefaultFade;
             }
 
-            int channel;
+            var channel = SelectMusicChannel(
+                ActiveMusic, MusicChannels[0].State, MusicChannels[1].State);
             AutoResetUniTaskCompletionSource stolen = null;
             AutoResetUniTaskCompletionSource silenced = null;
             if (ActiveMusic < 0)
             {
-                if (MusicChannels[0].State == MusicState.Idle)
+                if (MusicChannels[channel].State != MusicState.Idle)
                 {
-                    channel = 0;
-                }
-                else if (MusicChannels[1].State == MusicState.Idle)
-                {
-                    channel = 1; // preserve the other channel's fade tail (e.g. StopMusicAsync in flight)
-                }
-                else
-                {
-                    // Both channels still busy (e.g. crossfade cut short by StopMusic): steal
-                    // channel 0 so any awaiter on it (StopMusicAsync) still resolves.
-                    channel = 0;
-                    stolen = SilenceMusicChannel(0);
+                    stolen = SilenceMusicChannel(channel);
                 }
             }
             else
             {
-                var other = 1 - ActiveMusic;
-                if (MusicChannels[other].State == MusicState.FadingOut)
+                if (MusicChannels[channel].State == MusicState.FadingOut)
                 {
-                    // Third request mid-crossfade: newest wins — cut the dying track now.
-                    stolen = SilenceMusicChannel(other);
+                    stolen = SilenceMusicChannel(channel);
                 }
-                channel = other;
                 silenced = BeginMusicFadeOut(ActiveMusic, fade);
             }
             StartMusicOnChannel(channel, def, fade);
             ActiveMusic = channel;
             stolen?.TrySetResult(); // last, after all state mutation (two-phase)
             silenced?.TrySetResult();
+        }
+
+        private static int SelectMusicChannel(int activeChannel, MusicState first, MusicState second)
+        {
+            if (activeChannel >= 0)
+            {
+                return 1 - activeChannel;
+            }
+            // Preserve a stopped track's fade tail when the other channel is free.
+            if (first == MusicState.Idle)
+            {
+                return 0;
+            }
+            return second == MusicState.Idle ? 1 : 0;
         }
 
         /// <summary>Stops the current track, optionally fading out first.</summary>
@@ -113,19 +114,19 @@ namespace Bun3.Unity.Audio
             }
             for (var i = 0; i < MusicChannelCount; i++)
             {
-                ref var ch = ref MusicChannels[i];
-                if (ch.State == MusicState.Idle || ch.Paused)
+                ref var track = ref MusicChannels[i];
+                if (track.State == MusicState.Idle || track.Paused)
                 {
                     continue;
                 }
-                if (ch.LoopScheduled && AudioSettings.dspTime < ch.LoopStartDsp)
+                if (track.LoopScheduled && AudioSettings.dspTime < track.LoopStartDsp)
                 {
                     MusicLoopSources[i].Stop();
-                    ch.LoopScheduled = false;
+                    track.LoopScheduled = false;
                 }
                 MusicIntroSources[i].Pause();
                 MusicLoopSources[i].Pause();
-                ch.Paused = true;
+                track.Paused = true;
             }
         }
 
@@ -142,42 +143,42 @@ namespace Bun3.Unity.Audio
             }
             for (var i = 0; i < MusicChannelCount; i++)
             {
-                ref var ch = ref MusicChannels[i];
-                if (ch.State == MusicState.Idle || !ch.Paused)
+                ref var track = ref MusicChannels[i];
+                if (track.State == MusicState.Idle || !track.Paused)
                 {
                     continue;
                 }
-                ch.Paused = false;
+                track.Paused = false;
                 MusicIntroSources[i].UnPause();
                 MusicLoopSources[i].UnPause();
-                if (!ch.LoopScheduled && ch.Def != null)
+                if (!track.LoopScheduled && track.Def != null)
                 {
-                    var intro = ch.Def.Intro;
+                    var intro = track.Def.Intro;
                     var delay = intro != null
                         ? MusicMath.RemainingSeconds(MusicIntroSources[i].timeSamples, intro.samples, intro.frequency)
                         : MusicScheduleHeadroom;
-                    ch.LoopStartDsp = AudioSettings.dspTime + delay;
-                    MusicLoopSources[i].PlayScheduled(ch.LoopStartDsp);
-                    ch.LoopScheduled = true;
+                    track.LoopStartDsp = AudioSettings.dspTime + delay;
+                    MusicLoopSources[i].PlayScheduled(track.LoopStartDsp);
+                    track.LoopScheduled = true;
                 }
             }
         }
 
         private void StartMusicOnChannel(int channel, MusicDef def, float fadeIn)
         {
-            ref var ch = ref MusicChannels[channel];
-            ch.State = fadeIn > 0f ? MusicState.FadingIn : MusicState.Playing;
-            ch.Def = def;
-            ch.Paused = false;
+            ref var track = ref MusicChannels[channel];
+            track.State = fadeIn > 0f ? MusicState.FadingIn : MusicState.Playing;
+            track.Def = def;
+            track.Paused = false;
             if (fadeIn > 0f)
             {
-                ch.Fade.Begin(0f, 1f, fadeIn);
+                track.Fade.Begin(0f, 1f, fadeIn);
             }
             else
             {
-                ch.Fade.SetInstant(1f);
+                track.Fade.SetInstant(1f);
             }
-            ch.Completion = null;
+            track.Completion = null;
 
             var introSource = MusicIntroSources[channel];
             var loopSource = MusicLoopSources[channel];
@@ -189,16 +190,16 @@ namespace Bun3.Unity.Audio
             {
                 introSource.clip = def.Intro;
                 introSource.PlayScheduled(startDsp);
-                ch.LoopStartDsp = startDsp + MusicMath.ClipSeconds(def.Intro);
-                loopSource.PlayScheduled(ch.LoopStartDsp);
-                ch.LoopScheduled = true;
+                track.LoopStartDsp = startDsp + MusicMath.ClipSeconds(def.Intro);
+                loopSource.PlayScheduled(track.LoopStartDsp);
+                track.LoopScheduled = true;
             }
             else
             {
                 introSource.clip = null;
                 loopSource.PlayScheduled(startDsp);
-                ch.LoopStartDsp = startDsp;
-                ch.LoopScheduled = true;
+                track.LoopStartDsp = startDsp;
+                track.LoopScheduled = true;
             }
             ApplyMusicVolume(channel);
         }
@@ -208,18 +209,18 @@ namespace Bun3.Unity.Audio
         // Callers must TrySetResult() the return value last, after all state mutation (two-phase).
         private AutoResetUniTaskCompletionSource BeginMusicFadeOut(int channel, float duration)
         {
-            ref var ch = ref MusicChannels[channel];
-            if (ch.State == MusicState.Idle)
+            ref var track = ref MusicChannels[channel];
+            if (track.State == MusicState.Idle)
             {
                 return null;
             }
-            if (duration <= 0f || ch.Paused)
+            if (duration <= 0f || track.Paused)
             {
                 // A paused track is inaudible; fading it is meaningless — silence instantly so awaiters resolve.
                 return SilenceMusicChannel(channel);
             }
-            ch.Fade.Begin(ch.Fade.Factor, 0f, duration);
-            ch.State = MusicState.FadingOut;
+            track.Fade.Begin(track.Fade.Factor, 0f, duration);
+            track.State = MusicState.FadingOut;
             return null;
         }
 
@@ -227,22 +228,22 @@ namespace Bun3.Unity.Audio
         // callers collect it first and fire signals last (two-phase discipline).
         private AutoResetUniTaskCompletionSource SilenceMusicChannel(int channel)
         {
-            ref var ch = ref MusicChannels[channel];
-            var completion = ch.Completion;
+            ref var track = ref MusicChannels[channel];
+            var completion = track.Completion;
             MusicIntroSources[channel].Stop();
             MusicLoopSources[channel].Stop();
-            ch.State = MusicState.Idle;
-            ch.Def = null;
-            ch.Paused = false;
-            ch.LoopScheduled = false;
-            ch.Completion = null;
+            track.State = MusicState.Idle;
+            track.Def = null;
+            track.Paused = false;
+            track.LoopScheduled = false;
+            track.Completion = null;
             return completion;
         }
 
         private void ApplyMusicVolume(int channel)
         {
-            ref var ch = ref MusicChannels[channel];
-            var volume = (ch.Def != null ? ch.Def.Volume : 0f) * ch.Fade.Factor;
+            ref var track = ref MusicChannels[channel];
+            var volume = (track.Def != null ? track.Def.Volume : 0f) * track.Fade.Factor;
             MusicIntroSources[channel].volume = volume;
             MusicLoopSources[channel].volume = volume;
         }
@@ -261,13 +262,13 @@ namespace Bun3.Unity.Audio
                 return UniTask.CompletedTask;
             }
             PlayMusic(def, fade);
-            ref var ch = ref MusicChannels[ActiveMusic];
-            if (ch.State == MusicState.Playing)
+            ref var track = ref MusicChannels[ActiveMusic];
+            if (track.State == MusicState.Playing)
             {
                 return UniTask.CompletedTask; // zero-fade path: already done
             }
-            ch.Completion ??= AutoResetUniTaskCompletionSource.Create();
-            var task = ch.Completion.Task;
+            track.Completion ??= AutoResetUniTaskCompletionSource.Create();
+            var task = track.Completion.Task;
             return ct.CanBeCanceled ? WithMusicCancellation(task, ct) : task;
         }
 
@@ -282,9 +283,9 @@ namespace Bun3.Unity.Audio
             {
                 return UniTask.CompletedTask;
             }
-            ref var ch = ref MusicChannels[ActiveMusic];
-            ch.Completion ??= AutoResetUniTaskCompletionSource.Create();
-            var task = ch.Completion.Task;
+            ref var track = ref MusicChannels[ActiveMusic];
+            track.Completion ??= AutoResetUniTaskCompletionSource.Create();
+            var task = track.Completion.Task;
             StopMusic(fadeOut);
             return ct.CanBeCanceled ? WithMusicCancellation(task, ct) : task;
         }
@@ -304,36 +305,34 @@ namespace Bun3.Unity.Audio
 
         internal void TickMusic(float dt)
         {
-            // Phase 1: advance state; collect at most one signal per channel.
-            AutoResetUniTaskCompletionSource signal0 = null;
-            AutoResetUniTaskCompletionSource signal1 = null;
-            for (var i = 0; i < MusicChannelCount; i++)
-            {
-                ref var ch = ref MusicChannels[i];
-                if (ch.State == MusicState.Idle || ch.Paused)
-                {
-                    continue;
-                }
+            // Advance both channels before continuations can replace either track.
+            var firstCompletion = AdvanceMusicChannel(0, dt);
+            var secondCompletion = AdvanceMusicChannel(1, dt);
+            firstCompletion?.TrySetResult();
+            secondCompletion?.TrySetResult();
+        }
 
-                if (ch.Fade.Advance(dt))
-                {
-                    if (ch.State == MusicState.FadingOut)
-                    {
-                        var completion = SilenceMusicChannel(i);
-                        if (i == 0) { signal0 = completion; } else { signal1 = completion; }
-                        continue;
-                    }
-                    // Fade-in finished: signal the awaiter (PlayMusicAsync).
-                    ch.State = MusicState.Playing;
-                    if (i == 0) { signal0 = ch.Completion; } else { signal1 = ch.Completion; }
-                    ch.Completion = null;
-                }
-                ApplyMusicVolume(i);
+        private AutoResetUniTaskCompletionSource AdvanceMusicChannel(int channel, float deltaTime)
+        {
+            ref var track = ref MusicChannels[channel];
+            if (track.State == MusicState.Idle || track.Paused)
+            {
+                return null;
             }
 
-            // Phase 2: user signals last — continuations run inline and may re-enter.
-            signal0?.TrySetResult();
-            signal1?.TrySetResult();
+            AutoResetUniTaskCompletionSource completion = null;
+            if (track.Fade.Advance(deltaTime))
+            {
+                if (track.State == MusicState.FadingOut)
+                {
+                    return SilenceMusicChannel(channel);
+                }
+                track.State = MusicState.Playing;
+                completion = track.Completion;
+                track.Completion = null;
+            }
+            ApplyMusicVolume(channel);
+            return completion;
         }
     }
 }
