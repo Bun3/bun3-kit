@@ -158,7 +158,10 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio.Tests
                     Assert.That(mailbox, Is.Not.Null);
                     Assert.That(mailbox.TrySetBlocked(mailbox.Generation, false), Is.True);
                 }
-                while ((float)type.GetProperty("PeakDecodedAmplitude").GetValue(component) <= 0 && Time.realtimeSinceStartup < deadline) yield return null;
+                // Decoded amplitude is published before native rendering completes on the audio thread.
+                while (((float)type.GetProperty("PeakDecodedAmplitude").GetValue(component) <= 0 ||
+                    (float)type.GetProperty("PeakStereoDifference").GetValue(component) <= 1e-6f) &&
+                    Time.realtimeSinceStartup < deadline) yield return null;
                 TestContext.WriteLine("Streaming state: active={0}, speaking={1}, playing={2}, callbacks={3}, largestCallback={4}, peakDecoded={5}, stereoDifference={6}, clipSamples={7}",
                     playback.IsActive, playback.IsSpeaking, source.isPlaying,
                     type.GetProperty("CallbackCount").GetValue(component), type.GetProperty("LargestCallbackSampleCount").GetValue(component),
