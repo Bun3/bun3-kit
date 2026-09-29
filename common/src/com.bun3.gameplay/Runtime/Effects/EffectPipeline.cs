@@ -32,7 +32,8 @@ namespace Bun3.Gameplay.Effects
         private readonly EffectCatalog _catalog;
         private readonly IEffectTargetResolver _resolver;
         private readonly IRng _rng;
-        private readonly int _applyBudgetPerTick;
+        // World rescales this per registered unit; a standalone pipeline keeps its constructor value.
+        internal int ApplyBudgetPerTick { get; set; }
         private readonly Queue<PendingApply> _queue = new Queue<PendingApply>();
         private readonly List<EffectInstance> _expiryScratch = new List<EffectInstance>();
         private readonly List<EffectInstance> _removalScratch = new List<EffectInstance>();
@@ -91,7 +92,7 @@ namespace Bun3.Gameplay.Effects
             _rng = rng ?? throw new ArgumentNullException(nameof(rng));
             if (applyBudgetPerTick <= 0)
                 throw new ArgumentOutOfRangeException(nameof(applyBudgetPerTick), "Apply budget per tick must be at least 1.");
-            _applyBudgetPerTick = applyBudgetPerTick;
+            ApplyBudgetPerTick = applyBudgetPerTick;
         }
 
         /// <summary>Enqueues an effect apply request. Actual application happens on the next <see cref="Tick"/>.</summary>
@@ -234,7 +235,7 @@ namespace Bun3.Gameplay.Effects
         // remains — the budget is the only cap.
         private void DrainApplications()
         {
-            var budget = _applyBudgetPerTick;
+            var budget = ApplyBudgetPerTick;
             while (budget > 0 && _queue.Count > 0)
             {
                 budget--;

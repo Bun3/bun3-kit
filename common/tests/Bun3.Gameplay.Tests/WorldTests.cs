@@ -117,6 +117,22 @@ public sealed class WorldTests
     }
 
     [Test]
+    public void Apply_budget_scales_with_the_registered_unit_count()
+    {
+        var kit = EffectTestKit.Create();
+        kit.AddEffect(EffectTestKit.MinimalInstant("noop"));
+        var abilities = new AbilityCatalogBuilder().Build(kit.TagCatalog, kit.Seams, kit.Attributes, kit.Catalog);
+        var world = new World(kit.Catalog, abilities, new XorShiftRng(12345), 2);
+        for (ulong id = 1; id <= 3; id++) world.Spawn(MakeUnit(kit, id));
+        world.Tick();
+
+        for (var i = 0; i < 7; i++) world.Pipeline.EnqueueApply(kit.EffectId("noop"), new TargetId(1), new TargetId(1));
+        world.Tick();
+
+        Assert.That(world.Pipeline.PendingApplyCount, Is.EqualTo(1), "2 per unit x 3 units drains 6 of 7");
+    }
+
+    [Test]
     public void World_tick_advances_the_pipeline_tick_counter_once()
     {
         var kit = EffectTestKit.Create();

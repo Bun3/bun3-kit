@@ -22,18 +22,25 @@ namespace Bun3.Gameplay
         private readonly AbilityCatalog _abilities;
         private readonly IRng _rng;
         private readonly int[][] _grantedAbilityIds;
+        private readonly int _applyBudgetPerUnit;
 
         /// <summary>Creates a world over the given catalogs and random source.</summary>
         /// <param name="effects">Compiled effect catalog.</param>
         /// <param name="abilities">Compiled ability catalog.</param>
         /// <param name="rng">Seeded random source; shared with the pipeline.</param>
-        /// <param name="applyBudgetPerTick">Maximum effect applications drained per tick.</param>
-        public World(EffectCatalog effects, AbilityCatalog abilities, IRng rng, int applyBudgetPerTick = 64)
+        /// <param name="applyBudgetPerUnit">Effect applications drained per tick for each registered unit.
+        /// The budget is pooled: a tick drains up to this value times the unit count (at least one unit's
+        /// worth), in queue order. It exists to bound runaway chains such as mutual reflection; the
+        /// surplus carries over to the next tick.</param>
+        public World(EffectCatalog effects, AbilityCatalog abilities, IRng rng, int applyBudgetPerUnit = 32)
         {
             _effects = effects ?? throw new ArgumentNullException(nameof(effects));
             _abilities = abilities ?? throw new ArgumentNullException(nameof(abilities));
             _rng = rng ?? throw new ArgumentNullException(nameof(rng));
-            Pipeline = new EffectPipeline(effects, this, rng, applyBudgetPerTick);
+            if (applyBudgetPerUnit <= 0)
+                throw new ArgumentOutOfRangeException(nameof(applyBudgetPerUnit), "Apply budget per unit must be at least 1.");
+            _applyBudgetPerUnit = applyBudgetPerUnit;
+            Pipeline = new EffectPipeline(effects, this, rng, applyBudgetPerUnit);
 
             // AbilityCatalogBuilder.Build already proved every GrantedAbilityNames entry resolves
             // against abilities, so this cache is built over references already known to be valid.
@@ -216,6 +223,7 @@ namespace Bun3.Gameplay
             }
 
             _pendingOps.Clear();
+            Pipeline.ApplyBudgetPerTick = (int)Math.Min(int.MaxValue, (long)_applyBudgetPerUnit * Math.Max(1, _units.Count));
         }
 
         // ponytail: linear scan of the pending queue, O(M^2) for M spawns in one frame; add a pending-id
