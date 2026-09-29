@@ -186,7 +186,7 @@ namespace Bun3.Gameplay.Effects
                     for (var g = 0; g < grantedTags.Length; g++) Tags.Remove(grantedTags[g]);
                 }
 
-                EffectInstance.Return(instance);
+                instance.Enabled = false;   // Dropped, not pooled: a restore is rare and owns no pipeline pool.
             }
 
             _activeEffects.Clear();
@@ -200,7 +200,7 @@ namespace Bun3.Gameplay.Effects
             {
                 var row = rows[i];
                 var instance = EffectInstance.Rent(
-                    row.Id, row.EffectId, row.Source, row.Level, row.Stack,
+                    null, row.Id, row.EffectId, row.Source, row.Level, row.Stack,
                     row.RemainingTicks, row.PeriodCountdown, row.CreatedTick);
                 instance.Enabled = row.Enabled;
                 InsertActive(instance, catalog.GetEffect(row.EffectId).HasEventChains);

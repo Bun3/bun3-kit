@@ -10,6 +10,27 @@ namespace Bun3.Gameplay.Tests;
 public sealed class EffectRemovalTests
 {
     [Test]
+    public void A_removed_instance_is_not_recycled_into_another_pipeline()
+    {
+        var first = EffectTestKit.Create();
+        first.AddEffect(EffectTestKit.MinimalDuration("buff", ticks: 1));
+        var firstPipeline = first.BuildPipeline();
+        firstPipeline.EnqueueApply(first.EffectId("buff"), first.Defender.Id, first.Defender.Id);
+        firstPipeline.Tick();
+        var removed = first.Defender.ActiveEffects[0];
+        for (var i = 0; i < 3; i++) firstPipeline.Tick();
+        Assert.That(first.Defender.ActiveEffectCount, Is.Zero);
+
+        var second = EffectTestKit.Create();
+        second.AddEffect(EffectTestKit.MinimalDuration("buff", ticks: 1));
+        var secondPipeline = second.BuildPipeline();
+        secondPipeline.EnqueueApply(second.EffectId("buff"), second.Defender.Id, second.Defender.Id);
+        secondPipeline.Tick();
+
+        Assert.That(second.Defender.ActiveEffects[0], Is.Not.SameAs(removed));
+    }
+
+    [Test]
     public void Dispel_fires_premature_chain_but_not_normal()
     {
         var kit = EffectTestKit.Create();

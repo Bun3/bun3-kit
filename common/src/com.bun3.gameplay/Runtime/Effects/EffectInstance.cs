@@ -7,15 +7,10 @@ namespace Bun3.Gameplay.Effects
     /// <summary>
     /// Runtime instance of one effect applied to a target. The monotonically increasing
     /// <see cref="Id"/> issued by World is the basis of the canonical aggregation order.
-    /// Creation and return go through an internal static pool.
+    /// Instances are pooled per <see cref="EffectPipeline"/>; one never moves between pipelines.
     /// </summary>
     public sealed class EffectInstance : IAttributeModifierSource
     {
-        // ponytail: process-global static pool — assumes one world per thread (unsafe if multiple
-        // worlds share a thread concurrently or multiple threads touch the pool). Move the pool to
-        // a world/pipeline-owned instance when needed.
-        private static readonly Stack<EffectInstance> Pool = new Stack<EffectInstance>();
-
         private EffectInstance()
         {
         }
@@ -51,12 +46,13 @@ namespace Bun3.Gameplay.Effects
         /// </summary>
         public long CreatedTick { get; private set; }
 
-        /// <summary>Rents an instance from the pool and initializes its fields.</summary>
+        /// <summary>Rents an instance from the pool (or creates one when the pool is absent or empty)
+        /// and initializes its fields.</summary>
         internal static EffectInstance Rent(
-            ulong id, int effectId, TargetId source, int level, int stack,
+            Stack<EffectInstance>? pool, ulong id, int effectId, TargetId source, int level, int stack,
             int remainingTicks, int periodCountdown, long createdTick)
         {
-            var instance = Pool.Count > 0 ? Pool.Pop() : new EffectInstance();
+            var instance = pool != null && pool.Count > 0 ? pool.Pop() : new EffectInstance();
             instance.Id = id;
             instance.EffectId = effectId;
             instance.Source = source;
@@ -70,10 +66,10 @@ namespace Bun3.Gameplay.Effects
         }
 
         /// <summary>Disables the instance and returns it to the pool.</summary>
-        internal static void Return(EffectInstance instance)
+        internal static void Return(Stack<EffectInstance> pool, EffectInstance instance)
         {
             instance.Enabled = false;
-            Pool.Push(instance);
+            pool.Push(instance);
         }
     }
 }

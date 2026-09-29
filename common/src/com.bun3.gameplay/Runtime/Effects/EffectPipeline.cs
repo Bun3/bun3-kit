@@ -36,6 +36,7 @@ namespace Bun3.Gameplay.Effects
         internal int ApplyBudgetPerTick { get; set; }
         private readonly Queue<PendingApply> _queue = new Queue<PendingApply>();
         private readonly List<EffectInstance> _expiryScratch = new List<EffectInstance>();
+        private readonly Stack<EffectInstance> _instancePool = new Stack<EffectInstance>();
         private readonly List<EffectInstance> _removalScratch = new List<EffectInstance>();
         private ulong _nextInstanceId = 1;
 
@@ -839,7 +840,7 @@ namespace Bun3.Gameplay.Effects
 
             var periodCountdown = effect.PeriodTicks > 0 ? effect.PeriodTicks : -1;
             var instance = EffectInstance.Rent(
-                _nextInstanceId++, pending.EffectId, pending.Source, pending.Level, stack: 1,
+                _instancePool, _nextInstanceId++, pending.EffectId, pending.Source, pending.Level, stack: 1,
                 remainingTicks, periodCountdown, CurrentTick);
             target.InsertActive(instance, effect.HasEventChains);
 
@@ -1011,7 +1012,7 @@ namespace Bun3.Gameplay.Effects
 
             target.RemoveActive(instance, effect.HasEventChains);
             target.RaiseEffectEvent(new EffectLifecycleEvent(eventKind, instance.Id, instance.EffectId, instance.Stack));
-            EffectInstance.Return(instance);
+            EffectInstance.Return(_instancePool, instance);
 
             FireChain(effect.Chains, chainTrigger, source, level, target.Id, target);
         }
