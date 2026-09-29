@@ -4,7 +4,7 @@
     <TargetFramework>netstandard2.1</TargetFramework>
     <LangVersion>9.0</LangVersion>
     <Nullable>enable</Nullable>
-    <RootNamespace>Bun3.Gameplay.Tags.Catalog</RootNamespace>
+    <RootNamespace>Bun3.Gameplay</RootNamespace>
     <!-- Assembly name matches the Unity asmdef (Bun3.Gameplay.Catalog); only the PackageId marks this as authoring-time. -->
     <AssemblyName>Bun3.Gameplay.Catalog</AssemblyName>
     <PackageId>Bun3.Gameplay.Authoring</PackageId>

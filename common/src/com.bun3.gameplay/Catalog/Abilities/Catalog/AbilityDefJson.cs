@@ -2,14 +2,14 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Text;
 using Bun3.Gameplay.Effects;
 using Bun3.Gameplay.Effects.Catalog;
 using Bun3.Gameplay.Numerics;
 using Bun3.Gameplay.Tags;
 using Bun3.Gameplay.Tags.Catalog;
-using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+
+using static Bun3.Gameplay.Effects.Catalog.JsonFields;
 
 namespace Bun3.Gameplay.Abilities.Catalog
 {
@@ -34,81 +34,8 @@ namespace Bun3.Gameplay.Abilities.Catalog
         /// </exception>
         /// <exception cref="ArgumentException">The stream is not readable.</exception>
         /// <exception cref="TagCatalogException">The JSON syntax or ability shape is invalid.</exception>
-        public static List<AbilityDef> Load(Stream utf8Json, IReadOnlyDictionary<string, ushort> attributeNames)
-        {
-            if (utf8Json is null) throw new ArgumentNullException(nameof(utf8Json));
-            if (!utf8Json.CanRead) throw new ArgumentException("A readable stream is required.", nameof(utf8Json));
-            if (attributeNames is null) throw new ArgumentNullException(nameof(attributeNames));
-
-            string text;
-            try
-            {
-                using var streamReader = new StreamReader(utf8Json, new UTF8Encoding(false, true), false, 1024, true);
-                text = streamReader.ReadToEnd();
-            }
-            catch (DecoderFallbackException exception)
-            {
-                throw new TagCatalogException(exception.Message, string.Empty, 1, 1);
-            }
-
-            TagCatalogJson.StrictJsonSyntax.Validate(text);
-
-            try
-            {
-                using var stringReader = new StringReader(text);
-                using var reader = new JsonTextReader(stringReader)
-                {
-                    DateParseHandling = DateParseHandling.None,
-                    FloatParseHandling = FloatParseHandling.Decimal,
-                    MaxDepth = 16,
-                };
-                var root = JObject.Load(reader, new JsonLoadSettings
-                {
-                    DuplicatePropertyNameHandling = DuplicatePropertyNameHandling.Error,
-                    LineInfoHandling = LineInfoHandling.Load,
-                });
-                if (reader.Read())
-                {
-                    throw Error("Unexpected token after the root JSON value.", root);
-                }
-
-                return ReadRoot(root, attributeNames);
-            }
-            catch (TagCatalogException)
-            {
-                throw;
-            }
-            catch (JsonReaderException exception)
-            {
-                throw new TagCatalogException(
-                    exception.Message, string.Empty,
-                    Math.Max(1, exception.LineNumber), Math.Max(1, exception.LinePosition));
-            }
-        }
-
-        private static List<AbilityDef> ReadRoot(JObject root, IReadOnlyDictionary<string, ushort> attributeNames)
-        {
-            RequireAllowedProperties(root, "schemaVersion", "abilities");
-            RequireSchemaVersion(root);
-
-            var abilitiesArray = RequireArray(root, "abilities");
-            var result = new List<AbilityDef>(abilitiesArray.Count);
-            foreach (var item in abilitiesArray)
-            {
-                result.Add(ReadAbility(AsObject(item, "abilities items must be objects."), attributeNames));
-            }
-
-            return result;
-        }
-
-        private static void RequireSchemaVersion(JObject root)
-        {
-            var token = RequireProperty(root, "schemaVersion");
-            if (token.Type != JTokenType.Integer || token is not JValue { Value: long value } || value != 1)
-            {
-                throw Error("schemaVersion must be the integer 1.", token);
-            }
-        }
+        public static List<AbilityDef> Load(Stream utf8Json, IReadOnlyDictionary<string, ushort> attributeNames) =>
+            LoadDocument(utf8Json, attributeNames, "abilities", ReadAbility);
 
         private static AbilityDef ReadAbility(JObject ability, IReadOnlyDictionary<string, ushort> attributeNames)
         {
@@ -215,79 +142,5 @@ namespace Bun3.Gameplay.Abilities.Catalog
                 FixedLevel = fixedLevel,
             };
         }
-
-        // ---- Primitive field readers (same pattern as EffectDefJson/TagCatalogJson/TagSourceJson) ----
-
-        private static JToken RequireProperty(JObject value, string propertyName)
-        {
-            var property = value.Property(propertyName, StringComparison.Ordinal);
-            if (property is null)
-            {
-                throw Error($"Missing required field {propertyName}.", value);
-            }
-
-            return property.Value;
-        }
-
-        private static void RequireAllowedProperties(JObject value, params string[] allowed)
-        {
-            foreach (var property in value.Properties())
-            {
-                var permitted = false;
-                for (var i = 0; i < allowed.Length; i++)
-                {
-                    if (string.Equals(property.Name, allowed[i], StringComparison.Ordinal))
-                    {
-                        permitted = true;
-                        break;
-                    }
-                }
-
-                if (!permitted)
-                {
-                    throw Error($"Field not allowed: {property.Name}", property);
-                }
-            }
-        }
-
-        private static JObject RequireObject(JObject value, string propertyName) =>
-            AsObject(RequireProperty(value, propertyName), $"{propertyName} must be an object.");
-
-        private static JArray RequireArray(JObject value, string propertyName) =>
-            AsArray(RequireProperty(value, propertyName), $"{propertyName} must be an array.");
-
-        private static string RequireString(JObject value, string propertyName) =>
-            RequireStringValue(RequireProperty(value, propertyName), propertyName);
-
-        private static string RequireStringValue(JToken token, string propertyName)
-        {
-            if (token.Type != JTokenType.String)
-            {
-                throw Error($"{propertyName} must be a string.", token);
-            }
-
-            return token.Value<string>()!;
-        }
-
-        private static int RequireInt(JObject value, string propertyName)
-        {
-            var token = RequireProperty(value, propertyName);
-            if (token.Type != JTokenType.Integer || token is not JValue { Value: long longValue }
-                || longValue < int.MinValue || longValue > int.MaxValue)
-            {
-                throw Error($"{propertyName} must be an integer.", token);
-            }
-
-            return (int)longValue;
-        }
-
-        private static int ReadOptionalInt(JObject value, string propertyName, int fallback) =>
-            value.Property(propertyName, StringComparison.Ordinal) != null ? RequireInt(value, propertyName) : fallback;
-
-        private static JObject AsObject(JToken token, string message) => token as JObject ?? throw Error(message, token);
-
-        private static JArray AsArray(JToken token, string message) => token as JArray ?? throw Error(message, token);
-
-        private static TagCatalogException Error(string message, JToken token) => EffectDefJson.Error(message, token);
     }
 }
