@@ -165,6 +165,49 @@ public sealed class GameplayCatalogBinaryTests
                 .And.Message.Contains(missing.Index.ToString()));
     }
 
+    // Loading must grow with the level table itself, not with per-entry diagnostic label strings.
+    [Test]
+    public void Load_allocation_per_level_table_entry_is_bounded()
+    {
+        var small = WriteLevelTableCatalog(levels: 2000);
+        var large = WriteLevelTableCatalog(levels: 4000);
+        MeasureLoad(small);   // warm-up: JIT and static init
+
+        var perEntry = (MeasureLoad(large) - MeasureLoad(small)) / 2000.0;
+
+        // ~60 today (payload buffering plus the BigNum itself); per-entry label strings made it ~220.
+        Assert.That(perEntry, Is.LessThan(100), $"{perEntry:F1} bytes allocated per level-table entry");
+    }
+
+    private static (byte[] Bytes, EffectTestKit Kit) WriteLevelTableCatalog(int levels)
+    {
+        var kit = EffectTestKit.Create();
+        var values = new List<BigNum>(levels);
+        for (var level = 1; level <= levels; level++) values.Add(level);
+        var deep = EffectTestKit.MinimalInfinite("deep");
+        deep.MaxLevel = levels;
+        deep.Modifiers.Add(new ModifierDef
+        {
+            AttributeId = EffectTestKit.Attack,
+            Op = AttributeModifierOp.Add,
+            Magnitude = new MagnitudeDef { PerLevelValues = values },
+        });
+        kit.AddEffect(deep);
+
+        var abilities = new AbilityCatalogBuilder().Build(kit.TagCatalog, kit.Seams, kit.Attributes, kit.Catalog);
+        using var stream = new MemoryStream();
+        GameplayCatalogBinary.Write(stream, kit.Catalog, abilities, kit.TagCatalog, kit.Attributes);
+        return (stream.ToArray(), kit);
+    }
+
+    private static long MeasureLoad((byte[] Bytes, EffectTestKit Kit) source)
+    {
+        using var stream = new MemoryStream(source.Bytes);
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        GameplayCatalogBinary.Load(stream, source.Kit.TagCatalog, source.Kit.Seams, source.Kit.Attributes);
+        return GC.GetAllocatedBytesForCurrentThread() - before;
+    }
+
     [Test]
     public void Binary_and_json_paths_produce_the_same_scenario_hash()
     {

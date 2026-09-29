@@ -475,13 +475,13 @@ namespace Bun3.Gameplay.Catalog
 
         private static CompiledMagnitude? ReadMagnitude(PayloadReader reader, SeamRegistry seams, string field)
         {
-            if (!reader.ReadBool(field + " present")) return null;
-            var magnitudeBase = reader.ReadNullableOperand(field + " base");
-            var perLevel = reader.ReadNullableOperand(field + " per level");
-            var calcTag = reader.ReadTag(field + " calc tag");
-            var byLevel = reader.ReadNullableBigNums(field + " level table");
-            var tail = (LevelTail)reader.ReadByte(field + " tail");
-            var increment = reader.ReadBigNum(field + " increment");
+            if (!reader.ReadBool(field)) return null;
+            var magnitudeBase = reader.ReadNullableOperand(field);
+            var perLevel = reader.ReadNullableOperand(field);
+            var calcTag = reader.ReadTag(field);
+            var byLevel = reader.ReadNullableBigNums(field);
+            var tail = (LevelTail)reader.ReadByte(field);
+            var increment = reader.ReadBigNum(field);
             return new CompiledMagnitude(
                 magnitudeBase, perLevel, MagnitudeCalc(seams, calcTag), calcTag, byLevel, tail, increment);
         }
@@ -526,13 +526,13 @@ namespace Bun3.Gameplay.Catalog
 
         private static CompiledCondition[] ReadConditions(PayloadReader reader, string field)
         {
-            var conditions = new CompiledCondition[reader.ReadLength(field + " count")];
+            var conditions = new CompiledCondition[reader.ReadLength(field)];
             for (var i = 0; i < conditions.Length; i++)
             {
                 conditions[i] = new CompiledCondition(
-                    reader.ReadOperand(field + " left"),
-                    (ComparisonOp)reader.ReadByte(field + " op"),
-                    reader.ReadOperand(field + " right"));
+                    reader.ReadOperand(field),
+                    (ComparisonOp)reader.ReadByte(field),
+                    reader.ReadOperand(field));
             }
 
             return conditions;
@@ -546,7 +546,7 @@ namespace Bun3.Gameplay.Catalog
 
         private static GameplayTag[] ReadTags(PayloadReader reader, string field)
         {
-            var tags = new GameplayTag[reader.ReadLength(field + " count")];
+            var tags = new GameplayTag[reader.ReadLength(field)];
             for (var i = 0; i < tags.Length; i++) tags[i] = reader.ReadTag(field);
             return tags;
         }
@@ -740,7 +740,7 @@ namespace Bun3.Gameplay.Catalog
             internal bool ReadBool(string field)
             {
                 var value = ReadByte(field);
-                if (value > 1) throw Format(field + " is not a boolean.");
+                if (value > 1) throw Fail(field, "is not a boolean");
                 return value == 1;
             }
 
@@ -772,8 +772,8 @@ namespace Bun3.Gameplay.Catalog
 
             internal BigNum ReadBigNum(string field)
             {
-                var mantissa = ReadInt64(field + " mantissa");
-                var exponent = ReadInt32(field + " exponent");
+                var mantissa = ReadInt64(field);
+                var exponent = ReadInt32(field);
                 try
                 {
                     return BigNum.FromParts(mantissa, exponent);
@@ -781,40 +781,40 @@ namespace Bun3.Gameplay.Catalog
                 catch (Exception exception) when (exception is ArgumentOutOfRangeException
                                                   || exception is BigNumOverflowException)
                 {
-                    throw new TagCatalogFormatException(field + " is not a representable BigNum.", exception);
+                    throw new TagCatalogFormatException(At(field, "is not a representable BigNum"), exception);
                 }
             }
 
             internal Operand ReadOperand(string field)
             {
-                var kind = (OperandKind)ReadByte(field + " kind");
-                var attributeId = ReadUInt16(field + " attribute id");
-                var value = ReadBigNum(field + " value");
+                var kind = (OperandKind)ReadByte(field);
+                var attributeId = ReadUInt16(field);
+                var value = ReadBigNum(field);
                 switch (kind)
                 {
                     case OperandKind.Constant: return Operand.Constant(value);
                     case OperandKind.Attribute: return Operand.Attribute(attributeId, value);
                     case OperandKind.SourceAttribute: return Operand.SourceAttribute(attributeId, value);
                     case OperandKind.EventMagnitude: return Operand.EventMagnitude(value);
-                    default: throw Format(field + " has an unknown operand kind.");
+                    default: throw Fail(field, "has an unknown operand kind");
                 }
             }
 
             internal Operand? ReadNullableOperand(string field) =>
-                ReadBool(field + " present") ? ReadOperand(field) : (Operand?)null;
+                ReadBool(field) ? ReadOperand(field) : (Operand?)null;
 
             internal BigNum[] ReadBigNums(string field)
             {
-                var values = new BigNum[ReadLength(field + " count")];
+                var values = new BigNum[ReadLength(field)];
                 for (var i = 0; i < values.Length; i++) values[i] = ReadBigNum(field);
                 return values;
             }
 
             internal BigNum[]? ReadNullableBigNums(string field)
             {
-                var count = ReadInt32(field + " count");
+                var count = ReadInt32(field);
                 if (count == -1) return null;
-                if (count < 0 || count > Remaining) throw Format(field + " count exceeds the payload boundary.");
+                if (count < 0 || count > Remaining) throw Fail(field, "count exceeds the payload boundary");
                 var values = new BigNum[count];
                 for (var i = 0; i < count; i++) values[i] = ReadBigNum(field);
                 return values;
@@ -822,7 +822,7 @@ namespace Bun3.Gameplay.Catalog
 
             internal string? ReadString(string field)
             {
-                var length = ReadInt32(field + " length");
+                var length = ReadInt32(field);
                 if (length == -1) return null;
                 Require(length, field);
                 string value;
@@ -832,7 +832,7 @@ namespace Bun3.Gameplay.Catalog
                 }
                 catch (DecoderFallbackException exception)
                 {
-                    throw new TagCatalogFormatException(field + " is not strict UTF-8.", exception);
+                    throw new TagCatalogFormatException(At(field, "is not strict UTF-8"), exception);
                 }
 
                 _offset += length;
@@ -844,7 +844,7 @@ namespace Bun3.Gameplay.Catalog
             internal int ReadLength(string field)
             {
                 var count = ReadInt32(field);
-                if (count < 0 || count > Remaining) throw Format(field + " exceeds the payload boundary.");
+                if (count < 0 || count > Remaining) throw Fail(field, "exceeds the payload boundary");
                 return count;
             }
 
@@ -852,9 +852,15 @@ namespace Bun3.Gameplay.Catalog
             {
                 if (length < 0 || length > Remaining)
                 {
-                    throw Format(field + " extends past the payload boundary.");
+                    throw Fail(field, "extends past the payload boundary");
                 }
             }
+
+            // Labels name only the caller-level field; the byte offset locates the failure, so the
+            // success path never builds a label string.
+            private string At(string field, string problem) => $"{field} {problem} (payload byte {_offset}).";
+
+            private TagCatalogFormatException Fail(string field, string problem) => Format(At(field, problem));
         }
     }
 }
