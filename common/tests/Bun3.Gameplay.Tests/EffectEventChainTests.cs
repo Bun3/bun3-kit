@@ -151,6 +151,54 @@ public sealed class EffectEventChainTests
     }
 
     [Test]
+    public void Listener_count_tracks_only_instances_whose_effect_listens()
+    {
+        var kit = EffectTestKit.Create();
+        kit.AddEffect(Damage("retaliate", 7, eventTag: null));
+        kit.AddEffect(EffectTestKit.MinimalInfinite("plain"));
+        var thorns = EffectTestKit.MinimalDuration("thorns", ticks: 2);
+        thorns.Chains.Add(EventEdge("event.damage.taken", "retaliate", ChainListen.AsTarget));
+        kit.AddEffect(thorns);
+        var pipeline = kit.BuildPipeline();
+
+        pipeline.EnqueueApply(kit.EffectId("thorns"), kit.Defender.Id, kit.Defender.Id);
+        pipeline.EnqueueApply(kit.EffectId("plain"), kit.Defender.Id, kit.Defender.Id);
+        pipeline.Tick();
+
+        Assert.That(kit.Defender.EventListenerCount, Is.EqualTo(1));
+        Assert.That(kit.Attacker.EventListenerCount, Is.Zero);
+
+        for (var i = 0; i < 4; i++) pipeline.Tick();
+
+        Assert.That(kit.Defender.ActiveEffectCount, Is.EqualTo(1), "only the plain effect remains");
+        Assert.That(kit.Defender.EventListenerCount, Is.Zero);
+    }
+
+    [Test]
+    public void Reflection_still_fires_after_a_snapshot_restore()
+    {
+        var kit = BuildReflectKit(ChainListen.AsTarget);
+        kit.RegisterSelector("selector.everyone", new AttackerSelector());
+        var pipeline = kit.BuildPipeline();
+
+        foreach (var target in kit.AllTargets)
+        {
+            target.Attributes.SetBase(EffectTestKit.MaxHp, 100);
+            target.Attributes.SetBase(EffectTestKit.Hp, 100);
+        }
+
+        pipeline.EnqueueApply(kit.EffectId("thorns"), kit.Defender.Id, kit.Defender.Id);
+        pipeline.Tick();
+        kit.Defender.RestoreSnapshot(kit.Defender.CreateSnapshot(), kit.Catalog);
+
+        pipeline.EnqueueApply(kit.EffectId("bolt"), kit.Attacker.Id, kit.Defender.Id);
+        pipeline.Tick();
+
+        Assert.That(kit.Defender.EventListenerCount, Is.EqualTo(1));
+        Assert.That(kit.Attacker.Attributes.GetBase(EffectTestKit.Hp), Is.EqualTo((BigNum)93));
+    }
+
+    [Test]
     public void Disabled_listener_does_not_receive_events()
     {
         var kit = EffectTestKit.Create();

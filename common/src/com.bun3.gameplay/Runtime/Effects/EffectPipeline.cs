@@ -840,7 +840,7 @@ namespace Bun3.Gameplay.Effects
             var instance = EffectInstance.Rent(
                 _nextInstanceId++, pending.EffectId, pending.Source, pending.Level, stack: 1,
                 remainingTicks, periodCountdown, CurrentTick);
-            target.InsertActive(instance);
+            target.InsertActive(instance, effect.HasEventChains);
 
             if (effect.PeriodTicks == 0)
             {
@@ -1008,7 +1008,7 @@ namespace Bun3.Gameplay.Effects
 
             AbilityGrantHook?.Invoke(target, instance, false);
 
-            target.RemoveActive(instance);
+            target.RemoveActive(instance, effect.HasEventChains);
             target.RaiseEffectEvent(new EffectLifecycleEvent(eventKind, instance.Id, instance.EffectId, instance.Stack));
             EffectInstance.Return(instance);
 

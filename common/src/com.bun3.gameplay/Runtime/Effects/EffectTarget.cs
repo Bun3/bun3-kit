@@ -46,6 +46,9 @@ namespace Bun3.Gameplay.Effects
         /// <summary>Active effect instances, kept in ascending Id order.</summary>
         internal List<EffectInstance> ActiveEffects => _activeEffects;
 
+        /// <summary>Active instances whose effect has OnEvent chains. Zero lets event dispatch skip the scan.</summary>
+        internal int EventListenerCount { get; private set; }
+
         /// <summary>Effect lifecycle events not yet consumed.</summary>
         public ReadOnlySpan<EffectLifecycleEvent> PendingEffectEvents => _events.AsSpan(0, _eventCount);
 
@@ -66,15 +69,19 @@ namespace Bun3.Gameplay.Effects
         }
 
         /// <summary>Inserts an active effect instance at its ascending-Id position.</summary>
-        internal void InsertActive(EffectInstance instance)
+        internal void InsertActive(EffectInstance instance, bool listensForEvents)
         {
             var position = _activeEffects.Count;
             while (position > 0 && _activeEffects[position - 1].Id > instance.Id) position--;
             _activeEffects.Insert(position, instance);
+            if (listensForEvents) EventListenerCount++;
         }
 
         /// <summary>Removes an instance from the active effect list.</summary>
-        internal void RemoveActive(EffectInstance instance) => _activeEffects.Remove(instance);
+        internal void RemoveActive(EffectInstance instance, bool listensForEvents)
+        {
+            if (_activeEffects.Remove(instance) && listensForEvents) EventListenerCount--;
+        }
 
         /// <summary>Appends an effect lifecycle event to the buffer.</summary>
         internal void RaiseEffectEvent(EffectLifecycleEvent evt)
@@ -183,6 +190,7 @@ namespace Bun3.Gameplay.Effects
             }
 
             _activeEffects.Clear();
+            EventListenerCount = 0;
 
             var bases = snapshot.AttributeBases;
             for (var i = 0; i < bases.Length; i++) Attributes.RestoreDeclaredBase(i, bases[i]);
@@ -195,7 +203,7 @@ namespace Bun3.Gameplay.Effects
                     row.Id, row.EffectId, row.Source, row.Level, row.Stack,
                     row.RemainingTicks, row.PeriodCountdown, row.CreatedTick);
                 instance.Enabled = row.Enabled;
-                InsertActive(instance);
+                InsertActive(instance, catalog.GetEffect(row.EffectId).HasEventChains);
 
                 var modifiers = row.Modifiers;
                 for (var m = 0; m < modifiers.Length; m++)

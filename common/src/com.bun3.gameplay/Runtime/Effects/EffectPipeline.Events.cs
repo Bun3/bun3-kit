@@ -22,6 +22,7 @@ namespace Bun3.Gameplay.Effects
         private void DispatchEvent(TargetId listenerId, ChainListen listen, in GameplayEvent evt)
         {
             if (!_resolver.TryResolve(listenerId, out var listener) || listener is null) return;
+            if (listener.EventListenerCount == 0) return;
 
             var tagCatalog = listener.Tags.Catalog;
             var active = listener.ActiveEffects;
