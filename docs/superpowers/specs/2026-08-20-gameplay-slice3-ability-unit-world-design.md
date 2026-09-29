@@ -37,7 +37,7 @@
 | Ability의 로직 | **없음**(순수 데이터). `IAbilityBehavior` 시섬 불채택 — 시섬은 기존 3종 유지 |
 | 쿨다운 | Effect로 표현(GrantedTags ↔ BlockedTags). 감소는 `DurationScale`이 속성 참조 |
 | 코스트 | **즉시 차감**(Effect 우회 안 함) — 게이트 검사와 차감의 원자성 |
-| 발동 API | 동기 반환(사유 enum). 범용 Command 타입 계층 없음 |
+| 발동 API | ~~동기 반환(사유 enum)~~ → **§16 개정**: World 명령 큐에 적재, 틱 안에서 처리, 결과는 `PendingActivations` 버퍼 + 부수효과 없는 `CanActivateAbility` 조회 |
 | 스폰/디스폰 | 큐 적재 후 페이즈 경계 반영 — 순회 중 컬렉션 변경 금지 |
 | 셀렉터 후보 | `resolver.TargetIds` 전체 스팬(오름차순) + 태그·속성 접근자 |
 | 시전 인스턴스 | 불채택 — 즉발 발동만 |
@@ -374,6 +374,8 @@ AbilityDef
 
 ### 7.2 발동 순서와 결과
 
+> **§16 개정**: 진입점은 `World.EnqueueActivation`(틱 안에서 처리)과 `CanActivateAbility`(조회)로 바뀌었고, 게이트 4번에 `OnCooldown`이 추가됐다(§16.4). 아래 게이트·차감 의미는 그대로다.
+
 ```
 TryActivateAbility(unitId, abilityId) → AbilityActivationResult
 ```
@@ -531,6 +533,7 @@ EffectCatalogBinary / AbilityCatalogBinary
 ```
 World.Tick():
   ⓪ 스폰/디스폰 큐 반영 (레지스트리 변경은 여기서만) + 적용 예산 재산정
+  ⓪-1 관찰 버퍼 비움 · ⓪-2 명령 큐 처리 (§16.2)
   EffectPipeline.Tick():
     ① 적용   큐 드레인(FIFO, 틱당 예산 = 유닛당 예산 × 등록 유닛 수)
              — Instant 실행 시 RaiseEvents → OnEvent 체인 매칭 → 같은 큐 적재
@@ -662,3 +665,101 @@ bun3-server-template은 `Bun3.Gameplay`를 참조하지 않고, 저장소 밖에
 영향 없음).
 
 퍼블리시와 main 머지는 본 슬라이스 범위 밖이다 — 브랜치에서 완결하고 사용자 확인을 기다린다.
+
+## 16. 틱 경계 규칙과 관찰 API (구현 리뷰 후 개정, 2026-09-29)
+
+구현 리뷰(사용성 축)가 "게임 코드가 결과를 관찰할 수단이 없다"와 "틱 밖에서 상태가 바뀐다"를
+지적했다. 조사 근거: [`docs/research/2026-09-29-gameplay-observation-api.md`](../../research/2026-09-29-gameplay-observation-api.md)
+(GAS·오픈소스 4종), 그리고 idlez의 틱·입력 구조(입력은 틱 번호를 찍은 액션 큐에 적재하고
+틱의 입력 단계에서 소비, 이벤트 버퍼는 틱 시작에 비움, 틱 밖 스탯 직접 쓰기는 보드 편입 전
+초기값·스냅샷 역직렬화뿐이고 플레이 중 메타 스탯 교체도 큐 명령으로 처리).
+이 절이 §2의 "발동 API: 동기 반환", §7.2의 `TryActivateAbility`, §11의 틱 순서를 대체한다.
+
+### 16.1 규칙 — World 틱 밖에서는 큐 적재와 조회만
+
+틱 밖에서 시뮬레이션 상태를 바꾸는 공개 경로를 없앤다. 게임이 하는 모든 변경 요청은 `World`의
+**명령 큐 하나**(FIFO)에 쌓이고 다음 `Tick()` 안에서 호출 순서대로 처리된다. 종류가 달라도
+큐가 하나라서 호출 순서가 보존된다(적용 → 발동 순으로 불렀으면 그 순서로 처리).
+
+| 명령 | 처리 |
+|---|---|
+| `EnqueueApply(effectId, source, target, level)` | 파이프라인 적용 큐로 넘김 → 같은 틱 ①에서 드레인 |
+| `EnqueueActivation(unitId, abilityId)` | §7.2 게이트·코스트·쿨다운 → 결과를 `PendingActivations`에 기록 |
+| `EnqueueRemoveByTag(unitId, tag)` | `IsAncestorOrSelf(tag, asset)` 매칭 인스턴스 제거(`RemovedPrematurely`) |
+| `EnqueueRemoveById(unitId, instanceId)` | 해당 인스턴스 제거 |
+| `EnqueueSetBase(unitId, attributeId, value)` | 등록된 유닛의 Base 쓰기(메타 스탯 갱신 등) |
+
+- **조회는 언제나 허용**된다: `CanActivateAbility`, `TryGetCooldown`, `GetActiveEffect`, 속성 읽기 등.
+- **스폰 전 초기화는 예외가 아니다** — 아직 등록되지 않은 유닛의 `AttributeSet.SetBase` 직접
+  호출은 시뮬레이션 상태를 바꾸지 않는다. 풀힐·부활은 Instant 이펙트(`Add` + `MaxHp` 참조)로
+  `EnqueueApply`한다.
+- 틱 안(시섬 등)에서 부른 `Enqueue*`는 다음 틱에 처리된다.
+- 결정론: 상태 변경이 전부 `Tick()` 안의 고정 순서에서만 일어나므로, 같은 명령 열이면 같은
+  결과다. 남는 조건은 **적재 순서의 결정성**뿐이다 — 여러 스레드가 한 World에 적재하는 호스트는
+  적재 지점을 하나로 모아야 한다. 명령에 틱 번호를 찍는 방식(idlez)은 복제 단계(슬라이스 5)에서 다룬다.
+- 단독 `EffectPipeline`(World 없이)은 기존 공개 API(`EnqueueApply`, `RemoveByTags`, `RemoveById`)를
+  유지한다. World를 쓰는 게임은 `World.Enqueue*`만 쓴다.
+- `CreateSnapshot`은 명령 큐가 비어 있어야 한다(구조 변경 큐와 같은 이유).
+
+### 16.2 World.Tick 순서
+
+```
+World.Tick():
+  ⓪ 스폰/디스폰 반영 + 적용 예산 재산정 (§11)
+  ⓪-1 관찰 버퍼 비움 (등록 유닛의 이펙트·속성 이벤트, GameplayEvent, PendingActivations)
+  ⓪-2 명령 큐 처리 (FIFO)
+  ①~⑥ EffectPipeline 페이즈 (§11)
+```
+
+틱 밖에서는 이벤트가 생기지 않으므로(16.1) ⓪-1에서 비워도 읽히기 전에 사라지는 이벤트가 없다.
+게임의 약속은 **"매 `Tick()` 뒤에 한 번 읽는다"** 하나다. 단독 `EffectPipeline.Tick()`은 시작 시
+자기 버퍼를 비운다. 기존 `Clear*` 메서드는 남긴다.
+발동 타이밍은 이전과 같다 — 틱 사이에 요청한 발동의 효과는 다음 틱 ①에서 적용된다.
+
+### 16.3 발동 결과와 조회
+
+- `EnqueueActivation`은 반환값이 없다. 결과는 `World.PendingActivations`
+  (`ReadOnlySpan<AbilityActivation>`: `UnitId`, `AbilityId`, `Result`)로 틱 뒤에 읽는다.
+- `CanActivateAbility(unitId, abilityId) → AbilityActivationResult`는 §7.2 게이트 1~8을 부수효과
+  없이 평가한다(버튼 활성 상태용). 코스트 차감·쿨다운 적용·효과 적재는 하지 않는다.
+- 같은 틱의 두 번째 발동 요청이 쿨다운·코스트에 막히는 것은 이전과 같다(명령 처리 중 즉시 차감·즉시 쿨다운).
+
+### 16.4 쿨다운 게이트 — GAS 방식
+
+GAS는 쿨다운 태그를 차단 태그에 적게 하지 않고, 발동 검사에 별도 쿨다운 단계를 둔다
+(`CheckCooldown`, `GetCooldownTags` = "이 어빌리티를 쿨다운에 넣을 수 있는 모든 태그").
+같은 방식으로 §7.2 게이트에 단계를 추가한다(빌드 변환 없음, 런타임에 컴파일된 쿨다운 이펙트의
+`GrantedTags`를 참조):
+
+```
+1 UnknownUnit → 2 UnknownAbility → 3 NotGranted → 4 OnCooldown(신규)
+→ 5 MissingTag → 6 BlockedByTag → 7 ConditionFailed → 8 CostInsufficient
+```
+
+- `OnCooldown`: 유닛이 쿨다운 이펙트의 `GrantedTags` 중 하나라도 보유. 다른 이펙트가 같은 태그를
+  줘도(공유 쿨다운) 막힌다. `BlockedTags`에 같은 태그를 적어도 무해하다(4에서 먼저 걸린다).
+- `World.TryGetCooldown(unitId, abilityId, out remainingTicks, out durationTicks)`: 같은 태그를 주는
+  활성 인스턴스 중 남은 틱이 최대인 것. 게이트와 같은 태그를 보므로 UI와 실제 동작이 일치한다.
+
+### 16.5 관찰 API
+
+| 대상 | API | 비고 |
+|---|---|---|
+| 활성 이펙트 | `EffectTarget.GetActiveEffect(i)`, `TryGetActiveEffect(instanceId, out)` → `ActiveEffectInfo` | 값 복사(`InstanceId`, `EffectId`, `Source`, `Level`, `Stack`, `RemainingTicks`, `DurationTicks`, `Enabled`). 풀링 인스턴스를 노출하지 않는다. 스냅샷 복원·합류 뒤 버프 바를 다시 세우는 경로 |
+| 전체 지속시간 | `EffectInstance.DurationTicks` | 생성·갱신 시점의 스케일·DR 반영값. 스냅샷 행에 포함 |
+| 적용/제거 알림 | `EffectLifecycleEvent.Source`, `.Level` 추가 | 기존 드레인 버퍼 |
+| 전투 이벤트 | `EffectPipeline.PendingGameplayEvents` | 파이프라인 단위 버퍼 하나(발행 순서 = 결정적 순서). 데미지 숫자·전투 로그·네트워크의 단일 원천. 태그 필터는 소비자가 `IsAncestorOrSelf`로 |
+| 쿨다운 | `World.TryGetCooldown` | 16.4 |
+| 부여 어빌리티 | `AbilitySet.GetGrant(i)` → `AbilityGrantInfo(AbilityId, Source, Level)`, `AbilitySet.Version` | Grant·Revoke·복원마다 Version 증가. 스킬 바는 Version이 바뀐 틱에만 다시 그린다 |
+| 어빌리티 이름 | `AbilityCatalog.GetName(id)` | |
+
+속성 변경(`AttributeSet.PendingChanges`)은 현행 유지 — 원인 필드는 넣지 않는다(원인이 필요하면
+GameplayEvent). 코어에 cue(VFX) 시스템은 두지 않는다 — 위 버퍼·조회로 GAS cue의 네 이벤트
+(OnActive·WhileActive·Executed·Removed)가 전부 재구성되며, 태그→VFX 매핑은 Unity 계층 몫이다.
+
+### 16.6 채택하지 않은 것
+
+- 면역·DR로 무효화된 적용의 관찰 이벤트 — 실수요 시.
+- 전투 로그 완전성의 Build 검증 — 저작 규칙으로 둔다: 로그에 남길 피해 이펙트는 `RaiseEvents`를 선언한다.
+- 발동 성공/실패 콜백(GAS `AbilityActivatedCallbacks` 등) — `PendingActivations`로 충분.
+- 틱 사이 이벤트 보존(버퍼별 워터마크) — 16.1로 틱 밖 이벤트 발생 자체가 없어져 불필요.
