@@ -3,7 +3,6 @@ using System;
 using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.IO;
-using System.Security.Cryptography;
 using System.Text;
 
 namespace Bun3.Gameplay.Tags
@@ -32,7 +31,7 @@ namespace Bun3.Gameplay.Tags
             if (expectations is null) throw new ArgumentNullException(nameof(expectations));
             if (!input.CanRead) throw new ArgumentException("A readable stream is required.", nameof(input));
 
-            var bytes = ReadToEnd(input);
+            var bytes = ArtifactBytes.ReadToEnd(input, MaximumCatalogBytes, "B3DK input exceeds the allowed size.");
             ValidateMagic(bytes);
             ValidateSchema(bytes);
             if (bytes.Length < HeaderSize)
@@ -50,7 +49,7 @@ namespace Bun3.Gameplay.Tags
             }
 
             var versionOffset = HeaderSize + catalogIdLength;
-            ValidateChecksum(bytes);
+            ArtifactBytes.ValidateChecksum(bytes, ChecksumOffset, "B3DK content checksum mismatch.");
 
             var catalogId = Decode(bytes, HeaderSize, catalogIdLength, "Catalog ID");
             var catalogVersion = Decode(bytes, versionOffset, catalogVersionLength, "Catalog version");
@@ -75,23 +74,6 @@ namespace Bun3.Gameplay.Tags
         // cannot be a valid catalog, so fail as a format error instead of dying on OOM.
         private const int MaximumCatalogBytes = 64 * 1024 * 1024;
 
-        private static byte[] ReadToEnd(Stream input)
-        {
-            using var output = new MemoryStream();
-            var buffer = new byte[8192];
-            while (true)
-            {
-                var read = input.Read(buffer, 0, buffer.Length);
-                if (read == 0) return output.ToArray();
-                if (output.Length + read > MaximumCatalogBytes)
-                {
-                    throw Format("B3DK input exceeds the allowed size.");
-                }
-
-                output.Write(buffer, 0, read);
-            }
-        }
-
         private static void ValidateMagic(byte[] bytes)
         {
             if (bytes.Length < 4 || bytes[0] != (byte)'B' || bytes[1] != (byte)'3'
@@ -111,23 +93,6 @@ namespace Bun3.Gameplay.Tags
             if (ReadUInt16(bytes, 4) != SupportedSchema)
             {
                 throw Format("Unsupported B3DK schema.");
-            }
-        }
-
-        private static void ValidateChecksum(byte[] bytes)
-        {
-            var stored = bytes.AsSpan(ChecksumOffset, HashLength).ToArray();
-            bytes.AsSpan(ChecksumOffset, HashLength).Clear();
-            byte[] actual;
-            using (var sha256 = SHA256.Create())
-            {
-                actual = sha256.ComputeHash(bytes);
-            }
-
-            stored.CopyTo(bytes, ChecksumOffset);
-            if (!actual.AsSpan().SequenceEqual(stored))
-            {
-                throw Format("B3DK content checksum mismatch.");
             }
         }
 
