@@ -278,6 +278,55 @@ public sealed class WorldTests
     }
 
     [Test]
+    public void Removal_and_base_write_commands_run_inside_the_next_tick()
+    {
+        var kit = EffectTestKit.Create();
+        foreach (var name in new[] { "aura.a", "aura.b" })
+        {
+            var aura = EffectTestKit.MinimalInfinite(name);
+            aura.AssetTags.Add("effect.frost");
+            kit.AddEffect(aura);
+        }
+
+        var world = MakeWorld(kit);
+        var unit = MakeUnit(kit, 1);
+        world.Spawn(unit);
+        world.EnqueueApply(kit.EffectId("aura.a"), unit.Id, unit.Id);
+        world.EnqueueApply(kit.EffectId("aura.b"), unit.Id, unit.Id);
+        world.Tick();
+        var second = unit.Effects.GetActiveEffect(1).InstanceId;
+
+        world.EnqueueRemoveById(unit.Id, second);
+        world.EnqueueSetBase(unit.Id, EffectTestKit.Attack, 42);
+        Assert.That(unit.Effects.ActiveEffectCount, Is.EqualTo(2), "nothing runs outside the tick");
+        Assert.That(unit.Attributes.GetBase(EffectTestKit.Attack), Is.EqualTo((Bun3.Gameplay.Numerics.BigNum)0));
+        world.Tick();
+
+        Assert.That(unit.Effects.ActiveEffectCount, Is.EqualTo(1));
+        Assert.That(unit.Attributes.GetBase(EffectTestKit.Attack), Is.EqualTo((Bun3.Gameplay.Numerics.BigNum)42));
+
+        world.EnqueueRemoveByTag(unit.Id, kit.Tag("effect.frost"));
+        world.Tick();
+        Assert.That(unit.Effects.ActiveEffectCount, Is.Zero);
+    }
+
+    [Test]
+    public void Commands_for_unknown_units_or_undeclared_attributes_are_ignored()
+    {
+        var kit = EffectTestKit.Create();
+        var world = MakeWorld(kit);
+        world.Spawn(MakeUnit(kit, 1));
+        world.Tick();
+
+        world.EnqueueSetBase(new TargetId(1), attributeId: 99, value: 1);
+        world.EnqueueSetBase(new TargetId(7), EffectTestKit.Attack, 1);
+        world.EnqueueRemoveById(new TargetId(7), 1);
+        world.EnqueueRemoveByTag(new TargetId(7), kit.Tag("effect.frost"));
+
+        Assert.That(() => world.Tick(), Throws.Nothing);
+    }
+
+    [Test]
     public void Snapshotting_with_pending_commands_is_rejected()
     {
         var kit = EffectTestKit.Create();

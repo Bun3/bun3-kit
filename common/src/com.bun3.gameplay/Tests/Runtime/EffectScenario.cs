@@ -506,7 +506,7 @@ namespace Bun3.Gameplay.Tests
                 if (active.Count > 0)
                 {
                     var index = (int)(rng.NextUInt32() % (uint)active.Count);
-                    world.Pipeline.RemoveById(unitId, active[index].Id);
+                    world.EnqueueRemoveById(unitId, active[index].Id);
                 }
             }
             // roll == 3: no action this tick — lets duration/period timers advance untouched.

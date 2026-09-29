@@ -166,11 +166,15 @@ namespace Bun3.Gameplay.Effects
         public int RemoveByTags(TargetId target, TagContainer query)
         {
             if (query is null) throw new ArgumentNullException(nameof(query));
-            if (!_resolver.TryResolve(target, out var effectTarget) || effectTarget is null) return 0;
 
-            var queryCount = query.ExactKindCount;
-            Span<GameplayTag> queryTags = stackalloc GameplayTag[queryCount];
+            Span<GameplayTag> queryTags = stackalloc GameplayTag[query.ExactKindCount];
             query.CopyExactTags(queryTags);
+            return RemoveByTagSpan(target, queryTags);
+        }
+
+        internal int RemoveByTagSpan(TargetId target, ReadOnlySpan<GameplayTag> queryTags)
+        {
+            if (!_resolver.TryResolve(target, out var effectTarget) || effectTarget is null) return 0;
 
             var tagCatalog = effectTarget.Tags.Catalog;
             var active = effectTarget.ActiveEffects;

@@ -68,7 +68,7 @@ public sealed class AbilityGrantSourceTests
         world.Tick();
 
         Assert.That(unit.Effects.ActiveEffects.Count, Is.EqualTo(1));
-        world.Pipeline.RemoveById(unit.Id, unit.Effects.ActiveEffects[0].Id);
+        world.EnqueueRemoveById(unit.Id, unit.Effects.ActiveEffects[0].Id);
         world.Tick();
 
         Assert.That(unit.Abilities.IsGranted(abilityId), Is.False);
