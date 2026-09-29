@@ -83,6 +83,75 @@ public sealed class AbilityActivationTests
     }
 
     [Test]
+    public void Cooldown_gates_on_the_cooldown_effects_granted_tags_without_blocked_tags()
+    {
+        var f = Build((_, b) =>
+        {
+            var ability = Fireball();
+            ability.CooldownEffect = "cooldown.fireball";
+            b.Add(ability);
+        });
+        var id = f.Abilities.GetRequiredId("fireball");
+        f.Caster.Abilities.Grant(id, GrantSource.Archetype(), level: 1);
+
+        f.World.EnqueueActivation(f.Caster.Id, id);
+        f.World.EnqueueActivation(f.Caster.Id, id);
+        f.World.Tick();
+
+        Assert.That(f.World.PendingActivations[0].Result, Is.EqualTo(AbilityActivationResult.Success));
+        Assert.That(f.World.PendingActivations[1].Result, Is.EqualTo(AbilityActivationResult.OnCooldown));
+    }
+
+    [Test]
+    public void A_shared_cooldown_tag_from_another_ability_blocks_and_is_reported()
+    {
+        var f = Build((kit, b) =>
+        {
+            var meteorCooldown = EffectTestKit.MinimalDuration("cooldown.meteor", ticks: 30);
+            meteorCooldown.GrantedTags.Add("cooldown.fireball");
+            kit.AddEffect(meteorCooldown);
+
+            var fireball = Fireball();
+            fireball.CooldownEffect = "cooldown.fireball";
+            b.Add(fireball);
+
+            var meteor = new AbilityDef { Name = "meteor", MaxLevel = 1, CooldownEffect = "cooldown.meteor" };
+            meteor.Effects.Add(new AbilityEffectDef { EffectName = "bolt" });
+            b.Add(meteor);
+        });
+        var fireballId = f.Abilities.GetRequiredId("fireball");
+        var meteorId = f.Abilities.GetRequiredId("meteor");
+        f.Caster.Abilities.Grant(fireballId, GrantSource.Archetype(), level: 1);
+        f.Caster.Abilities.Grant(meteorId, GrantSource.Archetype(), level: 1);
+
+        Assert.That(Activate(f, f.Caster.Id, meteorId), Is.EqualTo(AbilityActivationResult.Success));
+
+        Assert.That(f.World.CanActivateAbility(f.Caster.Id, fireballId), Is.EqualTo(AbilityActivationResult.OnCooldown));
+        Assert.That(f.World.TryGetCooldown(f.Caster.Id, fireballId, out var remaining, out var duration), Is.True);
+        Assert.That(duration, Is.EqualTo(30));
+        Assert.That(remaining, Is.EqualTo(30));
+    }
+
+    [Test]
+    public void Try_get_cooldown_is_false_when_ready_or_without_a_cooldown_effect()
+    {
+        var f = Build((_, b) =>
+        {
+            var ability = Fireball();
+            ability.CooldownEffect = "cooldown.fireball";
+            b.Add(ability);
+            var plain = new AbilityDef { Name = "plain", MaxLevel = 1 };
+            plain.Effects.Add(new AbilityEffectDef { EffectName = "bolt" });
+            b.Add(plain);
+        });
+        var id = f.Abilities.GetRequiredId("fireball");
+
+        Assert.That(f.World.TryGetCooldown(f.Caster.Id, id, out _, out _), Is.False);
+        Assert.That(f.World.TryGetCooldown(f.Caster.Id, f.Abilities.GetRequiredId("plain"), out _, out _), Is.False);
+        Assert.That(f.World.TryGetCooldown(new TargetId(999), id, out _, out _), Is.False);
+    }
+
+    [Test]
     public void Activation_is_queued_and_reported_after_the_tick()
     {
         var f = Build((_, b) => b.Add(Fireball()));
@@ -393,7 +462,7 @@ public sealed class AbilityActivationTests
         f.World.Tick();
 
         Assert.That(f.World.PendingActivations[0].Result, Is.EqualTo(AbilityActivationResult.Success));
-        Assert.That(f.World.PendingActivations[1].Result, Is.EqualTo(AbilityActivationResult.BlockedByTag));
+        Assert.That(f.World.PendingActivations[1].Result, Is.EqualTo(AbilityActivationResult.OnCooldown));
     }
 
     [Test]

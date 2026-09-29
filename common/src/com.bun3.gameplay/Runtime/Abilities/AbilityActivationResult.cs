@@ -16,13 +16,16 @@ namespace Bun3.Gameplay.Abilities
         NotGranted = 3,
         /// <summary>The unit lacks a tag the ability requires.</summary>
         MissingTag = 4,
-        /// <summary>The unit owns a tag the ability blocks on — cooldown is reported here.</summary>
+        /// <summary>The unit owns a tag the ability blocks on.</summary>
         BlockedByTag = 5,
         /// <summary>An activation condition did not hold.</summary>
         ConditionFailed = 6,
         /// <summary>At least one cost exceeded the unit's Base value of that attribute, or the unit does not
         /// declare the attribute.</summary>
         CostInsufficient = 7,
+        /// <summary>The unit owns a tag granted by the ability's cooldown effect — including one granted by
+        /// another effect sharing that tag.</summary>
+        OnCooldown = 8,
     }
 
     /// <summary>Result of one queued ability activation, readable after the tick that processed it.</summary>

@@ -82,6 +82,20 @@ public sealed class AbilityCatalogBuilderTests
     }
 
     [Test]
+    public void A_cooldown_effect_that_grants_no_tag_is_a_build_error()
+    {
+        var kit = EffectTestKit.Create();
+        kit.AddEffect(EffectTestKit.MinimalDuration("cooldown.silent", ticks: 5));
+        var ability = new AbilityDef { Name = "silent", MaxLevel = 1, CooldownEffect = "cooldown.silent" };
+        var builder = new AbilityCatalogBuilder();
+        builder.Add(ability);
+
+        Assert.That(
+            () => builder.Build(kit.TagCatalog, kit.Seams, kit.Attributes, kit.Catalog),
+            Throws.InvalidOperationException.With.Message.Contains("silent").And.Message.Contains("GrantedTags"));
+    }
+
+    [Test]
     public void Unknown_cooldown_effect_is_rejected()
     {
         var kit = EffectTestKit.Create();

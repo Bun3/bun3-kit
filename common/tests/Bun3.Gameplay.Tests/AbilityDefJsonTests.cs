@@ -155,7 +155,9 @@ public sealed class AbilityDefJsonTests
         """);
 
         var kit = EffectTestKit.Create();
-        kit.AddEffect(EffectTestKit.MinimalInstant("Cooldown.Fireball"));
+        var cooldown = EffectTestKit.MinimalDuration("Cooldown.Fireball", ticks: 10);
+        cooldown.GrantedTags.Add("cooldown.fireball");
+        kit.AddEffect(cooldown);
         kit.AddEffect(EffectTestKit.MinimalInstant("FireBolt"));
 
         var builder = new AbilityCatalogBuilder();

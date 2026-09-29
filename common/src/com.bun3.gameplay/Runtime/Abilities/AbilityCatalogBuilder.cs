@@ -160,6 +160,13 @@ namespace Bun3.Gameplay.Abilities
                     throw new InvalidOperationException(
                         $"{owner}: references unknown cooldown effect '{def.CooldownEffect}'.");
                 }
+
+                if (effects.GetEffect(cooldownEffectId).GrantedTags.Length == 0)
+                {
+                    throw new InvalidOperationException(
+                        $"{owner}: cooldown effect '{def.CooldownEffect}' grants no tag, so it can never gate "
+                        + "activation. Add at least one GrantedTags entry to the cooldown effect.");
+                }
             }
 
             var conditions = new CompiledCondition[def.ActivationConditions.Count];

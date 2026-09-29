@@ -5,6 +5,7 @@ using Bun3.Gameplay.Abilities;
 using Bun3.Gameplay.Effects;
 using Bun3.Gameplay.Numerics;
 using Bun3.Gameplay.Seams;
+using Bun3.Gameplay.Tags;
 
 namespace Bun3.Gameplay
 {
@@ -31,6 +32,7 @@ namespace Bun3.Gameplay
             if (level == 0) return AbilityActivationResult.NotGranted;
 
             var ability = _abilities.GetAbility(abilityId);
+            if (IsOnCooldown(unit, ability)) return AbilityActivationResult.OnCooldown;
 
             var required = ability.RequiredTags;
             for (var i = 0; i < required.Length; i++)
@@ -76,6 +78,65 @@ namespace Bun3.Gameplay
 
             ApplyAbilityEffects(ability, unitId, level);
             return AbilityActivationResult.Success;
+        }
+
+        /// <summary>Reports the longest remaining cooldown among active instances granting any tag of the
+        /// ability's cooldown effect — the same tags the activation gate checks.</summary>
+        /// <param name="unitId">Unit to query.</param>
+        /// <param name="abilityId">Compiled ability id.</param>
+        /// <param name="remainingTicks">Remaining ticks of that instance.</param>
+        /// <param name="durationTicks">Total ticks of that instance's current lifetime.</param>
+        /// <returns>False when the unit or ability is unknown, the ability has no cooldown effect, or no
+        /// such instance is active.</returns>
+        public bool TryGetCooldown(TargetId unitId, int abilityId, out int remainingTicks, out int durationTicks)
+        {
+            remainingTicks = 0;
+            durationTicks = 0;
+            if (!TryGetUnit(unitId, out var unit) || unit is null || !_abilities.Contains(abilityId)) return false;
+
+            var cooldownEffectId = _abilities.GetAbility(abilityId).CooldownEffectId;
+            if (cooldownEffectId < 0) return false;
+
+            var cooldownTags = _effects.GetEffect(cooldownEffectId).GrantedTags;
+            var tagCatalog = unit.Tags.Catalog;
+            var active = unit.Effects.ActiveEffects;
+            var found = false;
+            for (var i = 0; i < active.Count; i++)
+            {
+                var instance = active[i];
+                if (!instance.Enabled || instance.RemainingTicks <= remainingTicks) continue;
+                if (!GrantsAny(_effects.GetEffect(instance.EffectId).GrantedTags, cooldownTags, tagCatalog)) continue;
+                remainingTicks = instance.RemainingTicks;
+                durationTicks = instance.DurationTicks;
+                found = true;
+            }
+
+            return found;
+        }
+
+        private bool IsOnCooldown(Unit unit, CompiledAbility ability)
+        {
+            if (ability.CooldownEffectId < 0) return false;
+            var tags = _effects.GetEffect(ability.CooldownEffectId).GrantedTags;
+            for (var i = 0; i < tags.Length; i++)
+            {
+                if (unit.Tags.Has(tags[i])) return true;
+            }
+
+            return false;
+        }
+
+        private static bool GrantsAny(GameplayTag[] granted, GameplayTag[] cooldownTags, TagCatalog tagCatalog)
+        {
+            for (var c = 0; c < cooldownTags.Length; c++)
+            {
+                for (var g = 0; g < granted.Length; g++)
+                {
+                    if (tagCatalog.IsAncestorOrSelf(cooldownTags[c], granted[g])) return true;
+                }
+            }
+
+            return false;
         }
 
         private void ApplyAbilityEffects(CompiledAbility ability, TargetId unitId, int level)
