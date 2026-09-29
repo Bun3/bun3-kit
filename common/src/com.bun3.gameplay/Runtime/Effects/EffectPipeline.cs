@@ -559,6 +559,16 @@ namespace Bun3.Gameplay.Effects
             CompiledEffect effect, EffectTarget target, EffectTarget? source, bool hasSource, in PendingApply pending,
             BigNum eventMagnitude)
         {
+            ExecuteOnBase(effect, target, source, hasSource, pending.Source, pending.Level, stack: 1, eventMagnitude);
+            FireChain(effect.Chains, ChainTrigger.OnApplication, pending.Source, pending.Level, pending.Target, target);
+        }
+
+        // The instant/periodic payload, applied straight to Base: modifiers, then executions, then one gameplay
+        // event per RaiseEvents entry carrying the actual Base delta (and the modifiers-only nominal amount).
+        private void ExecuteOnBase(
+            CompiledEffect effect, EffectTarget target, EffectTarget? source, bool hasSource, TargetId sourceId,
+            int level, int stack, BigNum eventMagnitude)
+        {
             var raises = effect.RaiseEvents;
             Span<BigNum> before = stackalloc BigNum[raises.Length];
             Span<BigNum> nominal = stackalloc BigNum[raises.Length];
@@ -572,7 +582,7 @@ namespace Bun3.Gameplay.Effects
             for (var i = 0; i < modifiers.Length; i++)
             {
                 var modifier = modifiers[i];
-                var magnitude = EvaluateMagnitude(modifier, target, source, hasSource, pending.Level, stack: 1, eventMagnitude);
+                var magnitude = EvaluateMagnitude(modifier, target, source, hasSource, level, stack, eventMagnitude);
                 for (var r = 0; r < raises.Length; r++)
                 {
                     if (raises[r].AttributeId == modifier.AttributeId) nominal[r] += magnitude;
@@ -584,19 +594,15 @@ namespace Bun3.Gameplay.Effects
             var executions = effect.Executions;
             for (var i = 0; i < executions.Length; i++)
             {
-                RunExecution(
-                    executions[i], target, source, hasSource, pending.Source, pending.Target, pending.Level, stack: 1,
-                    eventMagnitude);
+                RunExecution(executions[i], target, source, hasSource, sourceId, target.Id, level, stack, eventMagnitude);
             }
 
             for (var r = 0; r < raises.Length; r++)
             {
                 var delta = target.Attributes.GetBase(raises[r].AttributeId) - before[r];
-                var evt = new GameplayEvent(raises[r].Tag, pending.Source, pending.Target, delta, nominal[r]);
+                var evt = new GameplayEvent(raises[r].Tag, sourceId, target.Id, delta, nominal[r]);
                 RaiseGameplayEvent(in evt);
             }
-
-            FireChain(effect.Chains, ChainTrigger.OnApplication, pending.Source, pending.Level, pending.Target, target);
         }
 
         // Instant has no instance, so its modifiers are permanent changes applied straight to Base.
@@ -961,43 +967,7 @@ namespace Bun3.Gameplay.Effects
         private void FirePeriodic(CompiledEffect effect, EffectTarget target, EffectInstance instance, BigNum eventMagnitude)
         {
             var hasSource = _resolver.TryResolve(instance.Source, out var source) && source is not null;
-
-            var raises = effect.RaiseEvents;
-            Span<BigNum> before = stackalloc BigNum[raises.Length];
-            Span<BigNum> nominal = stackalloc BigNum[raises.Length];
-            for (var r = 0; r < raises.Length; r++)
-            {
-                before[r] = target.Attributes.GetBase(raises[r].AttributeId);
-                nominal[r] = BigNum.Zero;
-            }
-
-            var modifiers = effect.Modifiers;
-            for (var i = 0; i < modifiers.Length; i++)
-            {
-                var modifier = modifiers[i];
-                var magnitude = EvaluateMagnitude(modifier, target, source, hasSource, instance.Level, instance.Stack, eventMagnitude);
-                for (var r = 0; r < raises.Length; r++)
-                {
-                    if (raises[r].AttributeId == modifier.AttributeId) nominal[r] += magnitude;
-                }
-
-                ApplyModifierToBase(target, modifier, magnitude);
-            }
-
-            var executions = effect.Executions;
-            for (var i = 0; i < executions.Length; i++)
-            {
-                RunExecution(
-                    executions[i], target, source, hasSource, instance.Source, target.Id, instance.Level, instance.Stack,
-                    eventMagnitude);
-            }
-
-            for (var r = 0; r < raises.Length; r++)
-            {
-                var delta = target.Attributes.GetBase(raises[r].AttributeId) - before[r];
-                var evt = new GameplayEvent(raises[r].Tag, instance.Source, target.Id, delta, nominal[r]);
-                RaiseGameplayEvent(in evt);
-            }
+            ExecuteOnBase(effect, target, source, hasSource, instance.Source, instance.Level, instance.Stack, eventMagnitude);
         }
 
         // Expiry: with the RemoveOneAndRefresh stack policy and stacks remaining, drop one stack and reset
