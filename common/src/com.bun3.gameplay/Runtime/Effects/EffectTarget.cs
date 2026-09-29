@@ -46,6 +46,28 @@ namespace Bun3.Gameplay.Effects
         /// <summary>Active effect instances, kept in ascending Id order.</summary>
         internal List<EffectInstance> ActiveEffects => _activeEffects;
 
+        /// <summary>Returns a value copy of the active instance at <paramref name="index"/> (ascending instance id).</summary>
+        /// <param name="index">Index in [0, <see cref="ActiveEffectCount"/>).</param>
+        /// <returns>Copy of the instance's observable state.</returns>
+        public ActiveEffectInfo GetActiveEffect(int index) => new ActiveEffectInfo(_activeEffects[index]);
+
+        /// <summary>Finds an active instance by id.</summary>
+        /// <param name="instanceId">Instance id.</param>
+        /// <param name="info">Value copy when found.</param>
+        /// <returns>True when the instance is active on this target.</returns>
+        public bool TryGetActiveEffect(ulong instanceId, out ActiveEffectInfo info)
+        {
+            for (var i = 0; i < _activeEffects.Count; i++)
+            {
+                if (_activeEffects[i].Id != instanceId) continue;
+                info = new ActiveEffectInfo(_activeEffects[i]);
+                return true;
+            }
+
+            info = default;
+            return false;
+        }
+
         /// <summary>Active instances whose effect has OnEvent chains. Zero lets event dispatch skip the scan.</summary>
         internal int EventListenerCount { get; private set; }
 
@@ -142,8 +164,8 @@ namespace Bun3.Gameplay.Effects
 
                 instances[i] = new EffectTargetSnapshot.InstanceRow(
                     instance.Id, instance.EffectId, instance.Source, instance.Level, instance.Stack,
-                    instance.RemainingTicks, instance.PeriodCountdown, instance.Enabled, instance.CreatedTick,
-                    modifiers);
+                    instance.RemainingTicks, instance.DurationTicks, instance.PeriodCountdown, instance.Enabled,
+                    instance.CreatedTick, modifiers);
             }
 
             var drHistory = new EffectTargetSnapshot.DrHistoryRow[_drHistoryCount];
@@ -203,6 +225,7 @@ namespace Bun3.Gameplay.Effects
                     null, row.Id, row.EffectId, row.Source, row.Level, row.Stack,
                     row.RemainingTicks, row.PeriodCountdown, row.CreatedTick);
                 instance.Enabled = row.Enabled;
+                instance.DurationTicks = row.DurationTicks;
                 InsertActive(instance, catalog.GetEffect(row.EffectId).HasEventChains);
 
                 var modifiers = row.Modifiers;

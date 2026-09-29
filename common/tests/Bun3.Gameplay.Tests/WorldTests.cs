@@ -201,6 +201,34 @@ public sealed class WorldTests
     }
 
     [Test]
+    public void Snapshot_round_trip_keeps_duration_totals()
+    {
+        var kit = EffectTestKit.Create();
+        var slow = EffectTestKit.MinimalDuration("slow", ticks: 10);
+        slow.DurationScale = new MagnitudeDef
+        {
+            Base = Bun3.Gameplay.Attributes.Operand.Constant(Bun3.Gameplay.Numerics.BigNum.FromParts(2, 0)),
+        };
+        kit.AddEffect(slow);
+        var world = MakeWorld(kit);
+        var unit = MakeUnit(kit, 1);
+        world.Spawn(unit);
+        world.EnqueueApply(kit.EffectId("slow"), unit.Id, unit.Id);
+        world.Tick();
+        world.Tick();
+        var before = unit.Effects.GetActiveEffect(0);
+        var snapshot = world.CreateSnapshot();
+        world.Tick();
+
+        world.RestoreSnapshot(snapshot);
+
+        var after = unit.Effects.GetActiveEffect(0);
+        Assert.That(after.DurationTicks, Is.EqualTo(20));
+        Assert.That(after.RemainingTicks, Is.EqualTo(before.RemainingTicks));
+        Assert.That(after.InstanceId, Is.EqualTo(before.InstanceId));
+    }
+
+    [Test]
     public void Mismatched_unit_id_in_restore_snapshot_leaves_every_unit_untouched()
     {
         var kit = EffectTestKit.Create();

@@ -725,12 +725,14 @@ namespace Bun3.Gameplay.Effects
                 var cap = ToTicksFloor((BigNum)newDuration * stackPolicy.ExtendCapMultiplier);
                 var extended = instance.RemainingTicks + newDuration;
                 instance.RemainingTicks = extended < cap ? extended : cap;
+                instance.DurationTicks = instance.RemainingTicks;
             }
 
             if (stackPolicy.OnReapply != StackReapply.ExtendCapped
                 && stackPolicy.RefreshDurationOnReapply && effect.DurationType == EffectDurationType.Duration)
             {
                 instance.RemainingTicks = ComputeMergedDurationTicks(effect, target, instance, eventMagnitude);
+                instance.DurationTicks = instance.RemainingTicks;
             }
 
             if (stackPolicy.ResetPeriodOnReapply && effect.PeriodTicks > 0)
@@ -982,6 +984,7 @@ namespace Bun3.Gameplay.Effects
             {
                 instance.Stack--;
                 instance.RemainingTicks = effect.DurationTicks;
+                instance.DurationTicks = instance.RemainingTicks;
                 target.RaiseEffectEvent(new EffectLifecycleEvent(
                     EffectLifecycleKind.StackChanged, instance.Id, instance.EffectId, instance.Stack));
                 MarkDirtyForModifiers(target, effect);

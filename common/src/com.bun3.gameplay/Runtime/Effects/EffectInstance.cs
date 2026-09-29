@@ -24,6 +24,10 @@ namespace Bun3.Gameplay.Effects
         /// <summary>Remaining ticks of a Duration effect. Meaningless for Infinite/Instant.</summary>
         public int RemainingTicks { get; internal set; }
 
+        /// <summary>Total ticks of the current Duration lifetime — the scaled, DR-adjusted value set at
+        /// creation and again on every refresh, extension or stack-drop refresh. -1 for Infinite.</summary>
+        public int DurationTicks { get; internal set; }
+
         /// <summary>Ticks until the next periodic execution. -1 when there is no periodic execution.</summary>
         public int PeriodCountdown { get; internal set; }
 
@@ -59,6 +63,7 @@ namespace Bun3.Gameplay.Effects
             instance.Level = level;
             instance.Stack = stack;
             instance.RemainingTicks = remainingTicks;
+            instance.DurationTicks = remainingTicks;
             instance.PeriodCountdown = periodCountdown;
             instance.CreatedTick = createdTick;
             instance.Enabled = true;
@@ -71,5 +76,45 @@ namespace Bun3.Gameplay.Effects
             instance.Enabled = false;
             pool.Push(instance);
         }
+    }
+
+    /// <summary>Value copy of one active effect instance, safe to keep after the instance is pooled.</summary>
+    public readonly struct ActiveEffectInfo
+    {
+        internal ActiveEffectInfo(EffectInstance instance)
+        {
+            InstanceId = instance.Id;
+            EffectId = instance.EffectId;
+            Source = instance.Source;
+            Level = instance.Level;
+            Stack = instance.Stack;
+            RemainingTicks = instance.RemainingTicks;
+            DurationTicks = instance.DurationTicks;
+            Enabled = instance.Enabled;
+        }
+
+        /// <summary>Instance id.</summary>
+        public ulong InstanceId { get; }
+
+        /// <summary>Effect id.</summary>
+        public int EffectId { get; }
+
+        /// <summary>Caster that applied the effect.</summary>
+        public TargetId Source { get; }
+
+        /// <summary>Effect level.</summary>
+        public int Level { get; }
+
+        /// <summary>Stack count.</summary>
+        public int Stack { get; }
+
+        /// <summary>Remaining ticks of a Duration effect; -1 for Infinite.</summary>
+        public int RemainingTicks { get; }
+
+        /// <summary>Total ticks of the current Duration lifetime; -1 for Infinite.</summary>
+        public int DurationTicks { get; }
+
+        /// <summary>Whether the instance currently participates in aggregation.</summary>
+        public bool Enabled { get; }
     }
 }

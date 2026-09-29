@@ -45,7 +45,7 @@ namespace Bun3.Gameplay.Effects
         {
             internal InstanceRow(
                 ulong id, int effectId, TargetId source, int level, int stack,
-                int remainingTicks, int periodCountdown, bool enabled, long createdTick,
+                int remainingTicks, int durationTicks, int periodCountdown, bool enabled, long createdTick,
                 ModifierRow[] modifiers)
             {
                 Id = id;
@@ -54,6 +54,7 @@ namespace Bun3.Gameplay.Effects
                 Level = level;
                 Stack = stack;
                 RemainingTicks = remainingTicks;
+                DurationTicks = durationTicks;
                 PeriodCountdown = periodCountdown;
                 Enabled = enabled;
                 CreatedTick = createdTick;
@@ -66,6 +67,7 @@ namespace Bun3.Gameplay.Effects
             internal int Level { get; }
             internal int Stack { get; }
             internal int RemainingTicks { get; }
+            internal int DurationTicks { get; }
             internal int PeriodCountdown { get; }
             internal bool Enabled { get; }
             internal long CreatedTick { get; }

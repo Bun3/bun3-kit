@@ -11,6 +11,51 @@ namespace Bun3.Gameplay.Tests;
 [TestFixture]
 public sealed class EffectDurationScaleTests
 {
+    [Test]
+    public void Duration_ticks_keep_the_scaled_total_while_remaining_counts_down()
+    {
+        var kit = EffectTestKit.Create();
+        var def = EffectTestKit.MinimalDuration("slow", ticks: 10);
+        def.DurationScale = new MagnitudeDef { Base = Operand.Constant(BigNum.FromParts(2, 0)) };
+        kit.AddEffect(def);
+        var pipeline = kit.BuildPipeline();
+
+        pipeline.EnqueueApply(kit.EffectId("slow"), kit.Attacker.Id, kit.Defender.Id);
+        pipeline.Tick();
+        pipeline.Tick();
+
+        var info = kit.Defender.GetActiveEffect(0);
+        Assert.That(info.DurationTicks, Is.EqualTo(20));
+        Assert.That(info.RemainingTicks, Is.EqualTo(19));
+        Assert.That(info.EffectId, Is.EqualTo(kit.EffectId("slow")));
+        Assert.That(info.Source, Is.EqualTo(kit.Attacker.Id));
+        Assert.That(kit.Defender.TryGetActiveEffect(info.InstanceId, out var byId), Is.True);
+        Assert.That(byId.DurationTicks, Is.EqualTo(20));
+        Assert.That(kit.Defender.TryGetActiveEffect(info.InstanceId + 1000, out _), Is.False);
+    }
+
+    [Test]
+    public void Extending_a_duration_sets_the_total_to_the_new_remaining()
+    {
+        var kit = EffectTestKit.Create();
+        var def = EffectTestKit.MinimalDuration("slow", ticks: 10);
+        def.Stack.OnReapply = StackReapply.ExtendCapped;
+        kit.AddEffect(def);
+        var pipeline = kit.BuildPipeline();
+
+        pipeline.EnqueueApply(kit.EffectId("slow"), kit.Attacker.Id, kit.Defender.Id);
+        pipeline.Tick();
+        for (var i = 0; i < 4; i++) pipeline.Tick();
+        pipeline.EnqueueApply(kit.EffectId("slow"), kit.Attacker.Id, kit.Defender.Id);
+        pipeline.Tick();
+
+        // remaining 6 + new 10 = 16, capped at floor(10 x 1.3) = 13; the merge drains before the same
+        // tick's time phase, so remaining shows 12 while the total stays at the new lifetime's 13.
+        var info = kit.Defender.GetActiveEffect(0);
+        Assert.That(info.RemainingTicks, Is.EqualTo(12));
+        Assert.That(info.DurationTicks, Is.EqualTo(13));
+    }
+
     // ---- G3: DurationPerLevel ----
 
     [Test]
