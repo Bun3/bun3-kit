@@ -91,7 +91,7 @@ public sealed class WorldTests
     }
 
     [Test]
-    public void Spawning_a_duplicate_id_is_rejected()
+    public void Spawning_a_registered_id_throws_at_the_call_and_the_world_keeps_ticking()
     {
         var kit = EffectTestKit.Create();
         kit.AddEffect(EffectTestKit.MinimalInstant("noop"));
@@ -99,9 +99,21 @@ public sealed class WorldTests
         world.Spawn(MakeUnit(kit, 1));
         world.Tick();
 
-        world.Spawn(MakeUnit(kit, 1));
+        Assert.That(() => world.Spawn(MakeUnit(kit, 1)), Throws.InvalidOperationException);
+        Assert.That(() => world.Tick(), Throws.Nothing);
+        Assert.That(world.UnitCount, Is.EqualTo(1));
+    }
 
-        Assert.That(() => world.Tick(), Throws.InvalidOperationException);
+    [Test]
+    public void Spawning_an_id_already_queued_this_frame_throws()
+    {
+        var kit = EffectTestKit.Create();
+        kit.AddEffect(EffectTestKit.MinimalInstant("noop"));
+        var world = MakeWorld(kit);
+
+        world.Spawn(MakeUnit(kit, 5));
+
+        Assert.That(() => world.Spawn(MakeUnit(kit, 5)), Throws.InvalidOperationException);
     }
 
     [Test]
@@ -281,7 +293,7 @@ public sealed class WorldTests
     }
 
     [Test]
-    public void Flushing_the_structural_queue_is_atomic_on_a_mid_queue_duplicate()
+    public void A_rejected_duplicate_spawn_keeps_the_valid_queued_spawns()
     {
         var kit = EffectTestKit.Create();
         kit.AddEffect(EffectTestKit.MinimalInstant("noop"));
@@ -290,10 +302,10 @@ public sealed class WorldTests
         world.Tick();
 
         world.Spawn(MakeUnit(kit, 2));
-        world.Spawn(MakeUnit(kit, 1));
+        Assert.That(() => world.Spawn(MakeUnit(kit, 1)), Throws.InvalidOperationException);
+        world.Tick();
 
-        Assert.That(() => world.Tick(), Throws.InvalidOperationException);
-        Assert.That(world.UnitCount, Is.EqualTo(1), "a failed flush must not partially apply the queue");
-        Assert.That(world.TryGetUnit(new TargetId(2), out _), Is.False);
+        Assert.That(world.UnitCount, Is.EqualTo(2));
+        Assert.That(world.TryGetUnit(new TargetId(2), out _), Is.True);
     }
 }

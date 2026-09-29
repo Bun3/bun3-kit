@@ -114,9 +114,14 @@ namespace Bun3.Gameplay
         /// <see cref="Tick"/>, in the order this call takes relative to other queued spawns and
         /// despawns.</summary>
         /// <param name="unit">Unit to register.</param>
+        /// <exception cref="InvalidOperationException">Thrown when the id will already be registered at
+        /// this point in the queue — registered and not queued for despawn, or already queued for
+        /// spawn. The rejected call leaves the queue untouched.</exception>
         public void Spawn(Unit unit)
         {
             if (unit is null) throw new ArgumentNullException(nameof(unit));
+            if (WillBeRegistered(unit.Id))
+                throw new InvalidOperationException($"Unit id {unit.Id.Value} is already registered.");
             _pendingOps.Add((unit, unit.Id));
         }
 
@@ -186,17 +191,11 @@ namespace Bun3.Gameplay
             Pipeline.NextInstanceId = snapshot.NextInstanceId;
         }
 
-        /// <summary>
-        /// Applies the pending queue in call order. Validates the whole queue against a scratch id
-        /// set first — spawning an id that is already present at that point in the sequence throws
-        /// without mutating the registry and without clearing the queue, so the caller can inspect
-        /// and retry. Only once validation passes is the queue replayed against the real registry.
-        /// </summary>
+        /// <summary>Applies the pending queue in call order. <see cref="Spawn"/> already rejected every
+        /// duplicate, so replaying the queue cannot fail.</summary>
         private void FlushStructuralChanges()
         {
             if (_pendingOps.Count == 0) return;
-
-            ValidatePendingOps();
 
             for (var i = 0; i < _pendingOps.Count; i++)
             {
@@ -219,23 +218,16 @@ namespace Bun3.Gameplay
             _pendingOps.Clear();
         }
 
-        private void ValidatePendingOps()
+        // ponytail: linear scan of the pending queue, O(M^2) for M spawns in one frame; add a pending-id
+        // set if mass spawns show up in profiles.
+        private bool WillBeRegistered(TargetId id)
         {
-            var scratch = new HashSet<ulong>();
-            for (var i = 0; i < _unitIds.Count; i++) scratch.Add(_unitIds[i].Value);
-
-            for (var i = 0; i < _pendingOps.Count; i++)
+            for (var i = _pendingOps.Count - 1; i >= 0; i--)
             {
-                var op = _pendingOps[i];
-                if (op.Unit is null)
-                {
-                    scratch.Remove(op.Id.Value);
-                }
-                else if (!scratch.Add(op.Unit.Id.Value))
-                {
-                    throw new InvalidOperationException($"Unit id {op.Unit.Id.Value} is already registered.");
-                }
+                if (_pendingOps[i].Id == id) return _pendingOps[i].Unit is not null;
             }
+
+            return IndexOf(id) >= 0;
         }
 
         private int IndexOf(TargetId id)
