@@ -582,6 +582,20 @@ Build했을 때 시나리오 해시가 일치.
 **무할당 스모크**: 정착 상태 틱 반복 + 이벤트 발행 경로에서
 `GC.GetAllocatedBytesForCurrentThread` == 0. 발동·스폰 순간은 풀 왕복만 허용.
 
+**틱 경계·관찰 API(§16)**:
+- 명령 큐: 틱 밖에서는 아무것도 반영되지 않음, 종류가 달라도 호출 순서 보존, 처리 중 적재된 명령은
+  다음 틱, 대기 명령이 있으면 스냅샷 거부
+- 경계 입력: 같은 프레임 디스폰 뒤 발동 → `UnknownUnit`, 미선언 코스트 속성 → `CostInsufficient`,
+  미지 유닛·미선언 속성 대상 제거·Base 쓰기 → 무시(예외 없음)
+- `CanActivateAbility` 무부작용, 같은 틱 두 번째 발동이 코스트·쿨다운에 막힘
+- 쿨다운: BlockedTags 없이 `OnCooldown`, 공유 쿨다운 태그 게이트와 `TryGetCooldown`(30/30), 태그 없는
+  쿨다운 이펙트 Build 오류, 쿨다운 20% 감소 반지 합격선(100 → 80틱)
+- 관찰: `ActiveEffectInfo`·`DurationTicks`(스케일·연장·스냅샷 왕복), `PendingGameplayEvents`,
+  수명 이벤트 `Source`·`Level`, `AbilitySet.GetGrant`·`Version`
+- 버퍼 수명: 틱 뒤 버퍼 = 정확히 그 틱의 출력(스폰 전 초기화 제외, 명령 처리 이벤트 포함), 단독 파이프라인도
+  다음 틱에 비움
+- 무할당 스모크: 발동·적용·Base 쓰기·태그 제거 명령 + 관찰 읽기 반복이 정착 후 0바이트
+
 ## 13. 명명 컨벤션
 
 Effect 도메인 명명 정리(`EffectSpec`→`EffectDef` 등)와 남은 세 건의 리네임을 거치며 굳은
@@ -639,6 +653,8 @@ Effect 도메인 명명 정리(`EffectSpec`→`EffectDef` 등)와 남은 세 건
 | `IAbilityBehavior` 시섬 | 실수요 시 — §7.1 |
 | `Bun3.Server.Items`의 `ItemCatalog`/`ItemInstance`와 게임플레이 아이템 계층 이름 충돌 | §13 참조 — 슬라이스 4 착수 전 결정 |
 | `Parsed<Domain>` 계층의 일반화 여부 | §13 참조 |
+| 명령에 틱 번호 스탬프(과거·미래 틱 명령 거부 — idlez 입력 방식) | 슬라이스 5 복제 — 클라 예측·서버 검증에 필요 |
+| 면역·DR로 무효화된 적용의 관찰 이벤트 | 실수요 시 — §16.6 |
 
 ## 15. 버전
 

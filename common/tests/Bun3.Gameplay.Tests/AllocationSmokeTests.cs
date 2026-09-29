@@ -154,7 +154,7 @@ public class AllocationSmokeTests
     [Test]
     public void Settled_world_tick_with_event_listeners_allocates_nothing()
     {
-        var (world, _, _, _) = BuildWorldWithEventListeners();
+        var (world, _, _, _, _) = BuildWorldWithEventListeners();
 
         // Settle: both units already carry an active "Listener" instance from setup; run enough
         // idle ticks that every phase (RebuildAll/EvaluateOngoing/RebuildToggled) has walked them
@@ -170,9 +170,43 @@ public class AllocationSmokeTests
     }
 
     [Test]
+    public void Queued_commands_and_observation_reads_allocate_nothing_in_steady_state()
+    {
+        var (world, damageEffectId, attackerId, defenderId, strikeId) = BuildWorldWithEventListeners();
+        world.TryGetUnit(attackerId, out var attacker);
+        var cooldownTag = attacker!.Tags.Catalog.GetRequired("cooldown.fireball");
+
+        // Warm-up grows every buffer these paths touch to its steady capacity before measuring.
+        for (var i = 0; i < 10; i++) DriveCommandTick(world, damageEffectId, attackerId, defenderId, strikeId, attacker, cooldownTag);
+
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        for (var i = 0; i < 100; i++) DriveCommandTick(world, damageEffectId, attackerId, defenderId, strikeId, attacker, cooldownTag);
+        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+
+        Assert.That(allocated, Is.Zero, "queued commands or observation reads allocated on the heap");
+    }
+
+    private static long DriveCommandTick(
+        World world, int damageEffectId, TargetId attackerId, TargetId defenderId, int strikeId, Unit attacker,
+        GameplayTag cooldownTag)
+    {
+        world.EnqueueActivation(attackerId, strikeId);
+        world.EnqueueApply(damageEffectId, attackerId, defenderId);
+        world.EnqueueSetBase(attackerId, EffectTestKit.Mp, 1_000);
+        world.EnqueueRemoveByTag(attackerId, cooldownTag);
+        world.Tick();
+
+        long sink = world.PendingActivations.Length + world.Pipeline.PendingGameplayEvents.Length;
+        for (var i = 0; i < attacker.Effects.ActiveEffectCount; i++) sink += attacker.Effects.GetActiveEffect(i).RemainingTicks;
+        world.TryGetCooldown(attackerId, strikeId, out var remaining, out _);
+        sink += remaining + (int)world.CanActivateAbility(attackerId, strikeId);
+        return sink;
+    }
+
+    [Test]
     public void Raising_events_on_a_settled_world_allocates_nothing()
     {
-        var (world, damageEffectId, attackerId, defenderId) = BuildWorldWithEventListeners();
+        var (world, damageEffectId, attackerId, defenderId, _) = BuildWorldWithEventListeners();
 
         // Settle by pumping the exact operation under measurement (apply -> event -> OnEvent chain
         // -> counter-application) 10 times first. Every buffer this path touches — the pipeline's
@@ -202,7 +236,7 @@ public class AllocationSmokeTests
     // applying Damage to either raises event.damage.taken and fires a counter-application (Echo)
     // back onto the attacker via the built-in EventSource selector — real event dispatch, not a
     // no-op catalog.
-    private static (World World, int DamageEffectId, TargetId AttackerId, TargetId DefenderId) BuildWorldWithEventListeners()
+    private static (World World, int DamageEffectId, TargetId AttackerId, TargetId DefenderId, int StrikeId) BuildWorldWithEventListeners()
     {
         var tags = EffectTestKit.LoadCatalog();
         var attributes = EffectTestKit.BuildAttributeRegistry();
@@ -253,8 +287,25 @@ public class AllocationSmokeTests
                 },
             },
         });
+        effectBuilder.Add(new EffectDef
+        {
+            Name = "StrikeCooldown",
+            DurationType = EffectDurationType.Duration,
+            DurationTicks = 1,
+            GrantedTags = { "cooldown.fireball" },
+            AssetTags = { "cooldown.fireball" },
+        });
         var effects = effectBuilder.Build(tags, seams, attributes);
-        var abilities = new AbilityCatalogBuilder().Build(tags, seams, attributes, effects);
+        var abilityBuilder = new AbilityCatalogBuilder();
+        abilityBuilder.Add(new AbilityDef
+        {
+            Name = "Strike",
+            MaxLevel = 1,
+            CooldownEffect = "StrikeCooldown",
+            Costs = { new CostDef { AttributeId = EffectTestKit.Mp, Magnitude = new MagnitudeDef { Base = Operand.Constant(1) } } },
+            Effects = { new AbilityEffectDef { EffectName = "Damage" } },
+        });
+        var abilities = abilityBuilder.Build(tags, seams, attributes, effects);
 
         var world = new World(effects, abilities, new XorShiftRng(1));
         Span<ushort> attributeIds = stackalloc ushort[]
@@ -265,10 +316,12 @@ public class AllocationSmokeTests
         var defender = new Unit(new TargetId(2), attributes, attributeIds, tags);
         attacker.Attributes.SetBase(EffectTestKit.MaxHp, 10_000);
         attacker.Attributes.SetBase(EffectTestKit.Hp, 10_000);
+        attacker.Attributes.SetBase(EffectTestKit.Mp, 1_000);
         defender.Attributes.SetBase(EffectTestKit.MaxHp, 10_000);
         defender.Attributes.SetBase(EffectTestKit.Hp, 10_000);
         world.Spawn(attacker);
         world.Spawn(defender);
+        attacker.Abilities.Grant(abilities.GetRequiredId("Strike"), GrantSource.Archetype(), level: 1);
         world.Tick();
 
         var listenerEffectId = effects.GetRequiredId("Listener");
@@ -276,6 +329,6 @@ public class AllocationSmokeTests
         world.Pipeline.EnqueueApply(listenerEffectId, defender.Id, defender.Id);
         world.Tick();
 
-        return (world, effects.GetRequiredId("Damage"), attacker.Id, defender.Id);
+        return (world, effects.GetRequiredId("Damage"), attacker.Id, defender.Id, abilities.GetRequiredId("Strike"));
     }
 }
