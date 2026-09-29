@@ -165,20 +165,20 @@ namespace Bun3.Gameplay.Seams
         private readonly ReadOnlySpan<BigNum> _params;
         private readonly IEffectTargetResolver _resolver;
 
+        // evt is default outside an event path, which leaves every Event* member at its default.
         internal SelectorContext(
             TargetId source, TargetId origin, ReadOnlySpan<BigNum> parameters, IRng rng,
-            IEffectTargetResolver resolver, TargetId eventSource, TargetId eventTarget,
-            BigNum eventMagnitude, BigNum eventNominalMagnitude)
+            IEffectTargetResolver resolver, in GameplayEvent evt)
         {
             Source = source;
             Origin = origin;
             _params = parameters;
             Rng = rng;
             _resolver = resolver;
-            EventSource = eventSource;
-            EventTarget = eventTarget;
-            EventMagnitude = eventMagnitude;
-            EventNominalMagnitude = eventNominalMagnitude;
+            EventSource = evt.Source;
+            EventTarget = evt.Target;
+            EventMagnitude = evt.Magnitude;
+            EventNominalMagnitude = evt.NominalMagnitude;
         }
 
         /// <summary>Source that triggered the selection.</summary>

@@ -4,7 +4,6 @@ using System;
 using Bun3.Gameplay.Abilities;
 using Bun3.Gameplay.Effects;
 using Bun3.Gameplay.Numerics;
-using Bun3.Gameplay.Seams;
 using Bun3.Gameplay.Tags;
 
 namespace Bun3.Gameplay
@@ -150,31 +149,13 @@ namespace Bun3.Gameplay
 
         private void ApplyAbilityEffects(CompiledAbility ability, TargetId unitId, int level)
         {
-            // ponytail: target counts are authoring-effect scale, so a 32-slot stack buffer suffices -- on overflow only the first 32 are applied.
-            Span<TargetId> targets = stackalloc TargetId[32];
-
             var effects = ability.Effects;
             for (var i = 0; i < effects.Length; i++)
             {
                 var entry = effects[i];
                 var effectLevel = entry.LevelRule == ChainLevelRule.Inherit ? level : entry.FixedLevel;
-
-                if (entry.Selector is null)
-                {
-                    Pipeline.EnqueueApply(entry.EffectId, unitId, unitId, effectLevel);
-                    continue;
-                }
-
-                var ctx = new SelectorContext(
-                    unitId, unitId, entry.SelectorParams, Pipeline.Rng, this,
-                    eventSource: default, eventTarget: default,
-                    eventMagnitude: BigNum.Zero, eventNominalMagnitude: BigNum.Zero);
-                var count = Pipeline.SelectTargets(entry.Selector, in ctx, targets);
-
-                for (var k = 0; k < count; k++)
-                {
-                    Pipeline.EnqueueApply(entry.EffectId, unitId, targets[k], effectLevel);
-                }
+                Pipeline.ApplyToSelection(
+                    entry.Selector, entry.SelectorParams, entry.EffectId, unitId, unitId, effectLevel, default);
             }
         }
     }

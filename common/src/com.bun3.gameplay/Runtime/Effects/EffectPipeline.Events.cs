@@ -1,6 +1,5 @@
 #nullable enable
 using System;
-using Bun3.Gameplay.Numerics;
 using Bun3.Gameplay.Seams;
 
 namespace Bun3.Gameplay.Effects
@@ -75,30 +74,9 @@ namespace Bun3.Gameplay.Effects
             var chainLevel = chain.LevelRule == ChainLevelRule.Inherit ? instance.Level : chain.FixedLevel;
             EventChainFireCount++;
 
-            if (chain.Selector is null)
-            {
-                EnqueueApplyWithEvent(chain.EffectId, source, listenerId, chainLevel, in evt);
-                return;
-            }
-
-            // ponytail: target counts are authoring-effect scale, so a 32-slot stack buffer suffices -- on overflow only the first 32 are applied.
-            Span<TargetId> targets = stackalloc TargetId[32];
-            var selectorCtx = new SelectorContext(
-                source, listenerId, chain.SelectorParams, _rng, _resolver,
-                evt.Source, evt.Target, evt.Magnitude, evt.NominalMagnitude);
-            var count = SelectTargets(chain.Selector, in selectorCtx, targets);
-
-            for (var k = 0; k < count; k++)
-            {
-                EnqueueApplyWithEvent(chain.EffectId, source, targets[k], chainLevel, in evt);
-            }
+            // The event magnitude travels exactly one hop: into the effect this chain applies directly.
+            // That effect's own chains go through FireChain with no event, so they enqueue zero.
+            ApplyToSelection(chain.Selector, chain.SelectorParams, chain.EffectId, source, listenerId, chainLevel, in evt);
         }
-
-        // The event magnitude travels exactly one hop: into the effect this OnEvent chain applies
-        // directly. Anything that effect's own chains apply in turn goes through FireChain, which always
-        // enqueues BigNum.Zero.
-        private void EnqueueApplyWithEvent(
-            int effectId, TargetId source, TargetId target, int level, in GameplayEvent evt) =>
-            EnqueueApply(effectId, source, target, level, evt.Magnitude);
     }
 }

@@ -653,31 +653,37 @@ namespace Bun3.Gameplay.Effects
                 if (!EvaluateConditions(chain.Conditions, originTarget, sourceTarget, hasSource, BigNum.Zero)) continue;
 
                 var chainLevel = chain.LevelRule == ChainLevelRule.Inherit ? level : chain.FixedLevel;
-
-                if (chain.Selector is null)
-                {
-                    EnqueueApply(chain.EffectId, source, originTargetId, chainLevel);
-                    continue;
-                }
-
-                // ponytail: target counts are authoring-effect scale, so a 32-slot stack buffer suffices — on overflow only the first 32 are applied.
-                Span<TargetId> targets = stackalloc TargetId[32];
-                var selectorCtx = new SelectorContext(
-                    source, originTargetId, chain.SelectorParams, _rng, _resolver,
-                    eventSource: default, eventTarget: default, eventMagnitude: BigNum.Zero, eventNominalMagnitude: BigNum.Zero);
-                var count = SelectTargets(chain.Selector, in selectorCtx, targets);
-
-                for (var k = 0; k < count; k++)
-                {
-                    EnqueueApply(chain.EffectId, source, targets[k], chainLevel);
-                }
+                ApplyToSelection(
+                    chain.Selector, chain.SelectorParams, chain.EffectId, source, originTargetId, chainLevel, default);
             }
         }
 
-        // Shared selector-invocation step for FireChain, FireEventChain, and World ability activation:
-        // calls Select, counts truncation when the reported total exceeds the buffer, and returns the
-        // clamped count actually written into results.
-        internal int SelectTargets(ITargetSelector selector, in SelectorContext ctx, Span<TargetId> results)
+        // The dispatch step shared by chain edges, event chains and ability effects: without a selector the
+        // effect goes to the origin, otherwise to every selected target. evt is default outside an event
+        // path; its magnitude rides along into the applied effect (one hop only).
+        internal void ApplyToSelection(
+            ITargetSelector? selector, ReadOnlySpan<BigNum> selectorParams, int effectId, TargetId source,
+            TargetId origin, int level, in GameplayEvent evt)
+        {
+            if (selector is null)
+            {
+                EnqueueApply(effectId, source, origin, level, evt.Magnitude);
+                return;
+            }
+
+            // ponytail: target counts are authoring-effect scale, so a 32-slot stack buffer suffices — on overflow only the first 32 are applied.
+            Span<TargetId> targets = stackalloc TargetId[32];
+            var ctx = new SelectorContext(source, origin, selectorParams, _rng, _resolver, in evt);
+            var count = SelectTargets(selector, in ctx, targets);
+            for (var k = 0; k < count; k++)
+            {
+                EnqueueApply(effectId, source, targets[k], level, evt.Magnitude);
+            }
+        }
+
+        // Counts truncation when a selector's reported total exceeds the buffer and returns the clamped
+        // count actually written into results.
+        private int SelectTargets(ITargetSelector selector, in SelectorContext ctx, Span<TargetId> results)
         {
             var selected = selector.Select(in ctx, results);
             if (selected <= results.Length) return selected;

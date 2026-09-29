@@ -155,7 +155,7 @@ public sealed class SeamRegistryTests
 
         var selectorCtx = new SelectorContext(
             new TargetId(1), new TargetId(1), System.Array.Empty<BigNum>(), new XorShiftRng(1), new EmptyResolver(),
-            eventSource: default, eventTarget: default, eventMagnitude: BigNum.Zero, eventNominalMagnitude: BigNum.Zero);
+            default(GameplayEvent));
         var returned = selector.Select(in selectorCtx, buffer);
 
         Assert.That(returned, Is.EqualTo(40), "AllTargetsSelector should return total count (40), not written count (32)");
