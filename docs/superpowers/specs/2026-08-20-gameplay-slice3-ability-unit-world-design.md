@@ -424,6 +424,11 @@ AbilityDef "Fireball"
 `DurationScale`(G3)이 이미 `MagnitudeDef`이고 적용 시 1회 평가하며 Operand가 대상(= 시전자)
 속성을 읽으므로 **추가 기계가 0개**다.
 
+이 속성은 감소량이 아니라 **배율**이다 — `DurationScale`이 지속시간에 그대로 곱해지므로
+게임이 유닛마다 Base를 1로 초기화해야 한다. 속성 Base 기본값은 0이라, 초기화를 빠뜨리면
+쿨다운이 최소치 1틱으로 조용히 줄어든다. 합격선 테스트:
+`AbilityActivationTests.A_twenty_percent_cooldown_reduction_ring_is_pure_data`.
+
 쿨다운 초기화·단축은 기존 `RemoveByTags(cooldown.*)`로 커버된다.
 
 ### 7.4 AbilitySet과 부여 소스
