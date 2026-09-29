@@ -702,6 +702,12 @@ namespace Bun3.Gameplay.Tests
                 _ids = ids;
             }
 
+            public EffectTarget TargetAt(int index)
+            {
+                TryResolve(_ids[index], out var target);
+                return target!;
+            }
+
             public bool TryResolve(TargetId id, out EffectTarget? target)
             {
                 for (var i = 0; i < _targets.Length; i++)

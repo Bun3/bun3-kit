@@ -225,6 +225,8 @@ internal sealed class EffectTestKit
         public bool TryResolve(TargetId id, out EffectTarget? target) => _targets.TryGetValue(id.Value, out target);
 
         public IReadOnlyList<TargetId> TargetIds => _ids;
+
+        public EffectTarget TargetAt(int index) => _targets[_ids[index].Value];
     }
 
     /// <summary>Test execution calc that subtracts Input(0) from the target's Hp.</summary>

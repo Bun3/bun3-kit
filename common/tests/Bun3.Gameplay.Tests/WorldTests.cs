@@ -41,6 +41,23 @@ public sealed class WorldTests
     }
 
     [Test]
+    public void Target_at_an_index_is_the_target_resolved_from_the_id_at_that_index()
+    {
+        var kit = EffectTestKit.Create();
+        var world = MakeWorld(kit);
+        world.Spawn(MakeUnit(kit, 30));
+        world.Spawn(MakeUnit(kit, 10));
+        world.Spawn(MakeUnit(kit, 20));
+        world.Tick();
+
+        for (var i = 0; i < world.TargetIds.Count; i++)
+        {
+            world.TryResolve(world.TargetIds[i], out var resolved);
+            Assert.That(world.TargetAt(i), Is.SameAs(resolved));
+        }
+    }
+
+    [Test]
     public void Registry_and_target_ids_stay_in_ascending_order()
     {
         var kit = EffectTestKit.Create();

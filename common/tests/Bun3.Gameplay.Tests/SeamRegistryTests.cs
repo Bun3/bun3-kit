@@ -141,6 +141,8 @@ public sealed class SeamRegistryTests
         }
 
         public System.Collections.Generic.IReadOnlyList<TargetId> TargetIds => System.Array.Empty<TargetId>();
+
+        public EffectTarget TargetAt(int index) => throw new System.ArgumentOutOfRangeException(nameof(index));
     }
 
     [Test]

@@ -216,6 +216,30 @@ namespace Bun3.Gameplay.Seams
         /// <param name="index">Index into the candidate list.</param>
         public TargetId CandidateAt(int index) => _resolver.TargetIds[index];
 
+        /// <summary>Owned tags of the candidate at <paramref name="index"/> — an O(1) read for candidate scans.</summary>
+        /// <param name="index">Index into the candidate list.</param>
+        /// <returns>Owned-tag container of that candidate.</returns>
+        public TagCountContainer CandidateTagsAt(int index) => _resolver.TargetAt(index).Tags;
+
+        /// <summary>Reads the Current value of an attribute of the candidate at <paramref name="index"/> —
+        /// an O(1) read for candidate scans.</summary>
+        /// <param name="index">Index into the candidate list.</param>
+        /// <param name="attributeId">Attribute id to read.</param>
+        /// <param name="value">Current value; <see cref="BigNum.Zero"/> when the candidate does not declare it.</param>
+        /// <returns>True when the candidate declares that attribute.</returns>
+        public bool TryGetCandidateAttributeAt(int index, ushort attributeId, out BigNum value)
+        {
+            var attributes = _resolver.TargetAt(index).Attributes;
+            if (attributes.Has(attributeId))
+            {
+                value = attributes.GetCurrent(attributeId);
+                return true;
+            }
+
+            value = BigNum.Zero;
+            return false;
+        }
+
         /// <summary>Reads a candidate's owned tags.</summary>
         /// <param name="id">Candidate target id.</param>
         /// <param name="tags">Owned-tag container of that candidate.</param>

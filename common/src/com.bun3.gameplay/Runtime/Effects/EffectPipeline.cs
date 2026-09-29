@@ -150,10 +150,10 @@ namespace Bun3.Gameplay.Effects
         internal void ClearObservationBuffers()
         {
             _gameplayEventCount = 0;
-            var targetIds = _resolver.TargetIds;
-            for (var i = 0; i < targetIds.Count; i++)
+            var count = _resolver.TargetIds.Count;
+            for (var i = 0; i < count; i++)
             {
-                if (!_resolver.TryResolve(targetIds[i], out var target) || target is null) continue;
+                var target = _resolver.TargetAt(i);
                 target.ClearEffectEvents();
                 target.Attributes.ClearChanges();
             }
@@ -924,10 +924,10 @@ namespace Bun3.Gameplay.Effects
         // carry over to the next tick since this tick's phase 1 has already passed.
         private void AdvanceTime()
         {
-            var targetIds = _resolver.TargetIds;
-            for (var t = 0; t < targetIds.Count; t++)
+            var count = _resolver.TargetIds.Count;
+            for (var t = 0; t < count; t++)
             {
-                if (!_resolver.TryResolve(targetIds[t], out var target) || target is null) continue;
+                var target = _resolver.TargetAt(t);
 
                 var active = target.ActiveEffects;
                 _expiryScratch.Clear();
@@ -1031,13 +1031,10 @@ namespace Bun3.Gameplay.Effects
 
         private void RebuildDirtyAttributes()
         {
-            var targetIds = _resolver.TargetIds;
-            for (var t = 0; t < targetIds.Count; t++)
+            var count = _resolver.TargetIds.Count;
+            for (var t = 0; t < count; t++)
             {
-                if (_resolver.TryResolve(targetIds[t], out var target) && target is not null)
-                {
-                    target.Attributes.RebuildDirty();
-                }
+                _resolver.TargetAt(t).Attributes.RebuildDirty();
             }
         }
 
@@ -1050,10 +1047,10 @@ namespace Bun3.Gameplay.Effects
         // so Add/Remove are symmetric.
         private void EvaluateOngoing()
         {
-            var targetIds = _resolver.TargetIds;
-            for (var t = 0; t < targetIds.Count; t++)
+            var count = _resolver.TargetIds.Count;
+            for (var t = 0; t < count; t++)
             {
-                if (!_resolver.TryResolve(targetIds[t], out var target) || target is null) continue;
+                var target = _resolver.TargetAt(t);
 
                 var active = target.ActiveEffects;
                 for (var i = 0; i < active.Count; i++)

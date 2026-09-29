@@ -64,6 +64,8 @@ namespace Bun3.Gameplay
 
         private void OnEffectAbilityGrant(EffectTarget target, EffectInstance instance, bool granting)
         {
+            var ids = _grantedAbilityIds[instance.EffectId];
+            if (ids.Length == 0) return;
             if (!TryGetUnit(target.Id, out var unit) || unit is null) return;
 
             var source = GrantSource.Effect(instance.Id);
@@ -73,7 +75,6 @@ namespace Bun3.Gameplay
                 return;
             }
 
-            var ids = _grantedAbilityIds[instance.EffectId];
             for (var i = 0; i < ids.Length; i++)
             {
                 unit.Abilities.Grant(ids[i], source, instance.Level);
@@ -98,6 +99,11 @@ namespace Bun3.Gameplay
 
         /// <summary>Registered unit ids, ascending.</summary>
         public IReadOnlyList<TargetId> TargetIds => _unitIds;
+
+        /// <summary>Effect target of the unit whose id is <c>TargetIds[index]</c>.</summary>
+        /// <param name="index">Index in [0, <see cref="UnitCount"/>).</param>
+        /// <returns>The unit's effect target.</returns>
+        public EffectTarget TargetAt(int index) => _units[index].Effects;
 
         /// <summary>Resolves a unit's effect target by id.</summary>
         /// <param name="id">Target id to resolve.</param>

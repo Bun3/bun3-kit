@@ -29,6 +29,56 @@ public sealed class TargetSelectorTests
         }
     }
 
+    private sealed class IndexScanSelector : ITargetSelector
+    {
+        internal readonly List<BigNum> HpByIndex = new List<BigNum>();
+        internal readonly List<bool> TagsByIndex = new List<bool>();
+
+        public int Select(in SelectorContext ctx, Span<TargetId> results)
+        {
+            for (var i = 0; i < ctx.CandidateCount; i++)
+            {
+                ctx.TryGetCandidateAttributeAt(i, EffectTestKit.Hp, out var hp);
+                HpByIndex.Add(hp);
+                TagsByIndex.Add(ctx.CandidateTagsAt(i) != null);
+            }
+
+            return 0;
+        }
+    }
+
+    [Test]
+    public void Candidates_are_readable_by_index_in_candidate_order()
+    {
+        var kit = EffectTestKit.Create();
+        var selector = new IndexScanSelector();
+        kit.RegisterSelector("selector.everyone", selector);
+
+        var source = EffectTestKit.MinimalInstant("source");
+        var edge = EffectTestKit.Edge(ChainTrigger.OnApplication, "chained");
+        edge.SelectorTag = "selector.everyone";
+        source.Chains.Add(edge);
+        kit.AddEffect(source);
+        kit.AddEffect(EffectTestKit.MinimalInstant("chained"));
+        var pipeline = kit.BuildPipeline();
+
+        var hp = 10;
+        var expected = new SortedDictionary<ulong, BigNum>();
+        foreach (var target in kit.AllTargets)
+        {
+            target.Attributes.SetBase(EffectTestKit.MaxHp, 1000);
+            target.Attributes.SetBase(EffectTestKit.Hp, hp);
+            expected[target.Id.Value] = hp;
+            hp += 10;
+        }
+
+        pipeline.EnqueueApply(kit.EffectId("source"), kit.Attacker.Id, kit.Defender.Id);
+        pipeline.Tick();
+
+        Assert.That(selector.HpByIndex, Is.EqualTo(new List<BigNum>(expected.Values)));
+        Assert.That(selector.TagsByIndex, Has.All.True);
+    }
+
     [Test]
     public void Selector_sees_all_candidates_in_ascending_order_plus_origin_and_attributes()
     {

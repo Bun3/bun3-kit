@@ -17,5 +17,11 @@ namespace Bun3.Gameplay.Effects
 
         /// <summary>All target ids known to this resolver. Ascending order is a contract.</summary>
         IReadOnlyList<TargetId> TargetIds { get; }
+
+        /// <summary>The target whose id is <c>TargetIds[index]</c>. Tick phases and selector candidate scans
+        /// walk targets by index through this, so it should be O(1).</summary>
+        /// <param name="index">Index in [0, <c>TargetIds.Count</c>).</param>
+        /// <returns>The target at that index.</returns>
+        EffectTarget TargetAt(int index);
     }
 }
