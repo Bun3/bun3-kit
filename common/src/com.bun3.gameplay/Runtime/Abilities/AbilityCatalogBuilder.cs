@@ -60,9 +60,7 @@ namespace Bun3.Gameplay.Abilities
             return new AbilityCatalog(compiled, nameToId);
         }
 
-        // Every EffectDef.GrantedAbilities entry must name an ability in this catalog. Checked here
-        // (not at World construction) so the failure carries the same Build-time, name-based message
-        // shape as every other cross-reference in this library.
+        // Every EffectDef.GrantedAbilities entry must name an ability in this catalog.
         private static void ValidateGrantedAbilitiesResolve(EffectCatalog effects, Dictionary<string, int> nameToId)
         {
             for (var effectId = 0; effectId < effects.Count; effectId++)

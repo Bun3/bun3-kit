@@ -206,6 +206,8 @@ UnitSnapshot { EffectTargetSnapshot Effects; AbilitySetSnapshot Abilities; ulong
 
 ## 5. World
 
+> **§16 개정**: 발동은 `TryActivateAbility` 동기 반환이 아니라 World 명령 큐(`Enqueue*`)로 바뀌었고, 틱 순서에 ⓪-1 버퍼 비움·⓪-2 명령 처리가 들어갔다. 이 절의 World API·틱 서술은 §16이 대체한다.
+
 ```
 World : IEffectTargetResolver
 ├─ Unit 레지스트리 (TargetId 오름차순 — resolver 계약)

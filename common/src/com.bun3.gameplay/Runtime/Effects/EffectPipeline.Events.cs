@@ -1,12 +1,12 @@
+// EffectPipeline partial — gameplay event emission and OnEvent chain routing.
 #nullable enable
 using System;
 using Bun3.Gameplay.Seams;
 
 namespace Bun3.Gameplay.Effects
 {
-    // Gameplay event emission and OnEvent chain routing. Events are never queued: a raise walks the
-    // listeners immediately and enqueues applications, so cycles are bounded by the same per-tick
-    // apply budget as any other chain and no re-entry is possible.
+    // Events are never queued: a raise walks the listeners immediately and enqueues applications, so
+    // cycles are bounded by the same per-tick apply budget as any other chain and no re-entry is possible.
     public sealed partial class EffectPipeline
     {
         /// <summary>Number of OnEvent chain edges that fired.</summary>

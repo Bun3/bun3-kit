@@ -16,7 +16,9 @@ namespace Bun3.Gameplay.Effects
     /// decrement, expiry; fires OnCompleteNormal chains) → (3) <see cref="RebuildAll"/> (rebuilds slots
     /// marked dirty by 1–2) → (4) <see cref="EvaluateOngoing"/> (ongoing-condition toggles) →
     /// (5) <see cref="RebuildToggled"/> (rebuilds slots marked dirty by 4) → (6) event finalization
-    /// (no pipeline work — the game drains the lifecycle/attribute-change event buffers itself).
+    /// (no pipeline work — observation buffers are read after the tick and cleared when the next one
+    /// starts). Composed of this file plus <c>EffectPipeline.Events.cs</c> (gameplay event emission and
+    /// OnEvent chain routing).
     /// </summary>
     public sealed partial class EffectPipeline
     {
@@ -127,8 +129,9 @@ namespace Bun3.Gameplay.Effects
                 magnitude.Base, magnitude.PerLevel, magnitude.Calc, magnitude.ByLevel, magnitude.Tail, magnitude.Increment,
                 target, source, hasSource, level, stack: 1, BigNum.Zero);
 
-        // Applies one effect outside the drain loop. Must not be called from inside Tick — the drain
-        // loop owns the queue while it runs, and re-entering it would break the per-tick budget.
+        // Applies one effect outside the drain loop (World calls it while processing commands, before the
+        // phases run). Must not be called from inside the phases — the drain loop owns the queue while it
+        // runs, and re-entering it would break the per-tick budget.
         internal void ApplyImmediate(int effectId, TargetId source, TargetId target, int level) =>
             ProcessPendingApply(new PendingApply
             {
