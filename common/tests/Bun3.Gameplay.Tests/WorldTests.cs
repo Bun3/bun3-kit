@@ -126,7 +126,7 @@ public sealed class WorldTests
         for (ulong id = 1; id <= 3; id++) world.Spawn(MakeUnit(kit, id));
         world.Tick();
 
-        for (var i = 0; i < 7; i++) world.Pipeline.EnqueueApply(kit.EffectId("noop"), new TargetId(1), new TargetId(1));
+        for (var i = 0; i < 7; i++) world.EnqueueApply(kit.EffectId("noop"), new TargetId(1), new TargetId(1));
         world.Tick();
 
         Assert.That(world.Pipeline.PendingApplyCount, Is.EqualTo(1), "2 per unit x 3 units drains 6 of 7");
@@ -166,7 +166,7 @@ public sealed class WorldTests
 
         unit.Attributes.SetBase(EffectTestKit.MaxHp, 100);
         unit.Attributes.SetBase(EffectTestKit.Hp, 100);
-        world.Pipeline.EnqueueApply(kit.EffectId("hit"), new TargetId(0), unit.Id);
+        world.EnqueueApply(kit.EffectId("hit"), new TargetId(0), unit.Id);
         world.Tick();
 
         Assert.That(unit.Attributes.GetBase(EffectTestKit.Hp), Is.EqualTo((Bun3.Gameplay.Numerics.BigNum)70));
@@ -184,7 +184,7 @@ public sealed class WorldTests
         unit.Attributes.SetBase(EffectTestKit.MaxHp, 100);
         unit.Attributes.SetBase(EffectTestKit.Hp, 80);
 
-        world.Pipeline.EnqueueApply(kit.EffectId("aura"), unit.Id, unit.Id);
+        world.EnqueueApply(kit.EffectId("aura"), unit.Id, unit.Id);
         world.Tick();
         var snapshot = world.CreateSnapshot();
         var tickAtSnapshot = world.CurrentTick;
@@ -272,6 +272,7 @@ public sealed class WorldTests
         world.Spawn(MakeUnit(kit, 1));
         world.Tick();
 
+        // Direct pipeline enqueue on purpose: the only way an application is still pending outside a tick.
         world.Pipeline.EnqueueApply(kit.EffectId("noop"), new TargetId(1), new TargetId(1));
 
         Assert.That(() => world.CreateSnapshot(), Throws.InvalidOperationException);
@@ -360,6 +361,32 @@ public sealed class WorldTests
         Assert.That(unit.Attributes.PendingChanges.Length, Is.Zero);
         Assert.That(world.PendingActivations.Length, Is.Zero);
         Assert.That(world.Pipeline.PendingGameplayEvents.Length, Is.Zero);
+    }
+
+    [Test]
+    public void Gameplay_events_are_readable_from_the_world()
+    {
+        var kit = EffectTestKit.Create();
+        var bolt = EffectTestKit.MinimalInstant("bolt");
+        bolt.Modifiers.Add(new ModifierDef
+        {
+            AttributeId = EffectTestKit.Hp,
+            Op = Bun3.Gameplay.Attributes.AttributeModifierOp.Add,
+            Magnitude = new MagnitudeDef { Base = Bun3.Gameplay.Attributes.Operand.Constant(-5) },
+        });
+        bolt.RaiseEvents.Add(new RaiseEventDef { Tag = "event.damage.taken", AttributeId = EffectTestKit.Hp });
+        kit.AddEffect(bolt);
+        var world = MakeWorld(kit);
+        var unit = MakeUnit(kit, 1);
+        unit.Attributes.SetBase(EffectTestKit.MaxHp, 100);
+        unit.Attributes.SetBase(EffectTestKit.Hp, 100);
+        world.Spawn(unit);
+
+        world.EnqueueApply(kit.EffectId("bolt"), unit.Id, unit.Id);
+        world.Tick();
+
+        Assert.That(world.PendingGameplayEvents.Length, Is.EqualTo(1));
+        Assert.That(world.PendingGameplayEvents[0].Target, Is.EqualTo(unit.Id));
     }
 
     [Test]

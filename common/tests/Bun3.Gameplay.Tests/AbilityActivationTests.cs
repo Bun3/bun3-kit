@@ -429,7 +429,7 @@ public sealed class AbilityActivationTests
         var id = f.Abilities.GetRequiredId("fireball");
         f.Caster.Abilities.Grant(id, GrantSource.Archetype(), level: 1);
 
-        f.World.Pipeline.EnqueueApply(f.Kit.EffectId("mp.boost"), f.Caster.Id, f.Caster.Id);
+        f.World.EnqueueApply(f.Kit.EffectId("mp.boost"), f.Caster.Id, f.Caster.Id);
         f.World.Tick();
         Assert.That(f.Caster.Attributes.GetCurrent(EffectTestKit.Mp), Is.EqualTo((BigNum)90));
         Assert.That(f.Caster.Attributes.GetBase(EffectTestKit.Mp), Is.EqualTo((BigNum)50));
@@ -579,7 +579,7 @@ public sealed class AbilityActivationTests
         var id = f.Abilities.GetRequiredId("fireball");
         f.Caster.Abilities.Grant(id, GrantSource.Archetype(), level: 1);
         f.Caster.Attributes.SetBase(cooldownScale, 1);
-        f.World.Pipeline.EnqueueApply(f.Kit.EffectId("ring.cdr"), f.Caster.Id, f.Caster.Id);
+        f.World.EnqueueApply(f.Kit.EffectId("ring.cdr"), f.Caster.Id, f.Caster.Id);
         f.World.Tick();
 
         Assert.That(Activate(f, f.Caster.Id, id), Is.EqualTo(AbilityActivationResult.Success));

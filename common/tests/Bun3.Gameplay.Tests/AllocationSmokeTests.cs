@@ -216,14 +216,14 @@ public class AllocationSmokeTests
         // is exactly what keeps the measurement itself from tripping on a one-time list resize.
         for (var i = 0; i < 10; i++)
         {
-            world.Pipeline.EnqueueApply(damageEffectId, attackerId, defenderId);
+            world.EnqueueApply(damageEffectId, attackerId, defenderId);
             world.Tick();
         }
 
         var before = GC.GetAllocatedBytesForCurrentThread();
         for (var i = 0; i < 100; i++)
         {
-            world.Pipeline.EnqueueApply(damageEffectId, attackerId, defenderId);
+            world.EnqueueApply(damageEffectId, attackerId, defenderId);
             world.Tick();
         }
 
@@ -325,8 +325,8 @@ public class AllocationSmokeTests
         world.Tick();
 
         var listenerEffectId = effects.GetRequiredId("Listener");
-        world.Pipeline.EnqueueApply(listenerEffectId, attacker.Id, attacker.Id);
-        world.Pipeline.EnqueueApply(listenerEffectId, defender.Id, defender.Id);
+        world.EnqueueApply(listenerEffectId, attacker.Id, attacker.Id);
+        world.EnqueueApply(listenerEffectId, defender.Id, defender.Id);
         world.Tick();
 
         return (world, effects.GetRequiredId("Damage"), attacker.Id, defender.Id, abilities.GetRequiredId("Strike"));

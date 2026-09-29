@@ -54,7 +54,7 @@ public sealed class AbilityGrantSourceTests
         var (world, unit, abilityId, kit) = Build(_ => { });
 
         Assert.That(unit.Abilities.IsGranted(abilityId), Is.False);
-        world.Pipeline.EnqueueApply(kit.EffectId("granter"), unit.Id, unit.Id);
+        world.EnqueueApply(kit.EffectId("granter"), unit.Id, unit.Id);
         world.Tick();
 
         Assert.That(unit.Abilities.IsGranted(abilityId), Is.True);
@@ -64,7 +64,7 @@ public sealed class AbilityGrantSourceTests
     public void Removing_the_granting_effect_reclaims_the_ability()
     {
         var (world, unit, abilityId, kit) = Build(_ => { });
-        world.Pipeline.EnqueueApply(kit.EffectId("granter"), unit.Id, unit.Id);
+        world.EnqueueApply(kit.EffectId("granter"), unit.Id, unit.Id);
         world.Tick();
 
         Assert.That(unit.Effects.ActiveEffects.Count, Is.EqualTo(1));
@@ -85,7 +85,7 @@ public sealed class AbilityGrantSourceTests
                 Right = Operand.Constant(0),
             }));
 
-        world.Pipeline.EnqueueApply(kit.EffectId("granter"), unit.Id, unit.Id);
+        world.EnqueueApply(kit.EffectId("granter"), unit.Id, unit.Id);
         world.Tick();
         Assert.That(unit.Abilities.IsGranted(abilityId), Is.True);
 
@@ -147,11 +147,11 @@ public sealed class AbilityGrantSourceTests
             new StackPolicyDef { MaxStack = 5, OnReapply = StackReapply.AddStack, LevelFromStack = true },
             durationTicks: 100);
 
-        world.Pipeline.EnqueueApply(kit.EffectId("granter"), unit.Id, unit.Id);
+        world.EnqueueApply(kit.EffectId("granter"), unit.Id, unit.Id);
         world.Tick();
         Assert.That(unit.Abilities.GetLevel(abilityId), Is.EqualTo(1));
 
-        world.Pipeline.EnqueueApply(kit.EffectId("granter"), unit.Id, unit.Id);
+        world.EnqueueApply(kit.EffectId("granter"), unit.Id, unit.Id);
         world.Tick();
         Assert.That(unit.Abilities.GetLevel(abilityId), Is.EqualTo(2));
     }
@@ -167,9 +167,9 @@ public sealed class AbilityGrantSourceTests
             },
             durationTicks: 2);
 
-        world.Pipeline.EnqueueApply(kit.EffectId("granter"), unit.Id, unit.Id);
+        world.EnqueueApply(kit.EffectId("granter"), unit.Id, unit.Id);
         world.Tick();
-        world.Pipeline.EnqueueApply(kit.EffectId("granter"), unit.Id, unit.Id);
+        world.EnqueueApply(kit.EffectId("granter"), unit.Id, unit.Id);
         world.Tick();
         Assert.That(unit.Abilities.GetLevel(abilityId), Is.EqualTo(2));
 
@@ -187,7 +187,7 @@ public sealed class AbilityGrantSourceTests
 
         for (var i = 0; i < 4; i++)
         {
-            world.Pipeline.EnqueueApply(kit.EffectId("granter"), unit.Id, unit.Id);
+            world.EnqueueApply(kit.EffectId("granter"), unit.Id, unit.Id);
             world.Tick();
         }
 

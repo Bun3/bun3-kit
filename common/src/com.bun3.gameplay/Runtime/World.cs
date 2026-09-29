@@ -80,8 +80,15 @@ namespace Bun3.Gameplay
             }
         }
 
-        /// <summary>Effect pipeline this world drives.</summary>
+        /// <summary>Effect pipeline this world drives. Read from it freely, but do not call its mutating
+        /// members (<c>EnqueueApply</c>, <c>RemoveByTags</c>, <c>RemoveById</c>, <c>Tick</c>) on a world:
+        /// they bypass the command queue and its call order, the events they raise between ticks are cleared
+        /// when the next <see cref="Tick"/> starts, and the pipeline's own tick skips structural changes and
+        /// commands. Use the world's <c>Enqueue*</c> commands and <see cref="Tick"/> instead.</summary>
         public EffectPipeline Pipeline { get; }
+
+        /// <summary>Gameplay events raised by the last <see cref="Tick"/>, in raise order.</summary>
+        public ReadOnlySpan<GameplayEvent> PendingGameplayEvents => Pipeline.PendingGameplayEvents;
 
         /// <summary>Ticks processed so far. The pipeline owns the counter; this world keeps none of its own.</summary>
         public long CurrentTick => Pipeline.CurrentTick;

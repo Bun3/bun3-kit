@@ -716,7 +716,10 @@ bun3-server-template은 `Bun3.Gameplay`를 참조하지 않고, 저장소 밖에
   결과다. 남는 조건은 **적재 순서의 결정성**뿐이다 — 여러 스레드가 한 World에 적재하는 호스트는
   적재 지점을 하나로 모아야 한다. 명령에 틱 번호를 찍는 방식(idlez)은 복제 단계(슬라이스 5)에서 다룬다.
 - 단독 `EffectPipeline`(World 없이)은 기존 공개 API(`EnqueueApply`, `RemoveByTags`, `RemoveById`)를
-  유지한다. World를 쓰는 게임은 `World.Enqueue*`만 쓴다.
+  유지한다. World를 쓰는 게임은 `World.Enqueue*`만 쓰고 `World.Pipeline`은 읽기 전용으로 다룬다 — 그 변경
+  멤버는 명령 큐와 호출 순서를 우회하고, 틱 사이에 낸 이벤트는 다음 틱 시작에 지워지며, 파이프라인 자체
+  `Tick()`은 구조 변경·명령 처리를 건너뛴다(`World.Pipeline` XML 문서에 명시). 전투 이벤트는
+  `World.PendingGameplayEvents`로 읽어 파이프라인에 손댈 이유를 없앤다.
 - `CreateSnapshot`은 명령 큐가 비어 있어야 한다(구조 변경 큐와 같은 이유).
 - **명령 처리 중 예외**: 던진 명령과 그 앞 명령은 큐에서 빠지고 예외는 `Tick()`으로 한 번 전파된다
   (그 틱의 파이프라인 페이즈는 돌지 않는다). 다음 틱은 남은 명령부터 정상 진행한다 — 처리한 명령을
@@ -771,7 +774,7 @@ GAS는 쿨다운 태그를 차단 태그에 적게 하지 않고, 발동 검사�
 | 활성 이펙트 | `EffectTarget.GetActiveEffect(i)`, `TryGetActiveEffect(instanceId, out)` → `ActiveEffectInfo` | 값 복사(`InstanceId`, `EffectId`, `Source`, `Level`, `Stack`, `RemainingTicks`, `DurationTicks`, `Enabled`). 풀링 인스턴스를 노출하지 않는다. 스냅샷 복원·합류 뒤 버프 바를 다시 세우는 경로 |
 | 전체 지속시간 | `EffectInstance.DurationTicks` | 생성·갱신 시점의 스케일·DR 반영값. 스냅샷 행에 포함 |
 | 적용/제거 알림 | `EffectLifecycleEvent.Source`, `.Level` 추가 | 기존 드레인 버퍼 |
-| 전투 이벤트 | `EffectPipeline.PendingGameplayEvents` | 파이프라인 단위 버퍼 하나(발행 순서 = 결정적 순서). 데미지 숫자·전투 로그·네트워크의 단일 원천. 태그 필터는 소비자가 `IsAncestorOrSelf`로 |
+| 전투 이벤트 | `World.PendingGameplayEvents`(= `EffectPipeline.PendingGameplayEvents`) | 파이프라인 단위 버퍼 하나(발행 순서 = 결정적 순서). 데미지 숫자·전투 로그·네트워크의 단일 원천. 태그 필터는 소비자가 `IsAncestorOrSelf`로 |
 | 쿨다운 | `World.TryGetCooldown` | 16.4 |
 | 부여 어빌리티 | `AbilitySet.GetGrant(i)` → `AbilityGrantInfo(AbilityId, Source, Level)`, `AbilitySet.Version` | Grant·Revoke·복원마다 Version 증가. 스킬 바는 Version이 바뀐 틱에만 다시 그린다 |
 | 어빌리티 이름 | `AbilityCatalog.GetName(id)` | |
