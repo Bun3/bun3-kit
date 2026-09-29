@@ -1,4 +1,4 @@
-// World partial — command queue (the only way to change simulation state from outside Tick).
+// World partial — command queue: the only way to change a registered unit's simulation state from outside Tick.
 #nullable enable
 using System;
 using System.Collections.Generic;
@@ -18,6 +18,8 @@ namespace Bun3.Gameplay
             RemoveByTag,
             RemoveById,
             SetBase,
+            Grant,
+            Revoke,
         }
 
         private struct Command
@@ -31,6 +33,7 @@ namespace Bun3.Gameplay
             internal GameplayTag Tag;
             internal ushort AttributeId;
             internal BigNum Value;
+            internal GrantSource GrantSource;
         }
 
         private readonly List<Command> _commands = new List<Command>();
@@ -83,6 +86,30 @@ namespace Bun3.Gameplay
         public void EnqueueSetBase(TargetId unitId, ushort attributeId, BigNum value) =>
             _commands.Add(new Command { Kind = CommandKind.SetBase, Unit = unitId, AttributeId = attributeId, Value = value });
 
+        /// <summary>Queues an ability grant from one origin to a registered unit (e.g. a quest reward or an
+        /// equipped item). Runs during the next <see cref="Tick"/>; an unknown unit is ignored. Grant to a unit
+        /// before <see cref="Spawn"/> with <c>AbilitySet.Grant</c> directly.</summary>
+        /// <param name="unitId">Receiving unit.</param>
+        /// <param name="abilityId">Compiled ability id.</param>
+        /// <param name="source">Granting origin.</param>
+        /// <param name="level">Ability level this origin grants.</param>
+        /// <exception cref="ArgumentOutOfRangeException">Thrown at the call when the ability id is outside
+        /// the catalog or the level is below 1.</exception>
+        public void EnqueueGrant(TargetId unitId, int abilityId, GrantSource source, int level)
+        {
+            if (!_abilities.Contains(abilityId))
+                throw new ArgumentOutOfRangeException(nameof(abilityId), abilityId, "Ability id is outside the catalog.");
+            if (level < 1) throw new ArgumentOutOfRangeException(nameof(level), level, "Ability level must be at least 1.");
+            _commands.Add(new Command { Kind = CommandKind.Grant, Unit = unitId, Id = abilityId, GrantSource = source, Level = level });
+        }
+
+        /// <summary>Queues revocation of every grant one origin made to a unit. Runs during the next
+        /// <see cref="Tick"/>; an unknown unit is ignored.</summary>
+        /// <param name="unitId">Unit to revoke from.</param>
+        /// <param name="source">Origin whose grants are reclaimed.</param>
+        public void EnqueueRevoke(TargetId unitId, GrantSource source) =>
+            _commands.Add(new Command { Kind = CommandKind.Revoke, Unit = unitId, GrantSource = source });
+
         // Commands queued while processing (e.g. from a selector) wait for the next tick. A command that
         // throws is dropped together with the ones before it, so the failure surfaces once and the next
         // tick neither re-runs processed commands nor throws again.
@@ -114,6 +141,14 @@ namespace Bun3.Gameplay
                         case CommandKind.SetBase:
                             if (TryGetUnit(command.Unit, out var unit) && unit != null && unit.Attributes.Has(command.AttributeId))
                                 unit.Attributes.SetBase(command.AttributeId, command.Value);
+                            break;
+                        case CommandKind.Grant:
+                            if (TryGetUnit(command.Unit, out var grantee) && grantee != null)
+                                grantee.Abilities.Grant(command.Id, command.GrantSource, command.Level);
+                            break;
+                        case CommandKind.Revoke:
+                            if (TryGetUnit(command.Unit, out var holder) && holder != null)
+                                holder.Abilities.Revoke(command.GrantSource);
                             break;
                     }
                 }

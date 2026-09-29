@@ -185,6 +185,39 @@ public sealed class AbilityActivationTests
     }
 
     [Test]
+    public void Grant_and_revoke_commands_keep_call_order_with_activation()
+    {
+        var f = Build((_, b) => b.Add(Fireball()));
+        var id = f.Abilities.GetRequiredId("fireball");
+
+        f.World.EnqueueGrant(f.Caster.Id, id, GrantSource.Code(), level: 1);
+        f.World.EnqueueActivation(f.Caster.Id, id);
+        f.World.EnqueueRevoke(f.Caster.Id, GrantSource.Code());
+        f.World.EnqueueActivation(f.Caster.Id, id);
+        Assert.That(f.Caster.Abilities.IsGranted(id), Is.False, "nothing runs outside the tick");
+        f.World.Tick();
+
+        Assert.That(f.World.PendingActivations[0].Result, Is.EqualTo(AbilityActivationResult.Success));
+        Assert.That(f.World.PendingActivations[1].Result, Is.EqualTo(AbilityActivationResult.NotGranted));
+        Assert.That(f.Caster.Abilities.IsGranted(id), Is.False);
+    }
+
+    [Test]
+    public void Enqueue_grant_rejects_an_unknown_ability_or_a_level_below_one_at_the_call()
+    {
+        var f = Build((_, b) => b.Add(Fireball()));
+        var id = f.Abilities.GetRequiredId("fireball");
+
+        Assert.That(
+            () => f.World.EnqueueGrant(f.Caster.Id, 999, GrantSource.Code(), level: 1),
+            Throws.InstanceOf<ArgumentOutOfRangeException>());
+        Assert.That(
+            () => f.World.EnqueueGrant(f.Caster.Id, id, GrantSource.Code(), level: 0),
+            Throws.InstanceOf<ArgumentOutOfRangeException>());
+        Assert.That(f.World.PendingCommandCount, Is.Zero);
+    }
+
+    [Test]
     public void Activation_is_queued_and_reported_after_the_tick()
     {
         var f = Build((_, b) => b.Add(Fireball()));

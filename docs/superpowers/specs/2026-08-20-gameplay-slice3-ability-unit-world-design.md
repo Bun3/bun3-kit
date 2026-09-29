@@ -704,11 +704,13 @@ bun3-server-template은 `Bun3.Gameplay`를 참조하지 않고, 저장소 밖에
 | `EnqueueRemoveByTag(unitId, tag)` | `IsAncestorOrSelf(tag, asset)` 매칭 인스턴스 제거(`RemovedPrematurely`) |
 | `EnqueueRemoveById(unitId, instanceId)` | 해당 인스턴스 제거 |
 | `EnqueueSetBase(unitId, attributeId, value)` | 등록된 유닛의 Base 쓰기(메타 스탯 갱신 등) |
+| `EnqueueGrant(unitId, abilityId, source, level)` · `EnqueueRevoke(unitId, source)` | 런타임 어빌리티 부여·회수(퀘스트 보상, 장착 아이템 등). 잘못된 id·레벨은 적재 시점에 거부 |
 
 - **조회는 언제나 허용**된다: `CanActivateAbility`, `TryGetCooldown`, `GetActiveEffect`, 속성 읽기 등.
-- **스폰 전 초기화는 예외가 아니다** — 아직 등록되지 않은 유닛의 `AttributeSet.SetBase` 직접
-  호출은 시뮬레이션 상태를 바꾸지 않는다. 풀힐·부활은 Instant 이펙트(`Add` + `MaxHp` 참조)로
-  `EnqueueApply`한다.
+- **스폰 전 초기화는 예외가 아니다** — 아직 등록되지 않은 유닛의 `AttributeSet.SetBase`·
+  `AbilitySet.Grant`·`Tags.Add` 직접 호출은 시뮬레이션 상태를 바꾸지 않는다. 등록된 유닛의 런타임 태그는
+  이펙트(`GrantedTags`)로만 붙인다 — 느슨한 태그 명령은 두지 않는다(GAS도 런타임 상태 태그는 GE가 소유).
+  풀힐·부활은 Instant 이펙트(`Add` + `MaxHp` 참조)로 `EnqueueApply`한다.
 - 틱 안(시섬 등)에서 부른 `Enqueue*`는 다음 틱에 처리된다.
 - 결정론: 상태 변경이 전부 `Tick()` 안의 고정 순서에서만 일어나므로, 같은 명령 열이면 같은
   결과다. 남는 조건은 **적재 순서의 결정성**뿐이다 — 여러 스레드가 한 World에 적재하는 호스트는
