@@ -766,6 +766,7 @@ GAS는 쿨다운 태그를 차단 태그에 적게 하지 않고, 발동 검사�
   줘도(공유 쿨다운) 막힌다. `BlockedTags`에 같은 태그를 적어도 무해하다(4에서 먼저 걸린다).
 - `World.TryGetCooldown(unitId, abilityId, out remainingTicks, out durationTicks)`: 같은 태그를 주는
   활성 인스턴스 중 남은 틱이 최대인 것. 게이트와 같은 태그를 보므로 UI와 실제 동작이 일치한다.
+  Infinite 인스턴스가 막고 있으면 `true`와 `-1/-1`(제거될 때까지 유지)을 돌려준다.
 
 ### 16.5 관찰 API
 

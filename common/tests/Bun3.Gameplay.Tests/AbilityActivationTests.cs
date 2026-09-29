@@ -133,6 +133,29 @@ public sealed class AbilityActivationTests
     }
 
     [Test]
+    public void An_infinite_cooldown_is_reported_as_active_without_a_countdown()
+    {
+        var f = Build((kit, b) =>
+        {
+            var lockout = EffectTestKit.MinimalInfinite("cooldown.lockout");
+            lockout.GrantedTags.Add("cooldown.fireball");
+            kit.AddEffect(lockout);
+            var ability = Fireball();
+            ability.CooldownEffect = "cooldown.lockout";
+            b.Add(ability);
+        });
+        var id = f.Abilities.GetRequiredId("fireball");
+        f.Caster.Abilities.Grant(id, GrantSource.Archetype(), level: 1);
+
+        Assert.That(Activate(f, f.Caster.Id, id), Is.EqualTo(AbilityActivationResult.Success));
+
+        Assert.That(f.World.CanActivateAbility(f.Caster.Id, id), Is.EqualTo(AbilityActivationResult.OnCooldown));
+        Assert.That(f.World.TryGetCooldown(f.Caster.Id, id, out var remaining, out var duration), Is.True);
+        Assert.That(remaining, Is.EqualTo(-1));
+        Assert.That(duration, Is.EqualTo(-1));
+    }
+
+    [Test]
     public void Try_get_cooldown_is_false_when_ready_or_without_a_cooldown_effect()
     {
         var f = Build((_, b) =>

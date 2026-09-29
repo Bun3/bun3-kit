@@ -84,8 +84,9 @@ namespace Bun3.Gameplay
         /// ability's cooldown effect — the same tags the activation gate checks.</summary>
         /// <param name="unitId">Unit to query.</param>
         /// <param name="abilityId">Compiled ability id.</param>
-        /// <param name="remainingTicks">Remaining ticks of that instance.</param>
-        /// <param name="durationTicks">Total ticks of that instance's current lifetime.</param>
+        /// <param name="remainingTicks">Remaining ticks of that instance; -1 when an Infinite instance blocks
+        /// (it lasts until removed).</param>
+        /// <param name="durationTicks">Total ticks of that instance's current lifetime; -1 for Infinite.</param>
         /// <returns>False when the unit or ability is unknown, the ability has no cooldown effect, or no
         /// such instance is active.</returns>
         public bool TryGetCooldown(TargetId unitId, int abilityId, out int remainingTicks, out int durationTicks)
@@ -104,8 +105,16 @@ namespace Bun3.Gameplay
             for (var i = 0; i < active.Count; i++)
             {
                 var instance = active[i];
-                if (!instance.Enabled || instance.RemainingTicks <= remainingTicks) continue;
+                if (!instance.Enabled) continue;
                 if (!GrantsAny(_effects.GetEffect(instance.EffectId).GrantedTags, cooldownTags, tagCatalog)) continue;
+                if (instance.RemainingTicks < 0)
+                {
+                    remainingTicks = -1;
+                    durationTicks = -1;
+                    return true;
+                }
+
+                if (instance.RemainingTicks <= remainingTicks) continue;
                 remainingTicks = instance.RemainingTicks;
                 durationTicks = instance.DurationTicks;
                 found = true;
