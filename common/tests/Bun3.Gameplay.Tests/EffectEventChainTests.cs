@@ -151,6 +151,32 @@ public sealed class EffectEventChainTests
     }
 
     [Test]
+    public void Raised_events_are_readable_from_the_pipeline_buffer()
+    {
+        var kit = BuildReflectKit(ChainListen.AsTarget);
+        kit.RegisterSelector("selector.everyone", new AttackerSelector());
+        var pipeline = kit.BuildPipeline();
+        foreach (var target in kit.AllTargets)
+        {
+            target.Attributes.SetBase(EffectTestKit.MaxHp, 100);
+            target.Attributes.SetBase(EffectTestKit.Hp, 100);
+        }
+
+        pipeline.EnqueueApply(kit.EffectId("bolt"), kit.Attacker.Id, kit.Defender.Id);
+        pipeline.Tick();
+
+        var events = pipeline.PendingGameplayEvents;
+        Assert.That(events.Length, Is.EqualTo(1));
+        Assert.That(events[0].Tag, Is.EqualTo(kit.Tag("event.damage.taken")));
+        Assert.That(events[0].Source, Is.EqualTo(kit.Attacker.Id));
+        Assert.That(events[0].Target, Is.EqualTo(kit.Defender.Id));
+        Assert.That(events[0].Magnitude, Is.EqualTo((BigNum)(-40)));
+
+        pipeline.ClearGameplayEvents();
+        Assert.That(pipeline.PendingGameplayEvents.Length, Is.Zero);
+    }
+
+    [Test]
     public void Listener_count_tracks_only_instances_whose_effect_listens()
     {
         var kit = EffectTestKit.Create();

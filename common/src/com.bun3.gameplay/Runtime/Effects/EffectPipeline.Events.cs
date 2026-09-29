@@ -13,8 +13,20 @@ namespace Bun3.Gameplay.Effects
         /// <summary>Number of OnEvent chain edges that fired.</summary>
         internal long EventChainFireCount { get; private set; }
 
+        private GameplayEvent[] _gameplayEvents = new GameplayEvent[16];
+        private int _gameplayEventCount;
+
+        /// <summary>Gameplay events raised since the buffer was last cleared, in raise order — the single
+        /// source for damage numbers, combat logs and network broadcast.</summary>
+        public ReadOnlySpan<GameplayEvent> PendingGameplayEvents => _gameplayEvents.AsSpan(0, _gameplayEventCount);
+
+        /// <summary>Clears <see cref="PendingGameplayEvents"/>.</summary>
+        public void ClearGameplayEvents() => _gameplayEventCount = 0;
+
         private void RaiseGameplayEvent(in GameplayEvent evt)
         {
+            if (_gameplayEventCount == _gameplayEvents.Length) Array.Resize(ref _gameplayEvents, _gameplayEvents.Length * 2);
+            _gameplayEvents[_gameplayEventCount++] = evt;
             DispatchEvent(evt.Target, ChainListen.AsTarget, in evt);
             DispatchEvent(evt.Source, ChainListen.AsSource, in evt);
         }

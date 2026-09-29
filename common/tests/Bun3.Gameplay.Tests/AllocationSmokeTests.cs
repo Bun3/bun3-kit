@@ -289,5 +289,6 @@ public class AllocationSmokeTests
         attacker.Effects.ClearEffectEvents();
         defender!.Attributes.ClearChanges();
         defender.Effects.ClearEffectEvents();
+        world.Pipeline.ClearGameplayEvents();
     }
 }

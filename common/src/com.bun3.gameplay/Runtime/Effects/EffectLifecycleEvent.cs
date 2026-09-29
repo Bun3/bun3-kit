@@ -22,12 +22,17 @@ namespace Bun3.Gameplay.Effects
         /// <param name="instanceId">Id of the affected effect instance.</param>
         /// <param name="effectId">Effect id.</param>
         /// <param name="stack">Stack count at the time of the event.</param>
-        public EffectLifecycleEvent(EffectLifecycleKind kind, ulong instanceId, int effectId, int stack)
+        /// <param name="source">Caster that applied the instance.</param>
+        /// <param name="level">Instance level at the time of the event.</param>
+        public EffectLifecycleEvent(
+            EffectLifecycleKind kind, ulong instanceId, int effectId, int stack, TargetId source, int level)
         {
             Kind = kind;
             InstanceId = instanceId;
             EffectId = effectId;
             Stack = stack;
+            Source = source;
+            Level = level;
         }
 
         /// <summary>Event kind.</summary>
@@ -41,5 +46,11 @@ namespace Bun3.Gameplay.Effects
 
         /// <summary>Stack count at the time of the event.</summary>
         public int Stack { get; }
+
+        /// <summary>Caster that applied the instance.</summary>
+        public TargetId Source { get; }
+
+        /// <summary>Instance level at the time of the event.</summary>
+        public int Level { get; }
     }
 }

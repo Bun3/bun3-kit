@@ -45,6 +45,8 @@ public sealed class EffectVocabularyTests
             if (events[i].Kind == EffectLifecycleKind.RemovedPrematurely
                 && events[i].EffectId == kit.EffectId("frost_lower"))
             {
+                Assert.That(events[i].Source, Is.EqualTo(kit.Attacker.Id));
+                Assert.That(events[i].Level, Is.EqualTo(1));
                 sawRemovedPrematurely = true;
             }
         }
