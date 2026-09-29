@@ -327,6 +327,42 @@ public sealed class WorldTests
     }
 
     [Test]
+    public void Observation_buffers_hold_exactly_the_last_ticks_output()
+    {
+        var kit = EffectTestKit.Create();
+        kit.AddEffect(EffectTestKit.MinimalInfinite("aura"));
+        var abilityDef = new AbilityDef { Name = "cast", MaxLevel = 1 };
+        abilityDef.Costs.Add(new CostDef
+        {
+            AttributeId = EffectTestKit.Mp,
+            Magnitude = new MagnitudeDef { Base = Bun3.Gameplay.Attributes.Operand.Constant(5) },
+        });
+        var abilityBuilder = new AbilityCatalogBuilder();
+        abilityBuilder.Add(abilityDef);
+        var abilities = abilityBuilder.Build(kit.TagCatalog, kit.Seams, kit.Attributes, kit.Catalog);
+        var world = new World(kit.Catalog, abilities, new XorShiftRng(12345));
+        var unit = MakeUnit(kit, 1);
+        unit.Attributes.SetBase(EffectTestKit.Mp, 50);
+        world.Spawn(unit);
+        unit.Abilities.Grant(abilities.GetRequiredId("cast"), GrantSource.Archetype(), level: 1);
+        world.Tick();
+        Assert.That(unit.Attributes.PendingChanges.Length, Is.Zero, "pre-spawn initialization is not an event");
+
+        world.EnqueueApply(kit.EffectId("aura"), unit.Id, unit.Id);
+        world.EnqueueActivation(unit.Id, abilities.GetRequiredId("cast"));
+        world.Tick();
+        Assert.That(unit.Effects.PendingEffectEvents.Length, Is.EqualTo(1), "aura Applied");
+        Assert.That(unit.Attributes.PendingChanges.Length, Is.EqualTo(1), "Mp cost paid inside the tick");
+        Assert.That(world.PendingActivations.Length, Is.EqualTo(1));
+
+        world.Tick();
+        Assert.That(unit.Effects.PendingEffectEvents.Length, Is.Zero);
+        Assert.That(unit.Attributes.PendingChanges.Length, Is.Zero);
+        Assert.That(world.PendingActivations.Length, Is.Zero);
+        Assert.That(world.Pipeline.PendingGameplayEvents.Length, Is.Zero);
+    }
+
+    [Test]
     public void Snapshotting_with_pending_commands_is_rejected()
     {
         var kit = EffectTestKit.Create();

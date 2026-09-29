@@ -81,12 +81,6 @@ namespace Bun3.Gameplay.Tests
             {
                 DriveOneTick(world);
                 world.Pipeline.Tick();
-
-                for (var i = 0; i < world.Targets.Length; i++)
-                {
-                    world.Targets[i].Attributes.ClearChanges();
-                    world.Targets[i].ClearEffectEvents();
-                }
             }
         }
 
@@ -233,7 +227,6 @@ namespace Bun3.Gameplay.Tests
             {
                 DriveOneWorldTick(world, driverRng, unitIds, slashAbilityId, effects.Count);
                 world.Tick();
-                ClearWorldChangeBuffers(world, unitIds);
             }
 
             return HashWorldState(world, abilities, unitIds);
@@ -510,16 +503,6 @@ namespace Bun3.Gameplay.Tests
                 }
             }
             // roll == 3: no action this tick — lets duration/period timers advance untouched.
-        }
-
-        private static void ClearWorldChangeBuffers(World world, TargetId[] unitIds)
-        {
-            for (var i = 0; i < unitIds.Length; i++)
-            {
-                world.TryGetUnit(unitIds[i], out var unit);
-                unit!.Attributes.ClearChanges();
-                unit.Effects.ClearEffectEvents();
-            }
         }
 
         private static ulong HashWorldState(World world, AbilityCatalog abilities, TargetId[] unitIds)

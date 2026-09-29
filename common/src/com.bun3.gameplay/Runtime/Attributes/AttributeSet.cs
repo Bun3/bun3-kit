@@ -354,6 +354,7 @@ namespace Bun3.Gameplay.Attributes
         }
 
         /// <summary>Change events not yet consumed.</summary>
+        /// <remarks>Cleared automatically when the next pipeline tick starts.</remarks>
         public ReadOnlySpan<AttributeChange> PendingChanges => _changes.AsSpan(0, _changeCount);
 
         /// <summary>Clears the change event buffer.</summary>

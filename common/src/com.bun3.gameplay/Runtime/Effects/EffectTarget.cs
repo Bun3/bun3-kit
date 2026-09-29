@@ -72,6 +72,7 @@ namespace Bun3.Gameplay.Effects
         internal int EventListenerCount { get; private set; }
 
         /// <summary>Effect lifecycle events not yet consumed.</summary>
+        /// <remarks>Cleared automatically when the next tick starts.</remarks>
         public ReadOnlySpan<EffectLifecycleEvent> PendingEffectEvents => _events.AsSpan(0, _eventCount);
 
         /// <summary>Clears the effect lifecycle event buffer.</summary>

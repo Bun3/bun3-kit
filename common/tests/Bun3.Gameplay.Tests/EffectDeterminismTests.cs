@@ -267,8 +267,6 @@ public sealed class EffectDeterminismTests
         for (var i = 0; i < 60; i++)
         {
             pipeline.Tick();
-            kit.Defender.Attributes.ClearChanges();
-            kit.Defender.ClearEffectEvents();
         }
 
         Assert.That(pipeline.PendingApplyCount, Is.Zero);
@@ -278,8 +276,6 @@ public sealed class EffectDeterminismTests
         for (var i = 0; i < 1_000; i++)
         {
             pipeline.Tick();
-            kit.Defender.Attributes.ClearChanges();
-            kit.Defender.ClearEffectEvents();
         }
 
         var allocated = GC.GetAllocatedBytesForCurrentThread() - before;

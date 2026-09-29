@@ -184,7 +184,6 @@ public class AllocationSmokeTests
         {
             world.Pipeline.EnqueueApply(damageEffectId, attackerId, defenderId);
             world.Tick();
-            ClearWorldBuffers(world, attackerId, defenderId);
         }
 
         var before = GC.GetAllocatedBytesForCurrentThread();
@@ -192,7 +191,6 @@ public class AllocationSmokeTests
         {
             world.Pipeline.EnqueueApply(damageEffectId, attackerId, defenderId);
             world.Tick();
-            ClearWorldBuffers(world, attackerId, defenderId);
         }
 
         var after = GC.GetAllocatedBytesForCurrentThread();
@@ -279,16 +277,5 @@ public class AllocationSmokeTests
         world.Tick();
 
         return (world, effects.GetRequiredId("Damage"), attacker.Id, defender.Id);
-    }
-
-    private static void ClearWorldBuffers(World world, TargetId attackerId, TargetId defenderId)
-    {
-        world.TryGetUnit(attackerId, out var attacker);
-        world.TryGetUnit(defenderId, out var defender);
-        attacker!.Attributes.ClearChanges();
-        attacker.Effects.ClearEffectEvents();
-        defender!.Attributes.ClearChanges();
-        defender.Effects.ClearEffectEvents();
-        world.Pipeline.ClearGameplayEvents();
     }
 }

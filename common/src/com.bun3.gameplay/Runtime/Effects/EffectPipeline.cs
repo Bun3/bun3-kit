@@ -135,8 +135,26 @@ namespace Bun3.Gameplay.Effects
                 EffectId = effectId, Source = source, Target = target, Level = level, EventMagnitude = BigNum.Zero,
             });
 
-        /// <summary>Processes one tick in the six-phase order documented on the class.</summary>
-        public void Tick() => RunPhases();
+        /// <summary>Processes one tick in the six-phase order documented on the class. Observation buffers
+        /// (lifecycle events, attribute changes, gameplay events) are cleared first, so after the call they
+        /// hold exactly this tick's output.</summary>
+        public void Tick()
+        {
+            ClearObservationBuffers();
+            RunPhases();
+        }
+
+        internal void ClearObservationBuffers()
+        {
+            _gameplayEventCount = 0;
+            var targetIds = _resolver.TargetIds;
+            for (var i = 0; i < targetIds.Count; i++)
+            {
+                if (!_resolver.TryResolve(targetIds[i], out var target) || target is null) continue;
+                target.ClearEffectEvents();
+                target.Attributes.ClearChanges();
+            }
+        }
 
         internal void RunPhases()
         {
@@ -145,9 +163,8 @@ namespace Bun3.Gameplay.Effects
             RebuildAll();
             EvaluateOngoing();
             RebuildToggled();
-            // Phase 6, event finalization: no pipeline work. Lifecycle events
-            // (EffectTarget.PendingEffectEvents) and attribute-change events (AttributeSet.PendingChanges)
-            // are read and drained via Clear* by the game (caller) after this tick.
+            // Phase 6, event finalization: no pipeline work. Observation buffers are read after this call
+            // and cleared at the start of the next tick.
 
             CurrentTick++;
         }

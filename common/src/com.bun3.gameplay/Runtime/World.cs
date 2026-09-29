@@ -143,11 +143,13 @@ namespace Bun3.Gameplay
             _pendingOps.Add((null, id));
         }
 
-        /// <summary>Applies queued structural changes, processes queued commands in call order, then runs
-        /// the pipeline phases.</summary>
+        /// <summary>Applies queued structural changes, clears the observation buffers, processes queued
+        /// commands in call order, then runs the pipeline phases. Read the buffers after this call — they
+        /// hold exactly this tick's output.</summary>
         public void Tick()
         {
             FlushStructuralChanges();
+            Pipeline.ClearObservationBuffers();
             _activationCount = 0;
             ProcessCommands();
             Pipeline.RunPhases();

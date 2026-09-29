@@ -10,6 +10,21 @@ namespace Bun3.Gameplay.Tests;
 public sealed class EffectRemovalTests
 {
     [Test]
+    public void A_standalone_pipeline_clears_its_buffers_when_the_next_tick_starts()
+    {
+        var kit = EffectTestKit.Create();
+        kit.AddEffect(EffectTestKit.MinimalInfinite("aura"));
+        var pipeline = kit.BuildPipeline();
+
+        pipeline.EnqueueApply(kit.EffectId("aura"), kit.Defender.Id, kit.Defender.Id);
+        pipeline.Tick();
+        Assert.That(kit.Defender.PendingEffectEvents.Length, Is.EqualTo(1));
+
+        pipeline.Tick();
+        Assert.That(kit.Defender.PendingEffectEvents.Length, Is.Zero);
+    }
+
+    [Test]
     public void A_removed_instance_is_not_recycled_into_another_pipeline()
     {
         var first = EffectTestKit.Create();
