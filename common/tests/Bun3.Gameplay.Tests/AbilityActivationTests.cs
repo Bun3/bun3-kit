@@ -152,6 +152,39 @@ public sealed class AbilityActivationTests
     }
 
     [Test]
+    public void A_command_that_throws_surfaces_once_and_the_world_keeps_ticking()
+    {
+        var f = Build((kit, b) =>
+        {
+            var scaled = EffectTestKit.MinimalDuration("cooldown.scaled", ticks: 10);
+            scaled.GrantedTags.Add("cooldown.fireball");
+            scaled.DurationScale = new MagnitudeDef { Base = Operand.Attribute(EffectTestKit.Resistance) };
+            kit.AddEffect(scaled);
+            var ability = Fireball();
+            ability.CooldownEffect = "cooldown.scaled";
+            ability.Costs.Add(new CostDef { AttributeId = EffectTestKit.Mp, Magnitude = new MagnitudeDef { Base = Operand.Constant(10) } });
+            b.Add(ability);
+        });
+        var id = f.Abilities.GetRequiredId("fireball");
+        ReadOnlySpan<ushort> declared = stackalloc ushort[] { EffectTestKit.Hp, EffectTestKit.MaxHp, EffectTestKit.Mp };
+        var bare = new Unit(new TargetId(3), EffectTestKit.BuildAttributeRegistry(), declared, f.Kit.TagCatalog);
+        bare.Attributes.SetBase(EffectTestKit.Mp, 50);
+        f.World.Spawn(bare);
+        bare.Abilities.Grant(id, GrantSource.Archetype(), level: 1);
+        f.World.Tick();
+        var tickBefore = f.World.CurrentTick;
+
+        // The cooldown's DurationScale reads an attribute this unit does not declare.
+        f.World.EnqueueActivation(bare.Id, id);
+        Assert.That(() => f.World.Tick(), Throws.InstanceOf<ArgumentOutOfRangeException>());
+        Assert.That(() => f.World.Tick(), Throws.Nothing);
+
+        Assert.That(f.World.PendingCommandCount, Is.Zero);
+        Assert.That(bare.Attributes.GetBase(EffectTestKit.Mp), Is.EqualTo((BigNum)40), "the cost is not charged again");
+        Assert.That(f.World.CurrentTick, Is.EqualTo(tickBefore + 1));
+    }
+
+    [Test]
     public void Activation_is_queued_and_reported_after_the_tick()
     {
         var f = Build((_, b) => b.Add(Fireball()));

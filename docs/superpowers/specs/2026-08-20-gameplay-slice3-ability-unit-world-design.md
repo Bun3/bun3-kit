@@ -716,6 +716,11 @@ bun3-server-template은 `Bun3.Gameplay`를 참조하지 않고, 저장소 밖에
 - 단독 `EffectPipeline`(World 없이)은 기존 공개 API(`EnqueueApply`, `RemoveByTags`, `RemoveById`)를
   유지한다. World를 쓰는 게임은 `World.Enqueue*`만 쓴다.
 - `CreateSnapshot`은 명령 큐가 비어 있어야 한다(구조 변경 큐와 같은 이유).
+- **명령 처리 중 예외**: 던진 명령과 그 앞 명령은 큐에서 빠지고 예외는 `Tick()`으로 한 번 전파된다
+  (그 틱의 파이프라인 페이즈는 돌지 않는다). 다음 틱은 남은 명령부터 정상 진행한다 — 처리한 명령을
+  다시 실행하거나 같은 예외를 반복하지 않는다. 발동 commit은 코스트 차감 → 쿨다운 적용 → 효과 적재
+  순이므로, 쿨다운 적용이 던지면(예: 쿨다운 `DurationScale`이 유닛이 선언하지 않은 속성을 참조) 코스트만
+  빠진다. 이는 저작 오류이고 예외가 그 사실을 알린다.
 
 ### 16.2 World.Tick 순서
 

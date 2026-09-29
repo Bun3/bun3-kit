@@ -83,37 +83,45 @@ namespace Bun3.Gameplay
         public void EnqueueSetBase(TargetId unitId, ushort attributeId, BigNum value) =>
             _commands.Add(new Command { Kind = CommandKind.SetBase, Unit = unitId, AttributeId = attributeId, Value = value });
 
-        // Commands queued while processing (e.g. from a selector) wait for the next tick.
+        // Commands queued while processing (e.g. from a selector) wait for the next tick. A command that
+        // throws is dropped together with the ones before it, so the failure surfaces once and the next
+        // tick neither re-runs processed commands nor throws again.
         private void ProcessCommands()
         {
             Span<GameplayTag> query = stackalloc GameplayTag[1];
             var count = _commands.Count;
-            for (var i = 0; i < count; i++)
+            var processed = 0;
+            try
             {
-                var command = _commands[i];
-                switch (command.Kind)
+                for (; processed < count; processed++)
                 {
-                    case CommandKind.Apply:
-                        Pipeline.EnqueueApply(command.Id, command.Source, command.Unit, command.Level);
-                        break;
-                    case CommandKind.Activate:
-                        RecordActivation(command.Unit, command.Id, EvaluateActivation(command.Unit, command.Id, commit: true));
-                        break;
-                    case CommandKind.RemoveByTag:
-                        query[0] = command.Tag;
-                        Pipeline.RemoveByTagSpan(command.Unit, query);
-                        break;
-                    case CommandKind.RemoveById:
-                        Pipeline.RemoveById(command.Unit, command.InstanceId);
-                        break;
-                    case CommandKind.SetBase:
-                        if (TryGetUnit(command.Unit, out var unit) && unit != null && unit.Attributes.Has(command.AttributeId))
-                            unit.Attributes.SetBase(command.AttributeId, command.Value);
-                        break;
+                    var command = _commands[processed];
+                    switch (command.Kind)
+                    {
+                        case CommandKind.Apply:
+                            Pipeline.EnqueueApply(command.Id, command.Source, command.Unit, command.Level);
+                            break;
+                        case CommandKind.Activate:
+                            RecordActivation(command.Unit, command.Id, EvaluateActivation(command.Unit, command.Id, commit: true));
+                            break;
+                        case CommandKind.RemoveByTag:
+                            query[0] = command.Tag;
+                            Pipeline.RemoveByTagSpan(command.Unit, query);
+                            break;
+                        case CommandKind.RemoveById:
+                            Pipeline.RemoveById(command.Unit, command.InstanceId);
+                            break;
+                        case CommandKind.SetBase:
+                            if (TryGetUnit(command.Unit, out var unit) && unit != null && unit.Attributes.Has(command.AttributeId))
+                                unit.Attributes.SetBase(command.AttributeId, command.Value);
+                            break;
+                    }
                 }
             }
-
-            _commands.RemoveRange(0, count);
+            finally
+            {
+                _commands.RemoveRange(0, processed < count ? processed + 1 : count);
+            }
         }
 
         private void RecordActivation(TargetId unitId, int abilityId, AbilityActivationResult result)
