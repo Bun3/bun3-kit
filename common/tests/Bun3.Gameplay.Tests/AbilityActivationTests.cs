@@ -308,6 +308,52 @@ public sealed class AbilityActivationTests
     }
 
     [Test]
+    public void A_twenty_percent_cooldown_reduction_ring_is_pure_data()
+    {
+        // Stand-in for a game's cooldown-scale attribute: a multiplier whose Base is 1.
+        const ushort cooldownScale = EffectTestKit.Resistance;
+        var f = Build((kit, b) =>
+        {
+            var cooldown = EffectTestKit.MinimalDuration("cooldown.scaled", ticks: 100);
+            cooldown.GrantedTags.Add("cooldown.fireball");
+            cooldown.DurationScale = new MagnitudeDef { Base = Operand.Attribute(cooldownScale) };
+            kit.AddEffect(cooldown);
+
+            var ring = EffectTestKit.MinimalInfinite("ring.cdr");
+            ring.Modifiers.Add(new ModifierDef
+            {
+                AttributeId = cooldownScale,
+                Op = AttributeModifierOp.Multiply,
+                Magnitude = new MagnitudeDef { Base = Operand.Constant(BigNum.FromParts(-2, -1)) },   // -20%
+            });
+            kit.AddEffect(ring);
+
+            var ability = Fireball();
+            ability.CooldownEffect = "cooldown.scaled";
+            ability.BlockedTags.Add("cooldown.fireball");
+            b.Add(ability);
+        });
+        var id = f.Abilities.GetRequiredId("fireball");
+        f.Caster.Abilities.Grant(id, GrantSource.Archetype(), level: 1);
+        f.Caster.Attributes.SetBase(cooldownScale, 1);
+        f.World.Pipeline.EnqueueApply(f.Kit.EffectId("ring.cdr"), f.Caster.Id, f.Caster.Id);
+        f.World.Tick();
+
+        Assert.That(f.World.TryActivateAbility(f.Caster.Id, id), Is.EqualTo(AbilityActivationResult.Success));
+
+        var cooldownId = f.Kit.EffectId("cooldown.scaled");
+        var active = f.Caster.Effects.ActiveEffects;
+        EffectInstance? instance = null;
+        for (var i = 0; i < active.Count; i++)
+        {
+            if (active[i].EffectId == cooldownId) instance = active[i];
+        }
+
+        Assert.That(instance, Is.Not.Null);
+        Assert.That(instance!.RemainingTicks, Is.EqualTo(80));
+    }
+
+    [Test]
     public void Activation_enqueues_the_ability_effects_on_the_caster_by_default()
     {
         var f = Build((_, b) => b.Add(Fireball()));
