@@ -1,3 +1,4 @@
+// World partial — ability activation gates, cost payment and effect dispatch.
 #nullable enable
 using System;
 using Bun3.Gameplay.Abilities;
@@ -7,19 +8,21 @@ using Bun3.Gameplay.Seams;
 
 namespace Bun3.Gameplay
 {
-    // Ability activation. Gate checks and cost payment are synchronous so that repeated activation
-    // within one tick sees the spent resources; the ability's effects go through the normal apply
-    // queue, and the cooldown effect is applied immediately so its granted tags gate the next call.
     public sealed partial class World
     {
-        /// <summary>Attempts to activate a granted ability on a unit.</summary>
-        /// <param name="unitId">Unit activating the ability.</param>
+        /// <summary>Evaluates every activation gate without side effects — no cost is paid, no cooldown
+        /// applied, no effect enqueued, no random number drawn. Safe to call outside <see cref="Tick"/>.</summary>
+        /// <param name="unitId">Unit that would activate.</param>
         /// <param name="abilityId">Compiled ability id.</param>
-        /// <returns><see cref="AbilityActivationResult.Success"/> when every gate passed, otherwise the
-        /// reason the activation was refused. Gate failures are results, not exceptions.</returns>
-        /// <remarks>Costs are checked and paid against each attribute's Base, not its Current — a
-        /// modifier on a cost attribute does not fund the spend.</remarks>
-        public AbilityActivationResult TryActivateAbility(TargetId unitId, int abilityId)
+        /// <returns>The result a queued activation would get if processed now.</returns>
+        /// <remarks>Costs are checked against each attribute's Base, not its Current — a modifier on a
+        /// cost attribute does not fund the spend.</remarks>
+        public AbilityActivationResult CanActivateAbility(TargetId unitId, int abilityId) =>
+            EvaluateActivation(unitId, abilityId, commit: false);
+
+        // With commit, a passing activation pays its costs and applies its cooldown immediately, so a
+        // second request processed in the same tick sees both.
+        private AbilityActivationResult EvaluateActivation(TargetId unitId, int abilityId, bool commit)
         {
             if (!TryGetUnit(unitId, out var unit) || unit is null) return AbilityActivationResult.UnknownUnit;
             if (!_abilities.Contains(abilityId)) return AbilityActivationResult.UnknownAbility;
@@ -50,6 +53,7 @@ namespace Bun3.Gameplay
             Span<BigNum> amounts = stackalloc BigNum[costs.Length];
             for (var i = 0; i < costs.Length; i++)
             {
+                if (!unit.Attributes.Has(costs[i].AttributeId)) return AbilityActivationResult.CostInsufficient;
                 amounts[i] = Pipeline.ComputeMagnitude(
                     costs[i].Magnitude, unit.Effects, unit.Effects, hasSource: true, level);
                 if (unit.Attributes.GetBase(costs[i].AttributeId) < amounts[i])
@@ -57,6 +61,8 @@ namespace Bun3.Gameplay
                     return AbilityActivationResult.CostInsufficient;
                 }
             }
+
+            if (!commit) return AbilityActivationResult.Success;
 
             for (var i = 0; i < costs.Length; i++)
             {
@@ -75,8 +81,6 @@ namespace Bun3.Gameplay
         private void ApplyAbilityEffects(CompiledAbility ability, TargetId unitId, int level)
         {
             // ponytail: target counts are authoring-effect scale, so a 32-slot stack buffer suffices -- on overflow only the first 32 are applied.
-            // Hoisted above the loop: stack memory is released at method exit, not per iteration, so
-            // an alloc per effect entry would grow the frame with the entry count instead of staying fixed.
             Span<TargetId> targets = stackalloc TargetId[32];
 
             var effects = ability.Effects;

@@ -136,7 +136,9 @@ namespace Bun3.Gameplay.Effects
             });
 
         /// <summary>Processes one tick in the six-phase order documented on the class.</summary>
-        public void Tick()
+        public void Tick() => RunPhases();
+
+        internal void RunPhases()
         {
             DrainApplications();
             AdvanceTime();
@@ -651,7 +653,7 @@ namespace Bun3.Gameplay.Effects
             }
         }
 
-        // Shared selector-invocation step for FireChain, FireEventChain, and World.TryActivateAbility:
+        // Shared selector-invocation step for FireChain, FireEventChain, and World ability activation:
         // calls Select, counts truncation when the reported total exceeds the buffer, and returns the
         // clamped count actually written into results.
         internal int SelectTargets(ITargetSelector selector, in SelectorContext ctx, Span<TargetId> results)

@@ -11,7 +11,9 @@ namespace Bun3.Gameplay
     /// <see cref="IEffectTargetResolver"/> for the pipeline it owns, so effects address units by
     /// <see cref="TargetId"/> without knowing about units at all. Structural changes (spawn,
     /// despawn) are queued in call order and applied only at a phase boundary — the registry must
-    /// never mutate while a tick iterates it. Composed of this file plus <c>World.Ability.cs</c>.
+    /// never mutate while a tick iterates it. Outside <see cref="Tick"/> only queueing (spawn, despawn,
+    /// <c>Enqueue*</c> commands) and read-only queries are allowed. Composed of this file plus
+    /// <c>World.Ability.cs</c> and <c>World.Commands.cs</c>.
     /// </summary>
     public sealed partial class World : IEffectTargetResolver
     {
@@ -141,17 +143,20 @@ namespace Bun3.Gameplay
             _pendingOps.Add((null, id));
         }
 
-        /// <summary>Applies queued structural changes, then advances the pipeline by one tick.</summary>
+        /// <summary>Applies queued structural changes, processes queued commands in call order, then runs
+        /// the pipeline phases.</summary>
         public void Tick()
         {
             FlushStructuralChanges();
-            Pipeline.Tick();
+            _activationCount = 0;
+            ProcessCommands();
+            Pipeline.RunPhases();
         }
 
         /// <summary>Creates a deep-copy snapshot of every registered unit plus the world counters.</summary>
         /// <returns>Snapshot of the whole world.</returns>
-        /// <exception cref="InvalidOperationException">Thrown when applications or structural changes
-        /// are still pending — both are outside snapshot scope, so snapshotting mid-drain would
+        /// <exception cref="InvalidOperationException">Thrown when applications, structural changes or
+        /// commands are still pending — all are outside snapshot scope, so snapshotting mid-drain would
         /// silently lose work or omit not-yet-flushed units.</exception>
         public WorldSnapshot CreateSnapshot()
         {
@@ -159,6 +164,8 @@ namespace Bun3.Gameplay
                 throw new InvalidOperationException("Cannot snapshot a world with pending applications.");
             if (_pendingOps.Count > 0)
                 throw new InvalidOperationException("Cannot snapshot a world with pending structural changes.");
+            if (_commands.Count > 0)
+                throw new InvalidOperationException("Cannot snapshot a world with pending commands.");
 
             var units = new UnitSnapshot[_units.Count];
             for (var i = 0; i < _units.Count; i++) units[i] = _units[i].CreateSnapshot();

@@ -488,7 +488,7 @@ namespace Bun3.Gameplay.Tests
             var roll = rng.NextUInt32() % 4;
             if (roll == 0)
             {
-                world.TryActivateAbility(unitIds[rng.NextUInt32() % unitCount], slashAbilityId);
+                world.EnqueueActivation(unitIds[rng.NextUInt32() % unitCount], slashAbilityId);
             }
             else if (roll == 1)
             {
@@ -496,7 +496,7 @@ namespace Bun3.Gameplay.Tests
                 var source = unitIds[rng.NextUInt32() % unitCount];
                 var target = unitIds[rng.NextUInt32() % unitCount];
                 var level = 1 + (int)(rng.NextUInt32() % 2);
-                world.Pipeline.EnqueueApply(effectId, source, target, level);
+                world.EnqueueApply(effectId, source, target, level);
             }
             else if (roll == 2)
             {

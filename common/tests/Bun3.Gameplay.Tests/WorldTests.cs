@@ -250,6 +250,66 @@ public sealed class WorldTests
     }
 
     [Test]
+    public void Snapshotting_with_pending_commands_is_rejected()
+    {
+        var kit = EffectTestKit.Create();
+        kit.AddEffect(EffectTestKit.MinimalInstant("noop"));
+        var world = MakeWorld(kit);
+        world.Spawn(MakeUnit(kit, 1));
+        world.Tick();
+
+        world.EnqueueApply(kit.EffectId("noop"), new TargetId(1), new TargetId(1));
+
+        Assert.That(() => world.CreateSnapshot(), Throws.InvalidOperationException);
+    }
+
+    [Test]
+    public void A_command_enqueued_during_command_processing_runs_on_the_next_tick()
+    {
+        var kit = EffectTestKit.Create();
+        kit.AddEffect(EffectTestKit.MinimalInfinite("mark"));
+        kit.AddEffect(EffectTestKit.MinimalInfinite("mark.echo"));   // distinct id: a same-id apply would merge
+        var abilityDef = new AbilityDef { Name = "echo", MaxLevel = 1 };
+        abilityDef.Effects.Add(new AbilityEffectDef { EffectName = "mark", SelectorTag = "selector.team" });
+        var abilityBuilder = new AbilityCatalogBuilder();
+        abilityBuilder.Add(abilityDef);
+        World? world = null;
+        var echo = new EchoSelector(() => world!);
+        kit.RegisterSelector("selector.team", echo);
+        var abilities = abilityBuilder.Build(kit.TagCatalog, kit.Seams, kit.Attributes, kit.Catalog);
+        world = new World(kit.Catalog, abilities, new XorShiftRng(12345));
+        var unit = MakeUnit(kit, 1);
+        world.Spawn(unit);
+        world.Tick();
+        var id = abilities.GetRequiredId("echo");
+        unit.Abilities.Grant(id, GrantSource.Archetype(), level: 1);
+        echo.EffectId = kit.EffectId("mark.echo");
+
+        world.EnqueueActivation(unit.Id, id);
+        world.Tick();
+        Assert.That(world.PendingCommandCount, Is.EqualTo(1), "the selector's enqueue waits for the next tick");
+        Assert.That(unit.Effects.ActiveEffectCount, Is.EqualTo(1));
+
+        world.Tick();
+        Assert.That(world.PendingCommandCount, Is.Zero);
+        Assert.That(unit.Effects.ActiveEffectCount, Is.EqualTo(2));
+    }
+
+    private sealed class EchoSelector : Bun3.Gameplay.Seams.ITargetSelector
+    {
+        private readonly Func<World> _world;
+        internal EchoSelector(Func<World> world) => _world = world;
+        internal int EffectId { get; set; }
+
+        public int Select(in Bun3.Gameplay.Seams.SelectorContext ctx, Span<TargetId> results)
+        {
+            _world().EnqueueApply(EffectId, ctx.Source, ctx.Source);
+            results[0] = ctx.Source;
+            return 1;
+        }
+    }
+
+    [Test]
     public void Snapshotting_with_pending_structural_changes_is_rejected()
     {
         var kit = EffectTestKit.Create();

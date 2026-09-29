@@ -74,14 +74,115 @@ public sealed class AbilityActivationTests
         return ability;
     }
 
+    private static AbilityActivationResult Activate(Fixture f, TargetId unitId, int abilityId)
+    {
+        f.World.EnqueueActivation(unitId, abilityId);
+        f.World.Tick();
+        var results = f.World.PendingActivations;
+        return results[results.Length - 1].Result;
+    }
+
+    [Test]
+    public void Activation_is_queued_and_reported_after_the_tick()
+    {
+        var f = Build((_, b) => b.Add(Fireball()));
+        var id = f.Abilities.GetRequiredId("fireball");
+        f.Caster.Abilities.Grant(id, GrantSource.Archetype(), level: 1);
+
+        f.World.EnqueueActivation(f.Caster.Id, id);
+        Assert.That(f.Victim.Attributes.GetBase(EffectTestKit.Hp), Is.EqualTo((BigNum)100), "nothing runs outside the tick");
+        Assert.That(f.World.PendingCommandCount, Is.EqualTo(1));
+
+        f.World.Tick();
+
+        Assert.That(f.World.PendingActivations.Length, Is.EqualTo(1));
+        Assert.That(f.World.PendingActivations[0].UnitId, Is.EqualTo(f.Caster.Id));
+        Assert.That(f.World.PendingActivations[0].AbilityId, Is.EqualTo(id));
+        Assert.That(f.World.PendingActivations[0].Result, Is.EqualTo(AbilityActivationResult.Success));
+        Assert.That(f.World.PendingCommandCount, Is.Zero);
+    }
+
+    [Test]
+    public void Can_activate_reports_the_gate_result_without_side_effects()
+    {
+        var f = Build((_, b) =>
+        {
+            var ability = Fireball();
+            ability.CooldownEffect = "cooldown.fireball";
+            ability.Costs.Add(new CostDef { AttributeId = EffectTestKit.Mp, Magnitude = new MagnitudeDef { Base = Operand.Constant(30) } });
+            b.Add(ability);
+        });
+        var id = f.Abilities.GetRequiredId("fireball");
+        f.Caster.Abilities.Grant(id, GrantSource.Archetype(), level: 1);
+
+        Assert.That(f.World.CanActivateAbility(f.Caster.Id, id), Is.EqualTo(AbilityActivationResult.Success));
+        Assert.That(f.World.CanActivateAbility(f.Caster.Id, id), Is.EqualTo(AbilityActivationResult.Success));
+        Assert.That(f.Caster.Attributes.GetBase(EffectTestKit.Mp), Is.EqualTo((BigNum)50));
+        Assert.That(f.Caster.Effects.ActiveEffectCount, Is.Zero);
+        Assert.That(f.World.PendingCommandCount, Is.Zero);
+        Assert.That(f.World.Pipeline.PendingApplyCount, Is.Zero);
+    }
+
+    [Test]
+    public void Commands_keep_call_order_across_kinds()
+    {
+        var f = Build((kit, b) =>
+        {
+            kit.AddEffect(EffectTestKit.MinimalInfinite("mark.a"));
+            kit.AddEffect(EffectTestKit.MinimalInfinite("mark.b"));
+            var ability = new AbilityDef { Name = "mark", MaxLevel = 1 };
+            ability.Effects.Add(new AbilityEffectDef { EffectName = "mark.a" });
+            b.Add(ability);
+        });
+        var id = f.Abilities.GetRequiredId("mark");
+        f.Caster.Abilities.Grant(id, GrantSource.Archetype(), level: 1);
+
+        f.World.EnqueueApply(f.Kit.EffectId("mark.b"), f.Caster.Id, f.Caster.Id);
+        f.World.EnqueueActivation(f.Caster.Id, id);
+        f.World.Tick();
+
+        var active = f.Caster.Effects.ActiveEffects;
+        Assert.That(active[0].EffectId, Is.EqualTo(f.Kit.EffectId("mark.b")), "applied first, so the lower instance id");
+        Assert.That(active[1].EffectId, Is.EqualTo(f.Kit.EffectId("mark.a")));
+    }
+
+    [Test]
+    public void Activation_for_a_unit_despawned_this_frame_reports_unknown_unit()
+    {
+        var f = Build((_, b) => b.Add(Fireball()));
+        var id = f.Abilities.GetRequiredId("fireball");
+        f.Caster.Abilities.Grant(id, GrantSource.Archetype(), level: 1);
+
+        f.World.Despawn(f.Caster.Id);
+        Assert.That(Activate(f, f.Caster.Id, id), Is.EqualTo(AbilityActivationResult.UnknownUnit));
+    }
+
+    [Test]
+    public void A_cost_on_an_attribute_the_unit_does_not_declare_is_insufficient_not_an_exception()
+    {
+        var f = Build((_, b) =>
+        {
+            var ability = Fireball();
+            ability.Costs.Add(new CostDef { AttributeId = EffectTestKit.Resistance, Magnitude = new MagnitudeDef { Base = Operand.Constant(1) } });
+            b.Add(ability);
+        });
+        var id = f.Abilities.GetRequiredId("fireball");
+        ReadOnlySpan<ushort> declared = stackalloc ushort[] { EffectTestKit.Hp, EffectTestKit.MaxHp };
+        var bare = new Unit(new TargetId(3), EffectTestKit.BuildAttributeRegistry(), declared, f.Kit.TagCatalog);
+        f.World.Spawn(bare);
+        bare.Abilities.Grant(id, GrantSource.Archetype(), level: 1);
+
+        Assert.That(Activate(f, bare.Id, id), Is.EqualTo(AbilityActivationResult.CostInsufficient));
+    }
+
     [Test]
     public void Unknown_unit_and_ability_are_reported_as_such()
     {
         var f = Build((_, b) => b.Add(Fireball()));
         var id = f.Abilities.GetRequiredId("fireball");
 
-        Assert.That(f.World.TryActivateAbility(new TargetId(99), id), Is.EqualTo(AbilityActivationResult.UnknownUnit));
-        Assert.That(f.World.TryActivateAbility(f.Caster.Id, 12345), Is.EqualTo(AbilityActivationResult.UnknownAbility));
+        Assert.That(Activate(f, new TargetId(99), id), Is.EqualTo(AbilityActivationResult.UnknownUnit));
+        Assert.That(Activate(f, f.Caster.Id, 12345), Is.EqualTo(AbilityActivationResult.UnknownAbility));
     }
 
     [Test]
@@ -90,7 +191,7 @@ public sealed class AbilityActivationTests
         var f = Build((_, b) => b.Add(Fireball()));
 
         Assert.That(
-            f.World.TryActivateAbility(f.Caster.Id, f.Abilities.GetRequiredId("fireball")),
+            Activate(f, f.Caster.Id, f.Abilities.GetRequiredId("fireball")),
             Is.EqualTo(AbilityActivationResult.NotGranted));
     }
 
@@ -106,10 +207,10 @@ public sealed class AbilityActivationTests
         var id = f.Abilities.GetRequiredId("fireball");
         f.Caster.Abilities.Grant(id, GrantSource.Archetype(), level: 1);
 
-        Assert.That(f.World.TryActivateAbility(f.Caster.Id, id), Is.EqualTo(AbilityActivationResult.MissingTag));
+        Assert.That(Activate(f, f.Caster.Id, id), Is.EqualTo(AbilityActivationResult.MissingTag));
 
         f.Caster.Tags.Add(f.Kit.Tag("state.armed"));
-        Assert.That(f.World.TryActivateAbility(f.Caster.Id, id), Is.EqualTo(AbilityActivationResult.Success));
+        Assert.That(Activate(f, f.Caster.Id, id), Is.EqualTo(AbilityActivationResult.Success));
     }
 
     [Test]
@@ -125,7 +226,7 @@ public sealed class AbilityActivationTests
         f.Caster.Abilities.Grant(id, GrantSource.Archetype(), level: 1);
         f.Caster.Tags.Add(f.Kit.Tag("state.silenced"));
 
-        Assert.That(f.World.TryActivateAbility(f.Caster.Id, id), Is.EqualTo(AbilityActivationResult.BlockedByTag));
+        Assert.That(Activate(f, f.Caster.Id, id), Is.EqualTo(AbilityActivationResult.BlockedByTag));
     }
 
     [Test]
@@ -145,7 +246,7 @@ public sealed class AbilityActivationTests
         var id = f.Abilities.GetRequiredId("fireball");
         f.Caster.Abilities.Grant(id, GrantSource.Archetype(), level: 1);
 
-        Assert.That(f.World.TryActivateAbility(f.Caster.Id, id), Is.EqualTo(AbilityActivationResult.ConditionFailed));
+        Assert.That(Activate(f, f.Caster.Id, id), Is.EqualTo(AbilityActivationResult.ConditionFailed));
     }
 
     [Test]
@@ -164,7 +265,7 @@ public sealed class AbilityActivationTests
         var id = f.Abilities.GetRequiredId("fireball");
         f.Caster.Abilities.Grant(id, GrantSource.Archetype(), level: 1);
 
-        Assert.That(f.World.TryActivateAbility(f.Caster.Id, id), Is.EqualTo(AbilityActivationResult.CostInsufficient));
+        Assert.That(Activate(f, f.Caster.Id, id), Is.EqualTo(AbilityActivationResult.CostInsufficient));
         Assert.That(f.Caster.Attributes.GetBase(EffectTestKit.Mp), Is.EqualTo((BigNum)50));
     }
 
@@ -198,7 +299,7 @@ public sealed class AbilityActivationTests
         Assert.That(f.Caster.Attributes.GetCurrent(EffectTestKit.Mp), Is.EqualTo((BigNum)90));
         Assert.That(f.Caster.Attributes.GetBase(EffectTestKit.Mp), Is.EqualTo((BigNum)50));
 
-        Assert.That(f.World.TryActivateAbility(f.Caster.Id, id), Is.EqualTo(AbilityActivationResult.CostInsufficient));
+        Assert.That(Activate(f, f.Caster.Id, id), Is.EqualTo(AbilityActivationResult.CostInsufficient));
         Assert.That(f.Caster.Attributes.GetBase(EffectTestKit.Mp), Is.EqualTo((BigNum)50));
     }
 
@@ -219,7 +320,7 @@ public sealed class AbilityActivationTests
         f.Caster.Abilities.Grant(id, GrantSource.Archetype(), level: 1);
         f.Caster.Attributes.SetBase(EffectTestKit.Attack, 10);
 
-        Assert.That(f.World.TryActivateAbility(f.Caster.Id, id), Is.EqualTo(AbilityActivationResult.Success));
+        Assert.That(Activate(f, f.Caster.Id, id), Is.EqualTo(AbilityActivationResult.Success));
         Assert.That(f.Caster.Attributes.GetBase(EffectTestKit.Attack), Is.EqualTo((BigNum)0));
     }
 
@@ -244,7 +345,7 @@ public sealed class AbilityActivationTests
         var id = f.Abilities.GetRequiredId("fireball");
         f.Caster.Abilities.Grant(id, GrantSource.Archetype(), level: 1);
 
-        Assert.That(f.World.TryActivateAbility(f.Caster.Id, id), Is.EqualTo(AbilityActivationResult.CostInsufficient));
+        Assert.That(Activate(f, f.Caster.Id, id), Is.EqualTo(AbilityActivationResult.CostInsufficient));
         Assert.That(f.Caster.Attributes.GetBase(EffectTestKit.Mp), Is.EqualTo((BigNum)50));
         Assert.That(f.Caster.Attributes.GetBase(EffectTestKit.Attack), Is.EqualTo((BigNum)0));
     }
@@ -265,9 +366,12 @@ public sealed class AbilityActivationTests
         var id = f.Abilities.GetRequiredId("fireball");
         f.Caster.Abilities.Grant(id, GrantSource.Archetype(), level: 1);
 
-        Assert.That(f.World.TryActivateAbility(f.Caster.Id, id), Is.EqualTo(AbilityActivationResult.Success));
-        Assert.That(f.Caster.Attributes.GetBase(EffectTestKit.Mp), Is.EqualTo((BigNum)20));
-        Assert.That(f.World.TryActivateAbility(f.Caster.Id, id), Is.EqualTo(AbilityActivationResult.CostInsufficient));
+        f.World.EnqueueActivation(f.Caster.Id, id);
+        f.World.EnqueueActivation(f.Caster.Id, id);
+        f.World.Tick();
+
+        Assert.That(f.World.PendingActivations[0].Result, Is.EqualTo(AbilityActivationResult.Success));
+        Assert.That(f.World.PendingActivations[1].Result, Is.EqualTo(AbilityActivationResult.CostInsufficient));
         Assert.That(f.Caster.Attributes.GetBase(EffectTestKit.Mp), Is.EqualTo((BigNum)20));
     }
 
@@ -284,8 +388,12 @@ public sealed class AbilityActivationTests
         var id = f.Abilities.GetRequiredId("fireball");
         f.Caster.Abilities.Grant(id, GrantSource.Archetype(), level: 1);
 
-        Assert.That(f.World.TryActivateAbility(f.Caster.Id, id), Is.EqualTo(AbilityActivationResult.Success));
-        Assert.That(f.World.TryActivateAbility(f.Caster.Id, id), Is.EqualTo(AbilityActivationResult.BlockedByTag));
+        f.World.EnqueueActivation(f.Caster.Id, id);
+        f.World.EnqueueActivation(f.Caster.Id, id);
+        f.World.Tick();
+
+        Assert.That(f.World.PendingActivations[0].Result, Is.EqualTo(AbilityActivationResult.Success));
+        Assert.That(f.World.PendingActivations[1].Result, Is.EqualTo(AbilityActivationResult.BlockedByTag));
     }
 
     [Test]
@@ -301,10 +409,10 @@ public sealed class AbilityActivationTests
         var id = f.Abilities.GetRequiredId("fireball");
         f.Caster.Abilities.Grant(id, GrantSource.Archetype(), level: 1);
 
-        f.World.TryActivateAbility(f.Caster.Id, id);
+        Activate(f, f.Caster.Id, id);
         for (var i = 0; i < 8; i++) f.World.Tick();
 
-        Assert.That(f.World.TryActivateAbility(f.Caster.Id, id), Is.EqualTo(AbilityActivationResult.Success));
+        Assert.That(Activate(f, f.Caster.Id, id), Is.EqualTo(AbilityActivationResult.Success));
     }
 
     [Test]
@@ -339,7 +447,7 @@ public sealed class AbilityActivationTests
         f.World.Pipeline.EnqueueApply(f.Kit.EffectId("ring.cdr"), f.Caster.Id, f.Caster.Id);
         f.World.Tick();
 
-        Assert.That(f.World.TryActivateAbility(f.Caster.Id, id), Is.EqualTo(AbilityActivationResult.Success));
+        Assert.That(Activate(f, f.Caster.Id, id), Is.EqualTo(AbilityActivationResult.Success));
 
         var cooldownId = f.Kit.EffectId("cooldown.scaled");
         var active = f.Caster.Effects.ActiveEffects;
@@ -360,7 +468,7 @@ public sealed class AbilityActivationTests
         var id = f.Abilities.GetRequiredId("fireball");
         f.Caster.Abilities.Grant(id, GrantSource.Archetype(), level: 1);
 
-        Assert.That(f.World.TryActivateAbility(f.Caster.Id, id), Is.EqualTo(AbilityActivationResult.Success));
+        Assert.That(Activate(f, f.Caster.Id, id), Is.EqualTo(AbilityActivationResult.Success));
         f.World.Tick();
 
         Assert.That(f.Caster.Attributes.GetBase(EffectTestKit.Hp), Is.EqualTo((BigNum)75));
@@ -399,7 +507,7 @@ public sealed class AbilityActivationTests
 
         var id = abilities.GetRequiredId("fireball");
         caster.Abilities.Grant(id, GrantSource.Archetype(), level: 3);
-        world.TryActivateAbility(caster.Id, id);
+        world.EnqueueActivation(caster.Id, id);
         world.Tick();
 
         Assert.That(caster.Attributes.GetBase(EffectTestKit.Hp), Is.EqualTo((BigNum)70));
