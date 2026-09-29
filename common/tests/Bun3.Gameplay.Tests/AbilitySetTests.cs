@@ -8,6 +8,28 @@ namespace Bun3.Gameplay.Tests;
 public sealed class AbilitySetTests
 {
     [Test]
+    public void Grants_are_enumerable_in_canonical_order_and_version_tracks_changes()
+    {
+        var set = new AbilitySet();
+        var v0 = set.Version;
+
+        set.Grant(2, GrantSource.Archetype(), level: 1);
+        set.Grant(1, GrantSource.Archetype(), level: 3);
+        Assert.That(set.Version, Is.EqualTo(v0 + 2));
+        Assert.That(set.GetGrant(0).AbilityId, Is.EqualTo(1));
+        Assert.That(set.GetGrant(0).Level, Is.EqualTo(3));
+        Assert.That(set.GetGrant(1).AbilityId, Is.EqualTo(2));
+        Assert.That(set.GetGrant(1).Source, Is.EqualTo(GrantSource.Archetype()));
+
+        var beforeNoop = set.Version;
+        set.Revoke(GrantSource.Effect(999));
+        Assert.That(set.Version, Is.EqualTo(beforeNoop), "a revoke that removes nothing is not a change");
+
+        set.RestoreSnapshot(set.CreateSnapshot());
+        Assert.That(set.Version, Is.GreaterThan(beforeNoop));
+    }
+
+    [Test]
     public void Grant_then_revoke_by_the_same_source_removes_the_ability()
     {
         var set = new AbilitySet();

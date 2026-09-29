@@ -40,6 +40,7 @@ public sealed class AbilityCatalogBuilderTests
         Assert.That(catalog.Count, Is.EqualTo(2));
         Assert.That(catalog.GetRequiredId("alpha"), Is.EqualTo(0));
         Assert.That(catalog.GetRequiredId("beta"), Is.EqualTo(1));
+        Assert.That(catalog.GetName(catalog.GetRequiredId("beta")), Is.EqualTo("beta"));
     }
 
     [Test]

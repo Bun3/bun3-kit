@@ -25,6 +25,20 @@ namespace Bun3.Gameplay.Abilities
         /// <summary>Number of (ability, origin) grants held.</summary>
         public int GrantCount => _grants.Count;
 
+        /// <summary>Incremented whenever the grant list changes — a grant, a level change, a revoke that
+        /// removed something, or a restore. Redraw an ability bar only when it changes.</summary>
+        public int Version { get; private set; }
+
+        /// <summary>Returns the grant at <paramref name="index"/> in canonical order (ability id ascending,
+        /// then origin). An ability granted by several origins appears once per origin, adjacently.</summary>
+        /// <param name="index">Index in [0, <see cref="GrantCount"/>).</param>
+        /// <returns>Value copy of the grant.</returns>
+        public AbilityGrantInfo GetGrant(int index)
+        {
+            var grant = _grants[index];
+            return new AbilityGrantInfo(grant.AbilityId, grant.Source, grant.Level);
+        }
+
         /// <summary>Grants an ability from one origin. Regranting the same pair updates the level only.</summary>
         /// <param name="abilityId">Compiled ability id.</param>
         /// <param name="source">Origin granting the ability.</param>
@@ -40,10 +54,12 @@ namespace Bun3.Gameplay.Abilities
                 var existing = _grants[position];
                 existing.Level = level;
                 _grants[position] = existing;
+                Version++;
                 return;
             }
 
             _grants.Insert(position, new GrantEntry { AbilityId = abilityId, Source = source, Level = level });
+            Version++;
         }
 
         /// <summary>Revokes every grant made by one origin.</summary>
@@ -59,6 +75,7 @@ namespace Bun3.Gameplay.Abilities
                 removed++;
             }
 
+            if (removed > 0) Version++;
             return removed;
         }
 
@@ -114,6 +131,8 @@ namespace Bun3.Gameplay.Abilities
             {
                 _grants.Add(new GrantEntry { AbilityId = rows[i].AbilityId, Source = rows[i].Source, Level = rows[i].Level });
             }
+
+            Version++;
         }
 
         // Linear scan is intentional — grant counts are archetype-scale (single digits to low tens)
@@ -139,5 +158,25 @@ namespace Bun3.Gameplay.Abilities
             exists = false;
             return _grants.Count;
         }
+    }
+
+    /// <summary>One (ability, origin) grant of an <see cref="AbilitySet"/>.</summary>
+    public readonly struct AbilityGrantInfo
+    {
+        internal AbilityGrantInfo(int abilityId, GrantSource source, int level)
+        {
+            AbilityId = abilityId;
+            Source = source;
+            Level = level;
+        }
+
+        /// <summary>Compiled ability id.</summary>
+        public int AbilityId { get; }
+
+        /// <summary>Origin that granted the ability.</summary>
+        public GrantSource Source { get; }
+
+        /// <summary>Level this origin grants.</summary>
+        public int Level { get; }
     }
 }

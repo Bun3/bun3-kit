@@ -127,5 +127,11 @@ namespace Bun3.Gameplay.Abilities
         public bool Contains(int id) => id >= 0 && id < _abilities.Length;
 
         internal CompiledAbility GetAbility(int id) => _abilities[id];
+
+        /// <summary>Authored name of an ability. The string is built once at catalog build, so this does not
+        /// allocate.</summary>
+        /// <param name="id">Compiled ability id.</param>
+        /// <returns>Ability name.</returns>
+        public string GetName(int id) => _abilities[id].Name;
     }
 }
