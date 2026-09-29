@@ -631,7 +631,24 @@ Effect 도메인 명명 정리(`EffectSpec`→`EffectDef` 등)와 남은 세 건
 
 ## 15. 버전
 
-기능 추가(파괴 없음): `Bun3.Gameplay` 0.13.0 → **0.14.0**, UPM 동반.
+기능 추가 + **공개 API 파괴 변경**: `Bun3.Gameplay` 0.13.0 → **0.14.0**, UPM 동반.
+저작 어셈블리(`Bun3.Gameplay.Catalog`)를 싣는 `Bun3.Gameplay.Authoring`도 0.2.0 → **0.3.0**.
+0.x 구간이므로 파괴 변경도 마이너 범프로 처리한다.
+
+§13 명명 정리로 0.13.0에 공개됐던 이름이 바뀌었다.
+
+| 0.13.0 | 0.14.0 |
+|---|---|
+| `EffectSpec` · `StackPolicy` · `LevelKey` | `EffectDef` · `StackPolicyDef` · `LevelKeyDef` |
+| `AttributeDefinition` | `CompiledAttribute` |
+| `EffectInstance.SpecId` · `EffectLifecycleEvent.SpecId` | `EffectId` |
+| `EffectSpecJson` | `EffectDefJson` |
+| Effect JSON 루트 키 `"specs"` | `"effects"` (`schemaVersion`은 1 유지) |
+
+`[Obsolete]` 별칭과 `"specs"` 키 호환 수용은 두지 않는다. 확인해 보니 소비자가 없다 —
+bun3-server-template은 `Bun3.Gameplay`를 참조하지 않고, 저장소 밖에 저작된 Effect JSON도 없다.
+같은 이유로 JSON `schemaVersion`도 올리지 않는다.
+
 슬라이스 2 §7.2의 체인 값 전달 규칙 개정은 문서 개정이며 기존 4종 트리거의 동작은 불변이다.
 `calc.*`·`selector.*`에 이어 `event.*` 예약 루트가 추가된다(일반 태그이므로 카탈로그 스키마
 영향 없음).
