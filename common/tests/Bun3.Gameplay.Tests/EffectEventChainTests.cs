@@ -595,7 +595,7 @@ public sealed class EffectEventChainTests
     public void Event_magnitude_in_a_clamp_bound_is_rejected()
     {
         var builder = new AttributeRegistryBuilder();
-        builder.Register(EffectTestKit.Hp, min: Operand.EventMagnitude((BigNum)1));
+        builder.Register(EffectTestKit.Hp, "Hp", min: Operand.EventMagnitude((BigNum)1));
 
         Assert.That(() => builder.Build(), Throws.InvalidOperationException);
     }

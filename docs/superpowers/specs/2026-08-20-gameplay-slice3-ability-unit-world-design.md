@@ -842,3 +842,52 @@ GameplayEvent). 코어에 cue(VFX) 시스템은 두지 않는다 — 위 버퍼�
 - 대상 유무를 효과 항목에서 추론하는 것 — 빌드 시점 암묵 동작을 늘리지 않는다(§16.4와 같은 원칙).
 - 거리·시야 같은 공간 검사 — 이동·공간 스펙 이후.
 - 셀렉터로 고른 대상이 0명일 때 발동 실패 — 광역기는 빗나가도 발동은 성공(코스트 소모)이 관례다.
+
+## 18. 부트스트랩 묶음과 유닛 아키타입 (2026-10-01)
+
+구현 리뷰 사용성 축: 태그 → 속성 → 이름표 → 시섬 → 이펙트 → 어빌리티 → 월드 → 유닛까지 약 11단계에
+tags·seams·attributes를 네 번 넘겨야 했고, 예제 시나리오도 이 묶음을 따로 만들어 썼다. 두 번째 게임도
+똑같이 짤 코드이므로 프레임워크 몫이다(CLAUDE.md). 참고: Lyra는 PawnData·AbilitySet 데이터 자산으로
+"이런 유닛은 이런 어빌리티·속성을 갖는다"를 묶는다.
+
+### 18.1 속성 이름 (사용자 결정: 레지스트리에 이름 포함)
+
+- `AttributeRegistryBuilder.Register(attributeId, name, min, max, ...)` — 이름은 필수, 비어 있거나
+  중복이면 Build 오류. `AttributeRegistry.GetName(id)`·`TryGetId(name, out id)`.
+- JSON 로더(`EffectDefJson`·`AbilityDefJson`)는 별도 이름표 딕셔너리 대신 `AttributeRegistry`를 받는다.
+- 이름은 `Signature`에 넣지 않는다 — 컴파일 아티팩트는 id만 쓰므로 이름 변경이 아티팩트를 무효화하지 않는다.
+- 에러 메시지가 속성을 이름으로 보여줄 수 있게 된다(§19 에러 메시지).
+
+### 18.2 유닛 아키타입 (사용자 결정: JSON 저작까지)
+
+```
+UnitArchetypeDef: Name, Attributes [(AttributeId, Base)], Abilities [(AbilityName, Level)]
+```
+
+- 선언 속성 = `Attributes`의 속성들. 기본 Base는 **레지스트리 `EvaluationOrder` 순서로** 넣는다 —
+  저작 순서와 무관하게 클램프 경계(MaxHp)가 값(Hp)보다 먼저 들어간다.
+- 시작 어빌리티는 `GrantSource.Archetype()`으로 부여한다(§7.4의 Archetype 소스 배선).
+- Build 검증: 이름 중복·빈 이름, 미등록 속성, 한 아키타입 안의 속성 중복, 미지 어빌리티, 레벨 1 미만·
+  어빌리티 MaxLevel 초과.
+- 쿨다운 배율 속성(§7.3)의 Base 1 초기화를 아키타입 기본값으로 저작할 수 있다.
+- 시작 이펙트(패시브)는 두지 않는다 — 시작 어빌리티나 스폰 직후 `EnqueueApply`로 충분하다.
+- JSON: `{ "schemaVersion": 1, "archetypes": [ { "name": "Warrior", "attributes": { "MaxHp": "100",
+  "Hp": "100" }, "abilities": [ { "ability": "Slash", "level": 1 } ] } ] }` (속성은 이름, 값은 BigNum 문자열).
+
+### 18.3 GameplayDatabase
+
+```csharp
+var db = GameplayDatabase.Build(tags, seams, attributes, effectDefs, abilityDefs, archetypeDefs);
+// 또는 GameplayCatalogBinary.Load(stream, tags, seams, attributes) → GameplayDatabase
+var world = new World(db, rng);
+var unit = world.CreateUnit(new TargetId(1), db.Archetypes.GetRequiredId("Warrior"));
+world.Spawn(unit);
+```
+
+- `GameplayDatabase`: `Tags`·`Seams`·`Attributes`·`Effects`·`Abilities`·`Archetypes`를 묶는 불변 객체.
+  `Build`(정의에서 컴파일)와 이미 컴파일된 조각을 받는 생성자 두 경로.
+- `World(GameplayDatabase, IRng, applyBudgetPerUnit)` 하나로 생성자를 통일한다.
+- `World.CreateUnit(id, archetypeId, ownerId)`: 아키타입대로 유닛을 만들고 기본값·시작 어빌리티를 넣어
+  돌려준다(아직 미등록 — 스폰 전 직접 초기화 규칙 §16.1 그대로). `Spawn`은 따로 부른다.
+- 컴파일 아티팩트는 아키타입 섹션을 싣고 `GameplayDatabase`를 직접 읽고 쓴다(schema 1, 미퍼블리시).
+- 저작 쪽 `GameplayDatabaseJson.Load(tags, seams, attributes, effectsJson, abilitiesJson, archetypesJson)`.

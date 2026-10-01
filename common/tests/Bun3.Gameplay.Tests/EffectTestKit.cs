@@ -67,11 +67,11 @@ internal sealed class EffectTestKit
     public static AttributeRegistry BuildAttributeRegistry()
     {
         var builder = new AttributeRegistryBuilder();
-        builder.Register(MaxHp, min: Operand.Constant(1));
-        builder.Register(Hp, min: Operand.Constant(0), max: Operand.Attribute(MaxHp));
-        builder.Register(Attack, min: Operand.Constant(0));
-        builder.Register(Mp);
-        builder.Register(Resistance);
+        builder.Register(MaxHp, "MaxHp", min: Operand.Constant(1));
+        builder.Register(Hp, "Hp", min: Operand.Constant(0), max: Operand.Attribute(MaxHp));
+        builder.Register(Attack, "Attack", min: Operand.Constant(0));
+        builder.Register(Mp, "Mp");
+        builder.Register(Resistance, "Resistance");
         return builder.Build();
     }
 

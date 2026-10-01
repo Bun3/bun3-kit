@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using Bun3.Gameplay.Attributes;
 using Bun3.Gameplay.Effects;
 using Bun3.Gameplay.Effects.Catalog;
 using Bun3.Gameplay.Numerics;
@@ -18,7 +19,7 @@ namespace Bun3.Gameplay.Abilities.Catalog
     /// duplicate keys, unknown fields, unknown enum values; BigNum literals are always strings)
     /// but performs no semantic validation of tag, effect, or seam references — that is
     /// <see cref="AbilityCatalogBuilder.Build"/>'s job. Its only semantic step is resolving
-    /// attribute name strings to ushort ids via <see cref="Load"/>'s attributeNames dictionary.
+    /// attribute name strings to ushort ids through the <see cref="Load"/> attribute registry.
     /// Operand, MagnitudeDef, ConditionDef, and the "level" field (<c>"Inherit"</c> or a fixed
     /// integer, compiling to <see cref="ChainLevelRule"/> + FixedLevel) reuse <see cref="EffectDefJson"/>'s
     /// internal parsers so the two loaders share one implementation of each shape.
@@ -27,15 +28,16 @@ namespace Bun3.Gameplay.Abilities.Catalog
     {
         /// <summary>Reads the UTF-8 JSON stream from its current position to the end into a list of ability defs.</summary>
         /// <param name="utf8Json">Readable UTF-8 JSON stream.</param>
-        /// <param name="attributeNames">Dictionary resolving attribute names in costs/conditions to ids.</param>
+        /// <param name="attributes">Attribute registry resolving attribute names in costs/conditions to ids.</param>
         /// <returns>Ability defs in the order they appear in the JSON.</returns>
         /// <exception cref="ArgumentNullException">
-        /// <paramref name="utf8Json"/> or <paramref name="attributeNames"/> is null.
+        /// <paramref name="utf8Json"/> or <paramref name="attributes"/> is null.
         /// </exception>
         /// <exception cref="ArgumentException">The stream is not readable.</exception>
         /// <exception cref="TagCatalogException">The JSON syntax or ability shape is invalid.</exception>
-        public static List<AbilityDef> Load(Stream utf8Json, IReadOnlyDictionary<string, ushort> attributeNames) =>
-            LoadDocument(utf8Json, attributeNames, "abilities", ReadAbility);
+        public static List<AbilityDef> Load(Stream utf8Json, AttributeRegistry attributes) =>
+            LoadDocument(
+                utf8Json, (attributes ?? throw new ArgumentNullException(nameof(attributes))).NameToId, "abilities", ReadAbility);
 
         private static AbilityDef ReadAbility(JObject ability, IReadOnlyDictionary<string, ushort> attributeNames)
         {

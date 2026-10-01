@@ -14,19 +14,12 @@ namespace Bun3.Gameplay.Tests;
 [TestFixture]
 public sealed class EffectDefJsonTests
 {
-    // Name map aligned with EffectTestKit's attribute id constants.
-    private static readonly Dictionary<string, ushort> AttributeNames = new Dictionary<string, ushort>
-    {
-        ["Hp"] = EffectTestKit.Hp,
-        ["MaxHp"] = EffectTestKit.MaxHp,
-        ["Mp"] = EffectTestKit.Mp,
-        ["Attack"] = EffectTestKit.Attack,
-    };
+    private static readonly AttributeRegistry Attributes = EffectTestKit.BuildAttributeRegistry();
 
-    private static List<EffectDef> Load(string json, IReadOnlyDictionary<string, ushort>? attributeNames = null)
+    private static List<EffectDef> Load(string json)
     {
         using var stream = new MemoryStream(Encoding.UTF8.GetBytes(json));
-        return EffectDefJson.Load(stream, attributeNames ?? AttributeNames);
+        return EffectDefJson.Load(stream, Attributes);
     }
 
     private const string ChillSampleJson = """

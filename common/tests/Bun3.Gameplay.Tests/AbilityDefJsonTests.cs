@@ -15,18 +15,12 @@ namespace Bun3.Gameplay.Tests;
 [TestFixture]
 public sealed class AbilityDefJsonTests
 {
-    private static readonly Dictionary<string, ushort> AttributeNames = new Dictionary<string, ushort>
-    {
-        ["Hp"] = EffectTestKit.Hp,
-        ["MaxHp"] = EffectTestKit.MaxHp,
-        ["Mp"] = EffectTestKit.Mp,
-        ["Attack"] = EffectTestKit.Attack,
-    };
+    private static readonly AttributeRegistry Attributes = EffectTestKit.BuildAttributeRegistry();
 
     private static List<AbilityDef> Load(string json)
     {
         using var stream = new MemoryStream(Encoding.UTF8.GetBytes(json));
-        return AbilityDefJson.Load(stream, AttributeNames);
+        return AbilityDefJson.Load(stream, Attributes);
     }
 
     [Test]

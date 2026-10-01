@@ -18,21 +18,22 @@ namespace Bun3.Gameplay.Effects.Catalog
     /// duplicate keys, unknown fields, unknown enum values; BigNum literals are always strings)
     /// but performs no semantic validation of tag or seam references — that is
     /// <see cref="EffectCatalogBuilder.Build"/>'s job. Its only semantic step is resolving
-    /// attribute name strings to ushort ids via <see cref="Load"/>'s attributeNames dictionary.
+    /// attribute name strings to ushort ids through the <see cref="Load"/> attribute registry.
     /// </summary>
     public static class EffectDefJson
     {
         /// <summary>Reads the UTF-8 JSON stream from its current position to the end into a list of effect definitions.</summary>
         /// <param name="utf8Json">Readable UTF-8 JSON stream.</param>
-        /// <param name="attributeNames">Dictionary resolving attribute names in Operand/ModifierDef to ids.</param>
+        /// <param name="attributes">Attribute registry resolving attribute names in Operand/ModifierDef to ids.</param>
         /// <returns>Effect definitions in the order they appear in the JSON.</returns>
         /// <exception cref="ArgumentNullException">
-        /// <paramref name="utf8Json"/> or <paramref name="attributeNames"/> is null.
+        /// <paramref name="utf8Json"/> or <paramref name="attributes"/> is null.
         /// </exception>
         /// <exception cref="ArgumentException">The stream is not readable.</exception>
         /// <exception cref="TagCatalogException">The JSON syntax or effect shape is invalid.</exception>
-        public static List<EffectDef> Load(Stream utf8Json, IReadOnlyDictionary<string, ushort> attributeNames) =>
-            LoadDocument(utf8Json, attributeNames, "effects", ReadEffect);
+        public static List<EffectDef> Load(Stream utf8Json, AttributeRegistry attributes) =>
+            LoadDocument(
+                utf8Json, (attributes ?? throw new ArgumentNullException(nameof(attributes))).NameToId, "effects", ReadEffect);
 
         private static EffectDef ReadEffect(JObject effect, IReadOnlyDictionary<string, ushort> attributeNames)
         {

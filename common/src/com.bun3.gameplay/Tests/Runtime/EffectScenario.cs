@@ -42,9 +42,9 @@ namespace Bun3.Gameplay.Tests
             var tagCatalog = TagCatalog.Create(new List<string>(), new List<TagCatalog.ParsedRedirect>());
 
             var registryBuilder = new AttributeRegistryBuilder();
-            registryBuilder.Register(MaxHp, min: Operand.Constant(BigNum.FromParts(1, 0)));
-            registryBuilder.Register(Hp, min: Operand.Constant(BigNum.Zero), max: Operand.Attribute(MaxHp));
-            registryBuilder.Register(Attack, min: Operand.Constant(BigNum.Zero));
+            registryBuilder.Register(MaxHp, "MaxHp", min: Operand.Constant(BigNum.FromParts(1, 0)));
+            registryBuilder.Register(Hp, "Hp", min: Operand.Constant(BigNum.Zero), max: Operand.Attribute(MaxHp));
+            registryBuilder.Register(Attack, "Attack", min: Operand.Constant(BigNum.Zero));
             var registry = registryBuilder.Build();
 
             var catalogBuilder = new EffectCatalogBuilder();
@@ -322,8 +322,6 @@ namespace Bun3.Gameplay.Tests
 
         /// <summary>Name -> id map for <see cref="ScenarioAttributeIds"/>, for JSON-authored variants
         /// of the scenario catalogs (the binary-artifact equivalence test's JSON leg).</summary>
-        internal static readonly IReadOnlyDictionary<string, ushort> ScenarioAttributeNames =
-            new Dictionary<string, ushort> { ["Hp"] = Hp, ["MaxHp"] = MaxHp, ["Attack"] = Attack, ["Mp"] = Mp };
 
         private static TagCatalog BuildScenarioTagCatalog()
         {
@@ -334,10 +332,10 @@ namespace Bun3.Gameplay.Tests
         private static AttributeRegistry BuildScenarioAttributeRegistry()
         {
             var builder = new AttributeRegistryBuilder();
-            builder.Register(MaxHp, min: Operand.Constant(BigNum.FromParts(1, 0)));
-            builder.Register(Hp, min: Operand.Constant(BigNum.Zero), max: Operand.Attribute(MaxHp));
-            builder.Register(Attack, min: Operand.Constant(BigNum.Zero));
-            builder.Register(Mp, min: Operand.Constant(BigNum.Zero));
+            builder.Register(MaxHp, "MaxHp", min: Operand.Constant(BigNum.FromParts(1, 0)));
+            builder.Register(Hp, "Hp", min: Operand.Constant(BigNum.Zero), max: Operand.Attribute(MaxHp));
+            builder.Register(Attack, "Attack", min: Operand.Constant(BigNum.Zero));
+            builder.Register(Mp, "Mp", min: Operand.Constant(BigNum.Zero));
             return builder.Build();
         }
 

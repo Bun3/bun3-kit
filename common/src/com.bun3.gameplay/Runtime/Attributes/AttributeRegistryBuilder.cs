@@ -8,21 +8,33 @@ namespace Bun3.Gameplay.Attributes
     public sealed class AttributeRegistryBuilder
     {
         private readonly Dictionary<ushort, CompiledAttribute> _attributes = new Dictionary<ushort, CompiledAttribute>();
+        private readonly Dictionary<ushort, string> _names = new Dictionary<ushort, string>();
         private bool _built;
 
-        /// <summary>Registers an attribute's clamp bounds and boundary policies. Forward references are allowed; validation happens at Build.</summary>
+        /// <summary>Registers an attribute's name, clamp bounds and boundary policies. Forward references are
+        /// allowed; validation happens at Build.</summary>
+        /// <param name="attributeId">Attribute id.</param>
+        /// <param name="name">Name authoring data refers to the attribute by; unique within the registry.</param>
+        /// <param name="min">Lower clamp bound, or null.</param>
+        /// <param name="max">Upper clamp bound, or null.</param>
+        /// <param name="onMaxIncrease">How Base follows when the max bound increases.</param>
+        /// <param name="onMaxDecrease">How Base follows when the max bound decreases.</param>
+        /// <exception cref="ArgumentException">Thrown when the name is null or empty.</exception>
         public void Register(
             ushort attributeId,
+            string name,
             Operand? min = null,
             Operand? max = null,
             MaxIncreasePolicy onMaxIncrease = MaxIncreasePolicy.Stay,
             MaxDecreasePolicy onMaxDecrease = MaxDecreasePolicy.Follow)
         {
             if (_built) throw new InvalidOperationException("Cannot register after Build.");
+            if (string.IsNullOrEmpty(name)) throw new ArgumentException("Attribute name must not be empty.", nameof(name));
             if (_attributes.ContainsKey(attributeId))
                 throw new InvalidOperationException($"Attribute {attributeId} is registered more than once.");
 
             _attributes.Add(attributeId, new CompiledAttribute(min, max, onMaxIncrease, onMaxDecrease));
+            _names.Add(attributeId, name);
         }
 
         /// <summary>Validates references, cycles, and policy consistency, computes the topological order and dependent lists, and builds the immutable registry.</summary>
@@ -40,6 +52,19 @@ namespace Bun3.Gameplay.Attributes
                     throw new InvalidOperationException($"Attribute {pair.Key}: a non-default MaxDecreasePolicy requires max to be an attribute reference.");
             }
 
+            var nameToId = new Dictionary<string, ushort>(StringComparer.Ordinal);
+            foreach (var pair in _names)
+            {
+                if (nameToId.TryGetValue(pair.Value, out var other))
+                {
+                    var (first, second) = other < pair.Key ? (other, pair.Key) : (pair.Key, other);
+                    throw new InvalidOperationException(
+                        $"Attribute name '{pair.Value}' is registered for both {first} and {second}.");
+                }
+
+                nameToId.Add(pair.Value, pair.Key);
+            }
+
             var order = TopologicalOrder(dependencyLists);
             var dependents = new Dictionary<ushort, ushort[]>();
             foreach (var pair in dependencyLists)
@@ -49,8 +74,8 @@ namespace Bun3.Gameplay.Attributes
             }
 
             return new AttributeRegistry(
-                new Dictionary<ushort, CompiledAttribute>(_attributes), order, dependents,
-                ComputeSignature(_attributes, order));
+                new Dictionary<ushort, CompiledAttribute>(_attributes), new Dictionary<ushort, string>(_names), nameToId,
+                order, dependents, ComputeSignature(_attributes, order));
         }
 
         // FNV-1a over the shape in evaluation order. Evaluation order is itself derived from the shape,

@@ -22,7 +22,7 @@ public sealed class AttributeAggregationTests
     private static AttributeSet CreateSet()
     {
         var builder = new AttributeRegistryBuilder();
-        builder.Register(Attack, min: Operand.Constant(0));
+        builder.Register(Attack, "Attack", min: Operand.Constant(0));
         Span<ushort> ids = stackalloc ushort[] { Attack };
         return new AttributeSet(builder.Build(), ids);
     }

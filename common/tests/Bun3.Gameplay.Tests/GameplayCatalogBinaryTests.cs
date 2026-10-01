@@ -106,11 +106,11 @@ public sealed class GameplayCatalogBinaryTests
         stream.Position = 0;
 
         var otherAttributes = new AttributeRegistryBuilder();
-        otherAttributes.Register(EffectTestKit.MaxHp, min: Operand.Constant(1));
-        otherAttributes.Register(EffectTestKit.Hp, min: Operand.Constant(0), max: Operand.Attribute(EffectTestKit.MaxHp));
-        otherAttributes.Register(EffectTestKit.Attack, min: Operand.Constant(0));
-        otherAttributes.Register(EffectTestKit.Mp);
-        otherAttributes.Register(EffectTestKit.Resistance, min: Operand.Constant(0));
+        otherAttributes.Register(EffectTestKit.MaxHp, "MaxHp", min: Operand.Constant(1));
+        otherAttributes.Register(EffectTestKit.Hp, "Hp", min: Operand.Constant(0), max: Operand.Attribute(EffectTestKit.MaxHp));
+        otherAttributes.Register(EffectTestKit.Attack, "Attack", min: Operand.Constant(0));
+        otherAttributes.Register(EffectTestKit.Mp, "Mp");
+        otherAttributes.Register(EffectTestKit.Resistance, "Resistance", min: Operand.Constant(0));
 
         Assert.That(
             () => GameplayCatalogBinary.Load(stream, kit.TagCatalog, kit.Seams, otherAttributes.Build()),
@@ -222,7 +222,7 @@ public sealed class GameplayCatalogBinaryTests
         var effectBuilder = new EffectCatalogBuilder();
         using (var effectStream = new MemoryStream(Encoding.UTF8.GetBytes(ScenarioEffectsJson)))
         {
-            foreach (var def in EffectDefJson.Load(effectStream, EffectScenario.ScenarioAttributeNames))
+            foreach (var def in EffectDefJson.Load(effectStream, kit.Attributes))
             {
                 effectBuilder.Add(def);
             }
@@ -233,7 +233,7 @@ public sealed class GameplayCatalogBinaryTests
         var abilityBuilder = new AbilityCatalogBuilder();
         using (var abilityStream = new MemoryStream(Encoding.UTF8.GetBytes(ScenarioAbilitiesJson)))
         {
-            foreach (var def in AbilityDefJson.Load(abilityStream, EffectScenario.ScenarioAttributeNames))
+            foreach (var def in AbilityDefJson.Load(abilityStream, kit.Attributes))
             {
                 abilityBuilder.Add(def);
             }

@@ -16,9 +16,9 @@ public sealed class AttributeSetBasicTests
     private static AttributeRegistry BuildRegistry()
     {
         var builder = new AttributeRegistryBuilder();
-        builder.Register(MaxHp, min: Operand.Constant(1));
-        builder.Register(Hp, min: Operand.Constant(0), max: Operand.Attribute(MaxHp));
-        builder.Register(Attack);
+        builder.Register(MaxHp, "MaxHp", min: Operand.Constant(1));
+        builder.Register(Hp, "Hp", min: Operand.Constant(0), max: Operand.Attribute(MaxHp));
+        builder.Register(Attack, "Attack");
         return builder.Build();
     }
 
@@ -79,8 +79,8 @@ public sealed class AttributeSetBasicTests
     {
         // registry: Hp(max→MaxHp), MaxHp(no clamp)
         var builder = new AttributeRegistryBuilder();
-        builder.Register(MaxHp);
-        builder.Register(Hp, min: Operand.Constant(0), max: Operand.Attribute(MaxHp));
+        builder.Register(MaxHp, "MaxHp");
+        builder.Register(Hp, "Hp", min: Operand.Constant(0), max: Operand.Attribute(MaxHp));
         var registry = builder.Build();
 
         // creation fails when the set omits MaxHp

@@ -34,17 +34,23 @@ namespace Bun3.Gameplay.Attributes
     public sealed class AttributeRegistry
     {
         private readonly Dictionary<ushort, CompiledAttribute> _attributes;
+        private readonly Dictionary<ushort, string> _names;
+        private readonly Dictionary<string, ushort> _nameToId;
         private readonly ushort[] _evaluationOrder;
         private readonly Dictionary<ushort, ushort[]> _clampDependents;
         private static readonly ushort[] Empty = Array.Empty<ushort>();
 
         internal AttributeRegistry(
             Dictionary<ushort, CompiledAttribute> attributes,
+            Dictionary<ushort, string> names,
+            Dictionary<string, ushort> nameToId,
             ushort[] evaluationOrder,
             Dictionary<ushort, ushort[]> clampDependents,
             uint signature)
         {
             _attributes = attributes;
+            _names = names;
+            _nameToId = nameToId;
             _evaluationOrder = evaluationOrder;
             _clampDependents = clampDependents;
             Signature = signature;
@@ -52,7 +58,7 @@ namespace Bun3.Gameplay.Attributes
 
         /// <summary>
         /// Stable hash of the registered attribute shape — ids, clamp bounds, and boundary policies in
-        /// evaluation order. A compiled catalog artifact is only valid against the same shape, because
+        /// evaluation order (names are not part of it). A compiled catalog artifact is only valid against the same shape, because
         /// its magnitudes and clamps were resolved against it.
         /// </summary>
         public uint Signature { get; }
@@ -62,6 +68,19 @@ namespace Bun3.Gameplay.Attributes
 
         /// <summary>Returns whether the attribute id is registered.</summary>
         public bool Contains(ushort attributeId) => _attributes.ContainsKey(attributeId);
+
+        /// <summary>Registered name of an attribute.</summary>
+        /// <param name="attributeId">Registered attribute id.</param>
+        /// <returns>The attribute's name.</returns>
+        public string GetName(ushort attributeId) => _names[attributeId];
+
+        /// <summary>Finds an attribute id by its registered name (ordinal comparison).</summary>
+        /// <param name="name">Attribute name.</param>
+        /// <param name="attributeId">Id when found.</param>
+        /// <returns>True when an attribute has that name.</returns>
+        public bool TryGetId(string name, out ushort attributeId) => _nameToId.TryGetValue(name, out attributeId);
+
+        internal IReadOnlyDictionary<string, ushort> NameToId => _nameToId;
 
         internal CompiledAttribute GetCompiledAttribute(ushort attributeId) => _attributes[attributeId];
 
