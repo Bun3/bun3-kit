@@ -27,6 +27,50 @@ public sealed class EffectCatalogBuilderTests
     }
 
     [Test]
+    public void A_mistyped_raise_event_tag_names_the_effect_the_field_and_the_tag()
+    {
+        var builder = new EffectCatalogBuilder();
+        var def = EffectTestKit.MinimalInstant("bolt");
+        def.Modifiers.Add(new ModifierDef
+        {
+            AttributeId = EffectTestKit.Hp, Op = AttributeModifierOp.Add,
+            Magnitude = new MagnitudeDef { Base = Operand.Constant(-1) },
+        });
+        def.RaiseEvents.Add(new RaiseEventDef { Tag = "event.damage.typo", AttributeId = EffectTestKit.Hp });
+        builder.Add(def);
+
+        var ex = Assert.Throws<InvalidOperationException>(() => EffectTestKit.BuildCatalog(builder));
+        Assert.That(ex!.Message, Does.Contain("bolt").And.Contain("RaiseEvents").And.Contain("event.damage.typo"));
+    }
+
+    [Test]
+    public void A_mistyped_event_tag_names_the_effect_the_field_and_the_tag()
+    {
+        var builder = new EffectCatalogBuilder();
+        builder.Add(EffectTestKit.MinimalInstant("retaliate"));
+        var thorns = EffectTestKit.MinimalInfinite("thorns");
+        var edge = EffectTestKit.Edge(ChainTrigger.OnEvent, "retaliate");
+        edge.EventTag = "event.typo";
+        thorns.Chains.Add(edge);
+        builder.Add(thorns);
+
+        var ex = Assert.Throws<InvalidOperationException>(() => EffectTestKit.BuildCatalog(builder));
+        Assert.That(ex!.Message, Does.Contain("thorns").And.Contain("EventTag").And.Contain("event.typo"));
+    }
+
+    [Test]
+    public void A_raise_event_attribute_without_a_modifier_is_named_in_the_error()
+    {
+        var builder = new EffectCatalogBuilder();
+        var def = EffectTestKit.MinimalInstant("bolt");
+        def.RaiseEvents.Add(new RaiseEventDef { Tag = "event.damage.taken", AttributeId = EffectTestKit.Hp });
+        builder.Add(def);
+
+        var ex = Assert.Throws<InvalidOperationException>(() => EffectTestKit.BuildCatalog(builder));
+        Assert.That(ex!.Message, Does.Contain("'Hp'"));
+    }
+
+    [Test]
     public void Build_rejects_duplicate_name()
     {
         var builder = new EffectCatalogBuilder();

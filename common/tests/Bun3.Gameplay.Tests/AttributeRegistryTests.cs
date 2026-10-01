@@ -97,7 +97,8 @@ public sealed class AttributeRegistryTests
 
         var meaningless = new AttributeRegistryBuilder();
         meaningless.Register(Hp, "Hp", max: Operand.Constant(100), onMaxIncrease: MaxIncreasePolicy.Follow);
-        Assert.Throws<InvalidOperationException>(() => meaningless.Build());   // max is not an attribute reference
+        var ex = Assert.Throws<InvalidOperationException>(() => meaningless.Build());   // max is not an attribute reference
+        Assert.That(ex!.Message, Does.Contain("'Hp'"));
 
         var duplicated = new AttributeRegistryBuilder();
         duplicated.Register(Hp, "Hp");

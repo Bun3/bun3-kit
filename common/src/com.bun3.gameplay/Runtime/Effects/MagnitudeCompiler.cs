@@ -203,14 +203,20 @@ namespace Bun3.Gameplay.Effects
             var result = new GameplayTag[paths.Count];
             for (var i = 0; i < paths.Count; i++)
             {
-                if (!tags.TryGet(paths[i], out result[i]))
-                {
-                    throw new InvalidOperationException(
-                        $"{ownerName}: cannot resolve {what} tag: {paths[i]}");
-                }
+                result[i] = ResolveTag(paths[i], ownerName, tags, what);
             }
 
             return result;
+        }
+
+        internal static GameplayTag ResolveTag(string path, string ownerName, TagCatalog tags, string what)
+        {
+            if (!tags.TryGet(path, out var tag))
+            {
+                throw new InvalidOperationException($"{ownerName}: cannot resolve {what} tag: {path}");
+            }
+
+            return tag;
         }
 
         // Operand attribute reference validation; Constant and EventMagnitude carry no attribute id and are exempt.

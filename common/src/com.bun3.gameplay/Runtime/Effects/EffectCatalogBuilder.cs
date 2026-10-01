@@ -200,13 +200,14 @@ namespace Bun3.Gameplay.Effects
                 if (!modified)
                 {
                     throw new InvalidOperationException(
-                        $"Effect '{def.Name}': RaiseEvents attribute {raise.AttributeId} is not modified by a " +
+                        $"Effect '{def.Name}': RaiseEvents attribute {attributes.Describe(raise.AttributeId)} is not modified by a " +
                         "Modifiers entry on this effect. An Executions-only change to the attribute does not " +
                         "count — add a Modifiers entry targeting it, even a zero-magnitude one, or drop the " +
                         "RaiseEvents entry.");
                 }
 
-                raiseEvents[i] = new CompiledRaiseEvent(tags.GetRequired(raise.Tag), raise.AttributeId);
+                raiseEvents[i] = new CompiledRaiseEvent(
+                    MagnitudeCompiler.ResolveTag(raise.Tag, $"Effect '{def.Name}'", tags, "RaiseEvents"), raise.AttributeId);
             }
 
             var stack = new CompiledStackPolicy(
@@ -619,7 +620,7 @@ namespace Bun3.Gameplay.Effects
                         $"Effect '{ownerDef.Name}': an OnEvent chain requires EventTag.");
                 }
 
-                eventTag = tags.GetRequired(edge.EventTag!);
+                eventTag = MagnitudeCompiler.ResolveTag(edge.EventTag!, $"Effect '{ownerDef.Name}'", tags, "EventTag");
             }
             else if (!string.IsNullOrEmpty(edge.EventTag))
             {

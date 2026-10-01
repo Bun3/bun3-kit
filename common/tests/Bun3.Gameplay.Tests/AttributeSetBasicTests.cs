@@ -9,6 +9,19 @@ namespace Bun3.Gameplay.Tests;
 [TestFixture]
 public sealed class AttributeSetBasicTests
 {
+    [Test]
+    public void A_clamp_bound_missing_from_the_declaration_is_named_in_the_error()
+    {
+        var builder = new AttributeRegistryBuilder();
+        builder.Register(10, "Health", min: Operand.Constant(0), max: Operand.Attribute(11));
+        builder.Register(11, "MaxHealth");
+        var registry = builder.Build();
+
+        var declared = new ushort[] { 10 };
+        var ex = Assert.Throws<ArgumentException>(() => new AttributeSet(registry, declared));
+        Assert.That(ex!.Message, Does.Contain("'Health'").And.Contain("'MaxHealth'"));
+    }
+
     private const ushort Hp = 1;
     private const ushort MaxHp = 2;
     private const ushort Attack = 5;

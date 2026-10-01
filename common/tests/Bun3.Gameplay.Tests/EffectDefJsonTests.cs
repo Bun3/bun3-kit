@@ -114,6 +114,8 @@ public sealed class EffectDefJsonTests
         var ex = Assert.Throws<TagCatalogException>(() => Load(json));
         Assert.That(ex!.LineNumber, Is.GreaterThan(0));
         Assert.That(ex.Message, Does.Contain("bogus"));
+        Assert.That(ex.Message, Does.Contain("effects[0]").And.Contain($"line {ex.LineNumber}"),
+            "the location travels in the message, not only in properties");
     }
 
     [Test]

@@ -220,10 +220,10 @@ namespace Bun3.Gameplay.Effects.Catalog
         internal static TagCatalogException Error(string message, JToken token)
         {
             var lineInfo = (IJsonLineInfo)token;
-            return new TagCatalogException(
-                message, token.Path,
-                lineInfo.HasLineInfo() ? lineInfo.LineNumber : 1,
-                lineInfo.HasLineInfo() ? lineInfo.LinePosition : 1);
+            var line = lineInfo.HasLineInfo() ? lineInfo.LineNumber : 1;
+            var position = lineInfo.HasLineInfo() ? lineInfo.LinePosition : 1;
+            var where = token.Path.Length > 0 ? $"at '{token.Path}', " : string.Empty;
+            return new TagCatalogException($"{message} ({where}line {line}, position {position})", token.Path, line, position);
         }
     }
 }

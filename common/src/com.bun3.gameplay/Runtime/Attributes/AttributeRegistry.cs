@@ -82,6 +82,10 @@ namespace Bun3.Gameplay.Attributes
 
         internal IReadOnlyDictionary<string, ushort> NameToId => _nameToId;
 
+        // Error-message label: "'Hp' (1)" for a registered attribute, the bare id otherwise.
+        internal string Describe(ushort attributeId) =>
+            _names.TryGetValue(attributeId, out var name) ? $"'{name}' ({attributeId})" : attributeId.ToString();
+
         internal CompiledAttribute GetCompiledAttribute(ushort attributeId) => _attributes[attributeId];
 
         /// <summary>Clamp-dependency topological order (ties broken by ascending id).</summary>

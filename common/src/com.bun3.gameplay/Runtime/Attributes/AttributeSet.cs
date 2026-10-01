@@ -71,7 +71,7 @@ namespace Bun3.Gameplay.Attributes
                 if (!registry.Contains(ids[i]))
                     throw new ArgumentException($"Attribute {ids[i]} is not registered.", nameof(attributeIds));
                 if (i > 0 && ids[i] == ids[i - 1])
-                    throw new ArgumentException($"Attribute {ids[i]} is declared more than once.", nameof(attributeIds));
+                    throw new ArgumentException($"Attribute {registry.Describe(ids[i])} is declared more than once.", nameof(attributeIds));
                 if (ids[i] > maxId) maxId = ids[i];
             }
 
@@ -93,7 +93,7 @@ namespace Bun3.Gameplay.Attributes
                     var refId = attribute.Min.Value.AttributeId;
                     if (!Has(refId))
                         throw new ArgumentException(
-                            $"Clamp of attribute {id} references {refId}, which is not in the archetype declaration.",
+                            $"Clamp of attribute {registry.Describe(id)} references {registry.Describe(refId)}, which is not in the archetype declaration.",
                             nameof(attributeIds));
                 }
 
@@ -102,7 +102,7 @@ namespace Bun3.Gameplay.Attributes
                     var refId = attribute.Max.Value.AttributeId;
                     if (!Has(refId))
                         throw new ArgumentException(
-                            $"Clamp of attribute {id} references {refId}, which is not in the archetype declaration.",
+                            $"Clamp of attribute {registry.Describe(id)} references {registry.Describe(refId)}, which is not in the archetype declaration.",
                             nameof(attributeIds));
                 }
             }

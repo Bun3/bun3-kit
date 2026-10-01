@@ -47,9 +47,9 @@ namespace Bun3.Gameplay.Attributes
                 ValidateBound(pair.Key, pair.Value.Min, dependencyLists);
                 ValidateBound(pair.Key, pair.Value.Max, dependencyLists);
                 if (pair.Value.OnMaxIncrease != MaxIncreasePolicy.Stay && !IsAttributeBound(pair.Value.Max))
-                    throw new InvalidOperationException($"Attribute {pair.Key}: a non-default MaxIncreasePolicy requires max to be an attribute reference.");
+                    throw new InvalidOperationException($"Attribute {Describe(pair.Key)}: a non-default MaxIncreasePolicy requires max to be an attribute reference.");
                 if (pair.Value.OnMaxDecrease != MaxDecreasePolicy.Follow && !IsAttributeBound(pair.Value.Max))
-                    throw new InvalidOperationException($"Attribute {pair.Key}: a non-default MaxDecreasePolicy requires max to be an attribute reference.");
+                    throw new InvalidOperationException($"Attribute {Describe(pair.Key)}: a non-default MaxDecreasePolicy requires max to be an attribute reference.");
             }
 
             var nameToId = new Dictionary<string, ushort>(StringComparer.Ordinal);
@@ -127,6 +127,9 @@ namespace Bun3.Gameplay.Attributes
             }
         }
 
+        private string Describe(ushort attributeId) =>
+            _names.TryGetValue(attributeId, out var name) ? $"'{name}' ({attributeId})" : attributeId.ToString();
+
         private static bool IsAttributeBound(Operand? bound) =>
             bound.HasValue && bound.Value.Kind == OperandKind.Attribute;
 
@@ -135,16 +138,16 @@ namespace Bun3.Gameplay.Attributes
             if (!bound.HasValue) return;
 
             if (bound.Value.Kind == OperandKind.SourceAttribute)
-                throw new InvalidOperationException($"Clamp bounds of attribute {owner} cannot reference a SourceAttribute.");
+                throw new InvalidOperationException($"Clamp bounds of attribute {Describe(owner)} cannot reference a SourceAttribute.");
 
             if (bound.Value.Kind == OperandKind.EventMagnitude)
-                throw new InvalidOperationException($"Clamp bounds of attribute {owner} cannot reference EventMagnitude.");
+                throw new InvalidOperationException($"Clamp bounds of attribute {Describe(owner)} cannot reference EventMagnitude.");
 
             if (!IsAttributeBound(bound)) return;
 
             var referenced = bound!.Value.AttributeId;
             if (!_attributes.ContainsKey(referenced))
-                throw new InvalidOperationException($"Clamp of attribute {owner} references unregistered attribute {referenced}.");
+                throw new InvalidOperationException($"Clamp of attribute {Describe(owner)} references unregistered attribute {referenced}.");
 
             if (!dependencyLists.TryGetValue(referenced, out var list))
             {
