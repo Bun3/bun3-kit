@@ -30,6 +30,40 @@ public sealed class AbilityDefJsonTests
     }
 
     [Test]
+    public void Target_fields_are_read()
+    {
+        var abilities = Load("""
+        {
+          "schemaVersion": 1,
+          "abilities": [
+            {
+              "name": "execute",
+              "target": "Required",
+              "targetRequiredTags": ["state.armed"],
+              "targetBlockedTags": ["state.silenced"],
+              "targetConditions": [
+                { "left": { "attribute": "Hp" }, "op": "Less", "right": { "constant": "30" } }
+              ],
+              "effects": [
+                { "effect": "FireBolt", "origin": "Target" },
+                { "effect": "FireBolt" }
+              ]
+            }
+          ]
+        }
+        """);
+
+        var ability = abilities[0];
+        Assert.That(ability.Target, Is.EqualTo(AbilityTargetMode.Required));
+        Assert.That(ability.TargetRequiredTags, Is.EqualTo(new[] { "state.armed" }));
+        Assert.That(ability.TargetBlockedTags, Is.EqualTo(new[] { "state.silenced" }));
+        Assert.That(ability.TargetConditions.Count, Is.EqualTo(1));
+        Assert.That(ability.TargetConditions[0].Op, Is.EqualTo(ComparisonOp.Less));
+        Assert.That(ability.Effects[0].Origin, Is.EqualTo(AbilityEffectOrigin.Target));
+        Assert.That(ability.Effects[1].Origin, Is.EqualTo(AbilityEffectOrigin.Caster));
+    }
+
+    [Test]
     public void Full_ability_round_trips_every_field()
     {
         var abilities = Load("""

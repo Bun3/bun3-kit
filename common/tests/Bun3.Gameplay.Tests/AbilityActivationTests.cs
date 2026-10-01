@@ -240,6 +240,148 @@ public sealed class AbilityActivationTests
         Assert.That(f.World.PendingCommandCount, Is.Zero);
     }
 
+    private static AbilityDef TargetedFireball()
+    {
+        var ability = new AbilityDef { Name = "fireball", MaxLevel = 3, Target = AbilityTargetMode.Required };
+        ability.Effects.Add(new AbilityEffectDef
+        {
+            EffectName = "bolt", LevelRule = ChainLevelRule.Inherit, Origin = AbilityEffectOrigin.Target,
+        });
+        return ability;
+    }
+
+    private sealed class OriginRecorder : Bun3.Gameplay.Seams.ITargetSelector
+    {
+        internal TargetId Origin;
+        internal TargetId Source;
+
+        public int Select(in Bun3.Gameplay.Seams.SelectorContext ctx, Span<TargetId> results)
+        {
+            Origin = ctx.Origin;
+            Source = ctx.Source;
+            results[0] = ctx.Origin;
+            return 1;
+        }
+    }
+
+    [Test]
+    public void A_target_origin_effect_lands_on_the_explicit_target_and_the_result_names_it()
+    {
+        var f = Build((_, b) => b.Add(TargetedFireball()));
+        var id = f.Abilities.GetRequiredId("fireball");
+        f.Caster.Abilities.Grant(id, GrantSource.Archetype(), level: 1);
+
+        f.World.EnqueueActivation(f.Caster.Id, id, f.Victim.Id);
+        f.World.Tick();
+
+        Assert.That(f.World.PendingActivations[0].Result, Is.EqualTo(AbilityActivationResult.Success));
+        Assert.That(f.World.PendingActivations[0].Target, Is.EqualTo(f.Victim.Id));
+        Assert.That(f.Victim.Attributes.GetBase(EffectTestKit.Hp), Is.EqualTo((BigNum)75));
+        Assert.That(f.Caster.Attributes.GetBase(EffectTestKit.Hp), Is.EqualTo((BigNum)100));
+    }
+
+    [Test]
+    public void A_target_origin_selector_starts_from_the_target_with_the_caster_as_source()
+    {
+        var recorder = new OriginRecorder();
+        var f = Build((kit, b) =>
+        {
+            kit.RegisterSelector("selector.team", recorder);
+            var ability = TargetedFireball();
+            ability.Effects[0].SelectorTag = "selector.team";
+            b.Add(ability);
+        });
+        var id = f.Abilities.GetRequiredId("fireball");
+        f.Caster.Abilities.Grant(id, GrantSource.Archetype(), level: 1);
+
+        f.World.EnqueueActivation(f.Caster.Id, id, f.Victim.Id);
+        f.World.Tick();
+
+        Assert.That(recorder.Origin, Is.EqualTo(f.Victim.Id));
+        Assert.That(recorder.Source, Is.EqualTo(f.Caster.Id));
+        Assert.That(f.Victim.Attributes.GetBase(EffectTestKit.Hp), Is.EqualTo((BigNum)75));
+    }
+
+    [Test]
+    public void A_required_target_that_does_not_resolve_is_invalid_and_costs_nothing()
+    {
+        var f = Build((_, b) =>
+        {
+            var ability = TargetedFireball();
+            ability.Costs.Add(new CostDef { AttributeId = EffectTestKit.Mp, Magnitude = new MagnitudeDef { Base = Operand.Constant(10) } });
+            b.Add(ability);
+        });
+        var id = f.Abilities.GetRequiredId("fireball");
+        f.Caster.Abilities.Grant(id, GrantSource.Archetype(), level: 1);
+
+        Assert.That(f.World.CanActivateAbility(f.Caster.Id, id), Is.EqualTo(AbilityActivationResult.InvalidTarget));
+        f.World.EnqueueActivation(f.Caster.Id, id, new TargetId(999));
+        f.World.Tick();
+
+        Assert.That(f.World.PendingActivations[0].Result, Is.EqualTo(AbilityActivationResult.InvalidTarget));
+        Assert.That(f.Caster.Attributes.GetBase(EffectTestKit.Mp), Is.EqualTo((BigNum)50));
+    }
+
+    [Test]
+    public void An_untargeted_ability_ignores_the_target_argument()
+    {
+        var f = Build((_, b) => b.Add(Fireball()));
+        var id = f.Abilities.GetRequiredId("fireball");
+        f.Caster.Abilities.Grant(id, GrantSource.Archetype(), level: 1);
+
+        f.World.EnqueueActivation(f.Caster.Id, id, new TargetId(999));
+        f.World.Tick();
+
+        Assert.That(f.World.PendingActivations[0].Result, Is.EqualTo(AbilityActivationResult.Success));
+        Assert.That(f.Caster.Attributes.GetBase(EffectTestKit.Hp), Is.EqualTo((BigNum)75));
+    }
+
+    [Test]
+    public void Target_tags_gate_the_activation()
+    {
+        var f = Build((_, b) =>
+        {
+            var ability = TargetedFireball();
+            ability.TargetRequiredTags.Add("state.armed");
+            ability.TargetBlockedTags.Add("state.silenced");
+            b.Add(ability);
+        });
+        var id = f.Abilities.GetRequiredId("fireball");
+        f.Caster.Abilities.Grant(id, GrantSource.Archetype(), level: 1);
+
+        Assert.That(f.World.CanActivateAbility(f.Caster.Id, id, f.Victim.Id), Is.EqualTo(AbilityActivationResult.TargetMissingTag));
+        f.Victim.Tags.Add(f.Kit.Tag("state.armed"));
+        Assert.That(f.World.CanActivateAbility(f.Caster.Id, id, f.Victim.Id), Is.EqualTo(AbilityActivationResult.Success));
+        f.Victim.Tags.Add(f.Kit.Tag("state.silenced"));
+        Assert.That(f.World.CanActivateAbility(f.Caster.Id, id, f.Victim.Id), Is.EqualTo(AbilityActivationResult.TargetBlockedByTag));
+    }
+
+    [Test]
+    public void Target_conditions_read_the_target_and_the_caster_as_source()
+    {
+        var f = Build((_, b) =>
+        {
+            var ability = TargetedFireball();
+            ability.TargetConditions.Add(new ConditionDef
+            {
+                Left = Operand.Attribute(EffectTestKit.Hp), Op = ComparisonOp.Less, Right = Operand.Constant(30),
+            });
+            ability.TargetConditions.Add(new ConditionDef
+            {
+                Left = Operand.SourceAttribute(EffectTestKit.Mp), Op = ComparisonOp.GreaterOrEqual, Right = Operand.Constant(10),
+            });
+            b.Add(ability);
+        });
+        var id = f.Abilities.GetRequiredId("fireball");
+        f.Caster.Abilities.Grant(id, GrantSource.Archetype(), level: 1);
+
+        Assert.That(f.World.CanActivateAbility(f.Caster.Id, id, f.Victim.Id), Is.EqualTo(AbilityActivationResult.TargetConditionFailed));
+        f.Victim.Attributes.SetBase(EffectTestKit.Hp, 20);
+        Assert.That(f.World.CanActivateAbility(f.Caster.Id, id, f.Victim.Id), Is.EqualTo(AbilityActivationResult.Success));
+        f.Caster.Attributes.SetBase(EffectTestKit.Mp, 5);
+        Assert.That(f.World.CanActivateAbility(f.Caster.Id, id, f.Victim.Id), Is.EqualTo(AbilityActivationResult.TargetConditionFailed));
+    }
+
     [Test]
     public void Activation_is_queued_and_reported_after_the_tick()
     {

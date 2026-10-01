@@ -15,13 +15,36 @@ namespace Bun3.Gameplay.Abilities
         public MagnitudeDef Magnitude { get; set; } = new MagnitudeDef();
     }
 
+    /// <summary>Whether an ability acts on an explicit target chosen at activation.</summary>
+    public enum AbilityTargetMode : byte
+    {
+        /// <summary>No explicit target; the activation's target argument is ignored.</summary>
+        None = 0,
+        /// <summary>The activation needs a target that resolves to a registered unit.</summary>
+        Required = 1,
+    }
+
+    /// <summary>Where an ability effect entry starts: the unit it applies to without a selector, and the
+    /// selection origin with one.</summary>
+    public enum AbilityEffectOrigin : byte
+    {
+        /// <summary>The activating unit.</summary>
+        Caster = 0,
+        /// <summary>The activation's explicit target; requires <see cref="AbilityTargetMode.Required"/>.</summary>
+        Target = 1,
+    }
+
     /// <summary>One effect an activation applies, with the rule choosing its targets and level.</summary>
     public sealed class AbilityEffectDef
     {
         /// <summary>Name of the effect to apply.</summary>
         public string EffectName { get; set; } = string.Empty;
 
-        /// <summary>Target-selector tag registered in SeamRegistry, or null (use the activating unit).</summary>
+        /// <summary>Unit the entry starts from.</summary>
+        public AbilityEffectOrigin Origin { get; set; }
+
+        /// <summary>Target-selector tag registered in SeamRegistry, or null (apply to the <see cref="Origin"/> unit).
+        /// A selector selects starting from the origin unit.</summary>
         public string? SelectorTag { get; set; }
 
         /// <summary>Parameters passed to target selection.</summary>
@@ -59,11 +82,24 @@ namespace Bun3.Gameplay.Abilities
         /// <summary>Activation conditions; all must hold to activate.</summary>
         public List<ConditionDef> ActivationConditions { get; set; } = new List<ConditionDef>();
 
+        /// <summary>Whether the activation takes an explicit target.</summary>
+        public AbilityTargetMode Target { get; set; }
+
+        /// <summary>Tags the target must have. Requires <see cref="AbilityTargetMode.Required"/>.</summary>
+        public List<string> TargetRequiredTags { get; set; } = new List<string>();
+
+        /// <summary>Tags that block activation while the target has them. Requires <see cref="AbilityTargetMode.Required"/>.</summary>
+        public List<string> TargetBlockedTags { get; set; } = new List<string>();
+
+        /// <summary>Conditions on the target; all must hold. <c>Operand.Attribute</c> reads the target and
+        /// <c>Operand.SourceAttribute</c> the activating unit. Requires <see cref="AbilityTargetMode.Required"/>.</summary>
+        public List<ConditionDef> TargetConditions { get; set; } = new List<ConditionDef>();
+
         /// <summary>Resources consumed on a successful activation.</summary>
         public List<CostDef> Costs { get; set; } = new List<CostDef>();
 
         /// <summary>Name of the effect applied to the activating unit on success, or null for no cooldown.
-        /// Its GrantedTags paired with <see cref="BlockedTags"/> are what make the cooldown a gate.</summary>
+        /// While the unit owns any of its GrantedTags, activation reports OnCooldown.</summary>
         public string? CooldownEffect { get; set; }
 
         /// <summary>Effects applied on a successful activation.</summary>

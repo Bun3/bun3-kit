@@ -25,10 +25,11 @@ namespace Bun3.Gameplay.Abilities
     internal sealed class CompiledAbilityEffect
     {
         internal CompiledAbilityEffect(
-            int effectId, ITargetSelector? selector, GameplayTag selectorTag, BigNum[] selectorParams,
-            ChainLevelRule levelRule, int fixedLevel)
+            int effectId, AbilityEffectOrigin origin, ITargetSelector? selector, GameplayTag selectorTag,
+            BigNum[] selectorParams, ChainLevelRule levelRule, int fixedLevel)
         {
             EffectId = effectId;
+            Origin = origin;
             Selector = selector;
             SelectorTag = selectorTag;
             SelectorParams = selectorParams;
@@ -37,6 +38,8 @@ namespace Bun3.Gameplay.Abilities
         }
 
         internal int EffectId { get; }
+
+        internal AbilityEffectOrigin Origin { get; }
 
         internal ITargetSelector? Selector { get; }
 
@@ -56,8 +59,9 @@ namespace Bun3.Gameplay.Abilities
     {
         internal CompiledAbility(
             string name, int maxLevel, GameplayTag[] assetTags, GameplayTag[] requiredTags,
-            GameplayTag[] blockedTags, CompiledCondition[] activationConditions, CompiledCost[] costs,
-            int cooldownEffectId, CompiledAbilityEffect[] effects)
+            GameplayTag[] blockedTags, CompiledCondition[] activationConditions, AbilityTargetMode targetMode,
+            GameplayTag[] targetRequiredTags, GameplayTag[] targetBlockedTags, CompiledCondition[] targetConditions,
+            CompiledCost[] costs, int cooldownEffectId, CompiledAbilityEffect[] effects)
         {
             Name = name;
             MaxLevel = maxLevel;
@@ -65,6 +69,10 @@ namespace Bun3.Gameplay.Abilities
             RequiredTags = requiredTags;
             BlockedTags = blockedTags;
             ActivationConditions = activationConditions;
+            TargetMode = targetMode;
+            TargetRequiredTags = targetRequiredTags;
+            TargetBlockedTags = targetBlockedTags;
+            TargetConditions = targetConditions;
             Costs = costs;
             CooldownEffectId = cooldownEffectId;
             Effects = effects;
@@ -81,6 +89,14 @@ namespace Bun3.Gameplay.Abilities
         internal GameplayTag[] BlockedTags { get; }
 
         internal CompiledCondition[] ActivationConditions { get; }
+
+        internal AbilityTargetMode TargetMode { get; }
+
+        internal GameplayTag[] TargetRequiredTags { get; }
+
+        internal GameplayTag[] TargetBlockedTags { get; }
+
+        internal CompiledCondition[] TargetConditions { get; }
 
         internal CompiledCost[] Costs { get; }
 

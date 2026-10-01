@@ -48,7 +48,8 @@ namespace Bun3.Gameplay.Catalog
     //   drWindowTicks, drStageMultipliers, raiseEvents.
     //
     // Ability record: name, maxLevel, assetTags, requiredTags, blockedTags, activationConditions,
-    //   costs, cooldownEffectId, effects.
+    //   targetMode, targetRequiredTags, targetBlockedTags, targetConditions, costs, cooldownEffectId,
+    //   effects (each: effectId, origin, selectorTag, selectorParams, levelRule, fixedLevel).
     //
     // Seam contracts are never stored: only the tag they were resolved from travels, and Load
     // re-resolves them through the SeamRegistry it is handed. Name-to-id maps are not stored either

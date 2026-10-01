@@ -14,15 +14,16 @@ namespace Bun3.Gameplay
         /// applied, no effect enqueued, no random number drawn. Safe to call outside <see cref="Tick"/>.</summary>
         /// <param name="unitId">Unit that would activate.</param>
         /// <param name="abilityId">Compiled ability id.</param>
+        /// <param name="target">Explicit target for an ability whose Target is Required; ignored otherwise.</param>
         /// <returns>The result a queued activation would get if processed now.</returns>
         /// <remarks>Costs are checked against each attribute's Base, not its Current — a modifier on a
         /// cost attribute does not fund the spend.</remarks>
-        public AbilityActivationResult CanActivateAbility(TargetId unitId, int abilityId) =>
-            EvaluateActivation(unitId, abilityId, commit: false);
+        public AbilityActivationResult CanActivateAbility(TargetId unitId, int abilityId, TargetId target = default) =>
+            EvaluateActivation(unitId, abilityId, target, commit: false);
 
         // With commit, a passing activation pays its costs and applies its cooldown immediately, so a
         // second request processed in the same tick sees both.
-        private AbilityActivationResult EvaluateActivation(TargetId unitId, int abilityId, bool commit)
+        private AbilityActivationResult EvaluateActivation(TargetId unitId, int abilityId, TargetId target, bool commit)
         {
             if (!TryGetUnit(unitId, out var unit) || unit is null) return AbilityActivationResult.UnknownUnit;
             if (!_abilities.Contains(abilityId)) return AbilityActivationResult.UnknownAbility;
@@ -50,6 +51,12 @@ namespace Bun3.Gameplay
                 return AbilityActivationResult.ConditionFailed;
             }
 
+            if (ability.TargetMode == AbilityTargetMode.Required)
+            {
+                var targetResult = EvaluateTarget(ability, unit, target);
+                if (targetResult != AbilityActivationResult.Success) return targetResult;
+            }
+
             var costs = ability.Costs;
             Span<BigNum> amounts = stackalloc BigNum[costs.Length];
             for (var i = 0; i < costs.Length; i++)
@@ -75,8 +82,29 @@ namespace Bun3.Gameplay
                 Pipeline.ApplyImmediate(ability.CooldownEffectId, unitId, unitId, level);
             }
 
-            ApplyAbilityEffects(ability, unitId, level);
+            ApplyAbilityEffects(ability, unitId, target, level);
             return AbilityActivationResult.Success;
+        }
+
+        private AbilityActivationResult EvaluateTarget(CompiledAbility ability, Unit caster, TargetId target)
+        {
+            if (!TryGetUnit(target, out var targetUnit) || targetUnit is null) return AbilityActivationResult.InvalidTarget;
+
+            var required = ability.TargetRequiredTags;
+            for (var i = 0; i < required.Length; i++)
+            {
+                if (!targetUnit.Tags.Has(required[i])) return AbilityActivationResult.TargetMissingTag;
+            }
+
+            var blocked = ability.TargetBlockedTags;
+            for (var i = 0; i < blocked.Length; i++)
+            {
+                if (targetUnit.Tags.Has(blocked[i])) return AbilityActivationResult.TargetBlockedByTag;
+            }
+
+            return Pipeline.CheckConditions(ability.TargetConditions, targetUnit.Effects, caster.Effects, hasSource: true)
+                ? AbilityActivationResult.Success
+                : AbilityActivationResult.TargetConditionFailed;
         }
 
         /// <summary>Reports the longest remaining cooldown among active instances granting any tag of the
@@ -147,15 +175,16 @@ namespace Bun3.Gameplay
             return false;
         }
 
-        private void ApplyAbilityEffects(CompiledAbility ability, TargetId unitId, int level)
+        private void ApplyAbilityEffects(CompiledAbility ability, TargetId unitId, TargetId target, int level)
         {
             var effects = ability.Effects;
             for (var i = 0; i < effects.Length; i++)
             {
                 var entry = effects[i];
                 var effectLevel = entry.LevelRule == ChainLevelRule.Inherit ? level : entry.FixedLevel;
+                var origin = entry.Origin == AbilityEffectOrigin.Target ? target : unitId;
                 Pipeline.ApplyToSelection(
-                    entry.Selector, entry.SelectorParams, entry.EffectId, unitId, unitId, effectLevel, default);
+                    entry.Selector, entry.SelectorParams, entry.EffectId, unitId, origin, effectLevel, default);
             }
         }
     }

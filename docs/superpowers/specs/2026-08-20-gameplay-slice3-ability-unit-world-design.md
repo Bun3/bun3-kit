@@ -792,3 +792,53 @@ GameplayEvent). 코어에 cue(VFX) 시스템은 두지 않는다 — 위 버퍼�
 - 전투 로그 완전성의 Build 검증 — 저작 규칙으로 둔다: 로그에 남길 피해 이펙트는 `RaiseEvents`를 선언한다.
 - 발동 성공/실패 콜백(GAS `AbilityActivatedCallbacks` 등) — `PendingActivations`로 충분.
 - 틱 사이 이벤트 보존(버퍼별 워터마크) — 16.1로 틱 밖 이벤트 발생 자체가 없어져 불필요.
+
+## 17. 발동 대상 지정 (2026-10-01)
+
+구현 리뷰 사용성 축: 발동이 `(unit, ability)`뿐이라 "클릭한 적에게 파이어볼"을 데이터로 표현할 수
+없었다. GAS는 어빌리티에 `TargetRequiredTags`/`TargetBlockedTags`를 두고 발동에 대상 정보를 싣는다.
+
+### 17.1 결정
+
+- **발동 인자**: `EnqueueActivation(unit, ability, target)`, `CanActivateAbility(unit, ability, target)`.
+  결과 `AbilityActivation`에 `Target`이 실린다. `TargetId`에는 예약된 "없음" 값이 없으므로 대상 유무를
+  sentinel로 판단하지 않는다 — 어빌리티의 `Target` 모드가 정한다.
+- **`AbilityDef.Target`**: `None`(기본, 대상 인자 무시) | `Required`(등록 유닛으로 해석돼야 함).
+  빌드가 추론하지 않고 저작자가 명시한다. `None`인데 대상 기준점 항목이나 대상 검사가 있으면 Build 오류.
+- **효과 항목 기준점** `AbilityEffectDef.Origin`: `Caster`(기본) | `Target`. 셀렉터가 없으면 기준점 유닛에
+  적용하고, 있으면 셀렉터가 기준점에서 출발한다(`SelectorContext.Origin` = 기준점, `Source` = 시전자).
+  같은 광역 셀렉터를 시전자 주변·대상 주변에 재사용한다.
+- **대상 검사**(사용자 결정: 태그 + 속성 조건): `TargetRequiredTags`, `TargetBlockedTags`,
+  `TargetConditions`. 대상 조건에서 `Operand.Attribute`는 대상, `Operand.SourceAttribute`는 시전자를 읽는다
+  (처형: 대상 HP < 30%). 죽음·면역 같은 상태는 태그로 표현한다.
+
+### 17.2 게이트 순서
+
+```
+1 UnknownUnit → 2 UnknownAbility → 3 NotGranted → 4 OnCooldown → 5 MissingTag → 6 BlockedByTag
+→ 7 ConditionFailed → 8 InvalidTarget → 9 TargetMissingTag → 10 TargetBlockedByTag
+→ 11 TargetConditionFailed → 12 CostInsufficient
+```
+
+대상 검사(8~11)는 `Target = Required`일 때만 돈다. 코스트가 마지막인 것은 그대로다.
+
+### 17.3 저작 JSON
+
+```jsonc
+{ "name": "Fireball", "target": "Required",
+  "targetBlockedTags": ["state.dead"],
+  "targetConditions": [ { "left": { "attribute": "Hp" }, "op": "Less", "right": { "constant": "30" } } ],
+  "effects": [
+    { "effect": "FireBolt", "origin": "Target" },
+    { "effect": "Splash",   "origin": "Target", "selector": "selector.near" },
+    { "effect": "CastBuff" }
+  ] }
+```
+
+컴파일 아티팩트(schema 1)도 위 필드를 싣는다 — 아직 퍼블리시 전이라 schema 번호는 올리지 않는다.
+
+### 17.4 비채택
+
+- 대상 유무를 효과 항목에서 추론하는 것 — 빌드 시점 암묵 동작을 늘리지 않는다(§16.4와 같은 원칙).
+- 거리·시야 같은 공간 검사 — 이동·공간 스펙 이후.
+- 셀렉터로 고른 대상이 0명일 때 발동 실패 — 광역기는 빗나가도 발동은 성공(코스트 소모)이 관례다.

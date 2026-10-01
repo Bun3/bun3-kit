@@ -27,6 +27,7 @@ namespace Bun3.Gameplay
             internal CommandKind Kind;
             internal TargetId Unit;
             internal TargetId Source;
+            internal TargetId Target;
             internal int Id;
             internal int Level;
             internal ulong InstanceId;
@@ -60,8 +61,9 @@ namespace Bun3.Gameplay
         /// after the next <see cref="Tick"/>.</summary>
         /// <param name="unitId">Activating unit.</param>
         /// <param name="abilityId">Compiled ability id.</param>
-        public void EnqueueActivation(TargetId unitId, int abilityId) =>
-            _commands.Add(new Command { Kind = CommandKind.Activate, Unit = unitId, Id = abilityId });
+        /// <param name="target">Explicit target for an ability whose Target is Required; ignored otherwise.</param>
+        public void EnqueueActivation(TargetId unitId, int abilityId, TargetId target = default) =>
+            _commands.Add(new Command { Kind = CommandKind.Activate, Unit = unitId, Id = abilityId, Target = target });
 
         /// <summary>Queues removal of every active instance on the unit whose asset tags have
         /// <paramref name="tag"/> as self-or-ancestor. Runs during the next <see cref="Tick"/>.</summary>
@@ -129,7 +131,9 @@ namespace Bun3.Gameplay
                             Pipeline.EnqueueApply(command.Id, command.Source, command.Unit, command.Level);
                             break;
                         case CommandKind.Activate:
-                            RecordActivation(command.Unit, command.Id, EvaluateActivation(command.Unit, command.Id, commit: true));
+                            RecordActivation(
+                                command.Unit, command.Id, command.Target,
+                                EvaluateActivation(command.Unit, command.Id, command.Target, commit: true));
                             break;
                         case CommandKind.RemoveByTag:
                             query[0] = command.Tag;
@@ -159,10 +163,10 @@ namespace Bun3.Gameplay
             }
         }
 
-        private void RecordActivation(TargetId unitId, int abilityId, AbilityActivationResult result)
+        private void RecordActivation(TargetId unitId, int abilityId, TargetId target, AbilityActivationResult result)
         {
             if (_activationCount == _activations.Length) Array.Resize(ref _activations, _activations.Length * 2);
-            _activations[_activationCount++] = new AbilityActivation(unitId, abilityId, result);
+            _activations[_activationCount++] = new AbilityActivation(unitId, abilityId, target, result);
         }
     }
 }

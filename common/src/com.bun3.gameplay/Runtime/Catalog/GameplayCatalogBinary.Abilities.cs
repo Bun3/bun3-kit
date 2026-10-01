@@ -17,6 +17,10 @@ namespace Bun3.Gameplay.Catalog
             WriteTags(writer, ability.RequiredTags);
             WriteTags(writer, ability.BlockedTags);
             WriteConditions(writer, ability.ActivationConditions);
+            writer.WriteByte((byte)ability.TargetMode);
+            WriteTags(writer, ability.TargetRequiredTags);
+            WriteTags(writer, ability.TargetBlockedTags);
+            WriteConditions(writer, ability.TargetConditions);
 
             writer.WriteInt32(ability.Costs.Length);
             foreach (var cost in ability.Costs)
@@ -31,6 +35,7 @@ namespace Bun3.Gameplay.Catalog
             foreach (var effect in ability.Effects)
             {
                 writer.WriteInt32(effect.EffectId);
+                writer.WriteByte((byte)effect.Origin);
                 writer.WriteTag(effect.SelectorTag);
                 writer.WriteBigNums(effect.SelectorParams);
                 writer.WriteByte((byte)effect.LevelRule);
@@ -46,6 +51,10 @@ namespace Bun3.Gameplay.Catalog
             var requiredTags = ReadTags(reader, "ability required tag");
             var blockedTags = ReadTags(reader, "ability blocked tag");
             var activationConditions = ReadConditions(reader, "activation condition");
+            var targetMode = (AbilityTargetMode)reader.ReadByte("ability target mode");
+            var targetRequiredTags = ReadTags(reader, "ability target required tag");
+            var targetBlockedTags = ReadTags(reader, "ability target blocked tag");
+            var targetConditions = ReadConditions(reader, "target condition");
 
             var costs = new CompiledCost[reader.ReadLength("cost count")];
             for (var i = 0; i < costs.Length; i++)
@@ -62,18 +71,19 @@ namespace Bun3.Gameplay.Catalog
             for (var i = 0; i < effects.Length; i++)
             {
                 var effectId = reader.ReadInt32("ability effect id");
+                var origin = (AbilityEffectOrigin)reader.ReadByte("ability effect origin");
                 var selectorTag = reader.ReadTag("ability effect selector tag");
                 var selectorParams = reader.ReadBigNums("ability effect selector params");
                 var levelRule = (ChainLevelRule)reader.ReadByte("ability effect level rule");
                 var fixedLevel = reader.ReadInt32("ability effect fixed level");
                 effects[i] = new CompiledAbilityEffect(
-                    effectId, TargetSelector(seams, selectorTag), selectorTag, selectorParams, levelRule,
+                    effectId, origin, TargetSelector(seams, selectorTag), selectorTag, selectorParams, levelRule,
                     fixedLevel);
             }
 
             return new CompiledAbility(
-                name, maxLevel, assetTags, requiredTags, blockedTags, activationConditions, costs,
-                cooldownEffectId, effects);
+                name, maxLevel, assetTags, requiredTags, blockedTags, activationConditions, targetMode,
+                targetRequiredTags, targetBlockedTags, targetConditions, costs, cooldownEffectId, effects);
         }
     }
 }

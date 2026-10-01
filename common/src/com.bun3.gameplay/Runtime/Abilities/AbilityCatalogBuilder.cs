@@ -145,8 +145,15 @@ namespace Bun3.Gameplay.Abilities
                         + "but ability activation has no event context.");
                 }
 
+                if (entry.Origin == AbilityEffectOrigin.Target && def.Target != AbilityTargetMode.Required)
+                {
+                    throw new InvalidOperationException(
+                        $"{owner}: effect '{entry.EffectName}' starts from the target, but the ability's Target is "
+                        + $"{def.Target}. Set Target to Required.");
+                }
+
                 abilityEffects[i] = new CompiledAbilityEffect(
-                    effectId, selector, selectorTag, entry.SelectorParams.ToArray(), entry.LevelRule,
+                    effectId, entry.Origin, selector, selectorTag, entry.SelectorParams.ToArray(), entry.LevelRule,
                     entry.FixedLevel);
             }
 
@@ -167,15 +174,12 @@ namespace Bun3.Gameplay.Abilities
                 }
             }
 
-            var conditions = new CompiledCondition[def.ActivationConditions.Count];
-            for (var i = 0; i < def.ActivationConditions.Count; i++)
+            if (def.Target != AbilityTargetMode.Required
+                && (def.TargetRequiredTags.Count > 0 || def.TargetBlockedTags.Count > 0 || def.TargetConditions.Count > 0))
             {
-                var condition = def.ActivationConditions[i];
-                RejectEventMagnitude(condition.Left, owner, "ActivationConditions");
-                RejectEventMagnitude(condition.Right, owner, "ActivationConditions");
-                MagnitudeCompiler.ValidateOperandAttribute(condition.Left, owner, attributes);
-                MagnitudeCompiler.ValidateOperandAttribute(condition.Right, owner, attributes);
-                conditions[i] = new CompiledCondition(condition.Left, condition.Op, condition.Right);
+                throw new InvalidOperationException(
+                    $"{owner}: target tags or conditions are set, but the ability's Target is {def.Target}. "
+                    + "Set Target to Required.");
             }
 
             return new CompiledAbility(
@@ -184,10 +188,31 @@ namespace Bun3.Gameplay.Abilities
                 MagnitudeCompiler.ResolveTags(def.AssetTags, owner, tags, "AssetTags"),
                 MagnitudeCompiler.ResolveTags(def.RequiredTags, owner, tags, "RequiredTags"),
                 MagnitudeCompiler.ResolveTags(def.BlockedTags, owner, tags, "BlockedTags"),
-                conditions,
+                CompileConditions(def.ActivationConditions, owner, "ActivationConditions", attributes),
+                def.Target,
+                MagnitudeCompiler.ResolveTags(def.TargetRequiredTags, owner, tags, "TargetRequiredTags"),
+                MagnitudeCompiler.ResolveTags(def.TargetBlockedTags, owner, tags, "TargetBlockedTags"),
+                CompileConditions(def.TargetConditions, owner, "TargetConditions", attributes),
                 costs,
                 cooldownEffectId,
                 abilityEffects);
+        }
+
+        private static CompiledCondition[] CompileConditions(
+            List<ConditionDef> defs, string owner, string where, AttributeRegistry attributes)
+        {
+            var conditions = new CompiledCondition[defs.Count];
+            for (var i = 0; i < defs.Count; i++)
+            {
+                var condition = defs[i];
+                RejectEventMagnitude(condition.Left, owner, where);
+                RejectEventMagnitude(condition.Right, owner, where);
+                MagnitudeCompiler.ValidateOperandAttribute(condition.Left, owner, attributes);
+                MagnitudeCompiler.ValidateOperandAttribute(condition.Right, owner, attributes);
+                conditions[i] = new CompiledCondition(condition.Left, condition.Op, condition.Right);
+            }
+
+            return conditions;
         }
 
         // An ability activation is never an event path -- there is no GameplayEvent to carry a

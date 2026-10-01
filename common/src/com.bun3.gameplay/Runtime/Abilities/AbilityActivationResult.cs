@@ -26,15 +26,24 @@ namespace Bun3.Gameplay.Abilities
         /// <summary>The unit owns a tag granted by the ability's cooldown effect — including one granted by
         /// another effect sharing that tag.</summary>
         OnCooldown = 8,
+        /// <summary>The ability requires a target and the given target id did not resolve to a registered unit.</summary>
+        InvalidTarget = 9,
+        /// <summary>The target lacks a tag the ability requires on its target.</summary>
+        TargetMissingTag = 10,
+        /// <summary>The target owns a tag the ability blocks on.</summary>
+        TargetBlockedByTag = 11,
+        /// <summary>A target condition did not hold.</summary>
+        TargetConditionFailed = 12,
     }
 
     /// <summary>Result of one queued ability activation, readable after the tick that processed it.</summary>
     public readonly struct AbilityActivation
     {
-        internal AbilityActivation(TargetId unitId, int abilityId, AbilityActivationResult result)
+        internal AbilityActivation(TargetId unitId, int abilityId, TargetId target, AbilityActivationResult result)
         {
             UnitId = unitId;
             AbilityId = abilityId;
+            Target = target;
             Result = result;
         }
 
@@ -43,6 +52,9 @@ namespace Bun3.Gameplay.Abilities
 
         /// <summary>Requested ability id.</summary>
         public int AbilityId { get; }
+
+        /// <summary>Target passed with the request; meaningful only for abilities whose Target is Required.</summary>
+        public TargetId Target { get; }
 
         /// <summary>Gate outcome; <see cref="AbilityActivationResult.Success"/> means costs were paid and
         /// effects enqueued.</summary>

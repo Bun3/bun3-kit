@@ -41,7 +41,8 @@ namespace Bun3.Gameplay.Abilities.Catalog
         {
             RequireAllowedProperties(
                 ability, "name", "maxLevel", "assetTags", "requiredTags", "blockedTags",
-                "activationConditions", "costs", "cooldownEffect", "effects");
+                "activationConditions", "target", "targetRequiredTags", "targetBlockedTags", "targetConditions",
+                "costs", "cooldownEffect", "effects");
 
             var name = RequireString(ability, "name");
             var maxLevel = ReadOptionalInt(ability, "maxLevel", 0);
@@ -56,15 +57,18 @@ namespace Bun3.Gameplay.Abilities.Catalog
                 ? EffectDefJson.ReadStringArray(RequireArray(ability, "blockedTags"))
                 : new List<string>();
 
-            var activationConditions = new List<ConditionDef>();
-            if (ability.Property("activationConditions", StringComparison.Ordinal) != null)
-            {
-                foreach (var item in RequireArray(ability, "activationConditions"))
-                {
-                    activationConditions.Add(EffectDefJson.ReadCondition(
-                        AsObject(item, "activationConditions items must be objects."), attributeNames));
-                }
-            }
+            var activationConditions = ReadConditions(ability, "activationConditions", attributeNames);
+
+            var target = ability.Property("target", StringComparison.Ordinal) != null
+                ? RequireEnum<AbilityTargetMode>(ability, "target")
+                : AbilityTargetMode.None;
+            var targetRequiredTags = ability.Property("targetRequiredTags", StringComparison.Ordinal) != null
+                ? EffectDefJson.ReadStringArray(RequireArray(ability, "targetRequiredTags"))
+                : new List<string>();
+            var targetBlockedTags = ability.Property("targetBlockedTags", StringComparison.Ordinal) != null
+                ? EffectDefJson.ReadStringArray(RequireArray(ability, "targetBlockedTags"))
+                : new List<string>();
+            var targetConditions = ReadConditions(ability, "targetConditions", attributeNames);
 
             var costs = new List<CostDef>();
             if (ability.Property("costs", StringComparison.Ordinal) != null)
@@ -96,10 +100,29 @@ namespace Bun3.Gameplay.Abilities.Catalog
                 RequiredTags = requiredTags,
                 BlockedTags = blockedTags,
                 ActivationConditions = activationConditions,
+                Target = target,
+                TargetRequiredTags = targetRequiredTags,
+                TargetBlockedTags = targetBlockedTags,
+                TargetConditions = targetConditions,
                 Costs = costs,
                 CooldownEffect = cooldownEffect,
                 Effects = effects,
             };
+        }
+
+        private static List<ConditionDef> ReadConditions(
+            JObject ability, string propertyName, IReadOnlyDictionary<string, ushort> attributeNames)
+        {
+            var conditions = new List<ConditionDef>();
+            if (ability.Property(propertyName, StringComparison.Ordinal) == null) return conditions;
+
+            foreach (var item in RequireArray(ability, propertyName))
+            {
+                conditions.Add(EffectDefJson.ReadCondition(
+                    AsObject(item, $"{propertyName} items must be objects."), attributeNames));
+            }
+
+            return conditions;
         }
 
         private static CostDef ReadCost(JObject cost, IReadOnlyDictionary<string, ushort> attributeNames)
@@ -112,9 +135,12 @@ namespace Bun3.Gameplay.Abilities.Catalog
 
         private static AbilityEffectDef ReadAbilityEffect(JObject entry)
         {
-            RequireAllowedProperties(entry, "effect", "selector", "selectorParams", "level");
+            RequireAllowedProperties(entry, "effect", "origin", "selector", "selectorParams", "level");
 
             var effectName = RequireString(entry, "effect");
+            var origin = entry.Property("origin", StringComparison.Ordinal) != null
+                ? RequireEnum<AbilityEffectOrigin>(entry, "origin")
+                : AbilityEffectOrigin.Caster;
 
             string? selectorTag = null;
             if (entry.Property("selector", StringComparison.Ordinal) != null)
@@ -136,6 +162,7 @@ namespace Bun3.Gameplay.Abilities.Catalog
             return new AbilityEffectDef
             {
                 EffectName = effectName,
+                Origin = origin,
                 SelectorTag = selectorTag,
                 SelectorParams = selectorParams,
                 LevelRule = levelRule,

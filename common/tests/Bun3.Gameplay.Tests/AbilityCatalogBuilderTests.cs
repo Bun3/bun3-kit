@@ -97,6 +97,35 @@ public sealed class AbilityCatalogBuilderTests
     }
 
     [Test]
+    public void A_target_origin_entry_needs_a_required_target()
+    {
+        var kit = EffectTestKit.Create();
+        kit.AddEffect(EffectTestKit.MinimalInstant("bolt"));
+        var ability = Minimal("snipe");
+        ability.Effects.Add(new AbilityEffectDef { EffectName = "bolt", Origin = AbilityEffectOrigin.Target });
+        var builder = new AbilityCatalogBuilder();
+        builder.Add(ability);
+
+        Assert.That(
+            () => builder.Build(kit.TagCatalog, kit.Seams, kit.Attributes, kit.Catalog),
+            Throws.InvalidOperationException.With.Message.Contains("snipe").And.Message.Contains("Required"));
+    }
+
+    [Test]
+    public void Target_checks_need_a_required_target()
+    {
+        var kit = EffectTestKit.Create();
+        var ability = Minimal("snipe");
+        ability.TargetBlockedTags.Add("state.silenced");
+        var builder = new AbilityCatalogBuilder();
+        builder.Add(ability);
+
+        Assert.That(
+            () => builder.Build(kit.TagCatalog, kit.Seams, kit.Attributes, kit.Catalog),
+            Throws.InvalidOperationException.With.Message.Contains("snipe").And.Message.Contains("Required"));
+    }
+
+    [Test]
     public void Unknown_cooldown_effect_is_rejected()
     {
         var kit = EffectTestKit.Create();

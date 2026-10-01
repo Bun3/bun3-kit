@@ -478,7 +478,18 @@ public sealed class GameplayCatalogBinaryTests
         });
         kit.AddEffect(burn);
 
-        var fireball = new AbilityDef { Name = "fireball", MaxLevel = 2, CooldownEffect = "cooldown" };
+        var fireball = new AbilityDef
+        {
+            Name = "fireball", MaxLevel = 2, CooldownEffect = "cooldown", Target = AbilityTargetMode.Required,
+        };
+        fireball.TargetRequiredTags.Add("state.armed");
+        fireball.TargetBlockedTags.Add("state.silenced");
+        fireball.TargetConditions.Add(new ConditionDef
+        {
+            Left = Operand.Attribute(EffectTestKit.Hp),
+            Op = ComparisonOp.Less,
+            Right = Operand.SourceAttribute(EffectTestKit.Attack),
+        });
         fireball.AssetTags.Add("effect.fire.bolt");
         fireball.RequiredTags.Add("state.armed");
         fireball.BlockedTags.Add("cooldown.fireball");
@@ -506,7 +517,7 @@ public sealed class GameplayCatalogBinaryTests
             LevelRule = ChainLevelRule.Fixed,
             FixedLevel = 1,
         });
-        fireball.Effects.Add(new AbilityEffectDef { EffectName = "bolt" });
+        fireball.Effects.Add(new AbilityEffectDef { EffectName = "bolt", Origin = AbilityEffectOrigin.Target });
 
         var builder = new AbilityCatalogBuilder();
         builder.Add(fireball);
