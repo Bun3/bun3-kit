@@ -861,7 +861,7 @@ tags·seams·attributes를 네 번 넘겨야 했고, 예제 시나리오도 이 
 ### 18.2 유닛 아키타입 (사용자 결정: JSON 저작까지)
 
 ```
-UnitArchetypeDef: Name, Attributes [(AttributeId, Base)], Abilities [(AbilityName, Level)]
+ArchetypeDef: Name, Attributes [(AttributeId, Base)], Abilities [(AbilityName, Level)]  → ArchetypeCatalogBuilder → ArchetypeCatalog
 ```
 
 - 선언 속성 = `Attributes`의 속성들. 기본 Base는 **레지스트리 `EvaluationOrder` 순서로** 넣는다 —
