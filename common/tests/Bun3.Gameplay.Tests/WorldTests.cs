@@ -22,7 +22,43 @@ public sealed class WorldTests
     private static World MakeWorld(EffectTestKit kit)
     {
         var abilities = new AbilityCatalogBuilder().Build(kit.TagCatalog, kit.Seams, kit.Attributes, kit.Catalog);
-        return new World(kit.Catalog, abilities, new XorShiftRng(12345));
+        return new World(kit.Database(abilities), new XorShiftRng(12345));
+    }
+
+    [Test]
+    public void Create_unit_applies_the_archetypes_bases_and_starting_abilities()
+    {
+        var kit = EffectTestKit.Create();
+        kit.AddEffect(EffectTestKit.MinimalInstant("bolt"));
+        var slash = new AbilityDef { Name = "slash", MaxLevel = 3 };
+        slash.Effects.Add(new AbilityEffectDef { EffectName = "bolt" });
+        var abilityBuilder = new AbilityCatalogBuilder();
+        abilityBuilder.Add(slash);
+        var abilities = abilityBuilder.Build(kit.TagCatalog, kit.Seams, kit.Attributes, kit.Catalog);
+
+        var warrior = new ArchetypeDef { Name = "warrior" };
+        warrior.Attributes.Add(new ArchetypeAttributeDef { AttributeId = EffectTestKit.Hp, Base = 80 });
+        warrior.Attributes.Add(new ArchetypeAttributeDef { AttributeId = EffectTestKit.MaxHp, Base = 100 });
+        warrior.Abilities.Add(new ArchetypeAbilityDef { AbilityName = "slash", Level = 2 });
+        var archetypeBuilder = new ArchetypeCatalogBuilder();
+        archetypeBuilder.Add(warrior);
+        var database = kit.Database(abilities, archetypeBuilder.Build(kit.Attributes, abilities));
+        var world = new World(database, new XorShiftRng(1));
+
+        var unit = world.CreateUnit(new TargetId(1), database.Archetypes.GetRequiredId("warrior"), ownerId: 7);
+
+        Assert.That(world.UnitCount, Is.Zero, "created, not yet spawned");
+        Assert.That(unit.Attributes.GetBase(EffectTestKit.Hp), Is.EqualTo((Bun3.Gameplay.Numerics.BigNum)80), "authored before its MaxHp bound, still not clamped");
+        Assert.That(unit.Attributes.Has(EffectTestKit.Mp), Is.False);
+        Assert.That(unit.Abilities.GetLevel(abilities.GetRequiredId("slash")), Is.EqualTo(2));
+        Assert.That(unit.Abilities.GetGrant(0).Source, Is.EqualTo(GrantSource.Archetype()));
+        Assert.That(unit.OwnerId, Is.EqualTo(7ul));
+        Assert.That(() => world.CreateUnit(new TargetId(2), 5), Throws.InstanceOf<ArgumentOutOfRangeException>());
+
+        world.Spawn(unit);
+        world.Tick();
+        Assert.That(world.UnitCount, Is.EqualTo(1));
+        Assert.That(world.Database, Is.SameAs(database));
     }
 
     [Test]
@@ -139,7 +175,7 @@ public sealed class WorldTests
         var kit = EffectTestKit.Create();
         kit.AddEffect(EffectTestKit.MinimalInstant("noop"));
         var abilities = new AbilityCatalogBuilder().Build(kit.TagCatalog, kit.Seams, kit.Attributes, kit.Catalog);
-        var world = new World(kit.Catalog, abilities, new XorShiftRng(12345), 2);
+        var world = new World(kit.Database(abilities), new XorShiftRng(12345), 2);
         for (ulong id = 1; id <= 3; id++) world.Spawn(MakeUnit(kit, id));
         world.Tick();
 
@@ -358,7 +394,7 @@ public sealed class WorldTests
         var abilityBuilder = new AbilityCatalogBuilder();
         abilityBuilder.Add(abilityDef);
         var abilities = abilityBuilder.Build(kit.TagCatalog, kit.Seams, kit.Attributes, kit.Catalog);
-        var world = new World(kit.Catalog, abilities, new XorShiftRng(12345));
+        var world = new World(kit.Database(abilities), new XorShiftRng(12345));
         var unit = MakeUnit(kit, 1);
         unit.Attributes.SetBase(EffectTestKit.Mp, 50);
         world.Spawn(unit);
@@ -434,7 +470,7 @@ public sealed class WorldTests
         var echo = new EchoSelector(() => world!);
         kit.RegisterSelector("selector.team", echo);
         var abilities = abilityBuilder.Build(kit.TagCatalog, kit.Seams, kit.Attributes, kit.Catalog);
-        world = new World(kit.Catalog, abilities, new XorShiftRng(12345));
+        world = new World(kit.Database(abilities), new XorShiftRng(12345));
         var unit = MakeUnit(kit, 1);
         world.Spawn(unit);
         world.Tick();

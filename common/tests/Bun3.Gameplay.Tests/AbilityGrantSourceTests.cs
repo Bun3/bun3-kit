@@ -37,7 +37,7 @@ public sealed class AbilityGrantSourceTests
         abilityBuilder.Add(ability);
         var abilities = abilityBuilder.Build(kit.TagCatalog, kit.Seams, kit.Attributes, kit.Catalog);
 
-        var world = new World(kit.Catalog, abilities, new XorShiftRng(5));
+        var world = new World(kit.Database(abilities), new XorShiftRng(5));
         var unit = MakeUnit(kit, 1);
         world.Spawn(unit);
         world.Tick();
@@ -132,7 +132,7 @@ public sealed class AbilityGrantSourceTests
         abilityBuilder.Add(ability);
         var abilities = abilityBuilder.Build(kit.TagCatalog, kit.Seams, kit.Attributes, kit.Catalog);
 
-        var world = new World(kit.Catalog, abilities, new XorShiftRng(7));
+        var world = new World(kit.Database(abilities), new XorShiftRng(7));
         var unit = MakeUnit(kit, 1);
         world.Spawn(unit);
         world.Tick();

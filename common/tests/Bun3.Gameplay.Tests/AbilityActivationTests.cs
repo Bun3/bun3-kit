@@ -50,7 +50,7 @@ public sealed class AbilityActivationTests
         configure(kit, abilityBuilder);
 
         var abilities = abilityBuilder.Build(kit.TagCatalog, kit.Seams, kit.Attributes, kit.Catalog);
-        var world = new World(kit.Catalog, abilities, new XorShiftRng(999));
+        var world = new World(kit.Database(abilities), new XorShiftRng(999));
         var caster = MakeUnit(kit, 1);
         var victim = MakeUnit(kit, 2);
         world.Spawn(caster);
@@ -798,7 +798,7 @@ public sealed class AbilityActivationTests
         abilityBuilder.Add(ability);
         var abilities = abilityBuilder.Build(kit.TagCatalog, kit.Seams, kit.Attributes, kit.Catalog);
 
-        var world = new World(kit.Catalog, abilities, new XorShiftRng(7));
+        var world = new World(kit.Database(abilities), new XorShiftRng(7));
         var caster = MakeUnit(kit, 1);
         world.Spawn(caster);
         world.Tick();

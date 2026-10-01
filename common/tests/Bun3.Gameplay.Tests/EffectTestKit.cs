@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using Bun3.Gameplay.Abilities;
 using Bun3.Gameplay.Attributes;
 using Bun3.Gameplay.Effects;
 using Bun3.Gameplay.Numerics;
@@ -205,6 +206,10 @@ internal sealed class EffectTestKit
 
     private EffectCatalog BuiltCatalog =>
         _catalog ??= _effectCatalogBuilder.Build(_tagCatalog, BuiltSeams, BuiltAttributes);
+
+    /// <summary>Bundles the kit's catalogs with an ability catalog (and optionally archetypes) for a World.</summary>
+    public GameplayDatabase Database(AbilityCatalog abilities, ArchetypeCatalog? archetypes = null) =>
+        new GameplayDatabase(TagCatalog, Seams, Attributes, BuiltCatalog, abilities, archetypes ?? ArchetypeCatalog.Empty);
 
     /// <summary>Freezes the catalog with everything registered so far and creates a pipeline.</summary>
     public EffectPipeline BuildPipeline(int applyBudgetPerTick = 64) =>

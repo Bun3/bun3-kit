@@ -38,6 +38,7 @@ namespace Bun3.Gameplay.Catalog
     //   effects            array of effect records
     //   build warnings     array of string
     //   abilities          array of ability records
+    //   archetypes         array of archetype records
     //
     // Effect record: name, maxLevel, durationType, durationTicks, periodTicks, stack policy
     //   (maxStack, onReapply, addStackCount, refreshDurationOnReapply, resetPeriodOnReapply,
@@ -51,6 +52,9 @@ namespace Bun3.Gameplay.Catalog
     //   targetMode, targetRequiredTags, targetBlockedTags, targetConditions, costs, cooldownEffectId,
     //   effects (each: effectId, origin, selectorTag, selectorParams, levelRule, fixedLevel).
     //
+    // Archetype record: name, attributes (each: ushort attribute id + bignum base, clamp evaluation
+    //   order), abilities (each: int ability id + int level).
+    //
     // Seam contracts are never stored: only the tag they were resolved from travels, and Load
     // re-resolves them through the SeamRegistry it is handed. Name-to-id maps are not stored either
     // — records are written in id order, so ids are their positions.
@@ -60,7 +64,7 @@ namespace Bun3.Gameplay.Catalog
     /// <see cref="AbilityCatalog"/> built on top of it, in one file. Loading it replaces authoring-JSON
     /// parsing, level-table evaluation, and validation at startup; the JSON authoring data stays the
     /// source of truth and this artifact is a derived build output. Composed of this file (layout, Write,
-    /// Load) plus <c>GameplayCatalogBinary.Effects.cs</c>, <c>.Abilities.cs</c>, <c>.Fields.cs</c> (magnitudes,
+    /// Load) plus <c>GameplayCatalogBinary.Effects.cs</c>, <c>.Abilities.cs</c>, <c>.Archetypes.cs</c>, <c>.Fields.cs</c> (magnitudes,
     /// conditions, tags, seam re-resolution) and <c>.Buffers.cs</c> (byte writer and payload reader).
     /// </summary>
     public static partial class GameplayCatalogBinary
@@ -84,24 +88,22 @@ namespace Bun3.Gameplay.Catalog
 
         private static readonly Encoding StrictUtf8 = new UTF8Encoding(false, true);
 
-        /// <summary>Writes the compiled catalogs as a single deterministic schema 1 artifact.</summary>
+        /// <summary>Writes a compiled database as a single deterministic schema 1 artifact. Its tag catalog
+        /// fingerprint and attribute registry signature pin the artifact; the seam registry is not stored.</summary>
         /// <param name="output">Writable output stream; the artifact is written at the current position.</param>
-        /// <param name="effects">Compiled effect catalog.</param>
-        /// <param name="abilities">Compiled ability catalog built against <paramref name="effects"/>.</param>
-        /// <param name="tags">Tag catalog whose fingerprint pins the tag indices in the artifact.</param>
-        /// <param name="attributes">Attribute registry whose signature pins the attribute shape.</param>
+        /// <param name="database">Compiled database.</param>
         /// <exception cref="ArgumentNullException">Any argument is null.</exception>
         /// <exception cref="ArgumentException">The output stream is not writable.</exception>
-        public static void Write(
-            Stream output, EffectCatalog effects, AbilityCatalog abilities, TagCatalog tags,
-            AttributeRegistry attributes)
+        public static void Write(Stream output, GameplayDatabase database)
         {
             if (output is null) throw new ArgumentNullException(nameof(output));
-            if (effects is null) throw new ArgumentNullException(nameof(effects));
-            if (abilities is null) throw new ArgumentNullException(nameof(abilities));
-            if (tags is null) throw new ArgumentNullException(nameof(tags));
-            if (attributes is null) throw new ArgumentNullException(nameof(attributes));
+            if (database is null) throw new ArgumentNullException(nameof(database));
             if (!output.CanWrite) throw new ArgumentException("A writable stream is required.", nameof(output));
+
+            var effects = database.Effects;
+            var abilities = database.Abilities;
+            var tags = database.Tags;
+            var attributes = database.Attributes;
 
             var writer = new BufferWriter(HeaderSize + 1024);
             writer.WriteBytes(Magic);
@@ -121,6 +123,10 @@ namespace Bun3.Gameplay.Catalog
             writer.WriteInt32(abilities.Count);
             for (var id = 0; id < abilities.Count; id++) WriteAbility(writer, abilities.GetAbility(id));
 
+            var archetypes = database.Archetypes;
+            writer.WriteInt32(archetypes.Count);
+            for (var id = 0; id < archetypes.Count; id++) WriteArchetype(writer, archetypes.GetArchetype(id));
+
             writer.PatchUInt32(PayloadLengthOffset, checked((uint)(writer.Length - HeaderSize)));
             var bytes = writer.ToArray();
             using (var sha256 = SHA256.Create())
@@ -136,14 +142,13 @@ namespace Bun3.Gameplay.Catalog
         /// <param name="tags">Tag catalog the artifact must have been written against.</param>
         /// <param name="seams">Seam registry resolving the stored magnitude, execution, and selector tags.</param>
         /// <param name="attributes">Attribute registry the artifact must have been written against.</param>
-        /// <returns>The restored effect and ability catalogs.</returns>
+        /// <returns>The restored database, bundled with the given tags, seams and attributes.</returns>
         /// <exception cref="ArgumentNullException">Any argument is null.</exception>
         /// <exception cref="ArgumentException">The input stream is not readable.</exception>
         /// <exception cref="TagCatalogFormatException">The magic, schema, length, checksum, or payload structure is invalid.</exception>
         /// <exception cref="TagCatalogCompatibilityException">The tag fingerprint or attribute signature
         /// differs, or a stored seam tag is not registered in <paramref name="seams"/>.</exception>
-        public static (EffectCatalog Effects, AbilityCatalog Abilities) Load(
-            Stream input, TagCatalog tags, SeamRegistry seams, AttributeRegistry attributes)
+        public static GameplayDatabase Load(Stream input, TagCatalog tags, SeamRegistry seams, AttributeRegistry attributes)
         {
             if (input is null) throw new ArgumentNullException(nameof(input));
             if (tags is null) throw new ArgumentNullException(nameof(tags));
@@ -203,11 +208,21 @@ namespace Bun3.Gameplay.Catalog
                 if (!abilityNameToId.TryAdd(abilities[id].Name, id)) throw Format("Duplicate ability name.");
             }
 
+            var archetypes = new CompiledArchetype[reader.ReadLength("archetype count")];
+            var archetypeNameToId = new Dictionary<string, int>(archetypes.Length, StringComparer.Ordinal);
+            for (var id = 0; id < archetypes.Length; id++)
+            {
+                archetypes[id] = ReadArchetype(reader);
+                if (!archetypeNameToId.TryAdd(archetypes[id].Name, id)) throw Format("Duplicate archetype name.");
+            }
+
             if (reader.Remaining != 0) throw Format("Unparsed bytes remain after the payload.");
 
-            return (
+            return new GameplayDatabase(
+                tags, seams, attributes,
                 new EffectCatalog(effectNameToId, effects, warnings),
-                new AbilityCatalog(abilities, abilityNameToId));
+                new AbilityCatalog(abilities, abilityNameToId),
+                new ArchetypeCatalog(archetypes, archetypeNameToId));
         }
 
         private static TagCatalogFormatException Format(string message) => new TagCatalogFormatException(message);

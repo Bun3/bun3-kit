@@ -38,11 +38,11 @@ public sealed class GameplayCatalogBinaryTests
     {
         var (kit, abilities) = BuildSource();
         using var stream = new MemoryStream();
-        GameplayCatalogBinary.Write(stream, kit.Catalog, abilities, kit.TagCatalog, kit.Attributes);
+        GameplayCatalogBinary.Write(stream, new GameplayDatabase(kit.TagCatalog, kit.Seams, kit.Attributes, kit.Catalog, abilities, ArchetypeCatalog.Empty));
         stream.Position = 0;
 
-        var (loadedEffects, loadedAbilities) =
-            GameplayCatalogBinary.Load(stream, kit.TagCatalog, kit.Seams, kit.Attributes);
+        var loaded = GameplayCatalogBinary.Load(stream, kit.TagCatalog, kit.Seams, kit.Attributes);
+        var (loadedEffects, loadedAbilities) = (loaded.Effects, loaded.Abilities);
 
         Assert.That(loadedEffects.Count, Is.EqualTo(kit.Catalog.Count));
         Assert.That(loadedEffects.GetRequiredId("bolt"), Is.EqualTo(kit.Catalog.GetRequiredId("bolt")));
@@ -56,7 +56,7 @@ public sealed class GameplayCatalogBinaryTests
     {
         var (kit, abilities) = BuildSource();
         using var stream = new MemoryStream();
-        GameplayCatalogBinary.Write(stream, kit.Catalog, abilities, kit.TagCatalog, kit.Attributes);
+        GameplayCatalogBinary.Write(stream, new GameplayDatabase(kit.TagCatalog, kit.Seams, kit.Attributes, kit.Catalog, abilities, ArchetypeCatalog.Empty));
         stream.Position = 0;
 
         var otherKit = EffectTestKit.CreateWithExtraTag("state.extra");
@@ -71,7 +71,7 @@ public sealed class GameplayCatalogBinaryTests
     {
         var (kit, abilities) = BuildSource();
         using var full = new MemoryStream();
-        GameplayCatalogBinary.Write(full, kit.Catalog, abilities, kit.TagCatalog, kit.Attributes);
+        GameplayCatalogBinary.Write(full, new GameplayDatabase(kit.TagCatalog, kit.Seams, kit.Attributes, kit.Catalog, abilities, ArchetypeCatalog.Empty));
         var bytes = full.ToArray();
 
         using var truncated = new MemoryStream(bytes, 0, bytes.Length - 4);
@@ -86,7 +86,7 @@ public sealed class GameplayCatalogBinaryTests
     {
         var (kit, abilities) = BuildSource();
         using var full = new MemoryStream();
-        GameplayCatalogBinary.Write(full, kit.Catalog, abilities, kit.TagCatalog, kit.Attributes);
+        GameplayCatalogBinary.Write(full, new GameplayDatabase(kit.TagCatalog, kit.Seams, kit.Attributes, kit.Catalog, abilities, ArchetypeCatalog.Empty));
         var bytes = full.ToArray();
         bytes[bytes.Length - 1] ^= 0xFF;
 
@@ -102,7 +102,7 @@ public sealed class GameplayCatalogBinaryTests
     {
         var (kit, abilities) = BuildSource();
         using var stream = new MemoryStream();
-        GameplayCatalogBinary.Write(stream, kit.Catalog, abilities, kit.TagCatalog, kit.Attributes);
+        GameplayCatalogBinary.Write(stream, new GameplayDatabase(kit.TagCatalog, kit.Seams, kit.Attributes, kit.Catalog, abilities, ArchetypeCatalog.Empty));
         stream.Position = 0;
 
         var otherAttributes = new AttributeRegistryBuilder();
@@ -124,12 +124,21 @@ public sealed class GameplayCatalogBinaryTests
     public void Round_trip_preserves_every_compiled_member()
     {
         var (kit, abilities) = BuildRichSource();
+        var archetypes = BuildRichArchetypes(kit, abilities);
         using var stream = new MemoryStream();
-        GameplayCatalogBinary.Write(stream, kit.Catalog, abilities, kit.TagCatalog, kit.Attributes);
+        GameplayCatalogBinary.Write(stream, kit.Database(abilities, archetypes));
         stream.Position = 0;
 
-        var (loadedEffects, loadedAbilities) =
-            GameplayCatalogBinary.Load(stream, kit.TagCatalog, kit.Seams, kit.Attributes);
+        var loaded = GameplayCatalogBinary.Load(stream, kit.TagCatalog, kit.Seams, kit.Attributes);
+        var (loadedEffects, loadedAbilities) = (loaded.Effects, loaded.Abilities);
+
+        Assert.That(loaded.Archetypes.Count, Is.EqualTo(archetypes.Count));
+        for (var id = 0; id < archetypes.Count; id++)
+        {
+            AssertDeepEqual(
+                typeof(object), Invoke(archetypes, "GetArchetype", id), Invoke(loaded.Archetypes, "GetArchetype", id),
+                $"archetype[{id}]");
+        }
 
         Assert.That(loadedEffects.Count, Is.EqualTo(kit.Catalog.Count));
         Assert.That(loadedEffects.BuildWarnings, Is.EqualTo(kit.Catalog.BuildWarnings));
@@ -152,7 +161,7 @@ public sealed class GameplayCatalogBinaryTests
     {
         var (kit, abilities) = BuildRichSource();
         using var stream = new MemoryStream();
-        GameplayCatalogBinary.Write(stream, kit.Catalog, abilities, kit.TagCatalog, kit.Attributes);
+        GameplayCatalogBinary.Write(stream, new GameplayDatabase(kit.TagCatalog, kit.Seams, kit.Attributes, kit.Catalog, abilities, ArchetypeCatalog.Empty));
         stream.Position = 0;
 
         var emptySeams = new SeamRegistryBuilder().Build(kit.TagCatalog);
@@ -196,7 +205,7 @@ public sealed class GameplayCatalogBinaryTests
 
         var abilities = new AbilityCatalogBuilder().Build(kit.TagCatalog, kit.Seams, kit.Attributes, kit.Catalog);
         using var stream = new MemoryStream();
-        GameplayCatalogBinary.Write(stream, kit.Catalog, abilities, kit.TagCatalog, kit.Attributes);
+        GameplayCatalogBinary.Write(stream, new GameplayDatabase(kit.TagCatalog, kit.Seams, kit.Attributes, kit.Catalog, abilities, ArchetypeCatalog.Empty));
         return (stream.ToArray(), kit);
     }
 
@@ -213,33 +222,16 @@ public sealed class GameplayCatalogBinaryTests
     {
         var kit = EffectScenario.ScenarioKit();
         using var stream = new MemoryStream();
-        GameplayCatalogBinary.Write(stream, kit.Effects, kit.Abilities, kit.Tags, kit.Attributes);
+        GameplayCatalogBinary.Write(stream, new GameplayDatabase(kit.Tags, kit.Seams, kit.Attributes, kit.Effects, kit.Abilities, ArchetypeCatalog.Empty));
         stream.Position = 0;
 
-        var (loadedEffects, loadedAbilities) =
-            GameplayCatalogBinary.Load(stream, kit.Tags, kit.Seams, kit.Attributes);
+        var loaded = GameplayCatalogBinary.Load(stream, kit.Tags, kit.Seams, kit.Attributes);
+        var (loadedEffects, loadedAbilities) = (loaded.Effects, loaded.Abilities);
 
-        var effectBuilder = new EffectCatalogBuilder();
-        using (var effectStream = new MemoryStream(Encoding.UTF8.GetBytes(ScenarioEffectsJson)))
-        {
-            foreach (var def in EffectDefJson.Load(effectStream, kit.Attributes))
-            {
-                effectBuilder.Add(def);
-            }
-        }
-
-        var jsonEffects = effectBuilder.Build(kit.Tags, kit.Seams, kit.Attributes);
-
-        var abilityBuilder = new AbilityCatalogBuilder();
-        using (var abilityStream = new MemoryStream(Encoding.UTF8.GetBytes(ScenarioAbilitiesJson)))
-        {
-            foreach (var def in AbilityDefJson.Load(abilityStream, kit.Attributes))
-            {
-                abilityBuilder.Add(def);
-            }
-        }
-
-        var jsonAbilities = abilityBuilder.Build(kit.Tags, kit.Seams, kit.Attributes, jsonEffects);
+        using var effectStream = new MemoryStream(Encoding.UTF8.GetBytes(ScenarioEffectsJson));
+        using var abilityStream = new MemoryStream(Encoding.UTF8.GetBytes(ScenarioAbilitiesJson));
+        var json = GameplayDatabaseJson.Load(kit.Tags, kit.Seams, kit.Attributes, effectStream, abilityStream);
+        var (jsonEffects, jsonAbilities) = (json.Effects, json.Abilities);
 
         var builderHash = EffectScenario.RunHash(kit.Effects, kit.Abilities, kit.Tags, seed: 20260820);
         var binaryHash = EffectScenario.RunHash(loadedEffects, loadedAbilities, kit.Tags, seed: 20260820);
@@ -522,6 +514,18 @@ public sealed class GameplayCatalogBinaryTests
         var builder = new AbilityCatalogBuilder();
         builder.Add(fireball);
         return (kit, builder.Build(kit.TagCatalog, kit.Seams, kit.Attributes, kit.Catalog));
+    }
+
+    private static ArchetypeCatalog BuildRichArchetypes(EffectTestKit kit, AbilityCatalog abilities)
+    {
+        var warrior = new ArchetypeDef { Name = "warrior" };
+        warrior.Attributes.Add(new ArchetypeAttributeDef { AttributeId = EffectTestKit.Hp, Base = BigNum.FromParts(75, -1) });
+        warrior.Attributes.Add(new ArchetypeAttributeDef { AttributeId = EffectTestKit.MaxHp, Base = 100 });
+        warrior.Abilities.Add(new ArchetypeAbilityDef { AbilityName = "fireball", Level = 2 });
+        var builder = new ArchetypeCatalogBuilder();
+        builder.Add(warrior);
+        builder.Add(new ArchetypeDef { Name = "dummy" });
+        return builder.Build(kit.Attributes, abilities);
     }
 
     private static object GetEffect(EffectCatalog catalog, int id) =>

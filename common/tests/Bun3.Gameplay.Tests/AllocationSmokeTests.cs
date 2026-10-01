@@ -307,7 +307,7 @@ public class AllocationSmokeTests
         });
         var abilities = abilityBuilder.Build(tags, seams, attributes, effects);
 
-        var world = new World(effects, abilities, new XorShiftRng(1));
+        var world = new World(new GameplayDatabase(tags, seams, attributes, effects, abilities, ArchetypeCatalog.Empty), new XorShiftRng(1));
         Span<ushort> attributeIds = stackalloc ushort[]
         {
             EffectTestKit.Hp, EffectTestKit.MaxHp, EffectTestKit.Attack, EffectTestKit.Mp, EffectTestKit.Resistance,

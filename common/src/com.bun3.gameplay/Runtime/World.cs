@@ -26,18 +26,20 @@ namespace Bun3.Gameplay
         private readonly int[][] _grantedAbilityIds;
         private readonly int _applyBudgetPerUnit;
 
-        /// <summary>Creates a world over the given catalogs and random source.</summary>
-        /// <param name="effects">Compiled effect catalog.</param>
-        /// <param name="abilities">Compiled ability catalog.</param>
+        /// <summary>Creates a world running on a compiled database.</summary>
+        /// <param name="database">Compiled catalogs and registries.</param>
         /// <param name="rng">Seeded random source; shared with the pipeline.</param>
         /// <param name="applyBudgetPerUnit">Effect applications drained per tick for each registered unit.
         /// The budget is pooled: a tick drains up to this value times the unit count (at least one unit's
         /// worth), in queue order. It exists to bound runaway chains such as mutual reflection; the
         /// surplus carries over to the next tick.</param>
-        public World(EffectCatalog effects, AbilityCatalog abilities, IRng rng, int applyBudgetPerUnit = 32)
+        public World(GameplayDatabase database, IRng rng, int applyBudgetPerUnit = 32)
         {
-            _effects = effects ?? throw new ArgumentNullException(nameof(effects));
-            _abilities = abilities ?? throw new ArgumentNullException(nameof(abilities));
+            Database = database ?? throw new ArgumentNullException(nameof(database));
+            var effects = database.Effects;
+            var abilities = database.Abilities;
+            _effects = effects;
+            _abilities = abilities;
             _rng = rng ?? throw new ArgumentNullException(nameof(rng));
             if (applyBudgetPerUnit <= 0)
                 throw new ArgumentOutOfRangeException(nameof(applyBudgetPerUnit), "Apply budget per unit must be at least 1.");
@@ -80,6 +82,9 @@ namespace Bun3.Gameplay
                 unit.Abilities.Grant(ids[i], source, instance.Level);
             }
         }
+
+        /// <summary>Compiled catalogs and registries this world runs on.</summary>
+        public GameplayDatabase Database { get; }
 
         /// <summary>Effect pipeline this world drives. Read from it freely, but do not call its mutating
         /// members (<c>EnqueueApply</c>, <c>RemoveByTags</c>, <c>RemoveById</c>, <c>Tick</c>) on a world:
@@ -130,6 +135,34 @@ namespace Bun3.Gameplay
             var index = IndexOf(id);
             unit = index >= 0 ? _units[index] : null;
             return index >= 0;
+        }
+
+        /// <summary>Creates a unit from an archetype: its declared attributes with their initial Base values
+        /// (applied in clamp evaluation order) and its starting abilities granted from the archetype origin.
+        /// The unit is not registered yet — finish any initialization, then <see cref="Spawn"/> it.</summary>
+        /// <param name="id">Unit id.</param>
+        /// <param name="archetypeId">Archetype id in <see cref="GameplayDatabase.Archetypes"/>.</param>
+        /// <param name="ownerId">Owner id the unit carries.</param>
+        /// <returns>The new, unregistered unit.</returns>
+        /// <exception cref="ArgumentOutOfRangeException">Thrown when the archetype id is outside the catalog.</exception>
+        public Unit CreateUnit(TargetId id, int archetypeId, ulong ownerId = 0)
+        {
+            if ((uint)archetypeId >= (uint)Database.Archetypes.Count)
+                throw new ArgumentOutOfRangeException(nameof(archetypeId), archetypeId, "Archetype id is outside the catalog.");
+
+            var archetype = Database.Archetypes.GetArchetype(archetypeId);
+            var unit = new Unit(id, Database.Attributes, archetype.AttributeIds, Database.Tags, ownerId);
+            for (var i = 0; i < archetype.AttributeIds.Length; i++)
+            {
+                unit.Attributes.SetBase(archetype.AttributeIds[i], archetype.Bases[i]);
+            }
+
+            for (var i = 0; i < archetype.AbilityIds.Length; i++)
+            {
+                unit.Abilities.Grant(archetype.AbilityIds[i], GrantSource.Archetype(), archetype.AbilityLevels[i]);
+            }
+
+            return unit;
         }
 
         /// <summary>Queues a unit for registration. It becomes visible at the start of the next

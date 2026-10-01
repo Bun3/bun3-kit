@@ -196,7 +196,9 @@ namespace Bun3.Gameplay.Tests
             AddScenarioAbilities(abilityBuilder);
             var abilities = abilityBuilder.Build(tags, seams, attributes, effects);
 
-            var world = new World(effects, abilities, new XorShiftRng(NonZero(1)));
+            var world = new World(
+                new GameplayDatabase(tags, seams, attributes, effects, abilities, ArchetypeCatalog.Empty),
+                new XorShiftRng(NonZero(1)));
             var unitIds = SpawnScenarioUnits(world, attributes, tags);
             GrantScenarioBaseline(world, tags, abilities, unitIds, out var slashAbilityId);
 
@@ -218,7 +220,9 @@ namespace Bun3.Gameplay.Tests
         internal static ulong RunHash(EffectCatalog effects, AbilityCatalog abilities, TagCatalog tags, ulong seed)
         {
             var attributes = BuildScenarioAttributeRegistry();
-            var world = new World(effects, abilities, new XorShiftRng(NonZero(seed + 1)));
+            var database = new GameplayDatabase(
+                tags, new SeamRegistryBuilder().Build(tags), attributes, effects, abilities, ArchetypeCatalog.Empty);
+            var world = new World(database, new XorShiftRng(NonZero(seed + 1)));
             var unitIds = SpawnScenarioUnits(world, attributes, tags);
             GrantScenarioBaseline(world, tags, abilities, unitIds, out var slashAbilityId);
 
