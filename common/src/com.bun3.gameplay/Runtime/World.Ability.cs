@@ -14,16 +14,17 @@ namespace Bun3.Gameplay
         /// applied, no effect enqueued, no random number drawn. Safe to call outside <see cref="Tick"/>.</summary>
         /// <param name="unitId">Unit that would activate.</param>
         /// <param name="abilityId">Compiled ability id.</param>
-        /// <param name="target">Explicit target for an ability whose Target is Required; ignored otherwise.</param>
+        /// <param name="target">Explicit target for an ability whose Target is Required (null fails it with
+        /// InvalidTarget); ignored otherwise.</param>
         /// <returns>The result a queued activation would get if processed now.</returns>
         /// <remarks>Costs are checked against each attribute's Base, not its Current — a modifier on a
         /// cost attribute does not fund the spend.</remarks>
-        public AbilityActivationResult CanActivateAbility(TargetId unitId, int abilityId, TargetId target = default) =>
+        public AbilityActivationResult CanActivateAbility(TargetId unitId, int abilityId, TargetId? target = null) =>
             EvaluateActivation(unitId, abilityId, target, commit: false);
 
         // With commit, a passing activation pays its costs and applies its cooldown immediately, so a
         // second request processed in the same tick sees both.
-        private AbilityActivationResult EvaluateActivation(TargetId unitId, int abilityId, TargetId target, bool commit)
+        private AbilityActivationResult EvaluateActivation(TargetId unitId, int abilityId, TargetId? target, bool commit)
         {
             if (!TryGetUnit(unitId, out var unit) || unit is null) return AbilityActivationResult.UnknownUnit;
             if (!_abilities.Contains(abilityId)) return AbilityActivationResult.UnknownAbility;
@@ -82,13 +83,14 @@ namespace Bun3.Gameplay
                 Pipeline.ApplyImmediate(ability.CooldownEffectId, unitId, unitId, level);
             }
 
-            ApplyAbilityEffects(ability, unitId, target, level);
+            ApplyAbilityEffects(ability, unitId, target.GetValueOrDefault(), level);
             return AbilityActivationResult.Success;
         }
 
-        private AbilityActivationResult EvaluateTarget(CompiledAbility ability, Unit caster, TargetId target)
+        private AbilityActivationResult EvaluateTarget(CompiledAbility ability, Unit caster, TargetId? target)
         {
-            if (!TryGetUnit(target, out var targetUnit) || targetUnit is null) return AbilityActivationResult.InvalidTarget;
+            if (!target.HasValue || !TryGetUnit(target.Value, out var targetUnit) || targetUnit is null)
+                return AbilityActivationResult.InvalidTarget;
 
             var required = ability.TargetRequiredTags;
             for (var i = 0; i < required.Length; i++)

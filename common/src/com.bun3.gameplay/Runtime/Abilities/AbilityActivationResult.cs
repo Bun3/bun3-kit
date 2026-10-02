@@ -39,7 +39,7 @@ namespace Bun3.Gameplay.Abilities
     /// <summary>Result of one queued ability activation, readable after the tick that processed it.</summary>
     public readonly struct AbilityActivation
     {
-        internal AbilityActivation(TargetId unitId, int abilityId, TargetId target, AbilityActivationResult result)
+        internal AbilityActivation(TargetId unitId, int abilityId, TargetId? target, AbilityActivationResult result)
         {
             UnitId = unitId;
             AbilityId = abilityId;
@@ -53,8 +53,9 @@ namespace Bun3.Gameplay.Abilities
         /// <summary>Requested ability id.</summary>
         public int AbilityId { get; }
 
-        /// <summary>Target passed with the request; meaningful only for abilities whose Target is Required.</summary>
-        public TargetId Target { get; }
+        /// <summary>Target passed with the request, or null when none was; meaningful only for abilities whose
+        /// Target is Required.</summary>
+        public TargetId? Target { get; }
 
         /// <summary>Gate outcome; <see cref="AbilityActivationResult.Success"/> means costs were paid and
         /// effects enqueued.</summary>

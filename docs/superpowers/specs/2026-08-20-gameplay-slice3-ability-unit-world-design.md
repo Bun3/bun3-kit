@@ -802,7 +802,9 @@ GameplayEvent). 코어에 cue(VFX) 시스템은 두지 않는다 — 위 버퍼�
 
 - **발동 인자**: `EnqueueActivation(unit, ability, target)`, `CanActivateAbility(unit, ability, target)`.
   결과 `AbilityActivation`에 `Target`이 실린다. `TargetId`에는 예약된 "없음" 값이 없으므로 대상 유무를
-  sentinel로 판단하지 않는다 — 어빌리티의 `Target` 모드가 정한다.
+  sentinel로 판단하지 않는다 — 어빌리티의 `Target` 모드가 정한다. 대상 인자는 `TargetId?`(기본 null)이고,
+  `Required`인데 null이면 `InvalidTarget`이다(최종 리뷰: `= default`였을 때 0번 유닛이 있으면 대상을 빠뜨린
+  호출이 조용히 0번 유닛을 겨눴다). 결과의 `Target`도 `TargetId?`로 "대상 없음"과 "0번 대상"을 구분한다.
 - **`AbilityDef.Target`**: `None`(기본, 대상 인자 무시) | `Required`(등록 유닛으로 해석돼야 함).
   빌드가 추론하지 않고 저작자가 명시한다. `None`인데 대상 기준점 항목이나 대상 검사가 있으면 Build 오류.
 - **효과 항목 기준점** `AbilityEffectDef.Origin`: `Caster`(기본) | `Target`. 셀렉터가 없으면 기준점 유닛에

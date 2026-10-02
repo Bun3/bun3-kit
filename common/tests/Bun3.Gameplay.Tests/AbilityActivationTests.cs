@@ -323,6 +323,23 @@ public sealed class AbilityActivationTests
     }
 
     [Test]
+    public void A_required_target_left_out_is_invalid_even_when_unit_zero_exists()
+    {
+        var f = Build((_, b) => b.Add(TargetedFireball()));
+        var id = f.Abilities.GetRequiredId("fireball");
+        f.Caster.Abilities.Grant(id, GrantSource.Archetype(), level: 1);
+        f.World.Spawn(MakeUnit(f.Kit, 0));
+        f.World.Tick();
+
+        Assert.That(f.World.CanActivateAbility(f.Caster.Id, id), Is.EqualTo(AbilityActivationResult.InvalidTarget));
+        f.World.EnqueueActivation(f.Caster.Id, id);
+        f.World.Tick();
+
+        Assert.That(f.World.PendingActivations[0].Result, Is.EqualTo(AbilityActivationResult.InvalidTarget));
+        Assert.That(f.World.PendingActivations[0].Target, Is.Null);
+    }
+
+    [Test]
     public void An_untargeted_ability_ignores_the_target_argument()
     {
         var f = Build((_, b) => b.Add(Fireball()));
