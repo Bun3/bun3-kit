@@ -82,6 +82,15 @@ namespace Bun3.Gameplay
                 written++;
             }
 
+            try
+            {
+                _ = new AttributeSet(attributes, attributeIds);
+            }
+            catch (ArgumentException e)
+            {
+                throw new InvalidOperationException($"{owner}: {e.Message}", e);
+            }
+
             var abilityIds = new int[def.Abilities.Count];
             var abilityLevels = new int[def.Abilities.Count];
             for (var i = 0; i < def.Abilities.Count; i++)

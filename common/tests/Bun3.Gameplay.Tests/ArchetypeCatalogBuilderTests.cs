@@ -53,6 +53,16 @@ public sealed class ArchetypeCatalogBuilderTests
     }
 
     [Test]
+    public void An_attribute_whose_clamp_bound_is_not_declared_is_rejected_at_build()
+    {
+        var hpOnly = new ArchetypeDef { Name = "warrior" };
+        hpOnly.Attributes.Add(new ArchetypeAttributeDef { AttributeId = EffectTestKit.Hp, Base = 80 });
+
+        Assert.That(() => Build(EffectTestKit.Create(), hpOnly),
+            Throws.InvalidOperationException.With.Message.Contains("warrior").And.Message.Contains("'MaxHp'"));
+    }
+
+    [Test]
     public void Duplicate_or_empty_archetype_names_are_rejected()
     {
         Assert.That(() => Build(EffectTestKit.Create(), Warrior(), Warrior()),
