@@ -13,9 +13,9 @@ namespace Bun3.Gameplay.Effects
     /// paths, chains, and Ongoing toggles. One tick runs six phases —
     /// (1) <see cref="DrainApplications"/> (budget/immunity/application conditions/apply; fires
     /// OnApplication/OnStackOverflow chains) → (2) <see cref="AdvanceTime"/> (period firing, lifetime
-    /// decrement, expiry; fires OnCompleteNormal chains) → (3) <see cref="RebuildAll"/> (rebuilds slots
-    /// marked dirty by 1–2) → (4) <see cref="EvaluateOngoing"/> (ongoing-condition toggles) →
-    /// (5) <see cref="RebuildToggled"/> (rebuilds slots marked dirty by 4) → (6) event finalization
+    /// decrement, expiry; fires OnCompleteNormal chains) → (3) rebuild of slots marked dirty by 1–2 →
+    /// (4) Ongoing-condition toggles → (5) rebuild of slots marked dirty by 4 — phases 3–5 run per target
+    /// in one pass (<see cref="SettleAttributes"/>), since they touch only that target → (6) event finalization
     /// (no pipeline work — observation buffers are read after the tick and cleared when the next one
     /// starts). Composed of this file plus <c>EffectPipeline.Events.cs</c> (gameplay event emission and
     /// OnEvent chain routing).
@@ -163,9 +163,7 @@ namespace Bun3.Gameplay.Effects
         {
             DrainApplications();
             AdvanceTime();
-            RebuildAll();
-            EvaluateOngoing();
-            RebuildToggled();
+            SettleAttributes();
             // Phase 6, event finalization: no pipeline work. Observation buffers are read after this call
             // and cleared at the start of the next tick.
 
@@ -1022,62 +1020,55 @@ namespace Bun3.Gameplay.Effects
             FireChain(effect.Chains, chainTrigger, source, level, target.Id, target);
         }
 
-        // Phase 3: first rebuild — re-aggregates only the dirty slots marked by phases 1-2.
-        private void RebuildAll() => RebuildDirtyAttributes();
-
-        // Phase 5: second rebuild — re-aggregates only the dirty slots newly marked by the phase-4 Ongoing
-        // toggles. Effectively a RebuildDirty re-run; does nothing when nothing is dirty.
-        private void RebuildToggled() => RebuildDirtyAttributes();
-
-        private void RebuildDirtyAttributes()
-        {
-            var count = _resolver.TargetIds.Count;
-            for (var t = 0; t < count; t++)
-            {
-                _resolver.TargetAt(t).Attributes.RebuildDirty();
-            }
-        }
-
-        // Phase 4: evaluates only instances with Ongoing conditions (the target's Ongoing list), targets in
-        // TargetId order, instances in Id order. Evaluation uses the Current values rebuilt
-        // in phase 3 and runs once per tick. Toggles only when the result changes — OFF reclaims
-        // GrantedTags and marks modifiers dirty, ON grants GrantedTags and marks dirty. The instance
-        // itself is not removed (RebuildDirty's RebuildSlot skips modifiers of !Enabled instances, so
-        // leaving them attached still excludes them from aggregation). GrantedTags is a counted container,
-        // so Add/Remove are symmetric.
-        private void EvaluateOngoing()
+        // Phases 3-5 per target in one pass: rebuild what phases 1-2 dirtied, evaluate Ongoing conditions,
+        // rebuild what the toggles dirtied. Equivalent to running each phase across all targets because the
+        // three read and write only the target's own state (captured modifier magnitudes, own clamp bounds,
+        // source-less Ongoing conditions, own tags and ability grants).
+        private void SettleAttributes()
         {
             var count = _resolver.TargetIds.Count;
             for (var t = 0; t < count; t++)
             {
                 var target = _resolver.TargetAt(t);
+                target.Attributes.RebuildDirty();
+                EvaluateOngoing(target);
+                target.Attributes.RebuildDirty();
+            }
+        }
 
-                var active = target.OngoingEffects;
-                for (var i = 0; i < active.Count; i++)
+        // Phase 4: evaluates the target's Ongoing instances in Id order against the Current values rebuilt
+        // in phase 3, once per tick. Toggles only when the result changes — OFF reclaims
+        // GrantedTags and marks modifiers dirty, ON grants GrantedTags and marks dirty. The instance
+        // itself is not removed (RebuildDirty's RebuildSlot skips modifiers of !Enabled instances, so
+        // leaving them attached still excludes them from aggregation). GrantedTags is a counted container,
+        // so Add/Remove are symmetric.
+        private void EvaluateOngoing(EffectTarget target)
+        {
+            var active = target.OngoingEffects;
+            for (var i = 0; i < active.Count; i++)
+            {
+                var instance = active[i];
+                var effect = _catalog.GetEffect(instance.EffectId);
+
+                // Ongoing evaluation runs every tick with no triggering event — always zero. Build
+                // already rejects EventMagnitude in OngoingConditions, so this value is unreachable.
+                var satisfied = EvaluateConditions(effect.OngoingConditions, target, source: null, hasSource: false, BigNum.Zero);
+                if (satisfied == instance.Enabled) continue;
+
+                instance.Enabled = satisfied;
+                var grantedTags = effect.GrantedTags;
+                if (satisfied)
                 {
-                    var instance = active[i];
-                    var effect = _catalog.GetEffect(instance.EffectId);
-
-                    // Ongoing evaluation runs every tick with no triggering event — always zero. Build
-                    // already rejects EventMagnitude in OngoingConditions, so this value is unreachable.
-                    var satisfied = EvaluateConditions(effect.OngoingConditions, target, source: null, hasSource: false, BigNum.Zero);
-                    if (satisfied == instance.Enabled) continue;
-
-                    instance.Enabled = satisfied;
-                    var grantedTags = effect.GrantedTags;
-                    if (satisfied)
-                    {
-                        for (var g = 0; g < grantedTags.Length; g++) target.Tags.Add(grantedTags[g]);
-                    }
-                    else
-                    {
-                        for (var g = 0; g < grantedTags.Length; g++) target.Tags.Remove(grantedTags[g]);
-                    }
-
-                    AbilityGrantHook?.Invoke(target, instance, satisfied);
-
-                    MarkDirtyForModifiers(target, effect);
+                    for (var g = 0; g < grantedTags.Length; g++) target.Tags.Add(grantedTags[g]);
                 }
+                else
+                {
+                    for (var g = 0; g < grantedTags.Length; g++) target.Tags.Remove(grantedTags[g]);
+                }
+
+                AbilityGrantHook?.Invoke(target, instance, satisfied);
+
+                MarkDirtyForModifiers(target, effect);
             }
         }
     }

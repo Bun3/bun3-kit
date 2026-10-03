@@ -66,6 +66,65 @@ public sealed class EffectChainConditionTests
     }
 
     [Test]
+    public void An_ongoing_toggle_reaches_current_in_the_same_tick()
+    {
+        var kit = EffectTestKit.Create();
+        var berserk = EffectTestKit.MinimalInfinite("berserk");
+        berserk.OngoingConditions.Add(new ConditionDef
+        {
+            Left = Operand.Attribute(EffectTestKit.Hp),
+            Op = ComparisonOp.Less,
+            Right = Operand.Attribute(EffectTestKit.MaxHp, BigNum.FromParts(3, -1)),
+        });
+        berserk.Modifiers.Add(new ModifierDef
+        {
+            AttributeId = EffectTestKit.Attack, Op = AttributeModifierOp.Add,
+            Magnitude = new MagnitudeDef { Base = Operand.Constant(10) },
+        });
+        kit.AddEffect(berserk);
+        var pipeline = kit.BuildPipeline();
+        kit.Defender.Attributes.SetBase(EffectTestKit.MaxHp, 100);
+        kit.Defender.Attributes.SetBase(EffectTestKit.Hp, 100);
+        pipeline.EnqueueApply(kit.EffectId("berserk"), kit.Defender.Id, kit.Defender.Id);
+        pipeline.Tick();
+        Assert.That(kit.Defender.Attributes.GetCurrent(EffectTestKit.Attack), Is.EqualTo(BigNum.Zero));
+
+        kit.Defender.Attributes.SetBase(EffectTestKit.Hp, 20);
+        pipeline.Tick();
+
+        Assert.That(kit.Defender.Attributes.GetCurrent(EffectTestKit.Attack), Is.EqualTo((BigNum)10));
+    }
+
+    [Test]
+    public void Ongoing_conditions_see_modifiers_applied_earlier_in_the_same_tick()
+    {
+        var kit = EffectTestKit.Create();
+        var frenzy = EffectTestKit.MinimalInfinite("frenzy");
+        frenzy.OngoingConditions.Add(new ConditionDef
+        {
+            Left = Operand.Attribute(EffectTestKit.Attack), Op = ComparisonOp.GreaterOrEqual, Right = Operand.Constant(50),
+        });
+        frenzy.GrantedTags.Add("state.hasted");
+        kit.AddEffect(frenzy);
+        var might = EffectTestKit.MinimalInfinite("might");
+        might.Modifiers.Add(new ModifierDef
+        {
+            AttributeId = EffectTestKit.Attack, Op = AttributeModifierOp.Add,
+            Magnitude = new MagnitudeDef { Base = Operand.Constant(60) },
+        });
+        kit.AddEffect(might);
+        var pipeline = kit.BuildPipeline();
+        pipeline.EnqueueApply(kit.EffectId("frenzy"), kit.Defender.Id, kit.Defender.Id);
+        pipeline.Tick();
+        Assert.That(kit.Defender.Tags.Has(kit.Tag("state.hasted")), Is.False);
+
+        pipeline.EnqueueApply(kit.EffectId("might"), kit.Defender.Id, kit.Defender.Id);
+        pipeline.Tick();
+
+        Assert.That(kit.Defender.Tags.Has(kit.Tag("state.hasted")), Is.True);
+    }
+
+    [Test]
     public void A_removed_ongoing_effect_is_no_longer_evaluated()
     {
         var kit = EffectTestKit.Create();
