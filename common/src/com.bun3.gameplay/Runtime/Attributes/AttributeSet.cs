@@ -58,6 +58,7 @@ namespace Bun3.Gameplay.Attributes
         private readonly int[] _slotByAttributeId;         // sparse → dense (size = max registered id + 1, -1 = absent)
         private AttributeChange[] _changes = new AttributeChange[8];
         private int _changeCount;
+        private bool _anyDirty;
 
         /// <summary>Builds dense slots from the attribute ids the archetype declares. Declaration order is irrelevant.</summary>
         public AttributeSet(AttributeRegistry registry, ReadOnlySpan<ushort> attributeIds)
@@ -141,6 +142,7 @@ namespace Bun3.Gameplay.Attributes
         {
             _slots[index].Base = rawBase;
             _slots[index].Dirty = true;
+            _anyDirty = true;
         }
 
         /// <summary>Snapshot save only — collects the modifier rows attached by this source via a slot scan.</summary>
@@ -275,6 +277,7 @@ namespace Bun3.Gameplay.Attributes
             }
             slot.Modifiers.Insert(position, entry);
             slot.Dirty = true;
+            _anyDirty = true;
         }
 
         /// <summary>Removes all modifiers attached by the source.</summary>
@@ -290,17 +293,25 @@ namespace Bun3.Gameplay.Attributes
                     {
                         modifiers.RemoveAt(j);
                         _slots[i].Dirty = true;
+                        _anyDirty = true;
                     }
                 }
             }
         }
 
         /// <summary>Marks the attribute slot dirty (e.g. on an Enabled toggle).</summary>
-        internal void MarkDirty(ushort attributeId) => _slots[SlotIndex(attributeId)].Dirty = true;
+        internal void MarkDirty(ushort attributeId)
+        {
+            _slots[SlotIndex(attributeId)].Dirty = true;
+            _anyDirty = true;
+        }
 
         /// <summary>Rebuilds all dirty slots in canonical order, following the clamp topology (registry EvaluationOrder).</summary>
         internal void RebuildDirty()
         {
+            if (!_anyDirty) return;
+            _anyDirty = false;
+
             var order = _registry.EvaluationOrder;
             for (var i = 0; i < order.Length; i++)
             {
