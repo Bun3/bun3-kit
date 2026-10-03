@@ -66,6 +66,34 @@ public sealed class EffectChainConditionTests
     }
 
     [Test]
+    public void A_removed_ongoing_effect_is_no_longer_evaluated()
+    {
+        var kit = EffectTestKit.Create();
+        var lowHp = EffectTestKit.MinimalInfinite("lowhp");
+        lowHp.OngoingConditions.Add(new ConditionDef
+        {
+            Left = Operand.Attribute(EffectTestKit.Hp),
+            Op = ComparisonOp.Less,
+            Right = Operand.Attribute(EffectTestKit.MaxHp, BigNum.FromParts(3, -1)),
+        });
+        lowHp.GrantedTags.Add("state.lowhealth");
+        kit.AddEffect(lowHp);
+        var pipeline = kit.BuildPipeline();
+        kit.Defender.Attributes.SetBase(EffectTestKit.MaxHp, 100);
+        kit.Defender.Attributes.SetBase(EffectTestKit.Hp, 100);
+        pipeline.EnqueueApply(kit.EffectId("lowhp"), kit.Defender.Id, kit.Defender.Id);
+        pipeline.Tick();
+
+        pipeline.RemoveById(kit.Defender.Id, kit.Defender.GetActiveEffect(0).InstanceId);
+        foreach (var hp in new[] { 20, 80, 20 })
+        {
+            kit.Defender.Attributes.SetBase(EffectTestKit.Hp, hp);
+            pipeline.Tick();
+            Assert.That(kit.Defender.Tags.Count(kit.Tag("state.lowhealth")), Is.Zero, $"Hp {hp}");
+        }
+    }
+
+    [Test]
     public void Expiry_chain_fires_next_tick_and_selector_routes_targets()
     {
         var kit = EffectTestKit.Create();

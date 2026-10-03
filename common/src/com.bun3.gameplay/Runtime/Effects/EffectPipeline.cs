@@ -882,7 +882,7 @@ namespace Bun3.Gameplay.Effects
             var instance = EffectInstance.Rent(
                 _instancePool, _nextInstanceId++, pending.EffectId, pending.Source, pending.Level, stack: 1,
                 remainingTicks, periodCountdown, CurrentTick);
-            target.InsertActive(instance, effect.HasEventChains);
+            target.InsertActive(instance, effect);
 
             if (effect.PeriodTicks == 0)
             {
@@ -917,8 +917,8 @@ namespace Bun3.Gameplay.Effects
             }
         }
 
-        // Phase 2: iterate targets in TargetId order and instances in Id order (the active list is already
-        // canonical). Instances created this tick are skipped. Period firing runs before the expiry check,
+        // Phase 2: iterate targets in TargetId order and their timed instances (Duration or periodic) in Id
+        // order; the other instances do nothing here. Instances created this tick are skipped. Period firing runs before the expiry check,
         // so the final period fire on the expiring tick is still applied. Normal expiry (the
         // complete-removal path of ExpireInstance) fires OnCompleteNormal chains, and those apply requests
         // carry over to the next tick since this tick's phase 1 has already passed.
@@ -929,7 +929,7 @@ namespace Bun3.Gameplay.Effects
             {
                 var target = _resolver.TargetAt(t);
 
-                var active = target.ActiveEffects;
+                var active = target.TimedEffects;
                 _expiryScratch.Clear();
                 for (var i = 0; i < active.Count; i++)
                 {
@@ -1015,7 +1015,7 @@ namespace Bun3.Gameplay.Effects
 
             AbilityGrantHook?.Invoke(target, instance, false);
 
-            target.RemoveActive(instance, effect.HasEventChains);
+            target.RemoveActive(instance, effect);
             target.RaiseEffectEvent(new EffectLifecycleEvent(eventKind, instance.Id, instance.EffectId, instance.Stack, instance.Source, instance.Level));
             EffectInstance.Return(_instancePool, instance);
 
@@ -1038,8 +1038,8 @@ namespace Bun3.Gameplay.Effects
             }
         }
 
-        // Phase 4: evaluates only instances with Ongoing conditions, targets in TargetId order, instances
-        // in Id order (the active list is already canonical). Evaluation uses the Current values rebuilt
+        // Phase 4: evaluates only instances with Ongoing conditions (the target's Ongoing list), targets in
+        // TargetId order, instances in Id order. Evaluation uses the Current values rebuilt
         // in phase 3 and runs once per tick. Toggles only when the result changes — OFF reclaims
         // GrantedTags and marks modifiers dirty, ON grants GrantedTags and marks dirty. The instance
         // itself is not removed (RebuildDirty's RebuildSlot skips modifiers of !Enabled instances, so
@@ -1052,12 +1052,11 @@ namespace Bun3.Gameplay.Effects
             {
                 var target = _resolver.TargetAt(t);
 
-                var active = target.ActiveEffects;
+                var active = target.OngoingEffects;
                 for (var i = 0; i < active.Count; i++)
                 {
                     var instance = active[i];
                     var effect = _catalog.GetEffect(instance.EffectId);
-                    if (effect.OngoingConditions.Length == 0) continue;
 
                     // Ongoing evaluation runs every tick with no triggering event — always zero. Build
                     // already rejects EventMagnitude in OngoingConditions, so this value is unreachable.
