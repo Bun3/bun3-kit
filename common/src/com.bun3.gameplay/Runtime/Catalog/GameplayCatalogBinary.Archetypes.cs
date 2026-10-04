@@ -48,17 +48,15 @@ namespace Bun3.Gameplay.Catalog
                 abilityLevels[i] = reader.ReadInt32("archetype ability level");
             }
 
-            AttributeLayout layout;
             try
             {
-                layout = new AttributeLayout(attributes, attributeIds);
+                return new CompiledArchetype(
+                    name, new AttributeLayout(attributes, attributeIds), attributeIds, bases, abilityIds, abilityLevels);
             }
             catch (ArgumentException e)
             {
                 throw Format($"Archetype '{name}': {e.Message}");
             }
-
-            return new CompiledArchetype(name, layout, attributeIds, bases, abilityIds, abilityLevels);
         }
     }
 }

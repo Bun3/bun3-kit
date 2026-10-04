@@ -161,15 +161,10 @@ namespace Bun3.Gameplay
                 throw new ArgumentOutOfRangeException(nameof(archetypeId), archetypeId, "Archetype id is outside the catalog.");
 
             var archetype = Database.Archetypes.GetArchetype(archetypeId);
-            var unit = new Unit(id, archetype.Layout, Database.Tags, ownerId);
+            var unit = new Unit(id, archetype.Layout, archetype.Grants, Database.Tags, ownerId);
             for (var i = 0; i < archetype.AttributeIds.Length; i++)
             {
                 unit.Attributes.SetBase(archetype.AttributeIds[i], archetype.Bases[i]);
-            }
-
-            for (var i = 0; i < archetype.AbilityIds.Length; i++)
-            {
-                unit.Abilities.Grant(archetype.AbilityIds[i], GrantSource.Archetype(), archetype.AbilityLevels[i]);
             }
 
             return unit;

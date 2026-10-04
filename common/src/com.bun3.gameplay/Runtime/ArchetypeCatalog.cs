@@ -1,6 +1,7 @@
 #nullable enable
 using System;
 using System.Collections.Generic;
+using Bun3.Gameplay.Abilities;
 using Bun3.Gameplay.Attributes;
 using Bun3.Gameplay.Numerics;
 
@@ -18,6 +19,7 @@ namespace Bun3.Gameplay
             Bases = bases;
             AbilityIds = abilityIds;
             AbilityLevels = abilityLevels;
+            Grants = AbilitySet.ForArchetype(abilityIds, abilityLevels);
         }
 
         internal string Name { get; }
@@ -32,6 +34,9 @@ namespace Bun3.Gameplay
         internal int[] AbilityIds { get; }
 
         internal int[] AbilityLevels { get; }
+
+        /// <summary>Starting grants every unit of this archetype shares until its first grant change.</summary>
+        internal AbilitySet Grants { get; }
     }
 
     /// <summary>Immutable catalog of compiled unit archetypes, addressed by dense id.</summary>

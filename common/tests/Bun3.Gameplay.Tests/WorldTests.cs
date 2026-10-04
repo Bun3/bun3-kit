@@ -82,6 +82,43 @@ public sealed class WorldTests
     }
 
     [Test]
+    public void Grant_changes_on_one_unit_do_not_reach_another_unit_of_the_same_archetype()
+    {
+        var kit = EffectTestKit.Create();
+        kit.AddEffect(EffectTestKit.MinimalInstant("bolt"));
+        var abilityBuilder = new AbilityCatalogBuilder();
+        foreach (var name in new[] { "slash", "guard", "dash" })
+        {
+            var ability = new AbilityDef { Name = name, MaxLevel = 3 };
+            ability.Effects.Add(new AbilityEffectDef { EffectName = "bolt" });
+            abilityBuilder.Add(ability);
+        }
+
+        var abilities = abilityBuilder.Build(kit.TagCatalog, kit.Seams, kit.Attributes, kit.Catalog);
+        var warrior = new ArchetypeDef { Name = "warrior" };
+        warrior.Abilities.Add(new ArchetypeAbilityDef { AbilityName = "slash", Level = 2 });
+        warrior.Abilities.Add(new ArchetypeAbilityDef { AbilityName = "guard" });
+        var archetypes = new ArchetypeCatalogBuilder();
+        archetypes.Add(warrior);
+        var world = new World(kit.Database(abilities, archetypes.Build(kit.Attributes, abilities)), new XorShiftRng(1));
+        var first = world.CreateUnit(new TargetId(1), 0);
+        var second = world.CreateUnit(new TargetId(2), 0);
+        var third = world.CreateUnit(new TargetId(3), 0);
+        Assert.That(second.Abilities.Version, Is.EqualTo(first.Abilities.Version));
+
+        first.Abilities.Grant(abilities.GetRequiredId("dash"), GrantSource.Code(), level: 1);
+        first.Abilities.Grant(abilities.GetRequiredId("slash"), GrantSource.Archetype(), level: 3);
+        second.Abilities.Revoke(GrantSource.Archetype());
+
+        Assert.That(first.Abilities.GrantCount, Is.EqualTo(3));
+        Assert.That(first.Abilities.GetLevel(abilities.GetRequiredId("slash")), Is.EqualTo(3));
+        Assert.That(second.Abilities.GrantCount, Is.Zero);
+        Assert.That(third.Abilities.GrantCount, Is.EqualTo(2));
+        Assert.That(third.Abilities.GetLevel(abilities.GetRequiredId("slash")), Is.EqualTo(2));
+        Assert.That(third.Abilities.IsGranted(abilities.GetRequiredId("dash")), Is.False);
+    }
+
+    [Test]
     public void Spawn_is_visible_only_after_the_next_tick()
     {
         var kit = EffectTestKit.Create();

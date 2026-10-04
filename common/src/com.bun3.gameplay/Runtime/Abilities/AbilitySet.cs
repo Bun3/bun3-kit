@@ -20,10 +20,34 @@ namespace Bun3.Gameplay.Abilities
             internal int Level;
         }
 
-        private readonly List<GrantEntry> _grants = new List<GrantEntry>();
+        private GrantEntry[] _grants = Array.Empty<GrantEntry>();
+        private int _count;
+        private bool _sharedGrants;   // _grants belongs to an archetype until the first change copies it
+
+        /// <summary>Creates an empty ability set.</summary>
+        public AbilitySet()
+        {
+        }
+
+        // Starts from an archetype's starting grants without copying them; the first change copies.
+        internal AbilitySet(AbilitySet archetypeGrants)
+        {
+            _grants = archetypeGrants._grants;
+            _count = archetypeGrants._count;
+            Version = archetypeGrants.Version;
+            _sharedGrants = true;
+        }
+
+        /// <summary>Builds the starting grants of an archetype, granted in order from the archetype origin.</summary>
+        internal static AbilitySet ForArchetype(int[] abilityIds, int[] levels)
+        {
+            var grants = new AbilitySet();
+            for (var i = 0; i < abilityIds.Length; i++) grants.Grant(abilityIds[i], GrantSource.Archetype(), levels[i]);
+            return grants;
+        }
 
         /// <summary>Number of (ability, origin) grants held.</summary>
-        public int GrantCount => _grants.Count;
+        public int GrantCount => _count;
 
         /// <summary>Incremented whenever the grant list changes — a grant, a level change, a revoke that
         /// removed something, or a restore. Redraw an ability bar only when it changes.</summary>
@@ -35,6 +59,7 @@ namespace Bun3.Gameplay.Abilities
         /// <returns>Value copy of the grant.</returns>
         public AbilityGrantInfo GetGrant(int index)
         {
+            if ((uint)index >= (uint)_count) throw new ArgumentOutOfRangeException(nameof(index));
             var grant = _grants[index];
             return new AbilityGrantInfo(grant.AbilityId, grant.Source, grant.Level);
         }
@@ -51,14 +76,16 @@ namespace Bun3.Gameplay.Abilities
             var position = FindInsertPosition(abilityId, source, out var exists);
             if (exists)
             {
-                var existing = _grants[position];
-                existing.Level = level;
-                _grants[position] = existing;
+                Own(0);
+                _grants[position].Level = level;
                 Version++;
                 return;
             }
 
-            _grants.Insert(position, new GrantEntry { AbilityId = abilityId, Source = source, Level = level });
+            Own(1);
+            Array.Copy(_grants, position, _grants, position + 1, _count - position);
+            _grants[position] = new GrantEntry { AbilityId = abilityId, Source = source, Level = level };
+            _count++;
             Version++;
         }
 
@@ -68,14 +95,22 @@ namespace Bun3.Gameplay.Abilities
         public int Revoke(GrantSource source)
         {
             var removed = 0;
-            for (var i = _grants.Count - 1; i >= 0; i--)
+            for (var i = 0; i < _count; i++)
             {
-                if (_grants[i].Source != source) continue;
-                _grants.RemoveAt(i);
-                removed++;
+                if (_grants[i].Source == source) removed++;
             }
 
-            if (removed > 0) Version++;
+            if (removed == 0) return 0;
+
+            Own(0);
+            var kept = 0;
+            for (var i = 0; i < _count; i++)
+            {
+                if (_grants[i].Source != source) _grants[kept++] = _grants[i];
+            }
+
+            _count = kept;
+            Version++;
             return removed;
         }
 
@@ -84,7 +119,7 @@ namespace Bun3.Gameplay.Abilities
         /// <returns>True when at least one grant exists.</returns>
         public bool IsGranted(int abilityId)
         {
-            for (var i = 0; i < _grants.Count; i++)
+            for (var i = 0; i < _count; i++)
             {
                 if (_grants[i].AbilityId == abilityId) return true;
             }
@@ -98,7 +133,7 @@ namespace Bun3.Gameplay.Abilities
         public int GetLevel(int abilityId)
         {
             var level = 0;
-            for (var i = 0; i < _grants.Count; i++)
+            for (var i = 0; i < _count; i++)
             {
                 if (_grants[i].AbilityId == abilityId && _grants[i].Level > level) level = _grants[i].Level;
             }
@@ -110,8 +145,8 @@ namespace Bun3.Gameplay.Abilities
         /// <returns>Snapshot in canonical order.</returns>
         public AbilitySetSnapshot CreateSnapshot()
         {
-            var rows = new AbilitySetSnapshot.GrantRow[_grants.Count];
-            for (var i = 0; i < _grants.Count; i++)
+            var rows = new AbilitySetSnapshot.GrantRow[_count];
+            for (var i = 0; i < _count; i++)
             {
                 rows[i] = new AbilitySetSnapshot.GrantRow(_grants[i].AbilityId, _grants[i].Source, _grants[i].Level);
             }
@@ -125,13 +160,15 @@ namespace Bun3.Gameplay.Abilities
         {
             if (snapshot is null) throw new ArgumentNullException(nameof(snapshot));
 
-            _grants.Clear();
             var rows = snapshot.Grants;
+            _grants = new GrantEntry[rows.Length];
+            _sharedGrants = false;
             for (var i = 0; i < rows.Length; i++)
             {
-                _grants.Add(new GrantEntry { AbilityId = rows[i].AbilityId, Source = rows[i].Source, Level = rows[i].Level });
+                _grants[i] = new GrantEntry { AbilityId = rows[i].AbilityId, Source = rows[i].Source, Level = rows[i].Level };
             }
 
+            _count = rows.Length;
             Version++;
         }
 
@@ -139,7 +176,7 @@ namespace Bun3.Gameplay.Abilities
         // and the list must stay in canonical order for snapshot determinism.
         private int FindInsertPosition(int abilityId, GrantSource source, out bool exists)
         {
-            for (var i = 0; i < _grants.Count; i++)
+            for (var i = 0; i < _count; i++)
             {
                 var current = _grants[i];
                 if (current.AbilityId < abilityId) continue;
@@ -156,7 +193,19 @@ namespace Bun3.Gameplay.Abilities
             }
 
             exists = false;
-            return _grants.Count;
+            return _count;
+        }
+
+        // Makes _grants this set's own array with room for extra more entries.
+        private void Own(int extra)
+        {
+            var needed = _count + extra;
+            if (!_sharedGrants && needed <= _grants.Length) return;
+            var capacity = Math.Max(4, _sharedGrants ? needed : Math.Max(needed, _grants.Length * 2));
+            var owned = new GrantEntry[capacity];
+            Array.Copy(_grants, owned, _count);
+            _grants = owned;
+            _sharedGrants = false;
         }
     }
 
