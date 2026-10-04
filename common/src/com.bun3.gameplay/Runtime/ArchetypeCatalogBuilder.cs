@@ -82,9 +82,10 @@ namespace Bun3.Gameplay
                 written++;
             }
 
+            AttributeLayout layout;
             try
             {
-                _ = new AttributeSet(attributes, attributeIds);
+                layout = new AttributeLayout(attributes, attributeIds);
             }
             catch (ArgumentException e)
             {
@@ -117,7 +118,7 @@ namespace Bun3.Gameplay
                 abilityLevels[i] = entry.Level;
             }
 
-            return new CompiledArchetype(def.Name, attributeIds, baseValues, abilityIds, abilityLevels);
+            return new CompiledArchetype(def.Name, layout, attributeIds, baseValues, abilityIds, abilityLevels);
         }
     }
 }

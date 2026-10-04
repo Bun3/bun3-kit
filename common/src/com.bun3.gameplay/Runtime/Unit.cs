@@ -31,6 +31,14 @@ namespace Bun3.Gameplay
             OwnerId = ownerId;
         }
 
+        internal Unit(TargetId id, AttributeLayout layout, TagCatalog tagCatalog, ulong ownerId)
+        {
+            Id = id;
+            Effects = new EffectTarget(id, layout, tagCatalog);
+            Abilities = new AbilitySet();
+            OwnerId = ownerId;
+        }
+
         /// <summary>Unit id.</summary>
         public TargetId Id { get; }
 

@@ -1,6 +1,7 @@
 #nullable enable
 using System;
 using System.Collections.Generic;
+using Bun3.Gameplay.Attributes;
 using Bun3.Gameplay.Numerics;
 
 namespace Bun3.Gameplay
@@ -9,9 +10,10 @@ namespace Bun3.Gameplay
     internal sealed class CompiledArchetype
     {
         internal CompiledArchetype(
-            string name, ushort[] attributeIds, BigNum[] bases, int[] abilityIds, int[] abilityLevels)
+            string name, AttributeLayout layout, ushort[] attributeIds, BigNum[] bases, int[] abilityIds, int[] abilityLevels)
         {
             Name = name;
+            Layout = layout;
             AttributeIds = attributeIds;
             Bases = bases;
             AbilityIds = abilityIds;
@@ -19,6 +21,9 @@ namespace Bun3.Gameplay
         }
 
         internal string Name { get; }
+
+        /// <summary>Slot layout every unit of this archetype shares.</summary>
+        internal AttributeLayout Layout { get; }
 
         internal ushort[] AttributeIds { get; }
 

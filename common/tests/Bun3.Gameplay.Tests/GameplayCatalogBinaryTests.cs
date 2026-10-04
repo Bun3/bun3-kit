@@ -563,6 +563,13 @@ public sealed class GameplayCatalogBinaryTests
             return;
         }
 
+        // Layouts reference the registry the caller passed to Load, never a serialized copy.
+        if (expected is AttributeRegistry)
+        {
+            Assert.That(ReferenceEquals(expected, actual), Is.True, path + " must be the caller's registry");
+            return;
+        }
+
         var type = expected.GetType();
         if (type.IsArray)
         {

@@ -62,6 +62,26 @@ public sealed class WorldTests
     }
 
     [Test]
+    public void Units_of_one_archetype_share_one_attribute_layout()
+    {
+        var kit = EffectTestKit.Create();
+        var abilities = new AbilityCatalogBuilder().Build(kit.TagCatalog, kit.Seams, kit.Attributes, kit.Catalog);
+        var warrior = new ArchetypeDef { Name = "warrior" };
+        warrior.Attributes.Add(new ArchetypeAttributeDef { AttributeId = EffectTestKit.Hp, Base = 80 });
+        warrior.Attributes.Add(new ArchetypeAttributeDef { AttributeId = EffectTestKit.MaxHp, Base = 100 });
+        var archetypes = new ArchetypeCatalogBuilder();
+        archetypes.Add(warrior);
+        var database = kit.Database(abilities, archetypes.Build(kit.Attributes, abilities));
+        var world = new World(database, new XorShiftRng(1));
+
+        var first = world.CreateUnit(new TargetId(1), 0);
+        var second = world.CreateUnit(new TargetId(2), 0);
+
+        Assert.That(first.Attributes.Layout, Is.SameAs(second.Attributes.Layout));
+        Assert.That(second.Attributes.GetCurrent(EffectTestKit.Hp), Is.EqualTo((Bun3.Gameplay.Numerics.BigNum)80));
+    }
+
+    [Test]
     public void Spawn_is_visible_only_after_the_next_tick()
     {
         var kit = EffectTestKit.Create();

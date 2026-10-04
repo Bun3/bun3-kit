@@ -90,6 +90,13 @@ namespace Bun3.Gameplay.Effects
             Tags = tagCatalog.CreateCountContainer();
         }
 
+        internal EffectTarget(TargetId id, AttributeLayout layout, TagCatalog tagCatalog)
+        {
+            Id = id;
+            Attributes = new AttributeSet(layout);
+            Tags = tagCatalog.CreateCountContainer();
+        }
+
         /// <summary>Inserts an active effect instance at its ascending-Id position, in the active list and
         /// in each phase list its effect belongs to.</summary>
         internal void InsertActive(EffectInstance instance, CompiledEffect effect)

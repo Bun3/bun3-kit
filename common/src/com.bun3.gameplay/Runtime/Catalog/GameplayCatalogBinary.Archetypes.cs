@@ -1,5 +1,7 @@
 // GameplayCatalogBinary partial — archetype record codec.
 #nullable enable
+using System;
+using Bun3.Gameplay.Attributes;
 using Bun3.Gameplay.Numerics;
 
 namespace Bun3.Gameplay.Catalog
@@ -24,7 +26,7 @@ namespace Bun3.Gameplay.Catalog
             }
         }
 
-        private static CompiledArchetype ReadArchetype(PayloadReader reader)
+        private static CompiledArchetype ReadArchetype(PayloadReader reader, AttributeRegistry attributes)
         {
             var name = reader.ReadString("archetype name") ?? throw Format("Archetype name must not be null.");
 
@@ -46,7 +48,17 @@ namespace Bun3.Gameplay.Catalog
                 abilityLevels[i] = reader.ReadInt32("archetype ability level");
             }
 
-            return new CompiledArchetype(name, attributeIds, bases, abilityIds, abilityLevels);
+            AttributeLayout layout;
+            try
+            {
+                layout = new AttributeLayout(attributes, attributeIds);
+            }
+            catch (ArgumentException e)
+            {
+                throw Format($"Archetype '{name}': {e.Message}");
+            }
+
+            return new CompiledArchetype(name, layout, attributeIds, bases, abilityIds, abilityLevels);
         }
     }
 }

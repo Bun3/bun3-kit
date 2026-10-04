@@ -212,7 +212,7 @@ namespace Bun3.Gameplay.Catalog
             var archetypeNameToId = new Dictionary<string, int>(archetypes.Length, StringComparer.Ordinal);
             for (var id = 0; id < archetypes.Length; id++)
             {
-                archetypes[id] = ReadArchetype(reader);
+                archetypes[id] = ReadArchetype(reader, attributes);
                 if (!archetypeNameToId.TryAdd(archetypes[id].Name, id)) throw Format("Duplicate archetype name.");
             }
 
