@@ -543,7 +543,7 @@ public sealed class WorldStressBenchmarkTests
 
         var berserk = Def("berserk", EffectDurationType.Infinite);
         berserk.OngoingConditions.Add(Below(Hp, MaxHp, BigNum.FromParts(3, -1)));
-        berserk.Modifiers.Add(Modifier(Attack, AttributeModifierOp.Multiply, Operand.Constant(50)));
+        berserk.Modifiers.Add(Modifier(Attack, AttributeModifierOp.Multiply, Operand.Constant(BigNum.FromParts(5, -1))));
         berserk.GrantedTags.Add("state.berserk");
         effects.Add(berserk);
 
@@ -590,7 +590,7 @@ public sealed class WorldStressBenchmarkTests
         effects.Add(stun);
 
         var haste = Def("haste", EffectDurationType.Duration, ticks: 200);
-        haste.Modifiers.Add(Modifier(Speed, AttributeModifierOp.Multiply, Operand.Constant(30)));
+        haste.Modifiers.Add(Modifier(Speed, AttributeModifierOp.Multiply, Operand.Constant(BigNum.FromParts(3, -1))));
         haste.Modifiers.Add(Add(Attack, 5));
         haste.GrantedTags.Add("state.hasted");
         haste.AssetTags.Add("effect.buff");
