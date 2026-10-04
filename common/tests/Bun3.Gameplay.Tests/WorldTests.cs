@@ -400,20 +400,76 @@ public sealed class WorldTests
         world.Spawn(unit);
         unit.Abilities.Grant(abilities.GetRequiredId("cast"), GrantSource.Archetype(), level: 1);
         world.Tick();
-        Assert.That(unit.Attributes.PendingChanges.Length, Is.Zero, "pre-spawn initialization is not an event");
+        Assert.That(world.PendingAttributeChanges.Length, Is.Zero, "pre-spawn initialization is not an event");
 
         world.EnqueueApply(kit.EffectId("aura"), unit.Id, unit.Id);
         world.EnqueueActivation(unit.Id, abilities.GetRequiredId("cast"));
         world.Tick();
-        Assert.That(unit.Effects.PendingEffectEvents.Length, Is.EqualTo(1), "aura Applied");
-        Assert.That(unit.Attributes.PendingChanges.Length, Is.EqualTo(1), "Mp cost paid inside the tick");
+        Assert.That(world.PendingEffectEvents.Length, Is.EqualTo(1), "aura Applied");
+        Assert.That(world.PendingEffectEvents[0].Target, Is.EqualTo(unit.Id));
+        Assert.That(world.PendingAttributeChanges.Length, Is.EqualTo(1), "Mp cost paid inside the tick");
+        Assert.That(world.PendingAttributeChanges[0].Target, Is.EqualTo(unit.Id));
+        Assert.That(world.PendingAttributeChanges[0].AttributeId, Is.EqualTo(EffectTestKit.Mp));
         Assert.That(world.PendingActivations.Length, Is.EqualTo(1));
 
         world.Tick();
-        Assert.That(unit.Effects.PendingEffectEvents.Length, Is.Zero);
-        Assert.That(unit.Attributes.PendingChanges.Length, Is.Zero);
+        Assert.That(world.PendingEffectEvents.Length, Is.Zero);
+        Assert.That(world.PendingAttributeChanges.Length, Is.Zero);
         Assert.That(world.PendingActivations.Length, Is.Zero);
         Assert.That(world.Pipeline.PendingGameplayEvents.Length, Is.Zero);
+    }
+
+    [Test]
+    public void Attribute_changes_of_several_units_arrive_in_tick_order_with_their_targets()
+    {
+        var kit = EffectTestKit.Create();
+        var world = new World(kit.Database(new AbilityCatalogBuilder().Build(kit.TagCatalog, kit.Seams, kit.Attributes, kit.Catalog)), new XorShiftRng(1));
+        var first = MakeUnit(kit, 1);
+        var second = MakeUnit(kit, 2);
+        world.Spawn(first);
+        world.Spawn(second);
+        world.Tick();
+
+        world.EnqueueSetBase(second.Id, EffectTestKit.Mp, 5);
+        world.EnqueueSetBase(first.Id, EffectTestKit.Mp, 9);
+        world.Tick();
+
+        var changes = world.PendingAttributeChanges;
+        Assert.That(changes.Length, Is.EqualTo(2));
+        Assert.That(changes[0].Target, Is.EqualTo(second.Id));
+        Assert.That(changes[0].NewCurrent, Is.EqualTo((Bun3.Gameplay.Numerics.BigNum)5));
+        Assert.That(changes[1].Target, Is.EqualTo(first.Id));
+    }
+
+    [Test]
+    public void A_unit_spawned_this_tick_records_the_commands_of_the_same_tick()
+    {
+        var kit = EffectTestKit.Create();
+        var world = new World(kit.Database(new AbilityCatalogBuilder().Build(kit.TagCatalog, kit.Seams, kit.Attributes, kit.Catalog)), new XorShiftRng(1));
+        var unit = MakeUnit(kit, 1);
+
+        world.Spawn(unit);
+        world.EnqueueSetBase(unit.Id, EffectTestKit.Mp, 4);
+        world.Tick();
+
+        Assert.That(world.PendingAttributeChanges.Length, Is.EqualTo(1));
+        Assert.That(world.PendingAttributeChanges[0].Target, Is.EqualTo(unit.Id));
+    }
+
+    [Test]
+    public void A_despawned_unit_no_longer_records_into_the_world()
+    {
+        var kit = EffectTestKit.Create();
+        var world = new World(kit.Database(new AbilityCatalogBuilder().Build(kit.TagCatalog, kit.Seams, kit.Attributes, kit.Catalog)), new XorShiftRng(1));
+        var unit = MakeUnit(kit, 1);
+        world.Spawn(unit);
+        world.Tick();
+        world.Despawn(unit.Id);
+        world.Tick();
+
+        unit.Attributes.SetBase(EffectTestKit.Mp, 3);
+
+        Assert.That(world.PendingAttributeChanges.Length, Is.Zero);
     }
 
     [Test]

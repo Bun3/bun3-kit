@@ -150,13 +150,8 @@ namespace Bun3.Gameplay.Effects
         internal void ClearObservationBuffers()
         {
             _gameplayEventCount = 0;
-            var count = _resolver.TargetIds.Count;
-            for (var i = 0; i < count; i++)
-            {
-                var target = _resolver.TargetAt(i);
-                target.ClearEffectEvents();
-                target.Attributes.ClearChanges();
-            }
+            _effectEventCount = 0;
+            _attributeChanges.Clear();
         }
 
         internal void RunPhases()
@@ -570,6 +565,7 @@ namespace Bun3.Gameplay.Effects
             CompiledEffect effect, EffectTarget target, EffectTarget? source, bool hasSource, TargetId sourceId,
             int level, int stack, BigNum eventMagnitude)
         {
+            Track(target);
             var raises = effect.RaiseEvents;
             Span<BigNum> before = stackalloc BigNum[raises.Length];
             Span<BigNum> nominal = stackalloc BigNum[raises.Length];
@@ -745,8 +741,8 @@ namespace Bun3.Gameplay.Effects
                 else if (wouldBe != instance.Stack)
                 {
                     instance.Stack = wouldBe;
-                    target.RaiseEffectEvent(new EffectLifecycleEvent(
-                        EffectLifecycleKind.StackChanged, instance.Id, instance.EffectId, instance.Stack, instance.Source, instance.Level));
+                    RaiseEffectEvent(new EffectLifecycleEvent(
+                        EffectLifecycleKind.StackChanged, target.Id, instance.Id, instance.EffectId, instance.Stack, instance.Source, instance.Level));
                     MarkDirtyForModifiers(target, effect);
                     SyncLevelFromStack(effect, target, instance, eventMagnitude);
                 }
@@ -839,8 +835,8 @@ namespace Bun3.Gameplay.Effects
             if (newStack != instance.Stack)
             {
                 instance.Stack = newStack;
-                target.RaiseEffectEvent(new EffectLifecycleEvent(
-                    EffectLifecycleKind.StackChanged, instance.Id, instance.EffectId, instance.Stack, instance.Source, instance.Level));
+                RaiseEffectEvent(new EffectLifecycleEvent(
+                    EffectLifecycleKind.StackChanged, target.Id, instance.Id, instance.EffectId, instance.Stack, instance.Source, instance.Level));
                 MarkDirtyForModifiers(target, effect);
                 SyncLevelFromStack(effect, target, instance, eventMagnitude);
             }
@@ -901,7 +897,7 @@ namespace Bun3.Gameplay.Effects
 
             AbilityGrantHook?.Invoke(target, instance, true);
 
-            target.RaiseEffectEvent(new EffectLifecycleEvent(EffectLifecycleKind.Applied, instance.Id, pending.EffectId, instance.Stack, instance.Source, instance.Level));
+            RaiseEffectEvent(new EffectLifecycleEvent(EffectLifecycleKind.Applied, target.Id, instance.Id, pending.EffectId, instance.Stack, instance.Source, instance.Level));
 
             FireChain(effect.Chains, ChainTrigger.OnApplication, pending.Source, pending.Level, target.Id, target);
         }
@@ -983,8 +979,8 @@ namespace Bun3.Gameplay.Effects
                 instance.Stack--;
                 instance.RemainingTicks = effect.DurationTicks;
                 instance.DurationTicks = instance.RemainingTicks;
-                target.RaiseEffectEvent(new EffectLifecycleEvent(
-                    EffectLifecycleKind.StackChanged, instance.Id, instance.EffectId, instance.Stack, instance.Source, instance.Level));
+                RaiseEffectEvent(new EffectLifecycleEvent(
+                    EffectLifecycleKind.StackChanged, target.Id, instance.Id, instance.EffectId, instance.Stack, instance.Source, instance.Level));
                 MarkDirtyForModifiers(target, effect);
                 SyncLevelFromStack(effect, target, instance, BigNum.Zero);
                 return;
@@ -1014,7 +1010,7 @@ namespace Bun3.Gameplay.Effects
             AbilityGrantHook?.Invoke(target, instance, false);
 
             target.RemoveActive(instance, effect);
-            target.RaiseEffectEvent(new EffectLifecycleEvent(eventKind, instance.Id, instance.EffectId, instance.Stack, instance.Source, instance.Level));
+            RaiseEffectEvent(new EffectLifecycleEvent(eventKind, target.Id, instance.Id, instance.EffectId, instance.Stack, instance.Source, instance.Level));
             EffectInstance.Return(_instancePool, instance);
 
             FireChain(effect.Chains, chainTrigger, source, level, target.Id, target);
@@ -1030,6 +1026,7 @@ namespace Bun3.Gameplay.Effects
             for (var t = 0; t < count; t++)
             {
                 var target = _resolver.TargetAt(t);
+                Track(target);
                 target.Attributes.RebuildDirty();
                 EvaluateOngoing(target);
                 target.Attributes.RebuildDirty();

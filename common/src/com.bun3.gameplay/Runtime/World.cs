@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using Bun3.Gameplay.Abilities;
+using Bun3.Gameplay.Attributes;
 using Bun3.Gameplay.Effects;
 
 namespace Bun3.Gameplay
@@ -95,6 +96,15 @@ namespace Bun3.Gameplay
 
         /// <summary>Gameplay events raised by the last <see cref="Tick"/>, in raise order.</summary>
         public ReadOnlySpan<GameplayEvent> PendingGameplayEvents => Pipeline.PendingGameplayEvents;
+
+        /// <summary>This tick's effect lifecycle events of every unit, in occurrence order. Cleared when the next
+        /// <see cref="Tick"/> starts.</summary>
+        public ReadOnlySpan<EffectLifecycleEvent> PendingEffectEvents => Pipeline.PendingEffectEvents;
+
+        /// <summary>This tick's attribute Current changes of every registered unit, in occurrence order. Changes
+        /// made before a unit is spawned or after it is despawned are not recorded. Cleared when the next
+        /// <see cref="Tick"/> starts.</summary>
+        public ReadOnlySpan<AttributeChange> PendingAttributeChanges => Pipeline.PendingAttributeChanges;
 
         /// <summary>Ticks processed so far. The pipeline owns the counter; this world keeps none of its own.</summary>
         public long CurrentTick => Pipeline.CurrentTick;
@@ -266,12 +276,14 @@ namespace Bun3.Gameplay
                 {
                     var index = IndexOf(op.Id);
                     if (index < 0) continue;
+                    Pipeline.Untrack(_units[index].Effects);
                     _units.RemoveAt(index);
                     _unitIds.RemoveAt(index);
                 }
                 else
                 {
                     var position = InsertPosition(op.Unit.Id);
+                    Pipeline.Track(op.Unit.Effects);
                     _units.Insert(position, op.Unit);
                     _unitIds.Insert(position, op.Unit.Id);
                 }

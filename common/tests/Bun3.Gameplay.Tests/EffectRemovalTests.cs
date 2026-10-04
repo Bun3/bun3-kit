@@ -18,10 +18,36 @@ public sealed class EffectRemovalTests
 
         pipeline.EnqueueApply(kit.EffectId("aura"), kit.Defender.Id, kit.Defender.Id);
         pipeline.Tick();
-        Assert.That(kit.Defender.PendingEffectEvents.Length, Is.EqualTo(1));
+        Assert.That(pipeline.PendingEffectEvents.Length, Is.EqualTo(1));
+        Assert.That(pipeline.PendingEffectEvents[0].Target, Is.EqualTo(kit.Defender.Id));
 
         pipeline.Tick();
-        Assert.That(kit.Defender.PendingEffectEvents.Length, Is.Zero);
+        Assert.That(pipeline.PendingEffectEvents.Length, Is.Zero);
+    }
+
+    [Test]
+    public void A_standalone_pipeline_records_the_attribute_changes_it_makes()
+    {
+        var kit = EffectTestKit.Create();
+        var bolt = EffectTestKit.MinimalInstant("bolt");
+        bolt.Modifiers.Add(new ModifierDef
+        {
+            AttributeId = EffectTestKit.Hp, Op = AttributeModifierOp.Add,
+            Magnitude = new MagnitudeDef { Base = Operand.Constant(-30) },
+        });
+        kit.AddEffect(bolt);
+        var pipeline = kit.BuildPipeline();
+        kit.Defender.Attributes.SetBase(EffectTestKit.MaxHp, 100);
+        kit.Defender.Attributes.SetBase(EffectTestKit.Hp, 100);
+
+        pipeline.EnqueueApply(kit.EffectId("bolt"), kit.Attacker.Id, kit.Defender.Id);
+        pipeline.Tick();
+
+        var changes = pipeline.PendingAttributeChanges;
+        Assert.That(changes.Length, Is.EqualTo(1));
+        Assert.That(changes[0].Target, Is.EqualTo(kit.Defender.Id));
+        Assert.That(changes[0].AttributeId, Is.EqualTo(EffectTestKit.Hp));
+        Assert.That(changes[0].NewCurrent, Is.EqualTo((BigNum)70));
     }
 
     [Test]

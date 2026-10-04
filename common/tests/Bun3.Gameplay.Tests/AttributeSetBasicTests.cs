@@ -1,6 +1,7 @@
 #nullable enable
 using System;
 using Bun3.Gameplay.Attributes;
+using Bun3.Gameplay.Effects;
 using Bun3.Gameplay.Numerics;
 using NUnit.Framework;
 
@@ -63,18 +64,21 @@ public sealed class AttributeSetBasicTests
     public void Change_events_carry_old_and_new_and_skip_no_ops()
     {
         var set = CreateSet();
-        set.SetBase(MaxHp, 1000);
-        set.ClearChanges();
+        set.SetBase(MaxHp, 1000);                   // not attached yet — not recorded
+        var log = new AttributeChangeLog();
+        set.AttachChangeLog(log, new TargetId(7));
 
         set.SetBase(Hp, 800);
         set.SetBase(Hp, 800);                       // same value — no event
-        Assert.That(set.PendingChanges.Length, Is.EqualTo(1));
-        Assert.That(set.PendingChanges[0].AttributeId, Is.EqualTo(Hp));
-        Assert.That(set.PendingChanges[0].OldCurrent, Is.EqualTo(BigNum.Zero));
-        Assert.That(set.PendingChanges[0].NewCurrent, Is.EqualTo((BigNum)800));
+        Assert.That(log.Pending.Length, Is.EqualTo(1));
+        Assert.That(log.Pending[0].Target, Is.EqualTo(new TargetId(7)));
+        Assert.That(log.Pending[0].AttributeId, Is.EqualTo(Hp));
+        Assert.That(log.Pending[0].OldCurrent, Is.EqualTo(BigNum.Zero));
+        Assert.That(log.Pending[0].NewCurrent, Is.EqualTo((BigNum)800));
 
-        set.ClearChanges();
-        Assert.That(set.PendingChanges.Length, Is.Zero);
+        set.AttachChangeLog(null, default);
+        set.SetBase(Hp, 700);
+        Assert.That(log.Pending.Length, Is.EqualTo(1), "detached sets record nothing");
     }
 
     [Test]

@@ -38,7 +38,7 @@ public sealed class EffectVocabularyTests
         var remaining = kit.Defender.ActiveEffects[0];
         Assert.That(remaining.EffectId, Is.EqualTo(kit.EffectId("frost_higher")));
 
-        var events = kit.Defender.PendingEffectEvents;
+        var events = pipeline.PendingEffectEvents;
         var sawRemovedPrematurely = false;
         for (var i = 0; i < events.Length; i++)
         {
@@ -46,6 +46,7 @@ public sealed class EffectVocabularyTests
                 && events[i].EffectId == kit.EffectId("frost_lower"))
             {
                 Assert.That(events[i].Source, Is.EqualTo(kit.Attacker.Id));
+                Assert.That(events[i].Target, Is.EqualTo(kit.Defender.Id));
                 Assert.That(events[i].Level, Is.EqualTo(1));
                 sawRemovedPrematurely = true;
             }

@@ -1,6 +1,7 @@
-// EffectPipeline partial — gameplay event emission and OnEvent chain routing.
+// EffectPipeline partial — observation buffers (gameplay events, effect lifecycle events, attribute changes) and OnEvent chain routing.
 #nullable enable
 using System;
+using Bun3.Gameplay.Attributes;
 using Bun3.Gameplay.Seams;
 
 namespace Bun3.Gameplay.Effects
@@ -21,6 +22,35 @@ namespace Bun3.Gameplay.Effects
 
         /// <summary>Clears <see cref="PendingGameplayEvents"/>.</summary>
         public void ClearGameplayEvents() => _gameplayEventCount = 0;
+
+        private EffectLifecycleEvent[] _effectEvents = new EffectLifecycleEvent[16];
+        private int _effectEventCount;
+        private readonly AttributeChangeLog _attributeChanges = new AttributeChangeLog();
+
+        /// <summary>Effect lifecycle events of every target since the tick started, in occurrence order.</summary>
+        public ReadOnlySpan<EffectLifecycleEvent> PendingEffectEvents => _effectEvents.AsSpan(0, _effectEventCount);
+
+        /// <summary>Attribute Current changes of every attached target since the tick started, in occurrence
+        /// order. A target is attached once this pipeline changes its values; a World attaches its units at spawn.</summary>
+        public ReadOnlySpan<AttributeChange> PendingAttributeChanges => _attributeChanges.Pending;
+
+        private void RaiseEffectEvent(in EffectLifecycleEvent evt)
+        {
+            if (_effectEventCount == _effectEvents.Length) Array.Resize(ref _effectEvents, _effectEvents.Length * 2);
+            _effectEvents[_effectEventCount++] = evt;
+        }
+
+        /// <summary>Attaches the target's attribute set to this pipeline's change log.</summary>
+        internal void Track(EffectTarget target)
+        {
+            if (target.Attributes.ChangeLog != _attributeChanges) target.Attributes.AttachChangeLog(_attributeChanges, target.Id);
+        }
+
+        /// <summary>Detaches the target's attribute set when it is attached to this pipeline.</summary>
+        internal void Untrack(EffectTarget target)
+        {
+            if (target.Attributes.ChangeLog == _attributeChanges) target.Attributes.AttachChangeLog(null, default);
+        }
 
         private void RaiseGameplayEvent(in GameplayEvent evt)
         {

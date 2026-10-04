@@ -1,12 +1,14 @@
 #nullable enable
 using System;
+using Bun3.Gameplay.Effects;
 using Bun3.Gameplay.Numerics;
 
 namespace Bun3.Gameplay.Attributes
 {
     /// <summary>
     /// Dense slot set for the attributes an archetype declares. Base writes always pass through
-    /// clamping; Current changes are appended to the event buffer.
+    /// clamping; Current changes are recorded into the change log of the pipeline the set is attached to
+    /// (none when detached, e.g. before spawn).
     /// </summary>
     public sealed class AttributeSet
     {
@@ -56,8 +58,8 @@ namespace Bun3.Gameplay.Attributes
         private readonly AttributeRegistry _registry;
         private readonly Slot[] _slots;                    // canonical: ascending AttributeId
         private readonly int[] _slotByAttributeId;         // sparse → dense (size = max registered id + 1, -1 = absent)
-        private AttributeChange[] _changes = new AttributeChange[8];
-        private int _changeCount;
+        private AttributeChangeLog? _changeLog;
+        private TargetId _owner;
         private bool _anyDirty;
 
         /// <summary>Builds dense slots from the attribute ids the archetype declares. Declaration order is irrelevant.</summary>
@@ -357,18 +359,16 @@ namespace Bun3.Gameplay.Attributes
             ReapplyFormula(index);
         }
 
-        private void EmitChange(ushort attributeId, BigNum oldCurrent, BigNum newCurrent)
+        internal AttributeChangeLog? ChangeLog => _changeLog;
+
+        /// <summary>Routes Current changes into a pipeline's log under the owning unit's id; null detaches.</summary>
+        internal void AttachChangeLog(AttributeChangeLog? log, TargetId owner)
         {
-            if (_changeCount == _changes.Length)
-                Array.Resize(ref _changes, _changes.Length * 2);
-            _changes[_changeCount++] = new AttributeChange(attributeId, oldCurrent, newCurrent);
+            _changeLog = log;
+            _owner = owner;
         }
 
-        /// <summary>Change events not yet consumed.</summary>
-        /// <remarks>Cleared automatically when the next pipeline tick starts.</remarks>
-        public ReadOnlySpan<AttributeChange> PendingChanges => _changes.AsSpan(0, _changeCount);
-
-        /// <summary>Clears the change event buffer.</summary>
-        public void ClearChanges() => _changeCount = 0;
+        private void EmitChange(ushort attributeId, BigNum oldCurrent, BigNum newCurrent) =>
+            _changeLog?.Append(new AttributeChange(_owner, attributeId, oldCurrent, newCurrent));
     }
 }

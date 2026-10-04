@@ -15,8 +15,6 @@ namespace Bun3.Gameplay.Effects
         private readonly List<EffectInstance> _activeEffects = new List<EffectInstance>();
         private readonly List<EffectInstance> _timedEffects = new List<EffectInstance>();
         private readonly List<EffectInstance> _ongoingEffects = new List<EffectInstance>();
-        private EffectLifecycleEvent[] _events = new EffectLifecycleEvent[4];
-        private int _eventCount;
         private DrHistoryEntry[] _drHistory = Array.Empty<DrHistoryEntry>();
         private int _drHistoryCount;
 
@@ -79,13 +77,6 @@ namespace Bun3.Gameplay.Effects
         /// <summary>Active instances whose effect has OnEvent chains. Zero lets event dispatch skip the scan.</summary>
         internal int EventListenerCount { get; private set; }
 
-        /// <summary>Effect lifecycle events not yet consumed.</summary>
-        /// <remarks>Cleared automatically when the next tick starts.</remarks>
-        public ReadOnlySpan<EffectLifecycleEvent> PendingEffectEvents => _events.AsSpan(0, _eventCount);
-
-        /// <summary>Clears the effect lifecycle event buffer.</summary>
-        public void ClearEffectEvents() => _eventCount = 0;
-
         /// <summary>Creates a target from an id, attribute registry, archetype-declared attributes, and tag catalog.</summary>
         /// <param name="id">Target id.</param>
         /// <param name="registry">Registry holding the attribute definitions.</param>
@@ -126,13 +117,6 @@ namespace Bun3.Gameplay.Effects
             var position = list.Count;
             while (position > 0 && list[position - 1].Id > instance.Id) position--;
             list.Insert(position, instance);
-        }
-
-        /// <summary>Appends an effect lifecycle event to the buffer.</summary>
-        internal void RaiseEffectEvent(EffectLifecycleEvent evt)
-        {
-            if (_eventCount == _events.Length) Array.Resize(ref _events, _events.Length * 2);
-            _events[_eventCount++] = evt;
         }
 
         /// <summary>Finds the history slot for a DR category tag, or creates one (count 0) and returns its index.</summary>
