@@ -775,7 +775,8 @@ public sealed class AbilityActivationTests
         }
 
         Assert.That(instance, Is.Not.Null);
-        Assert.That(instance!.RemainingTicks, Is.EqualTo(80));
+        Assert.That(f.Caster.Effects.TryGetActiveEffect(instance!.Id, out var info), Is.True);
+        Assert.That(info.RemainingTicks, Is.EqualTo(80));
     }
 
     [Test]

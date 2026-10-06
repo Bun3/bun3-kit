@@ -216,21 +216,18 @@ public sealed class EffectVocabularyTests
         pipeline.Tick();
         for (var i = 0; i < 5; i++) pipeline.Tick();   // 5 ticks elapsed — 5 remain
 
-        var instance = kit.Defender.ActiveEffects[0];
-        Assert.That(instance.RemainingTicks, Is.EqualTo(5));
+        Assert.That(kit.Defender.GetActiveEffect(0).RemainingTicks, Is.EqualTo(5));
 
         // Reapply extends in merge (①) to min(5+10, 10*1.3=13)=13, but ② AdvanceTime in the same
         // tick immediately subtracts 1, so the observed value is 12 — without the cap, min(5+10)=15 would show as 14.
         pipeline.EnqueueApply(kit.EffectId("dot"), kit.Attacker.Id, kit.Defender.Id);
         pipeline.Tick();
-        instance = kit.Defender.ActiveEffects[0];
-        Assert.That(instance.RemainingTicks, Is.EqualTo(12));
+        Assert.That(kit.Defender.GetActiveEffect(0).RemainingTicks, Is.EqualTo(12));
 
         // Immediate reapply again: merge min(12+10, 13)=13, minus the same-tick decrement = 12 — pinned by the cap (pandemic behavior).
         pipeline.EnqueueApply(kit.EffectId("dot"), kit.Attacker.Id, kit.Defender.Id);
         pipeline.Tick();
-        instance = kit.Defender.ActiveEffects[0];
-        Assert.That(instance.RemainingTicks, Is.EqualTo(12));
+        Assert.That(kit.Defender.GetActiveEffect(0).RemainingTicks, Is.EqualTo(12));
     }
 
     [Test]

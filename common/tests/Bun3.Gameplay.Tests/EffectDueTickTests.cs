@@ -1,0 +1,180 @@
+#nullable enable
+using System;
+using Bun3.Gameplay.Abilities;
+using Bun3.Gameplay.Attributes;
+using Bun3.Gameplay.Effects;
+using Bun3.Gameplay.Numerics;
+using NUnit.Framework;
+
+namespace Bun3.Gameplay.Tests;
+
+/// <summary>Timed instances observed across long stretches in which nothing is due.</summary>
+[TestFixture]
+public sealed class EffectDueTickTests
+{
+    [Test]
+    public void Remaining_ticks_after_a_long_idle_stretch_are_exact()
+    {
+        var kit = EffectTestKit.Create();
+        kit.AddEffect(EffectTestKit.MinimalDuration("ward", ticks: 50));
+        var pipeline = kit.BuildPipeline();
+        pipeline.EnqueueApply(kit.EffectId("ward"), kit.Attacker.Id, kit.Defender.Id);
+
+        for (var tick = 0; tick < 30; tick++) pipeline.Tick();
+
+        Assert.That(kit.Defender.GetActiveEffect(0).RemainingTicks, Is.EqualTo(21));   // created on tick 0, advanced on 1..29
+        for (var tick = 0; tick < 20; tick++) pipeline.Tick();
+        Assert.That(kit.Defender.GetActiveEffect(0).RemainingTicks, Is.EqualTo(1));
+        pipeline.Tick();
+        Assert.That(kit.Defender.ActiveEffectCount, Is.Zero, "expires on its last tick");
+    }
+
+    [Test]
+    public void A_target_with_nothing_due_is_not_advanced()
+    {
+        var kit = EffectTestKit.Create();
+        kit.AddEffect(EffectTestKit.MinimalDuration("ward", ticks: 100));
+        var pipeline = kit.BuildPipeline();
+        pipeline.EnqueueApply(kit.EffectId("ward"), kit.Attacker.Id, kit.Defender.Id);
+        pipeline.Tick();
+        var visits = pipeline.AdvanceVisitCount;
+
+        for (var tick = 0; tick < 50; tick++) pipeline.Tick();
+
+        Assert.That(pipeline.AdvanceVisitCount, Is.EqualTo(visits), "the ward is next due on tick 100");
+        Assert.That(kit.Defender.GetActiveEffect(0).RemainingTicks, Is.EqualTo(50));
+    }
+
+    [Test]
+    public void A_periodic_effect_fires_exactly_on_its_period_through_idle_ticks()
+    {
+        var kit = EffectTestKit.Create();
+        var bleed = EffectTestKit.MinimalInfinite("bleed");
+        bleed.PeriodTicks = 7;
+        bleed.Modifiers.Add(new ModifierDef
+        {
+            AttributeId = EffectTestKit.Hp, Op = AttributeModifierOp.Add,
+            Magnitude = new MagnitudeDef { Base = Operand.Constant(-1) },
+        });
+        kit.AddEffect(bleed);
+        var pipeline = kit.BuildPipeline();
+        kit.Defender.Attributes.SetBase(EffectTestKit.MaxHp, 100);
+        kit.Defender.Attributes.SetBase(EffectTestKit.Hp, 100);
+        pipeline.EnqueueApply(kit.EffectId("bleed"), kit.Attacker.Id, kit.Defender.Id);
+
+        for (var tick = 0; tick < 40; tick++)
+        {
+            pipeline.Tick();
+            Assert.That(kit.Defender.Attributes.GetBase(EffectTestKit.Hp), Is.EqualTo((BigNum)(100 - tick / 7)), $"after tick {tick}");
+        }
+    }
+
+    [Test]
+    public void A_target_taken_over_by_another_pipeline_keeps_the_time_already_elapsed()
+    {
+        var kit = EffectTestKit.Create();
+        kit.AddEffect(EffectTestKit.MinimalDuration("ward", ticks: 50));
+        var first = kit.BuildPipeline();
+        first.EnqueueApply(kit.EffectId("ward"), kit.Attacker.Id, kit.Defender.Id);
+        for (var tick = 0; tick < 11; tick++) first.Tick();   // created on tick 0, advanced on 1..10
+
+        var second = kit.BuildPipeline();
+        second.Tick();   // its tick 0 equals the creation tick number, so this step is skipped as "created this tick"
+
+        Assert.That(kit.Defender.GetActiveEffect(0).RemainingTicks, Is.EqualTo(40));
+        second.Tick();
+        Assert.That(kit.Defender.GetActiveEffect(0).RemainingTicks, Is.EqualTo(39));
+    }
+
+    [Test]
+    public void Time_does_not_pass_for_a_despawned_unit()
+    {
+        var kit = EffectTestKit.Create();
+        kit.AddEffect(EffectTestKit.MinimalDuration("ward", ticks: 40));
+        var world = new World(kit.Database(new AbilityCatalogBuilder().Build(kit.TagCatalog, kit.Seams, kit.Attributes, kit.Catalog)), new XorShiftRng(1));
+        ReadOnlySpan<ushort> attributes = stackalloc ushort[] { EffectTestKit.Hp, EffectTestKit.MaxHp };
+        var unit = new Unit(new TargetId(1), kit.Attributes, attributes, kit.TagCatalog);
+        world.Spawn(unit);
+        world.EnqueueApply(kit.EffectId("ward"), unit.Id, unit.Id);
+        for (var tick = 0; tick < 6; tick++) world.Tick();   // created on tick 0, advanced on 1..5
+
+        world.Despawn(unit.Id);
+        for (var tick = 0; tick < 10; tick++) world.Tick();
+        world.Spawn(unit);
+        world.Tick();                                         // advanced once more after returning
+
+        Assert.That(unit.Effects.GetActiveEffect(0).RemainingTicks, Is.EqualTo(34));
+    }
+
+    [Test]
+    public void A_merge_that_shortens_the_remaining_time_expires_on_time()
+    {
+        var kit = EffectTestKit.Create();
+        var slow = EffectTestKit.MinimalDuration("slow", ticks: 10);
+        slow.DurationScale = new MagnitudeDef { Base = Operand.Attribute(EffectTestKit.Resistance) };
+        kit.AddEffect(slow);
+        var pipeline = kit.BuildPipeline();
+        kit.Defender.Attributes.SetBase(EffectTestKit.Resistance, 5);
+        pipeline.EnqueueApply(kit.EffectId("slow"), kit.Attacker.Id, kit.Defender.Id);
+        for (var tick = 0; tick < 6; tick++) pipeline.Tick();
+
+        kit.Defender.Attributes.SetBase(EffectTestKit.Resistance, 1);
+        pipeline.EnqueueApply(kit.EffectId("slow"), kit.Attacker.Id, kit.Defender.Id);
+        pipeline.Tick();                                      // refreshed to 10, advanced once in the same tick
+        Assert.That(kit.Defender.GetActiveEffect(0).RemainingTicks, Is.EqualTo(9));
+        for (var tick = 0; tick < 8; tick++) pipeline.Tick();
+        Assert.That(kit.Defender.ActiveEffectCount, Is.EqualTo(1));
+        pipeline.Tick();
+        Assert.That(kit.Defender.ActiveEffectCount, Is.Zero, "expires on the shortened schedule, not the original one");
+    }
+
+    [Test]
+    public void Cooldown_remaining_after_an_idle_stretch_is_exact()
+    {
+        var kit = EffectTestKit.Create();
+        var cooldown = EffectTestKit.MinimalDuration("cd", ticks: 50);
+        cooldown.GrantedTags.Add("cooldown.fireball");
+        kit.AddEffect(cooldown);
+        kit.AddEffect(EffectTestKit.MinimalInstant("bolt"));
+        var builder = new AbilityCatalogBuilder();
+        var fireball = new AbilityDef { Name = "fireball", MaxLevel = 1, CooldownEffect = "cd" };
+        fireball.Effects.Add(new AbilityEffectDef { EffectName = "bolt" });
+        builder.Add(fireball);
+        var abilities = builder.Build(kit.TagCatalog, kit.Seams, kit.Attributes, kit.Catalog);
+        var world = new World(kit.Database(abilities), new XorShiftRng(1));
+        ReadOnlySpan<ushort> attributes = stackalloc ushort[] { EffectTestKit.Hp, EffectTestKit.MaxHp };
+        var unit = new Unit(new TargetId(1), kit.Attributes, attributes, kit.TagCatalog);
+        unit.Abilities.Grant(abilities.GetRequiredId("fireball"), GrantSource.Code(), 1);
+        world.Spawn(unit);
+        world.Tick();
+
+        world.EnqueueActivation(unit.Id, abilities.GetRequiredId("fireball"));
+        for (var tick = 0; tick < 20; tick++) world.Tick();
+
+        Assert.That(world.TryGetCooldown(unit.Id, abilities.GetRequiredId("fireball"), out var remaining, out var duration), Is.True);
+        Assert.That(remaining, Is.EqualTo(31));   // applied on the activation tick, advanced on the 19 after it
+        Assert.That(duration, Is.EqualTo(50));
+    }
+
+    [Test]
+    public void A_snapshot_taken_after_an_idle_stretch_resumes_identically()
+    {
+        var kit = EffectTestKit.Create();
+        kit.AddEffect(EffectTestKit.MinimalDuration("ward", ticks: 60));
+        var world = new World(kit.Database(new AbilityCatalogBuilder().Build(kit.TagCatalog, kit.Seams, kit.Attributes, kit.Catalog)), new XorShiftRng(1));
+        ReadOnlySpan<ushort> attributes = stackalloc ushort[] { EffectTestKit.Hp, EffectTestKit.MaxHp };
+        var unit = new Unit(new TargetId(1), kit.Attributes, attributes, kit.TagCatalog);
+        world.Spawn(unit);
+        world.EnqueueApply(kit.EffectId("ward"), unit.Id, unit.Id);
+        for (var tick = 0; tick < 25; tick++) world.Tick();
+
+        var snapshot = world.CreateSnapshot();
+        for (var tick = 0; tick < 10; tick++) world.Tick();
+        var expected = unit.Effects.GetActiveEffect(0).RemainingTicks;
+
+        world.RestoreSnapshot(snapshot);
+        Assert.That(unit.Effects.GetActiveEffect(0).RemainingTicks, Is.EqualTo(expected + 10));
+        for (var tick = 0; tick < 10; tick++) world.Tick();
+        Assert.That(unit.Effects.GetActiveEffect(0).RemainingTicks, Is.EqualTo(expected));
+    }
+}

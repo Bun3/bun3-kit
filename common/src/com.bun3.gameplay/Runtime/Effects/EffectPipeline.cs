@@ -154,15 +154,19 @@ namespace Bun3.Gameplay.Effects
             _attributeChanges.Clear();
         }
 
+        private bool _advancedThisTick;
+
         internal void RunPhases()
         {
             DrainApplications();
             AdvanceTime();
+            _advancedThisTick = true;
             SettleAttributes();
             // Phase 6, event finalization: no pipeline work. Observation buffers are read after this call
             // and cleared at the start of the next tick.
 
             CurrentTick++;
+            _advancedThisTick = false;
         }
 
         /// <summary>
@@ -729,6 +733,8 @@ namespace Bun3.Gameplay.Effects
         // the stack value actually changes. A merge is not a new application, so no OnApplication chain fires here.
         private void MergeReapply(CompiledEffect effect, EffectTarget target, EffectInstance instance, BigNum eventMagnitude)
         {
+            CatchUp(target);
+            target.NextDueTick = long.MinValue;
             var stackPolicy = effect.Stack;
             if (stackPolicy.OnReapply == StackReapply.AddStack)
             {
@@ -922,7 +928,10 @@ namespace Bun3.Gameplay.Effects
             for (var t = 0; t < count; t++)
             {
                 var target = _resolver.TargetAt(t);
+                if (target.NextDueTick > CurrentTick) continue;
 
+                AdvanceVisitCount++;
+                CatchUp(target);
                 var active = target.TimedEffects;
                 _expiryScratch.Clear();
                 for (var i = 0; i < active.Count; i++)
@@ -957,7 +966,57 @@ namespace Bun3.Gameplay.Effects
                 {
                     ExpireInstance(target, _expiryScratch[i]);
                 }
+
+                target.AdvancedThrough = CurrentTick;
+                target.NextDueTick = NextDueTick(target, CurrentTick);
             }
+        }
+
+        /// <summary>Number of targets phase 2 processed — targets with nothing due are skipped.</summary>
+        internal long AdvanceVisitCount { get; private set; }
+
+        // Last tick whose time step (phase 2) has run.
+        private long AdvancedThroughTick => _advancedThisTick ? CurrentTick : CurrentTick - 1;
+
+        /// <summary>Applies the time steps a skipped target still owes, up to the last advanced tick. Before its
+        /// due tick a target only counts down, so subtracting the skipped steps at once is exact. An instance
+        /// created on a later tick than the baseline owes only the steps after its creation tick.</summary>
+        internal void CatchUp(EffectTarget target)
+        {
+            Track(target);
+            var advancedThrough = AdvancedThroughTick;
+            var baseline = target.AdvancedThrough;
+            target.AdvancedThrough = advancedThrough;
+            if (baseline == EffectTarget.UnknownTick || baseline >= advancedThrough) return;
+
+            var timed = target.TimedEffects;
+            for (var i = 0; i < timed.Count; i++)
+            {
+                var instance = timed[i];
+                var owed = advancedThrough - Math.Max(baseline, instance.CreatedTick);
+                if (owed <= 0) continue;
+                var effect = _catalog.GetEffect(instance.EffectId);
+                if (effect.PeriodTicks > 0) instance.PeriodCountdown -= (int)owed;
+                if (effect.DurationType == EffectDurationType.Duration) instance.RemainingTicks -= (int)owed;
+            }
+        }
+
+        // Earliest tick on which a timed instance fires (countdown reaches 0) or expires (remaining reaches 0
+        // or below), counted from the later of the current tick and the instance's creation tick.
+        private long NextDueTick(EffectTarget target, long tick)
+        {
+            var due = long.MaxValue;
+            var timed = target.TimedEffects;
+            for (var i = 0; i < timed.Count; i++)
+            {
+                var instance = timed[i];
+                var effect = _catalog.GetEffect(instance.EffectId);
+                var from = Math.Max(tick, instance.CreatedTick);
+                if (effect.PeriodTicks > 0 && instance.PeriodCountdown > 0) due = Math.Min(due, from + instance.PeriodCountdown);
+                if (effect.DurationType == EffectDurationType.Duration) due = Math.Min(due, from + Math.Max(1, instance.RemainingTicks));
+            }
+
+            return due;
         }
 
         // Period elapsed: same path as Instant — Modifiers adjust Base (Add-only, enforced at Build), Executions run.

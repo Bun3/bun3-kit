@@ -15,6 +15,9 @@ namespace Bun3.Gameplay.Effects
         private readonly List<EffectInstance> _activeEffects = new List<EffectInstance>();
         private readonly List<EffectInstance> _timedEffects = new List<EffectInstance>();
         private readonly List<EffectInstance> _ongoingEffects = new List<EffectInstance>();
+
+        /// <summary>Marks a time baseline that is not known yet; the next catch-up adopts the owner's clock.</summary>
+        internal const long UnknownTick = long.MinValue;
         private DrHistoryEntry[] _drHistory = Array.Empty<DrHistoryEntry>();
         private int _drHistoryCount;
 
@@ -52,10 +55,23 @@ namespace Bun3.Gameplay.Effects
         /// <summary>Active instances whose effect has Ongoing conditions, ascending Id.</summary>
         internal List<EffectInstance> OngoingEffects => _ongoingEffects;
 
+        /// <summary>Pipeline that advances this target's time and records its attribute changes.</summary>
+        internal EffectPipeline? Owner { get; set; }
+
+        /// <summary>Last tick whose time step is reflected in the timed instances' counters.</summary>
+        internal long AdvancedThrough { get; set; } = UnknownTick;
+
+        /// <summary>Earliest tick on which a timed instance fires or expires; never later than the truth.</summary>
+        internal long NextDueTick { get; set; } = long.MinValue;
+
         /// <summary>Returns a value copy of the active instance at <paramref name="index"/> (ascending instance id).</summary>
         /// <param name="index">Index in [0, <see cref="ActiveEffectCount"/>).</param>
         /// <returns>Copy of the instance's observable state.</returns>
-        public ActiveEffectInfo GetActiveEffect(int index) => new ActiveEffectInfo(_activeEffects[index]);
+        public ActiveEffectInfo GetActiveEffect(int index)
+        {
+            Owner?.CatchUp(this);
+            return new ActiveEffectInfo(_activeEffects[index]);
+        }
 
         /// <summary>Finds an active instance by id.</summary>
         /// <param name="instanceId">Instance id.</param>
@@ -63,6 +79,7 @@ namespace Bun3.Gameplay.Effects
         /// <returns>True when the instance is active on this target.</returns>
         public bool TryGetActiveEffect(ulong instanceId, out ActiveEffectInfo info)
         {
+            Owner?.CatchUp(this);
             for (var i = 0; i < _activeEffects.Count; i++)
             {
                 if (_activeEffects[i].Id != instanceId) continue;
@@ -102,6 +119,7 @@ namespace Bun3.Gameplay.Effects
         internal void InsertActive(EffectInstance instance, CompiledEffect effect)
         {
             InsertById(_activeEffects, instance);
+            NextDueTick = long.MinValue;
             if (effect.HasEventChains) EventListenerCount++;
             if (AdvancesWithTime(effect)) InsertById(_timedEffects, instance);
             if (effect.OngoingConditions.Length > 0) InsertById(_ongoingEffects, instance);
@@ -157,6 +175,7 @@ namespace Bun3.Gameplay.Effects
         /// </summary>
         public EffectTargetSnapshot CreateSnapshot()
         {
+            Owner?.CatchUp(this);
             var declaredCount = Attributes.DeclaredCount;
             var bases = new BigNum[declaredCount];
             for (var i = 0; i < declaredCount; i++) bases[i] = Attributes.DeclaredBaseAt(i);
@@ -229,6 +248,8 @@ namespace Bun3.Gameplay.Effects
             _timedEffects.Clear();
             _ongoingEffects.Clear();
             EventListenerCount = 0;
+            AdvancedThrough = UnknownTick;
+            NextDueTick = long.MinValue;
 
             var bases = snapshot.AttributeBases;
             for (var i = 0; i < bases.Length; i++) Attributes.RestoreDeclaredBase(i, bases[i]);

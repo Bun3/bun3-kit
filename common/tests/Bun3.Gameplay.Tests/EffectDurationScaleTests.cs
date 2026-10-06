@@ -71,7 +71,7 @@ public sealed class EffectDurationScaleTests
         pipeline.EnqueueApply(kit.EffectId("scaling_cc"), kit.Attacker.Id, kit.Defender.Id, level: 2);
         pipeline.Tick();
 
-        Assert.That(kit.Defender.ActiveEffects[0].RemainingTicks, Is.EqualTo(20));
+        Assert.That(kit.Defender.GetActiveEffect(0).RemainingTicks, Is.EqualTo(20));
     }
 
     [Test]
@@ -131,7 +131,7 @@ public sealed class EffectDurationScaleTests
         pipeline.EnqueueApply(kit.EffectId("scaled"), kit.Attacker.Id, kit.Defender.Id);
         pipeline.Tick();
 
-        Assert.That(kit.Defender.ActiveEffects[0].RemainingTicks, Is.EqualTo(20));
+        Assert.That(kit.Defender.GetActiveEffect(0).RemainingTicks, Is.EqualTo(20));
     }
 
     [Test]
@@ -147,7 +147,7 @@ public sealed class EffectDurationScaleTests
         pipeline.Tick();
 
         Assert.That(kit.Defender.ActiveEffectCount, Is.EqualTo(1));
-        Assert.That(kit.Defender.ActiveEffects[0].RemainingTicks, Is.EqualTo(1));
+        Assert.That(kit.Defender.GetActiveEffect(0).RemainingTicks, Is.EqualTo(1));
     }
 
     [Test]
@@ -172,14 +172,14 @@ public sealed class EffectDurationScaleTests
         var pipeline = kit.BuildPipeline();
         pipeline.EnqueueApply(kit.EffectId("dot"), kit.Attacker.Id, kit.Defender.Id);
         pipeline.Tick();
-        Assert.That(kit.Defender.ActiveEffects[0].RemainingTicks, Is.EqualTo(20));
+        Assert.That(kit.Defender.GetActiveEffect(0).RemainingTicks, Is.EqualTo(20));
 
         for (var i = 0; i < 5; i++) pipeline.Tick();   // 15 remaining
         pipeline.EnqueueApply(kit.EffectId("dot"), kit.Attacker.Id, kit.Defender.Id);
         pipeline.Tick();
 
         // Merge: min(15+20, 20*1.3=26)=26; same-tick AdvanceTime subtracts 1, so 25 is observed.
-        Assert.That(kit.Defender.ActiveEffects[0].RemainingTicks, Is.EqualTo(25));
+        Assert.That(kit.Defender.GetActiveEffect(0).RemainingTicks, Is.EqualTo(25));
     }
 
     // ---- G6: diminishing returns (DR) ----
@@ -210,13 +210,13 @@ public sealed class EffectDurationScaleTests
         // 1st application: multiplier 1 -> duration 10.
         pipeline.EnqueueApply(kit.EffectId("cc"), kit.Attacker.Id, kit.Defender.Id);
         pipeline.Tick();
-        Assert.That(kit.Defender.ActiveEffects[0].RemainingTicks, Is.EqualTo(10));
+        Assert.That(kit.Defender.GetActiveEffect(0).RemainingTicks, Is.EqualTo(10));
         RunUntilExpired(pipeline, kit.Defender);
 
         // 2nd application (after expiry): multiplier 0.5 -> duration 5.
         pipeline.EnqueueApply(kit.EffectId("cc"), kit.Attacker.Id, kit.Defender.Id);
         pipeline.Tick();
-        Assert.That(kit.Defender.ActiveEffects[0].RemainingTicks, Is.EqualTo(5));
+        Assert.That(kit.Defender.GetActiveEffect(0).RemainingTicks, Is.EqualTo(5));
         RunUntilExpired(pipeline, kit.Defender);
 
         // 3rd application: multiplier 0 -> duration 0 -> immune (fizzles), no instance created.
@@ -228,7 +228,7 @@ public sealed class EffectDurationScaleTests
         for (var i = 0; i < 101; i++) pipeline.Tick();
         pipeline.EnqueueApply(kit.EffectId("cc"), kit.Attacker.Id, kit.Defender.Id);
         pipeline.Tick();
-        Assert.That(kit.Defender.ActiveEffects[0].RemainingTicks, Is.EqualTo(10));
+        Assert.That(kit.Defender.GetActiveEffect(0).RemainingTicks, Is.EqualTo(10));
     }
 
     [Test]
@@ -244,7 +244,7 @@ public sealed class EffectDurationScaleTests
         var t0 = pipeline.CurrentTick;
         pipeline.EnqueueApply(kit.EffectId("cc"), kit.Attacker.Id, kit.Defender.Id);
         pipeline.Tick();
-        Assert.That(kit.Defender.ActiveEffects[0].RemainingTicks, Is.EqualTo(10));
+        Assert.That(kit.Defender.GetActiveEffect(0).RemainingTicks, Is.EqualTo(10));
         RunUntilExpired(pipeline, kit.Defender);
 
         while (pipeline.CurrentTick < t0 + 100) pipeline.Tick();
@@ -252,7 +252,7 @@ public sealed class EffectDurationScaleTests
 
         pipeline.EnqueueApply(kit.EffectId("cc"), kit.Attacker.Id, kit.Defender.Id);
         pipeline.Tick();
-        Assert.That(kit.Defender.ActiveEffects[0].RemainingTicks, Is.EqualTo(5));
+        Assert.That(kit.Defender.GetActiveEffect(0).RemainingTicks, Is.EqualTo(5));
     }
 
     [Test]
@@ -310,7 +310,7 @@ public sealed class EffectDurationScaleTests
         // After the snapshot, apply the 2nd on the original -> multiplier 0.5 -> duration 5 (reference).
         pipeline.EnqueueApply(kit.EffectId("cc"), kit.Attacker.Id, kit.Defender.Id);
         pipeline.Tick();
-        var referenceTicks = kit.Defender.ActiveEffects[0].RemainingTicks;
+        var referenceTicks = kit.Defender.GetActiveEffect(0).RemainingTicks;
         Assert.That(referenceTicks, Is.EqualTo(5));
         RunUntilExpired(pipeline, kit.Defender);
 
@@ -319,7 +319,7 @@ public sealed class EffectDurationScaleTests
         pipeline.EnqueueApply(kit.EffectId("cc"), kit.Attacker.Id, kit.Defender.Id);
         pipeline.Tick();
 
-        Assert.That(kit.Defender.ActiveEffects[0].RemainingTicks, Is.EqualTo(referenceTicks));
+        Assert.That(kit.Defender.GetActiveEffect(0).RemainingTicks, Is.EqualTo(referenceTicks));
     }
 
     [Test]

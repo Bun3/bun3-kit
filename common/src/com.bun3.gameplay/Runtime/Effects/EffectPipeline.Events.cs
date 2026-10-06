@@ -40,16 +40,27 @@ namespace Bun3.Gameplay.Effects
             _effectEvents[_effectEventCount++] = evt;
         }
 
-        /// <summary>Attaches the target's attribute set to this pipeline's change log.</summary>
+        /// <summary>Makes this pipeline the target's owner: it advances the target's time and records its
+        /// attribute changes. Time owed under a previous owner is settled first; the baseline restarts here.</summary>
         internal void Track(EffectTarget target)
         {
-            if (target.Attributes.ChangeLog != _attributeChanges) target.Attributes.AttachChangeLog(_attributeChanges, target.Id);
+            if (target.Owner == this) return;
+            target.Owner?.CatchUp(target);
+            target.Owner = this;
+            target.AdvancedThrough = EffectTarget.UnknownTick;
+            target.NextDueTick = long.MinValue;
+            target.Attributes.AttachChangeLog(_attributeChanges, target.Id);
         }
 
-        /// <summary>Detaches the target's attribute set when it is attached to this pipeline.</summary>
+        /// <summary>Releases a target this pipeline owns, settling its time first. Time stops until it is tracked again.</summary>
         internal void Untrack(EffectTarget target)
         {
-            if (target.Attributes.ChangeLog == _attributeChanges) target.Attributes.AttachChangeLog(null, default);
+            if (target.Owner != this) return;
+            CatchUp(target);
+            target.Owner = null;
+            target.AdvancedThrough = EffectTarget.UnknownTick;
+            target.NextDueTick = long.MinValue;
+            target.Attributes.AttachChangeLog(null, default);
         }
 
         private void RaiseGameplayEvent(in GameplayEvent evt)
