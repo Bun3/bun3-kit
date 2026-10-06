@@ -43,7 +43,7 @@ public sealed class WorldStressBenchmarkTests
         "state.berserk", "effect.buff", "effect.debuff", "effect.debuff.dot", "effect.debuff.cc",
         "event.damage.taken", "calc.execution.crit", "selector.nearby", "selector.event.source", "selector.event.target",
         "cooldown.attack", "cooldown.fireball", "cooldown.nova", "cooldown.haste", "cooldown.execute",
-        "cooldown.guard",
+        "cooldown.guard", "cooldown.smite",
     };
 
     private static readonly string[] AbilityNames = { "attack", "fireball", "nova", "haste", "execute", "guard" };
@@ -62,6 +62,400 @@ public sealed class WorldStressBenchmarkTests
     {
         foreach (var units in new[] { 1_000, 2_500, 5_000, 10_000 })
             Run("intense", units, thinkInterval: 1, cooldownDivisor: 4, warmupTicks: 600, measuredTicks: 400);
+    }
+
+    // Realistic population: per world 3 heroes (one of HeroTypes, 8 gear effects, level-ups, an ability-granting
+    // buff) and 60 mobs (one of MobTypes, small kits) that are despawned on death and replaced by new ids.
+    private const int HeroesPerWorld = 3, MobsPerWorld = 60, EngagedMobs = 20, HeroTypes = 20, MobTypes = 10;
+
+    [Test]
+    public void Realistic_population_memory_by_unit_kind()
+    {
+        foreach (var (label, heroTypes, mobTypes, cycle) in new[] { ("shared types", HeroTypes, MobTypes, false), ("unique types", 600, 4_000, true) })
+        {
+            var database = BuildPopulationDatabase(heroTypes, mobTypes);
+            var cursor = cycle ? new ArchetypeCursor() : null;
+            var populations = new Population[50];
+            for (var w = 0; w < populations.Length; w++) populations[w] = new Population(database, heroTypes, mobTypes, (uint)w + 1, cursor);
+            for (var t = 0; t < 900; t++)
+            {
+                foreach (var population in populations) population.Step();
+            }
+
+            var databaseObjects = Reachable(database, null).Keys;
+            var stop = new HashSet<object>(databaseObjects, ReferenceEqualityComparer.Instance);
+            foreach (var population in populations)
+            {
+                var heroSide = Reachable(population.Heroes[0], stop);
+                foreach (var shared in Reachable(population.Mobs[0], stop).Keys.Where(heroSide.ContainsKey).ToList()) stop.Add(shared);
+            }
+
+            long databaseBytes = 0;
+            foreach (var value in databaseObjects) databaseBytes += ObjectSize(value);
+            TestContext.Progress.WriteLine(
+                $"POPMEM == {label} / database: {databaseBytes} B for {database.Archetypes.Count} archetypes " +
+                $"({databaseBytes / (double)(populations.Length * (HeroesPerWorld + MobsPerWorld)):F0} B per live unit)");
+            ReportUnitBytes(label + " / heroes", populations.SelectMany(x => x.Heroes), stop);
+            ReportUnitBytes(label + " / mobs", populations.SelectMany(x => x.Mobs), stop);
+        }
+    }
+
+    [Test]
+    public void Realistic_population_tick_and_spawn_cost()
+    {
+        var database = BuildPopulationDatabase(HeroTypes, MobTypes);
+        foreach (var worlds in new[] { 1, 50, 200, 1_000 }) RunPopulations("shared types", database, HeroTypes, MobTypes, worlds, null);
+        RunPopulations("unique types", BuildPopulationDatabase(600, 4_000), 600, 4_000, 50, new ArchetypeCursor());
+    }
+
+    private static void RunPopulations(
+        string label, GameplayDatabase database, int heroTypes, int mobTypes, int worlds, ArchetypeCursor? cursor)
+    {
+        const int measuredRounds = 300;
+        var populations = new Population[worlds];
+        for (var w = 0; w < worlds; w++) populations[w] = new Population(database, heroTypes, mobTypes, (uint)w + 1, cursor);
+
+        void Rounds(int count)
+        {
+            for (var r = 0; r < count; r++)
+            {
+                foreach (var population in populations) population.Step();
+            }
+        }
+
+        var warmStart = Stopwatch.GetTimestamp();
+        do Rounds(300);
+        while (Stopwatch.GetTimestamp() - warmStart < Stopwatch.Frequency * 3 / 2);
+
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+        long spawnsBefore = 0;
+        foreach (var population in populations) spawnsBefore += population.Spawns;
+        var gen0 = GC.CollectionCount(0);
+        var gen2 = GC.CollectionCount(2);
+        var allocated = GC.GetAllocatedBytesForCurrentThread();
+        var start = Stopwatch.GetTimestamp();
+        Rounds(measuredRounds);
+        var ms = (Stopwatch.GetTimestamp() - start) * 1000.0 / Stopwatch.Frequency;
+        allocated = GC.GetAllocatedBytesForCurrentThread() - allocated;
+        long spawns = -spawnsBefore;
+        foreach (var population in populations) spawns += population.Spawns;
+
+        var units = (double)worlds * (HeroesPerWorld + MobsPerWorld);
+        TestContext.Progress.WriteLine(
+            $"POP {label,-12} {worlds,5} worlds ({units,6:F0} units) | {ms * 1_000_000 / (units * measuredRounds),5:F0} ns/unit per tick " +
+            $"| spawns/tick {spawns / (double)measuredRounds,6:F1} | alloc/tick {allocated / measuredRounds,8} B " +
+            $"({(spawns > 0 ? allocated / spawns : 0),5} B/spawn) | GC gen0 {GC.CollectionCount(0) - gen0} gen2 {GC.CollectionCount(2) - gen2}");
+    }
+
+    private static void ReportUnitBytes(string label, IEnumerable<Unit> units, HashSet<object> stop)
+    {
+        var byPath = new Dictionary<string, (long Bytes, long Count)>();
+        long total = 0, objects = 0, count = 0;
+        foreach (var unit in units)
+        {
+            count++;
+            foreach (var pair in Reachable(unit, stop))
+            {
+                var size = ObjectSize(pair.Key);
+                total += size;
+                objects++;
+                Accumulate(byPath, pair.Value, size);
+            }
+        }
+
+        var n = (double)count;
+        TestContext.Progress.WriteLine($"POPMEM == {label}: {total / n:F0} B/unit, {objects / n:F1} objects/unit (units {count})");
+        foreach (var row in byPath.OrderByDescending(r => r.Value.Bytes).Take(12))
+            TestContext.Progress.WriteLine($"POPMEM    {row.Value.Bytes / n,7:F0} B {row.Value.Count / n,6:F1} obj  {row.Key}");
+    }
+
+    private sealed class ArchetypeCursor
+    {
+        internal int Hero;
+        internal int Mob;
+    }
+
+    private sealed class Population
+    {
+        internal readonly World World;
+        internal readonly Unit[] Heroes = new Unit[HeroesPerWorld];
+        internal readonly Unit[] Mobs = new Unit[MobsPerWorld];
+        internal long Spawns;
+
+        private readonly int _heroTypes, _mobTypes;
+        private readonly ArchetypeCursor? _cursor;
+        private readonly int _attack, _fireball, _nova, _haste, _execute, _guard, _smite;
+        private readonly int[] _levelUpOrder;
+        private readonly int[] _heroEffects;
+        private readonly int _mobPassive, _empower;
+        private readonly GameplayTag _debuff;
+        private readonly Dictionary<ulong, int> _mobSlotById = new Dictionary<ulong, int>();
+        private readonly int[] _heroLevelUps = new int[HeroesPerWorld];
+        private readonly long[] _heroRespawnedAt = new long[HeroesPerWorld];
+        private ulong _nextId;
+        private long _frame;
+        private uint _random;
+
+        internal Population(GameplayDatabase database, int heroTypes, int mobTypes, uint seed, ArchetypeCursor? cursor)
+        {
+            World = new World(database, new XorShiftRng(seed));
+            _heroTypes = heroTypes;
+            _mobTypes = mobTypes;
+            _cursor = cursor;
+            _random = seed * 2654435761u | 1u;
+            var abilities = database.Abilities;
+            _attack = abilities.GetRequiredId("attack");
+            _fireball = abilities.GetRequiredId("fireball");
+            _nova = abilities.GetRequiredId("nova");
+            _haste = abilities.GetRequiredId("haste");
+            _execute = abilities.GetRequiredId("execute");
+            _guard = abilities.GetRequiredId("guard");
+            _smite = abilities.GetRequiredId("smite");
+            _levelUpOrder = new[] { _nova, _haste, _execute, _fireball, _attack, _guard };
+            var effects = database.Effects;
+            _heroEffects = Passives.Concat(Enumerable.Range(0, 8).Select(g => "gear_" + g)).Select(effects.GetRequiredId).ToArray();
+            _mobPassive = effects.GetRequiredId("mob_passive");
+            _empower = effects.GetRequiredId("empower");
+            _debuff = database.Tags.GetRequired("effect.debuff");
+
+            for (var h = 0; h < HeroesPerWorld; h++) Heroes[h] = SpawnHero();
+            for (var m = 0; m < MobsPerWorld; m++) PlaceMob(m);
+            World.Tick();
+        }
+
+        internal void Step()
+        {
+            Think();
+            World.Tick();
+            Observe();
+        }
+
+        private uint Next()
+        {
+            _random ^= _random << 13;
+            _random ^= _random >> 17;
+            _random ^= _random << 5;
+            return _random;
+        }
+
+        private Unit Spawn(int archetype)
+        {
+            var unit = World.CreateUnit(new TargetId(++_nextId), archetype);
+            World.Spawn(unit);
+            Spawns++;
+            return unit;
+        }
+
+        private Unit SpawnHero()
+        {
+            var archetype = _cursor != null ? _cursor.Hero++ % _heroTypes : (int)(Next() % (uint)_heroTypes);
+            var hero = Spawn(archetype);
+            foreach (var effect in _heroEffects) World.EnqueueApply(effect, hero.Id, hero.Id);
+            return hero;
+        }
+
+        private void PlaceMob(int slot)
+        {
+            var archetype = _heroTypes + (_cursor != null ? _cursor.Mob++ % _mobTypes : (int)(Next() % (uint)_mobTypes));
+            var mob = Spawn(archetype);
+            World.EnqueueApply(_mobPassive, mob.Id, mob.Id);
+            Mobs[slot] = mob;
+            _mobSlotById[mob.Id.Value] = slot;
+        }
+
+        private bool Ready(TargetId self, int ability, TargetId? target) =>
+            World.CanActivateAbility(self, ability, target) == AbilityActivationResult.Success;
+
+        private void Think()
+        {
+            for (var h = 0; h < HeroesPerWorld; h++)
+            {
+                var hero = Heroes[h].Id;
+                if ((_frame + h * 97) % 300 == 0)
+                {
+                    var step = _heroLevelUps[h]++;
+                    World.EnqueueGrant(hero, _levelUpOrder[step % _levelUpOrder.Length], GrantSource.Code(), Math.Min(5, 1 + step / _levelUpOrder.Length));
+                }
+
+                if ((_frame + h * 53) % 200 == 0) World.EnqueueApply(_empower, hero, hero);
+                if ((_frame + h) % 5 != 0) continue;
+
+                var target = Mobs[(int)(Next() % MobsPerWorld)].Id;
+                if (Ready(hero, _guard, null)) World.EnqueueActivation(hero, _guard);
+                else if (Ready(hero, _smite, target)) World.EnqueueActivation(hero, _smite, target);
+                else if (Ready(hero, _execute, target)) World.EnqueueActivation(hero, _execute, target);
+                else if (Ready(hero, _nova, null)) World.EnqueueActivation(hero, _nova);
+                else if (Ready(hero, _fireball, target)) World.EnqueueActivation(hero, _fireball, target);
+                else if (Ready(hero, _haste, null)) World.EnqueueActivation(hero, _haste);
+                else World.EnqueueActivation(hero, _attack, target);
+            }
+
+            for (var m = (int)(_frame % 20); m < EngagedMobs; m += 20)
+            {
+                var mob = Mobs[m].Id;
+                var target = Heroes[(int)(Next() % HeroesPerWorld)].Id;
+                if (Ready(mob, _fireball, target)) World.EnqueueActivation(mob, _fireball, target);
+                else if (Ready(mob, _nova, null)) World.EnqueueActivation(mob, _nova);
+                else World.EnqueueActivation(mob, _attack, target);
+            }
+        }
+
+        private void Observe()
+        {
+            foreach (var evt in World.PendingGameplayEvents) Check(evt.Target);
+            for (var m = (int)(_frame % 20); m < MobsPerWorld; m += 20) CheckMob(m);
+            for (var h = 0; h < HeroesPerWorld; h++)
+            {
+                if ((_frame + h) % 20 == 0) CheckHero(h);
+            }
+
+            _frame++;
+        }
+
+        private void Check(TargetId id)
+        {
+            if (_mobSlotById.TryGetValue(id.Value, out var slot))
+            {
+                CheckMob(slot);
+                return;
+            }
+
+            for (var h = 0; h < HeroesPerWorld; h++)
+            {
+                if (Heroes[h].Id == id) CheckHero(h);
+            }
+        }
+
+        private void CheckMob(int slot)
+        {
+            var mob = Mobs[slot];
+            if (mob.Attributes.GetCurrent(Hp) != BigNum.Zero) return;
+            World.Despawn(mob.Id);
+            _mobSlotById.Remove(mob.Id.Value);
+            PlaceMob(slot);
+        }
+
+        private void CheckHero(int h)
+        {
+            if (Heroes[h].Attributes.GetCurrent(Hp) != BigNum.Zero || _heroRespawnedAt[h] == _frame + 1) return;
+            _heroRespawnedAt[h] = _frame + 1;
+            var hero = Heroes[h].Id;
+            World.EnqueueRemoveByTag(hero, _debuff);
+            World.EnqueueSetBase(hero, Hp, 5_000);
+            World.EnqueueSetBase(hero, Mp, 200);
+        }
+    }
+
+    private sealed class NearbyCandidatesSelector : ITargetSelector
+    {
+        private readonly int _count;
+
+        internal NearbyCandidatesSelector(int count) => _count = count;
+
+        public int Select(in SelectorContext ctx, Span<TargetId> results)
+        {
+            var candidates = ctx.CandidateCount;
+            if (candidates == 0) return 0;
+            var start = (int)(ctx.Origin.Value % (ulong)candidates);
+            var written = 0;
+            for (var i = 1; i <= _count && i < candidates && written < results.Length; i++)
+            {
+                var candidate = ctx.CandidateAt((start + i) % candidates);
+                if (candidate != ctx.Origin) results[written++] = candidate;
+            }
+
+            return written;
+        }
+    }
+
+    private static GameplayDatabase BuildPopulationDatabase(int heroTypes, int mobTypes)
+    {
+        var tags = LoadTags();
+        var seams = new SeamRegistryBuilder();
+        seams.RegisterExecutionCalc(tags.GetRequired("calc.execution.crit"), new CritCalc());
+        seams.RegisterTargetSelector(tags.GetRequired("selector.nearby"), new NearbyCandidatesSelector(count: 8));
+
+        var effects = Effects(cooldownDivisor: 1);
+        var gearAttributes = new[] { Attack, Defense, MaxHp, CritChance, Speed, HpRegen, MpRegen };
+        for (var g = 0; g < 10; g++)
+        {
+            var gear = Def("gear_" + g, EffectDurationType.Infinite);
+            for (var m = 0; m < 2 + g % 2; m++) gear.Modifiers.Add(Add(gearAttributes[(g + m * 3) % gearAttributes.Length], 3 + g));
+            effects.Add(gear);
+        }
+
+        var mobPassive = Def("mob_passive", EffectDurationType.Infinite);
+        mobPassive.Modifiers.Add(Add(Attack, 5));
+        mobPassive.Modifiers.Add(Add(Defense, 2));
+        effects.Add(mobPassive);
+        var empower = Def("empower", EffectDurationType.Duration, ticks: 100);
+        empower.Modifiers.Add(Add(Attack, 10));
+        empower.GrantedAbilities.Add("smite");
+        empower.AssetTags.Add("effect.buff");
+        effects.Add(empower);
+        var smiteCooldown = Def("cd_smite", EffectDurationType.Duration, ticks: 60);
+        smiteCooldown.GrantedTags.Add("cooldown.smite");
+        effects.Add(smiteCooldown);
+
+        var abilities = Abilities();
+        foreach (var ability in abilities) ability.MaxLevel = 5;
+        var smite = new AbilityDef { Name = "smite", MaxLevel = 5, Target = AbilityTargetMode.Required, CooldownEffect = "cd_smite" };
+        smite.BlockedTags.Add("state.stunned");
+        smite.Effects.Add(new AbilityEffectDef { EffectName = "hit", Origin = AbilityEffectOrigin.Target });
+        smite.Effects.Add(new AbilityEffectDef { EffectName = "hit", Origin = AbilityEffectOrigin.Target });
+        abilities.Add(smite);
+
+        var archetypes = new List<ArchetypeDef>();
+        var heroExtras = new[] { "nova", "haste", "execute" };
+        for (var h = 0; h < heroTypes; h++)
+        {
+            var hero = new ArchetypeDef { Name = "hero_" + h };
+            void Base(ushort attribute, BigNum value) => hero.Attributes.Add(new ArchetypeAttributeDef { AttributeId = attribute, Base = value });
+            Base(MaxHp, 5_000 + h);
+            Base(Hp, 5_000 + h);
+            Base(MaxMp, 200);
+            Base(Mp, 200);
+            Base(Attack, 30 + h % 20);
+            Base(Defense, 10);
+            Base(Speed, 100);
+            Base(CritChance, 0);
+            Base(CritDamage, 150);
+            Base(HpRegen, 15);
+            Base(MpRegen, 8);
+            Base((ushort)(100 + h % 19), 1);
+            Base((ushort)(100 + (h + 7) % 19), 1);
+            foreach (var name in new[] { "attack", "fireball", "guard", heroExtras[h % 3] })
+                hero.Abilities.Add(new ArchetypeAbilityDef { AbilityName = name });
+            archetypes.Add(hero);
+        }
+
+        for (var m = 0; m < mobTypes; m++)
+        {
+            var mob = new ArchetypeDef { Name = "mob_" + m };
+            void Base(ushort attribute, BigNum value) => mob.Attributes.Add(new ArchetypeAttributeDef { AttributeId = attribute, Base = value });
+            Base(MaxHp, 200 + m % 50 * 10);
+            Base(Hp, 200 + m % 50 * 10);
+            Base(MaxMp, 100);
+            Base(Mp, 100);
+            Base(Attack, 10 + m % 10);
+            Base(Defense, 2);
+            Base(Speed, 80);
+            Base(CritChance, 0);
+            Base(CritDamage, 150);
+            mob.Abilities.Add(new ArchetypeAbilityDef { AbilityName = "attack" });
+            if (m % 3 == 1) mob.Abilities.Add(new ArchetypeAbilityDef { AbilityName = "fireball" });
+            if (m % 3 == 2)
+            {
+                mob.Abilities.Add(new ArchetypeAbilityDef { AbilityName = "nova" });
+                mob.Abilities.Add(new ArchetypeAbilityDef { AbilityName = "haste" });
+            }
+
+            archetypes.Add(mob);
+        }
+
+        return GameplayDatabase.Build(tags, seams.Build(tags), BuildRegistry(), effects, abilities, archetypes);
     }
 
     [Test]
