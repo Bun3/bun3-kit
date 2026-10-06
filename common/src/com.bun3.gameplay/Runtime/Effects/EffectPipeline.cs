@@ -986,8 +986,9 @@ namespace Bun3.Gameplay.Effects
             Track(target);
             var advancedThrough = AdvancedThroughTick;
             var baseline = target.AdvancedThrough;
+            if (baseline != EffectTarget.UnknownTick && baseline >= advancedThrough) return;   // already ahead, e.g. advanced earlier in this time step
             target.AdvancedThrough = advancedThrough;
-            if (baseline == EffectTarget.UnknownTick || baseline >= advancedThrough) return;
+            if (baseline == EffectTarget.UnknownTick) return;
 
             var timed = target.TimedEffects;
             for (var i = 0; i < timed.Count; i++)

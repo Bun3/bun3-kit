@@ -45,6 +45,51 @@ public sealed class EffectDueTickTests
         Assert.That(kit.Defender.GetActiveEffect(0).RemainingTicks, Is.EqualTo(50));
     }
 
+    private sealed class PeekCalc : Bun3.Gameplay.Seams.IMagnitudeCalc
+    {
+        internal EffectTarget? Peek;
+
+        public BigNum Calculate(in Bun3.Gameplay.Seams.MagnitudeContext ctx)
+        {
+            if (Peek != null && Peek.ActiveEffectCount > 0) Peek.GetActiveEffect(0);
+            return BigNum.Zero;
+        }
+    }
+
+    [Test]
+    public void A_lookup_during_the_time_step_does_not_rewind_an_advanced_target()
+    {
+        var kit = EffectTestKit.Create();
+        var peek = new PeekCalc();
+        kit.RegisterMagnitudeCalc("calc.magnitude.x", peek);
+        var bleed = EffectTestKit.MinimalInfinite("bleed");
+        bleed.PeriodTicks = 3;
+        bleed.Modifiers.Add(new ModifierDef
+        {
+            AttributeId = EffectTestKit.Hp, Op = AttributeModifierOp.Add,
+            Magnitude = new MagnitudeDef { Base = Operand.Constant(-1) },
+        });
+        kit.AddEffect(bleed);
+        var probe = EffectTestKit.MinimalInfinite("probe");
+        probe.PeriodTicks = 1;
+        probe.Modifiers.Add(new ModifierDef
+        {
+            AttributeId = EffectTestKit.Mp, Op = AttributeModifierOp.Add,
+            Magnitude = new MagnitudeDef { CalcTag = "calc.magnitude.x" },
+        });
+        kit.AddEffect(probe);
+        var pipeline = kit.BuildPipeline();
+        kit.Attacker.Attributes.SetBase(EffectTestKit.MaxHp, 100);
+        kit.Attacker.Attributes.SetBase(EffectTestKit.Hp, 100);
+        peek.Peek = kit.Attacker;   // the attacker advances before the defender, whose period peeks at it
+        pipeline.EnqueueApply(kit.EffectId("bleed"), kit.Attacker.Id, kit.Attacker.Id);
+        pipeline.EnqueueApply(kit.EffectId("probe"), kit.Defender.Id, kit.Defender.Id);
+
+        for (var tick = 0; tick < 31; tick++) pipeline.Tick();
+
+        Assert.That(kit.Attacker.Attributes.GetBase(EffectTestKit.Hp), Is.EqualTo((BigNum)90));
+    }
+
     [Test]
     public void A_periodic_effect_fires_exactly_on_its_period_through_idle_ticks()
     {
