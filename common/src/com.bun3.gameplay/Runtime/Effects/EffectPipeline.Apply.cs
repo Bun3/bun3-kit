@@ -1,4 +1,4 @@
-// EffectPipeline partial — phase 1 — draining the apply queue: immunity, chance, conditions, DR, instant execution, instance creation and reapply merges.
+// EffectPipeline partial — phase 1: draining the apply queue: immunity, chance, conditions, DR, instant execution, instance creation and reapply merges.
 #nullable enable
 using System;
 using System.Collections.Generic;
@@ -99,9 +99,7 @@ namespace Bun3.Gameplay.Effects
             var chance = effect.ChanceToApply;
             if (chance is null) return true;
 
-            var probability = EvaluateMagnitudeCore(
-                chance.Base, chance.PerLevel, chance.Calc, chance.ByLevel, chance.Tail, chance.Increment,
-                target, source, hasSource, level, stack: 1, eventMagnitude);
+            var probability = EvaluateMagnitude(chance, target, source, hasSource, level, stack: 1, eventMagnitude);
             var roll = (BigNum)(long)_rng.NextUInt32();
             return roll < probability * RngRollRange;
         }
@@ -277,7 +275,7 @@ namespace Bun3.Gameplay.Effects
         private void MergeReapply(CompiledEffect effect, EffectTarget target, EffectInstance instance, BigNum eventMagnitude)
         {
             CatchUp(target);
-            target.NextDueTick = long.MinValue;
+            target.NextDueTick = EffectTarget.DueNow;
             var stackPolicy = effect.Stack;
             if (stackPolicy.OnReapply == StackReapply.AddStack)
             {
@@ -289,11 +287,7 @@ namespace Bun3.Gameplay.Effects
                 }
                 else if (wouldBe != instance.Stack)
                 {
-                    instance.Stack = wouldBe;
-                    RaiseEffectEvent(new EffectLifecycleEvent(
-                        EffectLifecycleKind.StackChanged, target.Id, instance.Id, instance.EffectId, instance.Stack, instance.Source, instance.Level));
-                    MarkDirtyForModifiers(target, effect);
-                    SyncLevelFromStack(effect, target, instance, eventMagnitude);
+                    SetStack(effect, target, instance, wouldBe, eventMagnitude);
                 }
             }
             else if (stackPolicy.OnReapply == StackReapply.ExtendCapped)
@@ -355,14 +349,17 @@ namespace Bun3.Gameplay.Effects
             }
 
             var newStack = effect.Stack.ClearStacksOnOverflow ? 1 : effect.Stack.MaxStack;
-            if (newStack != instance.Stack)
-            {
-                instance.Stack = newStack;
-                RaiseEffectEvent(new EffectLifecycleEvent(
-                    EffectLifecycleKind.StackChanged, target.Id, instance.Id, instance.EffectId, instance.Stack, instance.Source, instance.Level));
-                MarkDirtyForModifiers(target, effect);
-                SyncLevelFromStack(effect, target, instance, eventMagnitude);
-            }
+            if (newStack != instance.Stack) SetStack(effect, target, instance, newStack, eventMagnitude);
+        }
+
+        // A changed stack count raises StackChanged with the level before LevelFromStack re-syncs it.
+        private void SetStack(CompiledEffect effect, EffectTarget target, EffectInstance instance, int stack, BigNum eventMagnitude)
+        {
+            instance.Stack = stack;
+            RaiseEffectEvent(new EffectLifecycleEvent(
+                EffectLifecycleKind.StackChanged, target.Id, instance.Id, instance.EffectId, instance.Stack, instance.Source, instance.Level));
+            MarkDirtyForModifiers(target, effect);
+            SyncLevelFromStack(effect, target, instance, eventMagnitude);
         }
 
         // New instance: rent → insert in ascending Id order → attach modifiers (unless periodic) → grant
@@ -412,11 +409,7 @@ namespace Bun3.Gameplay.Effects
                 }
             }
 
-            var grantedTags = effect.GrantedTags;
-            for (var i = 0; i < grantedTags.Length; i++)
-            {
-                target.Tags.Add(grantedTags[i]);
-            }
+            target.GrantTags(effect.GrantedTags);
 
             AbilityGrantHook?.Invoke(target, instance, true);
 

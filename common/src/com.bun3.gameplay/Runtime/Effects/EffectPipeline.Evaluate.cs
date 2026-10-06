@@ -66,6 +66,13 @@ namespace Bun3.Gameplay.Effects
                 modifier.Base, modifier.PerLevel, modifier.Calc, modifier.ByLevel, modifier.Tail, modifier.Increment,
                 target, source, hasSource, level, stack, eventMagnitude);
 
+        private BigNum EvaluateMagnitude(
+            CompiledMagnitude magnitude, EffectTarget target, EffectTarget? source, bool hasSource, int level, int stack,
+            BigNum eventMagnitude) =>
+            EvaluateMagnitudeCore(
+                magnitude.Base, magnitude.PerLevel, magnitude.Calc, magnitude.ByLevel, magnitude.Tail, magnitude.Increment,
+                target, source, hasSource, level, stack, eventMagnitude);
+
         private BigNum EvaluateMagnitudeCore(
             Operand? @base, Operand? perLevel, IMagnitudeCalc? calc, BigNum[]? byLevel, LevelTail tail, BigNum increment,
             EffectTarget target, EffectTarget? source, bool hasSource, int level, int stack, BigNum eventMagnitude)
@@ -118,11 +125,7 @@ namespace Bun3.Gameplay.Effects
 
             if (effect.DurationScale == null) return baseDuration;
 
-            var scale = effect.DurationScale;
-            var scaleValue = EvaluateMagnitudeCore(
-                scale.Base, scale.PerLevel, scale.Calc, scale.ByLevel, scale.Tail, scale.Increment,
-                target, source, hasSource, level, stack, eventMagnitude);
-            return baseDuration * scaleValue;
+            return baseDuration * EvaluateMagnitude(effect.DurationScale, target, source, hasSource, level, stack, eventMagnitude);
         }
 
         // "New duration" used by merges (Refresh/ExtendCapped) — DR applies only to the new-instance

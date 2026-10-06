@@ -129,7 +129,7 @@ namespace Bun3.Gameplay
 
             var cooldownTags = _effects.GetEffect(cooldownEffectId).GrantedTags;
             var tagCatalog = unit.Tags.Catalog;
-            unit.Effects.Owner?.CatchUp(unit.Effects);
+            unit.Effects.SyncTime();
             var active = unit.Effects.ActiveEffects;
             var found = false;
             for (var i = 0; i < active.Count; i++)

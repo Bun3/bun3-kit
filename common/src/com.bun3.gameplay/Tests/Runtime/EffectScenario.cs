@@ -95,7 +95,7 @@ namespace Bun3.Gameplay.Tests
                 hash = FoldAttribute(hash, target, MaxHp);
                 hash = FoldAttribute(hash, target, Attack);
 
-                target.Owner?.CatchUp(target);
+                target.SyncTime();
                 var active = target.ActiveEffects;
                 for (var k = 0; k < active.Count; k++)
                 {
@@ -126,7 +126,7 @@ namespace Bun3.Gameplay.Tests
             else if (roll == 1)
             {
                 var target = world.Targets[world.DriverRng.NextUInt32() % TargetCount];
-                target.Owner?.CatchUp(target);
+                target.SyncTime();
                 var active = target.ActiveEffects;
                 if (active.Count > 0)
                 {
@@ -530,7 +530,7 @@ namespace Bun3.Gameplay.Tests
                 // RemoveActive uses List<T>.Remove (shifts, never swap-removes), so the live list
                 // stays a subsequence of creation order — no extra sort needed to keep the fold order
                 // canonical.
-                u.Effects.Owner?.CatchUp(u.Effects);
+                u.Effects.SyncTime();
                 var active = u.Effects.ActiveEffects;
                 for (var k = 0; k < active.Count; k++)
                 {

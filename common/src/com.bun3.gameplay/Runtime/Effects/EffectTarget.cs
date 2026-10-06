@@ -18,6 +18,9 @@ namespace Bun3.Gameplay.Effects
 
         /// <summary>Marks a time baseline that is not known yet; the next catch-up adopts the owner's clock.</summary>
         internal const long UnknownTick = long.MinValue;
+
+        /// <summary>A due tick that makes the next time step process the target.</summary>
+        internal const long DueNow = long.MinValue;
         private DrHistoryEntry[] _drHistory = Array.Empty<DrHistoryEntry>();
         private int _drHistoryCount;
 
@@ -62,14 +65,34 @@ namespace Bun3.Gameplay.Effects
         internal long AdvancedThrough { get; set; } = UnknownTick;
 
         /// <summary>Earliest tick on which a timed instance fires or expires; never later than the truth.</summary>
-        internal long NextDueTick { get; set; } = long.MinValue;
+        internal long NextDueTick { get; set; } = DueNow;
+
+        /// <summary>Applies the time steps owed to this target by its owner, if any, before counters are read.</summary>
+        internal void SyncTime() => Owner?.CatchUp(this);
+
+        /// <summary>Forgets the time baseline: the next catch-up starts from the owner's clock and the next time step processes the target.</summary>
+        internal void ResetTimeBaseline()
+        {
+            AdvancedThrough = UnknownTick;
+            NextDueTick = DueNow;
+        }
+
+        internal void GrantTags(GameplayTag[] tags)
+        {
+            for (var i = 0; i < tags.Length; i++) Tags.Add(tags[i]);
+        }
+
+        internal void RevokeTags(GameplayTag[] tags)
+        {
+            for (var i = 0; i < tags.Length; i++) Tags.Remove(tags[i]);
+        }
 
         /// <summary>Returns a value copy of the active instance at <paramref name="index"/> (ascending instance id).</summary>
         /// <param name="index">Index in [0, <see cref="ActiveEffectCount"/>).</param>
         /// <returns>Copy of the instance's observable state.</returns>
         public ActiveEffectInfo GetActiveEffect(int index)
         {
-            Owner?.CatchUp(this);
+            SyncTime();
             return new ActiveEffectInfo(_activeEffects[index]);
         }
 
@@ -79,7 +102,7 @@ namespace Bun3.Gameplay.Effects
         /// <returns>True when the instance is active on this target.</returns>
         public bool TryGetActiveEffect(ulong instanceId, out ActiveEffectInfo info)
         {
-            Owner?.CatchUp(this);
+            SyncTime();
             for (var i = 0; i < _activeEffects.Count; i++)
             {
                 if (_activeEffects[i].Id != instanceId) continue;
@@ -123,7 +146,7 @@ namespace Bun3.Gameplay.Effects
             if (AdvancesWithTime(effect))
             {
                 InsertById(_timedEffects, instance);
-                NextDueTick = long.MinValue;
+                NextDueTick = DueNow;
             }
 
             if (effect.OngoingConditions.Length > 0) InsertById(_ongoingEffects, instance);
@@ -179,7 +202,7 @@ namespace Bun3.Gameplay.Effects
         /// </summary>
         public EffectTargetSnapshot CreateSnapshot()
         {
-            Owner?.CatchUp(this);
+            SyncTime();
             var declaredCount = Attributes.DeclaredCount;
             var bases = new BigNum[declaredCount];
             for (var i = 0; i < declaredCount; i++) bases[i] = Attributes.DeclaredBaseAt(i);
@@ -241,8 +264,7 @@ namespace Bun3.Gameplay.Effects
                 Attributes.DetachModifiers(instance);
                 if (instance.Enabled)   // Disabled instances hold no tags — removing would double-decrement.
                 {
-                    var grantedTags = catalog.GetEffect(instance.EffectId).GrantedTags;
-                    for (var g = 0; g < grantedTags.Length; g++) Tags.Remove(grantedTags[g]);
+                    RevokeTags(catalog.GetEffect(instance.EffectId).GrantedTags);
                 }
 
                 instance.Enabled = false;   // Dropped, not pooled: a restore is rare and owns no pipeline pool.
@@ -252,8 +274,7 @@ namespace Bun3.Gameplay.Effects
             _timedEffects.Clear();
             _ongoingEffects.Clear();
             EventListenerCount = 0;
-            AdvancedThrough = UnknownTick;
-            NextDueTick = long.MinValue;
+            ResetTimeBaseline();
 
             var bases = snapshot.AttributeBases;
             for (var i = 0; i < bases.Length; i++) Attributes.RestoreDeclaredBase(i, bases[i]);
@@ -280,8 +301,7 @@ namespace Bun3.Gameplay.Effects
 
                 if (row.Enabled)   // Disabled instances grant no tags — adding would leak permanently.
                 {
-                    var grantedTags = catalog.GetEffect(row.EffectId).GrantedTags;
-                    for (var g = 0; g < grantedTags.Length; g++) Tags.Add(grantedTags[g]);
+                    GrantTags(catalog.GetEffect(row.EffectId).GrantedTags);
                 }
             }
 

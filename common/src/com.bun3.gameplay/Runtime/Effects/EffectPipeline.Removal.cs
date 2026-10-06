@@ -132,11 +132,7 @@ namespace Bun3.Gameplay.Effects
             var level = instance.Level;
 
             target.Attributes.DetachModifiers(instance);
-            var grantedTags = effect.GrantedTags;
-            for (var i = 0; i < grantedTags.Length; i++)
-            {
-                target.Tags.Remove(grantedTags[i]);
-            }
+            target.RevokeTags(effect.GrantedTags);
 
             AbilityGrantHook?.Invoke(target, instance, false);
 

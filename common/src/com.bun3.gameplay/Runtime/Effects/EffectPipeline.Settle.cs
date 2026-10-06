@@ -1,4 +1,4 @@
-// EffectPipeline partial — phases 3–5 per target — rebuild, Ongoing toggles, rebuild.
+// EffectPipeline partial — phases 3–5 per target: rebuild, Ongoing toggles, rebuild.
 #nullable enable
 using Bun3.Gameplay.Numerics;
 
@@ -43,15 +43,8 @@ namespace Bun3.Gameplay.Effects
                 if (satisfied == instance.Enabled) continue;
 
                 instance.Enabled = satisfied;
-                var grantedTags = effect.GrantedTags;
-                if (satisfied)
-                {
-                    for (var g = 0; g < grantedTags.Length; g++) target.Tags.Add(grantedTags[g]);
-                }
-                else
-                {
-                    for (var g = 0; g < grantedTags.Length; g++) target.Tags.Remove(grantedTags[g]);
-                }
+                if (satisfied) target.GrantTags(effect.GrantedTags);
+                else target.RevokeTags(effect.GrantedTags);
 
                 AbilityGrantHook?.Invoke(target, instance, satisfied);
 

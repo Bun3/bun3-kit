@@ -1,4 +1,4 @@
-// EffectPipeline partial — phase 2 — due-tick time advance, lazy catch-up and target ownership.
+// EffectPipeline partial — phase 2: due-tick time advance, lazy catch-up and target ownership.
 #nullable enable
 using System;
 using System.Collections.Generic;
@@ -62,7 +62,7 @@ namespace Bun3.Gameplay.Effects
                 }
 
                 target.AdvancedThrough = CurrentTick;
-                target.NextDueTick = NextDueTick(target, CurrentTick);
+                target.NextDueTick = ComputeNextDueTick(target, CurrentTick);
             }
         }
 
@@ -97,7 +97,7 @@ namespace Bun3.Gameplay.Effects
 
         // Earliest tick on which a timed instance fires (countdown reaches 0) or expires (remaining reaches 0
         // or below), counted from the later of the current tick and the instance's creation tick.
-        private long NextDueTick(EffectTarget target, long tick)
+        private long ComputeNextDueTick(EffectTarget target, long tick)
         {
             var due = long.MaxValue;
             var timed = target.TimedEffects;
@@ -129,13 +129,9 @@ namespace Bun3.Gameplay.Effects
             var effect = _catalog.GetEffect(instance.EffectId);
             if (effect.Stack.OnExpiration == StackExpiration.RemoveOneAndRefresh && instance.Stack > 1)
             {
-                instance.Stack--;
                 instance.RemainingTicks = effect.DurationTicks;
                 instance.DurationTicks = instance.RemainingTicks;
-                RaiseEffectEvent(new EffectLifecycleEvent(
-                    EffectLifecycleKind.StackChanged, target.Id, instance.Id, instance.EffectId, instance.Stack, instance.Source, instance.Level));
-                MarkDirtyForModifiers(target, effect);
-                SyncLevelFromStack(effect, target, instance, BigNum.Zero);
+                SetStack(effect, target, instance, instance.Stack - 1, BigNum.Zero);
                 return;
             }
 
@@ -148,10 +144,9 @@ namespace Bun3.Gameplay.Effects
         internal void Track(EffectTarget target)
         {
             if (target.Owner == this) return;
-            target.Owner?.CatchUp(target);
+            target.SyncTime();
             target.Owner = this;
-            target.AdvancedThrough = EffectTarget.UnknownTick;
-            target.NextDueTick = long.MinValue;
+            target.ResetTimeBaseline();
             target.Attributes.AttachChangeLog(_attributeChanges, target.Id);
             var active = target.ActiveEffects;
             for (var i = 0; i < active.Count; i++)
@@ -166,8 +161,7 @@ namespace Bun3.Gameplay.Effects
             if (target.Owner != this) return;
             CatchUp(target);
             target.Owner = null;
-            target.AdvancedThrough = EffectTarget.UnknownTick;
-            target.NextDueTick = long.MinValue;
+            target.ResetTimeBaseline();
             target.Attributes.AttachChangeLog(null, default);
         }
     }

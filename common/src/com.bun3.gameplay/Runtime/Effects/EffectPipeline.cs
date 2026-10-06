@@ -133,9 +133,7 @@ namespace Bun3.Gameplay.Effects
         /// <summary>Evaluates a standalone compiled magnitude outside the drain loop, with no event context.</summary>
         internal BigNum ComputeMagnitude(
             CompiledMagnitude magnitude, EffectTarget target, EffectTarget? source, bool hasSource, int level) =>
-            EvaluateMagnitudeCore(
-                magnitude.Base, magnitude.PerLevel, magnitude.Calc, magnitude.ByLevel, magnitude.Tail, magnitude.Increment,
-                target, source, hasSource, level, stack: 1, BigNum.Zero);
+            EvaluateMagnitude(magnitude, target, source, hasSource, level, stack: 1, BigNum.Zero);
 
         // Applies one effect outside the drain loop (World calls it while processing commands, before the
         // phases run). Must not be called from inside the phases — the drain loop owns the queue while it
