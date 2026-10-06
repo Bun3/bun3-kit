@@ -124,11 +124,88 @@ public sealed class EffectDueTickTests
         for (var tick = 0; tick < 11; tick++) first.Tick();   // created on tick 0, advanced on 1..10
 
         var second = kit.BuildPipeline();
-        second.Tick();   // its tick 0 equals the creation tick number, so this step is skipped as "created this tick"
+        second.Tick();   // a takeover keeps counting down on the new owner's very first time step
 
-        Assert.That(kit.Defender.GetActiveEffect(0).RemainingTicks, Is.EqualTo(40));
-        second.Tick();
         Assert.That(kit.Defender.GetActiveEffect(0).RemainingTicks, Is.EqualTo(39));
+    }
+
+    [Test]
+    public void A_pipeline_taking_over_a_target_advances_it_from_its_first_tick()
+    {
+        var kit = EffectTestKit.Create();
+        kit.AddEffect(EffectTestKit.MinimalDuration("ward", ticks: 50));
+        var first = kit.BuildPipeline();
+        for (var tick = 0; tick < 3; tick++) first.Tick();
+        first.EnqueueApply(kit.EffectId("ward"), kit.Attacker.Id, kit.Defender.Id);
+        for (var tick = 0; tick < 8; tick++) first.Tick();   // created on tick 3, advanced on 4..10
+
+        var second = kit.BuildPipeline();
+        for (var tick = 0; tick < 2; tick++) second.Tick();
+
+        Assert.That(kit.Defender.GetActiveEffect(0).RemainingTicks, Is.EqualTo(41));
+    }
+
+    private sealed class ListResolver : IEffectTargetResolver
+    {
+        internal readonly System.Collections.Generic.List<EffectTarget> Targets = new System.Collections.Generic.List<EffectTarget>();
+        private readonly System.Collections.Generic.List<TargetId> _ids = new System.Collections.Generic.List<TargetId>();
+
+        public System.Collections.Generic.IReadOnlyList<TargetId> TargetIds => _ids;
+
+        internal void Add(EffectTarget target)
+        {
+            Targets.Add(target);
+            _ids.Add(target.Id);
+        }
+
+        public bool TryResolve(TargetId id, out EffectTarget? target)
+        {
+            target = Targets.Find(t => t.Id == id);
+            return target != null;
+        }
+
+        public EffectTarget TargetAt(int index) => Targets[index];
+    }
+
+    [Test]
+    public void A_takeover_by_a_pipeline_whose_clock_is_ahead_advances_on_the_first_tick()
+    {
+        var kit = EffectTestKit.Create();
+        kit.AddEffect(EffectTestKit.MinimalDuration("ward", ticks: 50));
+        var first = kit.BuildPipeline();
+        first.EnqueueApply(kit.EffectId("ward"), kit.Attacker.Id, kit.Defender.Id);
+        for (var tick = 0; tick < 11; tick++) first.Tick();   // 40 remain; next due on the first clock's tick 50
+
+        var resolver = new ListResolver();
+        var second = new EffectPipeline(kit.Catalog, resolver, new XorShiftRng(1));
+        for (var tick = 0; tick < 20; tick++) second.Tick();
+        resolver.Add(kit.Defender);
+        second.Tick();
+
+        Assert.That(kit.Defender.GetActiveEffect(0).RemainingTicks, Is.EqualTo(39));
+    }
+
+    [Test]
+    public void A_unit_moved_to_a_world_with_an_earlier_clock_keeps_counting_down()
+    {
+        var kit = EffectTestKit.Create();
+        kit.AddEffect(EffectTestKit.MinimalDuration("ward", ticks: 50));
+        var abilities = new AbilityCatalogBuilder().Build(kit.TagCatalog, kit.Seams, kit.Attributes, kit.Catalog);
+        var early = new World(kit.Database(abilities), new XorShiftRng(1));
+        var late = new World(kit.Database(abilities), new XorShiftRng(1));
+        ReadOnlySpan<ushort> attributes = stackalloc ushort[] { EffectTestKit.Hp, EffectTestKit.MaxHp };
+        var unit = new Unit(new TargetId(1), kit.Attributes, attributes, kit.TagCatalog);
+        for (var tick = 0; tick < 20; tick++) late.Tick();
+        late.Spawn(unit);
+        late.EnqueueApply(kit.EffectId("ward"), unit.Id, unit.Id);
+        for (var tick = 0; tick < 5; tick++) late.Tick();      // created on tick 20, advanced on 21..24
+        late.Despawn(unit.Id);
+        late.Tick();
+
+        early.Spawn(unit);
+        for (var tick = 0; tick < 5; tick++) early.Tick();
+
+        Assert.That(unit.Effects.GetActiveEffect(0).RemainingTicks, Is.EqualTo(41));
     }
 
     [Test]

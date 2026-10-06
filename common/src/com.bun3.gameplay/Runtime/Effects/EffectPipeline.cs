@@ -154,19 +154,18 @@ namespace Bun3.Gameplay.Effects
             _attributeChanges.Clear();
         }
 
-        private bool _advancedThisTick;
+        private long _lastAdvancedTick = long.MinValue;
 
         internal void RunPhases()
         {
             DrainApplications();
             AdvanceTime();
-            _advancedThisTick = true;
+            _lastAdvancedTick = CurrentTick;
             SettleAttributes();
             // Phase 6, event finalization: no pipeline work. Observation buffers are read after this call
             // and cleared at the start of the next tick.
 
             CurrentTick++;
-            _advancedThisTick = false;
         }
 
         /// <summary>
@@ -276,6 +275,7 @@ namespace Bun3.Gameplay.Effects
                 return;
             }
 
+            Track(target);
             var effect = _catalog.GetEffect(pending.EffectId);
 
             if (IsImmune(target, effect))
@@ -928,9 +928,10 @@ namespace Bun3.Gameplay.Effects
             for (var t = 0; t < count; t++)
             {
                 var target = _resolver.TargetAt(t);
-                if (target.NextDueTick > CurrentTick) continue;
+                if (target.Owner == this && target.NextDueTick > CurrentTick) continue;
 
                 AdvanceVisitCount++;
+                Track(target);
                 CatchUp(target);
                 var active = target.TimedEffects;
                 _expiryScratch.Clear();
@@ -976,14 +977,13 @@ namespace Bun3.Gameplay.Effects
         internal long AdvanceVisitCount { get; private set; }
 
         // Last tick whose time step (phase 2) has run.
-        private long AdvancedThroughTick => _advancedThisTick ? CurrentTick : CurrentTick - 1;
+        private long AdvancedThroughTick => _lastAdvancedTick == CurrentTick ? CurrentTick : CurrentTick - 1;
 
         /// <summary>Applies the time steps a skipped target still owes, up to the last advanced tick. Before its
         /// due tick a target only counts down, so subtracting the skipped steps at once is exact. An instance
         /// created on a later tick than the baseline owes only the steps after its creation tick.</summary>
         internal void CatchUp(EffectTarget target)
         {
-            Track(target);
             var advancedThrough = AdvancedThroughTick;
             var baseline = target.AdvancedThrough;
             if (baseline != EffectTarget.UnknownTick && baseline >= advancedThrough) return;   // already ahead, e.g. advanced earlier in this time step

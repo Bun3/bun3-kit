@@ -41,7 +41,8 @@ namespace Bun3.Gameplay.Effects
         }
 
         /// <summary>Makes this pipeline the target's owner: it advances the target's time and records its
-        /// attribute changes. Time owed under a previous owner is settled first; the baseline restarts here.</summary>
+        /// attribute changes. Time owed under a previous owner is settled first and the baseline restarts here;
+        /// instances created on another clock count as already existing, so they advance on the next time step.</summary>
         internal void Track(EffectTarget target)
         {
             if (target.Owner == this) return;
@@ -50,6 +51,11 @@ namespace Bun3.Gameplay.Effects
             target.AdvancedThrough = EffectTarget.UnknownTick;
             target.NextDueTick = long.MinValue;
             target.Attributes.AttachChangeLog(_attributeChanges, target.Id);
+            var active = target.ActiveEffects;
+            for (var i = 0; i < active.Count; i++)
+            {
+                if (active[i].CreatedTick >= CurrentTick) active[i].CreatedTick = CurrentTick - 1;
+            }
         }
 
         /// <summary>Releases a target this pipeline owns, settling its time first. Time stops until it is tracked again.</summary>

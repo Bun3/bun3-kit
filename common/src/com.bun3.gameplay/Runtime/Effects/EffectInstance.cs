@@ -48,7 +48,7 @@ namespace Bun3.Gameplay.Effects
         /// Pipeline tick this instance was created on. Lifetime (RemainingTicks) and period
         /// (PeriodCountdown) do not advance on the creation tick; they advance from the next tick.
         /// </summary>
-        public long CreatedTick { get; private set; }
+        public long CreatedTick { get; internal set; }
 
         /// <summary>Rents an instance from the pool (or creates one when the pool is absent or empty)
         /// and initializes its fields.</summary>

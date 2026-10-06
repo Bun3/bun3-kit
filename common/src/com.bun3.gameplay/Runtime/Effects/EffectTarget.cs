@@ -119,9 +119,13 @@ namespace Bun3.Gameplay.Effects
         internal void InsertActive(EffectInstance instance, CompiledEffect effect)
         {
             InsertById(_activeEffects, instance);
-            NextDueTick = long.MinValue;
             if (effect.HasEventChains) EventListenerCount++;
-            if (AdvancesWithTime(effect)) InsertById(_timedEffects, instance);
+            if (AdvancesWithTime(effect))
+            {
+                InsertById(_timedEffects, instance);
+                NextDueTick = long.MinValue;
+            }
+
             if (effect.OngoingConditions.Length > 0) InsertById(_ongoingEffects, instance);
         }
 
