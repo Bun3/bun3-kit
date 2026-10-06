@@ -526,10 +526,7 @@ namespace Bun3.Gameplay.Tests
                     hash = Fold(hash, c.Exponent);
                 }
 
-                // Ascending instance id: List<T>.Add appends (ids are assigned monotonically) and
-                // RemoveActive uses List<T>.Remove (shifts, never swap-removes), so the live list
-                // stays a subsequence of creation order — no extra sort needed to keep the fold order
-                // canonical.
+                // The active list is kept in ascending instance id, so the fold order is canonical.
                 u.Effects.SyncTime();
                 var active = u.Effects.ActiveEffects;
                 for (var k = 0; k < active.Count; k++)

@@ -55,12 +55,9 @@ namespace Bun3.Gameplay.Effects
                 return;
             }
 
-            // DR immunity must be decided before the RemoveOnApply side effect — otherwise an immune
-            // application would observably dispel the target's existing effects first (every other drop
-            // path — Immune/Chance/Condition — also short-circuits before side effects). DR applies only
-            // to the new-instance path, so when an active instance of the same effect exists (merge target)
-            // we skip it and keep the existing merge behavior. ApplyDrHistory mutates history, so it is
-            // called exactly once — the ticks computed here are passed through to CreateInstance.
+            // DR is decided before RemoveOnApply so an immune application has no side effects, and only for a
+            // new instance (a merge keeps its stack policy). ApplyDrHistory records history, so its duration
+            // is passed on to CreateInstance instead of being computed twice.
             var precomputedDurationTicks = -1;
             if (effect.DurationType == EffectDurationType.Duration && effect.DrCategory.IsValid
                 && FindActiveByEffectId(target, pending.EffectId) == null)
@@ -240,11 +237,8 @@ namespace Bun3.Gameplay.Effects
             execution.Calc.Execute(ref ctx);
         }
 
-        // Duration/Infinite: if the target has an active instance with the same EffectId, merge via the
-        // stack policy; otherwise create a new instance, attach modifiers, and grant tags.
-        // precomputedDurationTicks is the duration (with DR composed) that ProcessPendingApply computed
-        // before RemoveOnApply (-1 when DR is unused or a merge target exists) and CreateInstance uses it
-        // as-is — prevents a duplicate ApplyDrHistory call.
+        // Duration/Infinite: merge into an active instance of the same effect per its stack policy, or create
+        // one. precomputedDurationTicks is the DR-composed duration, -1 when DR does not apply.
         private void ApplyDurationOrInfinite(
             CompiledEffect effect, EffectTarget target, in PendingApply pending, int precomputedDurationTicks)
         {
@@ -365,10 +359,7 @@ namespace Bun3.Gameplay.Effects
         // New instance: rent → insert in ascending Id order → attach modifiers (unless periodic) → grant
         // GrantedTags → Applied event → fire OnApplication chains. Periodic effects (PeriodTicks > 0) only
         // adjust Base each period via the same path as Instant and never attach modifiers persistently.
-        // For Duration effects with DR, ProcessPendingApply computed the duration (and immunity) before
-        // RemoveOnApply and passed it as precomputedDurationTicks — this method uses that value as-is and
-        // never calls ApplyDrHistory again (prevents double history mutation). Duration without DR is
-        // computed here (clamped to a minimum of 1 tick).
+        // A Duration without DR lasts at least 1 tick.
         private void CreateInstance(
             CompiledEffect effect, EffectTarget target, in PendingApply pending, int precomputedDurationTicks,
             BigNum eventMagnitude)
@@ -380,8 +371,7 @@ namespace Bun3.Gameplay.Effects
             {
                 if (effect.DrCategory.IsValid)
                 {
-                    // If DR-immune (0 ticks or less), ProcessPendingApply already dropped silently and
-                    // returned, so reaching this path guarantees precomputedDurationTicks > 0.
+                    // ProcessPendingApply already dropped DR-immune applications, so this is positive.
                     remainingTicks = precomputedDurationTicks;
                 }
                 else
@@ -394,7 +384,7 @@ namespace Bun3.Gameplay.Effects
 
             var periodCountdown = effect.PeriodTicks > 0 ? effect.PeriodTicks : -1;
             var instance = EffectInstance.Rent(
-                _instancePool, _nextInstanceId++, pending.EffectId, pending.Source, pending.Level, stack: 1,
+                _instancePool, NextInstanceId++, pending.EffectId, pending.Source, pending.Level, stack: 1,
                 remainingTicks, periodCountdown, CurrentTick);
             target.InsertActive(instance, effect);
 

@@ -6,8 +6,10 @@ namespace Bun3.Gameplay.Effects
 {
     /// <summary>
     /// Runtime instance of one effect applied to a target. The monotonically increasing
-    /// <see cref="Id"/> issued by World is the basis of the canonical aggregation order.
-    /// Instances are pooled per <see cref="EffectPipeline"/>; one never moves between pipelines.
+    /// <see cref="Id"/> issued by the pipeline is the basis of the canonical aggregation order.
+    /// Instances are pooled per <see cref="EffectPipeline"/>. <see cref="RemainingTicks"/> and
+    /// <see cref="PeriodCountdown"/> are stored counters that may lag behind skipped time steps — read them
+    /// through <see cref="EffectTarget.GetActiveEffect"/>, which catches up first.
     /// </summary>
     public sealed class EffectInstance : IAttributeModifierSource
     {
@@ -15,7 +17,7 @@ namespace Bun3.Gameplay.Effects
         {
         }
 
-        /// <summary>Monotonically increasing id issued by World.</summary>
+        /// <summary>Monotonically increasing id issued by the pipeline.</summary>
         public ulong Id { get; private set; }
 
         /// <summary>Effect id.</summary>

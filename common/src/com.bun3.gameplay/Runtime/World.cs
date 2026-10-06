@@ -37,10 +37,8 @@ namespace Bun3.Gameplay
         public World(GameplayDatabase database, IRng rng, int applyBudgetPerUnit = 32)
         {
             Database = database ?? throw new ArgumentNullException(nameof(database));
-            var effects = database.Effects;
-            var abilities = database.Abilities;
-            _effects = effects;
-            _abilities = abilities;
+            var effects = _effects = database.Effects;
+            var abilities = _abilities = database.Abilities;
             _rng = rng ?? throw new ArgumentNullException(nameof(rng));
             if (applyBudgetPerUnit <= 0)
                 throw new ArgumentOutOfRangeException(nameof(applyBudgetPerUnit), "Apply budget per unit must be at least 1.");

@@ -48,8 +48,6 @@ namespace Bun3.Gameplay.Effects
 
         private readonly List<EffectInstance> _removalScratch = new List<EffectInstance>();
 
-        private ulong _nextInstanceId = 1;
-
         /// <summary>Number of apply requests silently dropped because the target failed to resolve.</summary>
         internal long UnresolvedTargetDropCount { get; private set; }
 
@@ -82,11 +80,7 @@ namespace Bun3.Gameplay.Effects
         /// <summary>Next instance id to issue. For snapshot-restore replay determinism, save the value at
         /// snapshot time and restore it as-is (only safe when the pending queue is empty — queued entries
         /// would also need their issued ids reproduced, which is out of scope).</summary>
-        internal ulong NextInstanceId
-        {
-            get => _nextInstanceId;
-            set => _nextInstanceId = value;
-        }
+        internal ulong NextInstanceId { get; set; } = 1;
 
         /// <summary>Number of apply requests left in the queue this tick because the budget was exceeded.</summary>
         public int PendingApplyCount => _queue.Count;
@@ -122,9 +116,6 @@ namespace Bun3.Gameplay.Effects
             });
         }
 
-        /// <summary>Random source shared with this pipeline.</summary>
-        internal IRng Rng => _rng;
-
         /// <summary>Evaluates a compiled condition list outside the drain loop, with no event context.</summary>
         internal bool CheckConditions(
             CompiledCondition[] conditions, EffectTarget target, EffectTarget? source, bool hasSource) =>
@@ -159,9 +150,6 @@ namespace Bun3.Gameplay.Effects
             AdvanceTime();
             _lastAdvancedTick = CurrentTick;
             SettleAttributes();
-            // Phase 6, event finalization: no pipeline work. Observation buffers are read after this call
-            // and cleared at the start of the next tick.
-
             CurrentTick++;
         }
     }

@@ -34,8 +34,9 @@ namespace Bun3.Gameplay.Effects
         /// <summary>Effect lifecycle events of every target since the tick started, in occurrence order.</summary>
         public ReadOnlySpan<EffectLifecycleEvent> PendingEffectEvents => _effectEvents.AsSpan(0, _effectEventCount);
 
-        /// <summary>Attribute Current changes of every attached target since the tick started, in occurrence
-        /// order. A target is attached once this pipeline changes its values; a World attaches its units at spawn.</summary>
+        /// <summary>Attribute Current changes of every target this pipeline owns since the tick started, in
+        /// occurrence order. A World owns its units from spawn to despawn; a standalone pipeline owns a target once
+        /// it applies to, advances or settles it.</summary>
         public ReadOnlySpan<AttributeChange> PendingAttributeChanges => _attributeChanges.Pending;
 
         private void RaiseEffectEvent(in EffectLifecycleEvent evt)

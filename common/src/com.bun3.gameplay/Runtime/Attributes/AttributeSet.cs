@@ -61,7 +61,6 @@ namespace Bun3.Gameplay.Attributes
             internal bool ScaleWithStack { get; }
         }
 
-        private readonly AttributeRegistry _registry;
         private readonly AttributeLayout _layout;
         private readonly Slot[] _slots;                    // canonical: ascending AttributeId
         private Aggregate[] _aggregates = Array.Empty<Aggregate>();
@@ -69,7 +68,7 @@ namespace Bun3.Gameplay.Attributes
         private ModifierEntry[] _modifiers = Array.Empty<ModifierEntry>();   // sorted by (Slot, Source.Id, RowIndex)
         private int _modifierCount;
         private AttributeChangeLog? _changeLog;
-        private TargetId _owner;
+        private TargetId _targetId;
         private bool _anyDirty;
 
         /// <summary>Builds dense slots from the attribute ids the archetype declares. Declaration order is irrelevant.</summary>
@@ -81,7 +80,6 @@ namespace Bun3.Gameplay.Attributes
         internal AttributeSet(AttributeLayout layout)
         {
             _layout = layout;
-            _registry = layout.Registry;
             var ids = layout.AttributeIds;
             _slots = new Slot[ids.Length];
             for (var i = 0; i < ids.Length; i++)
@@ -128,7 +126,7 @@ namespace Bun3.Gameplay.Attributes
             _anyDirty = true;
         }
 
-        /// <summary>Snapshot save only — collects the modifier rows attached by this source via a slot scan.</summary>
+        /// <summary>Snapshot save only — collects the modifier rows attached by this source, in canonical order.</summary>
         internal void CollectModifiers(IAttributeModifierSource source, System.Collections.Generic.List<ModifierSnapshotRow> output)
         {
             for (var i = 0; i < _modifierCount; i++)
@@ -161,13 +159,13 @@ namespace Bun3.Gameplay.Attributes
         private BigNum ResolveBound(Operand bound)
         {
             if (bound.Kind == OperandKind.Constant) return bound.Value;
-            // attribute-referencing bounds are validated in the constructor — existence guaranteed
+            // attribute-referencing bounds are validated by the layout — the slot exists
             return _slots[_layout.SlotByAttributeId[bound.AttributeId]].Current * bound.Value;
         }
 
         private BigNum ClampToBounds(int slotIndex, BigNum value)
         {
-            var attribute = _registry.GetCompiledAttribute(_slots[slotIndex].AttributeId);
+            var attribute = _layout.Registry.GetCompiledAttribute(_slots[slotIndex].AttributeId);
             if (attribute.Min.HasValue)
             {
                 var min = ResolveBound(attribute.Min.Value);
@@ -185,7 +183,7 @@ namespace Bun3.Gameplay.Attributes
 
         // O(1) formula reapply via cached Σ aggregates. A slot no modifier has touched is (Base + 0) × (1 + 0),
         // whose canonical BigNum is Base itself.
-        internal void ReapplyFormula(int slotIndex)
+        private void ReapplyFormula(int slotIndex)
         {
             ref var slot = ref _slots[slotIndex];
             BigNum value;
@@ -215,12 +213,12 @@ namespace Bun3.Gameplay.Attributes
         // The dependency graph is a DAG validated at registry build, so recursion is safe.
         private void PropagateToDependents(ushort changedAttributeId, BigNum oldValue, BigNum newValue)
         {
-            var dependents = _registry.GetClampDependents(changedAttributeId);
+            var dependents = _layout.Registry.GetClampDependents(changedAttributeId);
             for (var i = 0; i < dependents.Length; i++)
             {
                 if (!Has(dependents[i])) continue;
                 var index = _layout.SlotByAttributeId[dependents[i]];
-                var attribute = _registry.GetCompiledAttribute(dependents[i]);
+                var attribute = _layout.Registry.GetCompiledAttribute(dependents[i]);
                 var maxOperand = attribute.Max.GetValueOrDefault();
                 var referencesAsMax = attribute.Max.HasValue
                     && maxOperand.Kind == OperandKind.Attribute
@@ -239,7 +237,7 @@ namespace Bun3.Gameplay.Attributes
                     _slots[index].Base = ClampToBounds(index, _slots[index].Base);    // truncate Base to the lowered bound
                 }
 
-                ReapplyFormula(index);   // Stay: reapply alone is the safety net
+                ReapplyFormula(index);   // the Stay policies keep Base and only re-clamp Current
             }
         }
 
@@ -368,16 +366,14 @@ namespace Bun3.Gameplay.Attributes
             return low;
         }
 
-        internal AttributeChangeLog? ChangeLog => _changeLog;
-
         /// <summary>Routes Current changes into a pipeline's log under the owning unit's id; null detaches.</summary>
-        internal void AttachChangeLog(AttributeChangeLog? log, TargetId owner)
+        internal void AttachChangeLog(AttributeChangeLog? log, TargetId targetId)
         {
             _changeLog = log;
-            _owner = owner;
+            _targetId = targetId;
         }
 
         private void EmitChange(ushort attributeId, BigNum oldCurrent, BigNum newCurrent) =>
-            _changeLog?.Append(new AttributeChange(_owner, attributeId, oldCurrent, newCurrent));
+            _changeLog?.Append(new AttributeChange(_targetId, attributeId, oldCurrent, newCurrent));
     }
 }

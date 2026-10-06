@@ -469,7 +469,7 @@ public sealed class EffectDefJsonTests
 
         pipeline.EnqueueApply(kit.EffectId("cc"), kit.Attacker.Id, kit.Defender.Id);
         pipeline.Tick();
-        return kit.Defender.ActiveEffects[0].RemainingTicks;
+        return kit.Defender.GetActiveEffect(0).RemainingTicks;
     }
 
     [Test]

@@ -735,7 +735,7 @@ bun3-server-template은 `Bun3.Gameplay`를 참조하지 않고, 저장소 밖에
 ```
 World.Tick():
   ⓪ 스폰/디스폰 반영 + 적용 예산 재산정 (§11)
-  ⓪-1 관찰 버퍼 비움 (등록 유닛의 이펙트·속성 이벤트, GameplayEvent, PendingActivations)
+  ⓪-1 관찰 버퍼 비움 (이펙트·속성 이벤트, GameplayEvent, PendingActivations — §20.2 이후 파이프라인 단위 버퍼라 카운트 초기화만)
   ⓪-2 명령 큐 처리 (FIFO)
   ①~⑥ EffectPipeline 페이즈 (§11)
 ```
@@ -783,7 +783,7 @@ GAS는 쿨다운 태그를 차단 태그에 적게 하지 않고, 발동 검사�
 | 부여 어빌리티 | `AbilitySet.GetGrant(i)` → `AbilityGrantInfo(AbilityId, Source, Level)`, `AbilitySet.Version` | Grant·Revoke·복원마다 Version 증가. 스킬 바는 Version이 바뀐 틱에만 다시 그린다 |
 | 어빌리티 이름 | `AbilityCatalog.GetName(id)` | |
 
-속성 변경(`AttributeSet.PendingChanges`)은 현행 유지 — 원인 필드는 넣지 않는다(원인이 필요하면
+속성 변경(`AttributeSet.PendingChanges` — §20.2에서 `World.PendingAttributeChanges`로 이전)은 현행 유지 — 원인 필드는 넣지 않는다(원인이 필요하면
 GameplayEvent). 코어에 cue(VFX) 시스템은 두지 않는다 — 위 버퍼·조회로 GAS cue의 네 이벤트
 (OnActive·WhileActive·Executed·Removed)가 전부 재구성되며, 태그→VFX 매핑은 Unity 계층 몫이다.
 
