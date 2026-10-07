@@ -18,12 +18,9 @@ namespace Bun3.Gameplay.Effects
 
         private int _gameplayEventCount;
 
-        /// <summary>Gameplay events raised since the buffer was last cleared, in raise order — the single
-        /// source for damage numbers, combat logs and network broadcast.</summary>
+        /// <summary>Gameplay events raised during the last tick, in raise order — the single source for damage
+        /// numbers, combat logs and network broadcast. Cleared when the next tick starts.</summary>
         public ReadOnlySpan<GameplayEvent> PendingGameplayEvents => _gameplayEvents.AsSpan(0, _gameplayEventCount);
-
-        /// <summary>Clears <see cref="PendingGameplayEvents"/>.</summary>
-        public void ClearGameplayEvents() => _gameplayEventCount = 0;
 
         private EffectLifecycleEvent[] _effectEvents = new EffectLifecycleEvent[16];
 

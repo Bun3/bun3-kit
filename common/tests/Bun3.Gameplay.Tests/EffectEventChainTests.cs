@@ -172,8 +172,8 @@ public sealed class EffectEventChainTests
         Assert.That(events[0].Target, Is.EqualTo(kit.Defender.Id));
         Assert.That(events[0].Magnitude, Is.EqualTo((BigNum)(-40)));
 
-        pipeline.ClearGameplayEvents();
-        Assert.That(pipeline.PendingGameplayEvents.Length, Is.Zero);
+        pipeline.Tick();
+        Assert.That(pipeline.PendingGameplayEvents.Length, Is.Zero, "the next tick starts with an empty buffer");
     }
 
     [Test]
