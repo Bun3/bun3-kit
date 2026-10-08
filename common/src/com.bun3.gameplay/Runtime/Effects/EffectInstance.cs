@@ -11,7 +11,7 @@ namespace Bun3.Gameplay.Effects
     /// <see cref="PeriodCountdown"/> are stored counters that may lag behind skipped time steps — read them
     /// through <see cref="EffectTarget.GetActiveEffect"/>, which catches up first.
     /// </summary>
-    public sealed class EffectInstance : IAttributeModifierSource
+    internal sealed class EffectInstance : IAttributeModifierSource
     {
         private EffectInstance()
         {

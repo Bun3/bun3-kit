@@ -2,7 +2,7 @@
 namespace Bun3.Gameplay.Attributes
 {
     /// <summary>Minimum state a modifier-supplying source (e.g. an EffectInstance) exposes to aggregation.</summary>
-    public interface IAttributeModifierSource
+    internal interface IAttributeModifierSource
     {
         /// <summary>Monotonically increasing id issued by the World — the basis of canonical aggregation order.</summary>
         ulong Id { get; }
