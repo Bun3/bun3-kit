@@ -34,7 +34,7 @@
 | 이벤트 페이로드 | `(Tag, Source, Target, Magnitude, NominalMagnitude)` — 체인 값 전달 규칙을 `OnEvent`에 한해 개정 |
 | magnitude | **실적용**(클램프 후) 기본. Operand kind 1종. 명목값은 이벤트에 동승하되 Operand 없음 |
 | magnitude 소스 | **속성 명시** — `RaiseEvents`가 태그와 속성 id를 짝으로 선언 |
-| Ability의 로직 | **없음**(순수 데이터). `IAbilityBehavior` 시섬 불채택 — 시섬은 기존 3종 유지 |
+| Ability의 로직 | **없음**(순수 데이터). `IAbilityBehavior` 확장점 불채택 — 확장점은 기존 3종 유지 |
 | 쿨다운 | Effect로 표현(GrantedTags ↔ BlockedTags). 감소는 `DurationScale`이 속성 참조 |
 | 코스트 | **즉시 차감**(Effect 우회 안 함) — 게이트 검사와 차감의 원자성 |
 | 발동 API | ~~동기 반환(사유 enum)~~ → **§16 개정**: World 명령 큐에 적재, 틱 안에서 처리, 결과는 `PendingActivations` 버퍼 + 부수효과 없는 `CanActivateAbility` 조회 |
@@ -369,9 +369,9 @@ AbilityDef
 └─ Effects: [{ EffectName, SelectorTag?, SelectorParams[], LevelRule }]
 ```
 
-`IAbilityBehavior` 시섬을 두지 않는다. 소비자가 0개이고, 임의 로직 자리는 이미
+`IAbilityBehavior` 확장점을 두지 않는다. 소비자가 0개이고, 임의 로직 자리는 이미
 `IExecutionCalc`가 있다(어빌리티가 Effect를 적용하고 그 Effect가 Execution을 갖는 경로).
-시섬은 기존 3종(`IMagnitudeCalc`·`IExecutionCalc`·`ITargetSelector`)을 유지한다.
+확장점은 기존 3종(`IMagnitudeCalc`·`IExecutionCalc`·`ITargetSelector`)을 유지한다.
 필요해지면 추가는 비파괴다.
 
 ### 7.2 발동 순서와 결과
@@ -653,7 +653,7 @@ Effect 도메인 명명 정리(`EffectSpec`→`EffectDef` 등)와 남은 세 건
 | 복제(gameplay.proto)·미러 월드·시야 필터 | 슬라이스 5 |
 | `World.PostAsync` 액터 래퍼 | `Bun3.Server.Gameplay`, 슬라이스 5 |
 | 피해 파이프라인 1급화(치명타·방어구 순서 고정) | 채택 안 함 — §3.3. 게임이 MagnitudeCalc로 정한다 |
-| `IAbilityBehavior` 시섬 | 실수요 시 — §7.1 |
+| `IAbilityBehavior` 확장점 | 실수요 시 — §7.1 |
 | `Bun3.Server.Items`의 `ItemCatalog`/`ItemInstance`와 게임플레이 아이템 계층 이름 충돌 | §13 참조 — 슬라이스 4 착수 전 결정 |
 | `Parsed<Domain>` 계층의 일반화 여부 | §13 참조 |
 | 명령에 틱 번호 스탬프(과거·미래 틱 명령 거부 — idlez 입력 방식) | 슬라이스 5 복제 — 클라 예측·서버 검증에 필요 |
@@ -714,7 +714,7 @@ bun3-server-template은 `Bun3.Gameplay`를 참조하지 않고, 저장소 밖에
   `AbilitySet.Grant`·`Tags.Add` 직접 호출은 시뮬레이션 상태를 바꾸지 않는다. 등록된 유닛의 런타임 태그는
   이펙트(`GrantedTags`)로만 붙인다 — 느슨한 태그 명령은 두지 않는다(GAS도 런타임 상태 태그는 GE가 소유).
   풀힐·부활은 Instant 이펙트(`Add` + `MaxHp` 참조)로 `EnqueueApply`한다.
-- 틱 안(시섬 등)에서 부른 `Enqueue*`는 다음 틱에 처리된다.
+- 틱 안(확장점 등)에서 부른 `Enqueue*`는 다음 틱에 처리된다.
 - 결정론: 상태 변경이 전부 `Tick()` 안의 고정 순서에서만 일어나므로, 같은 명령 열이면 같은
   결과다. 남는 조건은 **적재 순서의 결정성**뿐이다 — 여러 스레드가 한 World에 적재하는 호스트는
   적재 지점을 하나로 모아야 한다. 명령에 틱 번호를 찍는 방식(idlez)은 복제 단계(슬라이스 5)에서 다룬다.
@@ -848,7 +848,7 @@ GameplayEvent). 코어에 cue(VFX) 시스템은 두지 않는다 — 위 버퍼�
 
 ## 18. 부트스트랩 묶음과 유닛 아키타입 (2026-10-01)
 
-구현 리뷰 사용성 축: 태그 → 속성 → 이름표 → 시섬 → 이펙트 → 어빌리티 → 월드 → 유닛까지 약 11단계에
+구현 리뷰 사용성 축: 태그 → 속성 → 이름표 → 확장점 → 이펙트 → 어빌리티 → 월드 → 유닛까지 약 11단계에
 tags·seams·attributes를 네 번 넘겨야 했고, 예제 시나리오도 이 묶음을 따로 만들어 썼다. 두 번째 게임도
 똑같이 짤 코드이므로 프레임워크 몫이다(CLAUDE.md). 참고: Lyra는 PawnData·AbilitySet 데이터 자산으로
 "이런 유닛은 이런 어빌리티·속성을 갖는다"를 묶는다.

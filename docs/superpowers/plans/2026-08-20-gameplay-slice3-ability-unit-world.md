@@ -1489,7 +1489,7 @@ Expected: PASS, 통과 개수가 Step 1과 동일. **하나라도 줄거나 실�
 
 ```bash
 git add common/src/com.bun3.gameplay/Runtime/Effects/MagnitudeCompiler.cs common/src/com.bun3.gameplay/Runtime/Effects/EffectCatalogBuilder.cs
-git commit -m "♻️ 크기·시섬·태그 컴파일을 MagnitudeCompiler로 추출: Ability 빌더와 공유" -m "Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
+git commit -m "♻️ 크기·확장점·태그 컴파일을 MagnitudeCompiler로 추출: Ability 빌더와 공유" -m "Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 ```
 
 ---
@@ -5389,7 +5389,7 @@ Expected: FAIL — `GameplayCatalogBinary` 없음.
 페이로드
   effectCount  uint
   effect ×N    (이름, DurationType, DurationTicks, PeriodTicks, StackPolicy, Modifiers,
-                Executions(시섬 태그 인덱스), 조건들, GrantedTags/AssetTags/ImmunityTags 인덱스,
+                Executions(확장점 태그 인덱스), 조건들, GrantedTags/AssetTags/ImmunityTags 인덱스,
                 Chains(트리거·EventTag·Listen·EffectId·셀렉터 태그 인덱스·파라미터·조건·레벨규칙),
                 RemoveOnApplyTags, ChanceToApply, DurationPerLevel, DurationScale, Dr*,
                 RaiseEvents, GrantedAbilityNames)
@@ -5398,7 +5398,7 @@ Expected: FAIL — `GameplayCatalogBinary` 없음.
                 ActivationConditions, Costs, CooldownEffectId, Effects)
 ```
 
-- 시섬(`IMagnitudeCalc`/`IExecutionCalc`/`ITargetSelector`)은 **직렬화하지 않는다** — 태그
+- 확장점(`IMagnitudeCalc`/`IExecutionCalc`/`ITargetSelector`)은 **직렬화하지 않는다** — 태그
   인덱스만 싣고 `Load` 가 넘겨받은 `SeamRegistry` 로 다시 해석한다. 미등록 태그는 예외다.
 - `GameplayTag` 는 `ushort` 인덱스로만 싣는다. fingerprint 검사가 인덱스 의미를 보장한다.
 - `BigNum` 은 `long` 가수 + `int` 지수로 싣는다.

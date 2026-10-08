@@ -200,7 +200,7 @@ GAS는 활성화가 비동기이고 네트워크 예측을 거치므로 결과�
 
 - **이벤트 흐름.** `FlexiCore.EnqueueEvent(IEventContext)`는 이벤트를 큐에 쌓는다. 러너는 `TriggerCachedEvents`에서 **페이즈 경계에 한꺼번에 드레인**하며 `IFlexiEventResolver.ResolveEvent`를 부른다. 게임은 multicast 구독 대신 resolver 인터페이스 하나(`OnEventReceived`, `ResolveEvent`)와 `IFlexiRunnerResolver.OnFlowFinished`를 구현한다. [FlexiCore.cs L6-26, L284-303](https://github.com/PhysaliaStudio/Flexi/blob/51da089e62d7b9bea03ddd7fa087078ecef2254d/Packages/studio.physalia.flexi/Runtime/FlexiCore.cs#L284-L303), [AbilityEventQueue.cs](https://github.com/PhysaliaStudio/Flexi/blob/51da089e62d7b9bea03ddd7fa087078ecef2254d/Packages/studio.physalia.flexi/Runtime/Internal/AbilityEventQueue.cs)
 - **할당 비용.** 이벤트는 마커 인터페이스 `IEventContext`를 구현하는 게임 정의 **클래스**여서 이벤트마다 할당된다. 큐의 `Dequeue`도 `RemoveAt(0)`이다. [Contexts.cs](https://github.com/PhysaliaStudio/Flexi/blob/51da089e62d7b9bea03ddd7fa087078ecef2254d/Packages/studio.physalia.flexi/Runtime/Runner/Contexts.cs)
-- **교훈.** "지연 큐 + 페이즈 경계 드레인 + 도메인 지식은 게임 구현 인터페이스로"라는 형태는 Bun3의 기존 방침(시섬, 페이즈 경계, 새 큐 금지)과 같은 계열이다. 페이로드는 값 타입이어야 한다.
+- **교훈.** "지연 큐 + 페이즈 경계 드레인 + 도메인 지식은 게임 구현 인터페이스로"라는 형태는 Bun3의 기존 방침(확장점, 페이즈 경계, 새 큐 금지)과 같은 계열이다. 페이로드는 값 타입이어야 한다.
 
 ### 9.5 비교
 

@@ -15,7 +15,7 @@
 - [x] ItemCatalog<TDefinition> + ItemCatalogBuilder<TDefinition> (Register/AddValidator/Build)
 - [x] 카탈로그 테스트
 
-## 3단계 — 수량 시섬
+## 3단계 — 수량 확장점
 - [x] IQuantityOps<TQuantity> / LongQuantityOps / BigNumQuantityOps
 - [x] BigNum 손실 의미론 XML 문서 명시
 
