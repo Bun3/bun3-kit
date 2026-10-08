@@ -30,7 +30,7 @@ flowchart TB
   AB["어빌리티 Ability<br/>스킬 = 조건 + 비용 + 쿨다운 + 효과 목록"]
   EF["효과 Effect<br/>데미지 · 버프 · 도트 · 쿨다운<br/>즉발 · 지속 · 무한"]
   EV["게임플레이 이벤트<br/>누가 누구에게 얼마나"]
-  SE["시섬 · 게임 코드 확장점<br/>계산식 · 실행 계산 · 대상 선택"]:::game
+  SE["확장점 · 게임 코드가 채우는 곳<br/>계산식 · 실행 계산 · 대상 선택"]:::game
   TITLE ~~~ U
   U -->|보유| AT
   U -->|보유| TG
@@ -72,12 +72,12 @@ sequenceDiagram
 %%{init: {"flowchart": {"wrappingWidth": 640}}}%%
 flowchart LR
   H1["지킨 원칙"]:::head ~~~ H2["어떻게"]:::head ~~~ H3["확인 · 결과"]:::head
-  P1["데이터가 정본<br/>콘텐츠는 코드 없이"] --> M1["효과 · 어빌리티 · 아키타입 = JSON 데이터<br/>로드 시 컴파일 · 검증, 수식은 한 번만 파싱<br/>새 공식이 필요할 때만 시섬 코드"] --> R1["피해 반사 · 쿨다운 20% 감소 반지<br/>코드 0줄 (테스트로 고정)"]:::ok
+  P1["데이터가 정본<br/>콘텐츠는 코드 없이"] --> M1["효과 · 어빌리티 · 아키타입 = JSON 데이터<br/>로드 시 컴파일 · 검증, 수식은 한 번만 파싱<br/>새 공식이 필요할 때만 확장점 코드"] --> R1["피해 반사 · 쿨다운 20% 감소 반지<br/>코드 0줄 (테스트로 고정)"]:::ok
   P2["결정론<br/>같은 입력이면 같은 결과"] --> M2["시간 = 틱 카운터뿐 · 난수 = 시드 주입 IRng<br/>처리 · 집계 순서 고정"] --> R2["골든 해시 테스트<br/>스냅샷 복원 · 효과 제거 후 비트 동일"]:::ok
   P3["틱 경계 규율<br/>틱 밖에서는 상태가 안 바뀐다"] --> M3["틱 밖 = 명령 큐 적재 · 조회만<br/>결과 = 관찰 버퍼 4종"] --> R3["명령은 쌓인 순서대로 처리<br/>틱 중 외부 변경 경합 없음"]:::ok
   P4["핫패스 무할당"] --> M4["풀 · 버퍼 재사용<br/>클로저 · LINQ · 문자열 생성 금지"] --> R4["부하 벤치 측정 구간<br/>GC 할당 0"]:::ok
   P5["캐시에 맞는 유닛"] --> M5["아키타입별 속성 레이아웃 · 시작 어빌리티 공유<br/>수정자가 붙은 슬롯만 합산 기록<br/>기한이 된 유닛만 시간 진행"] --> R5["몹 2.8 → 1.5KB · 영웅 7.8 → 5.1KB<br/>유닛 · 틱당 100 → 70ns (월드 50개)"]:::ok
-  P6["프레임워크는 도메인을 모른다"] --> M6["게임 지식은 시섬 3종 · IRng · 태그로만 들어온다"] --> R6["다음 게임도<br/>콘텐츠와 시섬만 새로 짠다"]:::ok
+  P6["프레임워크는 도메인을 모른다"] --> M6["게임 지식은 확장점 3종 · IRng · 태그로만 들어온다"] --> R6["다음 게임도<br/>콘텐츠와 확장점만 새로 짠다"]:::ok
   classDef head fill:#255f80,stroke:#255f80,color:#ffffff,font-weight:bold
   classDef ok fill:#dff0e6,stroke:#2f7a4f,color:#123a24
   classDef default fill:#e2edf3,stroke:#255f80,color:#14303f
@@ -154,7 +154,7 @@ flowchart TB
   subgraph RT["Bun3.Gameplay 런타임"]
     direction LR
     TC["TagCatalog<br/>불변 · ushort 인덱스"]
-    DB["GameplayDatabase<br/>태그 · 속성 · 시섬 · 효과 · 어빌리티 · 아키타입<br/>불변 · 월드 간 공유"]
+    DB["GameplayDatabase<br/>태그 · 속성 · 확장점 · 효과 · 어빌리티 · 아키타입<br/>불변 · 월드 간 공유"]
     W["World<br/>유닛 · 명령 큐 · EffectPipeline"]
   end
   subgraph HOST["실행 환경"]
@@ -189,7 +189,7 @@ flowchart TB
 flowchart TD
   T["TagCatalog 로드<br/>TagCatalogBinary.Load"] --> R
   R["속성 등록<br/>AttributeRegistryBuilder.Register(id, 이름, min, max)"]:::game --> S
-  S["시섬 등록<br/>IMagnitudeCalc · IExecutionCalc · ITargetSelector"]:::game --> D
+  S["확장점 등록<br/>IMagnitudeCalc · IExecutionCalc · ITargetSelector"]:::game --> D
   D{"콘텐츠를<br/>어떻게 받나"}
   D -->|"개발 · JSON 또는 코드"| B["GameplayDatabase.Build<br/>효과 → 어빌리티 → 아키타입 순서로 컴파일 · 검증"]
   D -->|"출시 · 바이너리"| L["GameplayCatalogBinary.Load<br/>지문 · 서명 확인"]
@@ -211,7 +211,7 @@ flowchart TB
   subgraph GAME["게임이 만드는 것"]
     direction LR
     C1["콘텐츠<br/>태그 · 속성 · 효과 · 어빌리티 · 아키타입"]:::game
-    C2["시섬 구현<br/>크기 계산 · 실행 계산 · 대상 선택"]:::game
+    C2["확장점 구현<br/>크기 계산 · 실행 계산 · 대상 선택"]:::game
     C3["AI · 입력 처리"]:::game
     C4["게임 규칙<br/>사망 판정 · 리스폰 · 보상"]:::game
     C5["루프와 운영<br/>Tick 주기 · 네트워크 · 저장"]:::game
