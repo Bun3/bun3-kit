@@ -9,6 +9,7 @@ Bun3's personal framework monorepo.
 | `unity/` | Unity package development project (`com.bun3.unity.*`) |
 
 - Design doc: `docs/superpowers/specs/2026-07-26-monorepo-structure-design.md`
+- Architecture diagrams (Korean): [`docs/architecture/gameplay.md`](docs/architecture/gameplay.md) — Bun3.Gameplay
 - Solutions: root `Bun3.sln` (common+server). `unity/unity.sln` is Unity-generated.
 - Consumption: server/.NET via NuGet, Unity via `?path=` UPM git URLs. The server app
   entry point lives in the separate `bun3-server-template` repo.
