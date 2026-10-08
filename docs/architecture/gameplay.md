@@ -1,7 +1,6 @@
 # Bun3.Gameplay 구조 지도
 
 - 기준: `Bun3.Gameplay` 0.14.0 · `Bun3.Gameplay.Authoring` 0.3.0
-- 다이어그램만 위에서부터 순서대로 보면 패키지가 무엇을 하는지, 무엇으로 만들었는지, 무엇을 중요하게 지켰는지 잡히도록 구성했다.
 - 결정의 근거와 경위는 스펙이 정본이다 — [프레임워크](../superpowers/specs/2026-08-10-gameplay-framework-design.md) ·
   [속성·효과](../superpowers/specs/2026-08-17-gameplay-slice2-attributes-effects-design.md) ·
   [어빌리티·유닛·월드](../superpowers/specs/2026-08-20-gameplay-slice3-ability-unit-world-design.md)
