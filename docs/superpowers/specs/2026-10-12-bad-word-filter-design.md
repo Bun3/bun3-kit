@@ -132,7 +132,7 @@ Case is preserved here; stream B needs it.
 - Skipped when the text has no ASCII letter.
 - Keep ASCII letters (after step 0); drop everything else.
 - Map with the KS X 5002 layout — consonants `q w e r t a s d f g z x c v` = ㅂㅈㄷㄱㅅㅁㄴㅇㄹㅎㅋㅌㅊㅍ, vowels `y u i o p h j k l b n m` = ㅛㅕㅑㅐㅔㅗㅓㅏㅣㅠㅜㅡ, Shift `Q W E R T O P` = ㅃㅉㄸㄲㅆㅒㅖ, other uppercase = lowercase — then compose with `HangulComposer`. `tlqkf` → `시발`, `qudtls` → `병신`.
-- A **short** Korean pattern (normalized length < 2, or containing any loose jamo) matches in stream B only when the match spans the whole stream. `tq` alone → `ㅅㅂ` blocks; `tq` inside an English word does not.
+- Stream B is scanned only when it has two or more jamo/syllables (a single typed letter is not readable as Korean, so single-character patterns never match here). A **short** Korean pattern (normalized length < 2, or containing any loose jamo) matches only when the match spans the whole stream **and** the input contains no Hangul (the Hangul stream is empty): `tq` → `ㅅㅂ` and `qt` → `ㅂㅅ` block, `tq` inside an English word or `가qt` does not. Long patterns are unaffected (`가tlqkf` still blocks via `시발`).
 
 ### Stream C — Latin
 

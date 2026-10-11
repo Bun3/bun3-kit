@@ -1,6 +1,6 @@
 # com.bun3.badwords default Korean entries.
 # Grammar: one entry per line; '#' starts a comment; '!' allow; '|' word boundary (English). See README.md.
-# Source: korcen (MIT) https://github.com/Tanat05/korcen @ eecd9763dbdccce3dc96ddb578ef0b6396058fa9
+# Sources: korcen (MIT) https://github.com/Tanat05/korcen @ eecd9763dbdccce3dc96ddb578ef0b6396058fa9; doublems/korean-bad-words (MIT) https://github.com/doublems/korean-bad-words @ 96d6ce489b64fcf258cd4c25b9a1b3a62b0f5558
 
 # == korcen general ==
 ㅗ
@@ -47,7 +47,6 @@
 싸발
 십발
 슈발
-야발
 씨불
 씨랄
 쉬발
@@ -59,9 +58,6 @@
 씨밝
 씨밯
 쑤발
-치발
-발씨
-리발
 씨볼
 찌발
 씨비바라랄
@@ -94,8 +90,6 @@
 신발년
 신발놈
 띠바랄
-시방
-씨방
 씨부련
 시부련
 씨잇발
@@ -184,7 +178,6 @@
 십새
 새키
 씹색
-새까
 새꺄
 샛끼
 새뀌
@@ -342,7 +335,6 @@
 개쉨
 개쉬끼
 개쉬리
-개쉽
 개습
 개습세
 개습쌔
@@ -429,7 +421,6 @@
 게너마
 게년
 게노마
-게놈
 게뇨나
 게뇬
 게뇸
@@ -561,7 +552,6 @@
 !아저씨
 !바로
 !저거시
-!우리발
 !피시방
 !피씨방
 !방장
@@ -1186,24 +1176,13 @@
 !야스쿠
 !이게년
 !떻게년
-!시방영
-!시방송
-!시방식
-!토리발
-!무리발
 !다시불
 !역시불
-!야발견
 !어색스
-!임새까
-!새까맣
-!새까먹
 !렇게같은
 !없니엄마
 !머니엄마
 !머니아빠
-!윤발씨
-!리치발
 !새끼공룡
 
 # == doublems/korean-bad-words (MIT) @ 96d6ce489b64fcf258cd4c25b9a1b3a62b0f5558 ==
@@ -1233,7 +1212,6 @@
 게자시
 게호로년
 게호로놈
-광년
 광뇬
 나쁜년
 나쁜뇬
@@ -1452,7 +1430,6 @@
 지룔
 지미럴
 짬지
-쪼까
 카섹
 커닐링구스
 컴샷

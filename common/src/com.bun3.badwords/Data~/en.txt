@@ -8,24 +8,23 @@ sival
 sibar
 sibak
 sipal
-siqk
+|siqk|
 tlbal
 tlval
 tlbar
 tlbak
 tlpal
-tlqk
-siba
-tlba
-siva
-tlva
+|tlqk|
+|siba|
+|tlba|
+|tlva|
 tlqkf
 tlqkd
 wlfkf
 giral
 rotorl
 rotprl
-bozi
+|bozi|
 |sex|
 
 # == dsojevic severity 3-4 ==

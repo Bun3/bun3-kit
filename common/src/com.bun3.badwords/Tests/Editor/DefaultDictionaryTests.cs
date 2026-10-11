@@ -35,6 +35,14 @@ namespace Bun3.BadWords.Tests
         [TestCase("Jurassic")]
         [TestCase("hello world")]
         [TestCase("가")]
+        [TestCase("공룡 다리 발자국")]
+        [TestCase("게놈")]
+        [TestCase("새까만")]
+        [TestCase("10광년")]
+        [TestCase("TV")]
+        [TestCase("새끼공룡")]
+        [TestCase("Siva")]
+        [TestCase("H")]
         public void PassesOrdinaryText(string text) =>
             Assert.That(BadWordFilter.Default.ContainsBadWord(text), Is.False, BadWordFilter.Default.Explain(text));
 

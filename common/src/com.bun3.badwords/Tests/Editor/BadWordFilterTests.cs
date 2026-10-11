@@ -31,7 +31,6 @@ namespace Bun3.BadWords.Tests
         [TestCase("t l q k f")]
         [TestCase("qudtls")]
         [TestCase("tq")]
-        [TestCase("whw")]
         [TestCase("fuck")]
         [TestCase("FUCK")]
         [TestCase("f u c k")]
@@ -58,10 +57,23 @@ namespace Bun3.BadWords.Tests
         [TestCase("accumulate")]
         [TestCase("Scunthorpe")]
         [TestCase("tqx")]
+        [TestCase("whw")]
         [TestCase("Player One")]
         [TestCase("가")]
         public void PassesOrdinaryText(string text) =>
             Assert.That(filter.ContainsBadWord(text), Is.False, filter.Explain(text));
+
+        [Test]
+        public void KeyboardStreamIgnoresSingleLettersAndMixedInput()
+        {
+            var shortFilter = new BadWordFilter(new[] { "ㅗ", "ㅂㅅ", "시발" });
+            Assert.That(shortFilter.ContainsBadWord("h"), Is.False);
+            Assert.That(shortFilter.ContainsBadWord("H"), Is.False);
+            Assert.That(shortFilter.ContainsBadWord("공룡h"), Is.False);
+            Assert.That(shortFilter.ContainsBadWord("가qt"), Is.False);
+            Assert.That(shortFilter.ContainsBadWord("qt"), Is.True);
+            Assert.That(shortFilter.ContainsBadWord("가tlqkf"), Is.True);
+        }
 
         [Test]
         public void LongInputUsesThePooledPath()

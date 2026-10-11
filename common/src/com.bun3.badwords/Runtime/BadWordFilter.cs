@@ -86,10 +86,12 @@ namespace Bun3.BadWords
 
         StreamKind Find(ReadOnlySpan<char> text, Span<char> work, Span<char> stream, out Match match)
         {
-            int length = TextNormalizer.Hangul(text, work, stream);
-            if (korean.TryFindBlocked(stream.Slice(0, length), false, out match)) return StreamKind.Hangul;
-            length = TextNormalizer.Keyboard(text, work, stream);
-            if (length > 0 && korean.TryFindBlocked(stream.Slice(0, length), true, out match)) return StreamKind.Keyboard;
+            int hangulLength = TextNormalizer.Hangul(text, work, stream);
+            if (korean.TryFindBlocked(stream.Slice(0, hangulLength), false, out match)) return StreamKind.Hangul;
+            // Stream B drops Hangul: a one-letter stream is not readable as Korean, and short patterns only count for Hangul-free input.
+            int length = TextNormalizer.Keyboard(text, work, stream);
+            if (length > 1 && korean.TryFindBlocked(stream.Slice(0, length), true, out match, hangulLength > 0)) return StreamKind.Keyboard;
+            match = default;
             length = TextNormalizer.Latin(text, work, stream);
             if (length == 0) return StreamKind.None;
             if (english.TryFindBlocked(stream.Slice(0, length), false, out match)) return StreamKind.Latin;
