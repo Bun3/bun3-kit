@@ -9,10 +9,12 @@
     <Version>0.1.0</Version>
     <Authors>Bun3</Authors>
     <RepositoryUrl>https://github.com/Bun3/bun3-kit</RepositoryUrl>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 
   <ItemGroup>
     <Compile Remove="Tests/**/*.cs" />
+    <None Include="Third Party Notices.md;README.md" Pack="true" PackagePath="/" />
   </ItemGroup>
 
 </Project>

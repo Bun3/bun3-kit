@@ -17,13 +17,20 @@ namespace Bun3.BadWords.Tests
         {
             string shortText = "시1발 f.u.c.k 시발점 tlqkf class";
             string longText = new string('a', 300) + " fuck";
+            string cleanText = "hello world 다시 발견 class Player One";
+            string cleanLong = cleanText;
+            while (cleanLong.Length <= 300) cleanLong += " " + cleanText;
             filter.ContainsBadWord(shortText);
             filter.ContainsBadWord(longText);
+            filter.ContainsBadWord(cleanText);
+            filter.ContainsBadWord(cleanLong);
 #if UNITY_5_3_OR_NEWER
             Assert.That(() =>
             {
                 filter.ContainsBadWord(shortText);
                 filter.ContainsBadWord(longText);
+                filter.ContainsBadWord(cleanText);
+                filter.ContainsBadWord(cleanLong);
             }, Is.Not.AllocatingGCMemory());
 #else
             long before = GC.GetAllocatedBytesForCurrentThread();
@@ -31,6 +38,8 @@ namespace Bun3.BadWords.Tests
             {
                 filter.ContainsBadWord(shortText);
                 filter.ContainsBadWord(longText);
+                filter.ContainsBadWord(cleanText);
+                filter.ContainsBadWord(cleanLong);
             }
             Assert.That(GC.GetAllocatedBytesForCurrentThread() - before, Is.EqualTo(0));
 #endif
@@ -45,6 +54,12 @@ namespace Bun3.BadWords.Tests
             var actual = new bool[4000];
             Parallel.For(0, actual.Length, i => actual[i] = filter.ContainsBadWord(inputs[i % inputs.Length]));
             for (int i = 0; i < actual.Length; i++) Assert.That(actual[i], Is.EqualTo(expected[i % inputs.Length]));
+
+            string[] defaultInputs = { "시발점", "Player", "fuck", "tlqkf", "hello" };
+            var defaultExpected = new bool[defaultInputs.Length];
+            for (int i = 0; i < defaultInputs.Length; i++) defaultExpected[i] = BadWordFilter.Default.ContainsBadWord(defaultInputs[i]);
+            Parallel.For(0, actual.Length, i => actual[i] = BadWordFilter.Default.ContainsBadWord(defaultInputs[i % defaultInputs.Length]));
+            for (int i = 0; i < actual.Length; i++) Assert.That(actual[i], Is.EqualTo(defaultExpected[i % defaultInputs.Length]));
         }
     }
 }

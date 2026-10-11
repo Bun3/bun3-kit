@@ -30,6 +30,10 @@ var filter = new BadWordFilter(BadWordFilter.DefaultEntries.Concat(new[] { "cust
 
 Not handled: initial-consonant projection of syllables, symbols imitating jamo, digit puns mixed into Korean words, two-letter splits (`fu ck`), self-censoring (`f*ck`), mathematical alphanumerics, conjoining jamo (pass NFC text). Korean entries may contain only Hangul and spaces.
 
+More limits: a leet digit next to an end boundary is not folded (`ass1`); `!` is not read as `i`; a precomposed syllable followed by loose jamo is not recombined; more than 32 matches in one scan count as a bad word, so an allowed word repeated 33 or more times blocks; English entries containing symbols treat those symbols as word boundaries.
+
+Memory: inputs longer than the shared `ArrayPool`'s maximum array length (about 1M chars on some runtimes) may allocate. Cap input length in the consumer; nicknames and chat lines are far below it.
+
 ## Default dictionary
 
 Sources live in `Data~/` (not imported by Unity). `Runtime/BadWordFilter.Default.cs` is generated; regenerate with `BUN3_BADWORDS_REGEN=1 dotnet test common/tests/Bun3.BadWords.Tests --filter GeneratedDefaultIsUpToDate`. Bump the package version for any data change. Licenses: `Third Party Notices.md`.

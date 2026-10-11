@@ -1179,7 +1179,6 @@ namespace Bun3.BadWords
             "\uAC1C\uC790\uC2A5",
             "\uAC1C\uC790\uC2C1",
             "\uAC1C\uC89D",
-            "\uAC8C\uBCF4\uC9C0",
             "\uAC8C\uC139",
             "\uAC8C\uC14B\uD0A4",
             "\uAC8C\uC250\uC774",
@@ -2332,7 +2331,6 @@ namespace Bun3.BadWords
             "!spiciness",
             "!spicinesses",
             "!spicing",
-            "!spicks",
             "!spicula",
             "!spiculae",
             "!spicular",
@@ -2688,6 +2686,8 @@ namespace Bun3.BadWords
             "!specialist",
             "!pakistan",
             "!expansys",
+            "!cocoon",
+            "!cocoons",
         };
     }
 }

@@ -16,7 +16,10 @@ namespace Bun3.BadWords.Tests
         public void GeneratedDefaultIsUpToDate()
         {
             List<string> entries = ReadDataEntries();
-            _ = new BadWordFilter(entries);
+            var filter = new BadWordFilter(entries);
+            foreach (string entry in entries)
+                if (!entry.StartsWith("!", StringComparison.Ordinal))
+                    Assert.That(filter.ContainsBadWord(entry.Trim('|')), Is.True, "Dead block entry: " + entry);
             string expected = Render(entries);
             string path = Path.Combine(PackageRoot(), "Runtime", "BadWordFilter.Default.cs");
             if (Environment.GetEnvironmentVariable(regenerateVariable) == "1")

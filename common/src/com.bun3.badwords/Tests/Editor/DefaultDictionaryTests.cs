@@ -43,6 +43,7 @@ namespace Bun3.BadWords.Tests
         [TestCase("새끼공룡")]
         [TestCase("Siva")]
         [TestCase("H")]
+        [TestCase("Cocoon")]
         public void PassesOrdinaryText(string text) =>
             Assert.That(BadWordFilter.Default.ContainsBadWord(text), Is.False, BadWordFilter.Default.Explain(text));
 

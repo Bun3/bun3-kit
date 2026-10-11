@@ -917,7 +917,6 @@ zoophile
 !spiciness
 !spicinesses
 !spicing
-!spicks
 !spicula
 !spiculae
 !spicular
@@ -1275,3 +1274,5 @@ zoophile
 !specialist
 !pakistan
 !expansys
+!cocoon
+!cocoons
