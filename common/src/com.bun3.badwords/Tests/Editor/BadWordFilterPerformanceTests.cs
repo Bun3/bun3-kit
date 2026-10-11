@@ -1,6 +1,10 @@
 using System;
 using System.Threading.Tasks;
 using NUnit.Framework;
+#if UNITY_5_3_OR_NEWER
+using UnityEngine.TestTools.Constraints;
+using Is = UnityEngine.TestTools.Constraints.Is;
+#endif
 
 namespace Bun3.BadWords.Tests
 {
@@ -20,7 +24,7 @@ namespace Bun3.BadWords.Tests
             {
                 filter.ContainsBadWord(shortText);
                 filter.ContainsBadWord(longText);
-            }, UnityEngine.TestTools.Constraints.Is.Not.AllocatingGCMemory());
+            }, Is.Not.AllocatingGCMemory());
 #else
             long before = GC.GetAllocatedBytesForCurrentThread();
             for (int i = 0; i < 100; i++)
