@@ -93,7 +93,7 @@ entry    = ["!"] ["|"] word ["|"]
 - leading/trailing `|` — word boundary required before/after the match. Latin entries only.
 - Language is inferred: an entry containing a Hangul syllable or compatibility jamo is Korean; otherwise it is English.
 - Entries are normalized with the same stream normalizer as text (Korean: stream A rules; English: stream C rules), so spelling variants of an entry collapse to one pattern.
-- `ArgumentException` when: the entry normalizes to empty; it mixes Hangul and Latin; `|` is used on a Korean entry; it is `!` or `|` alone. Duplicates after normalization are merged.
+- `ArgumentException` when: the entry is null; it has no Hangul or Latin letter (includes `!`/`|` alone and digit-only entries); a Korean entry contains anything other than Hangul and spaces (stream A would silently drop it, e.g. `18놈` → `놈`); `|` is used on a Korean entry. Duplicates after normalization are merged (`Allow`/`Short` OR, boundaries AND).
 
 ## Normalization
 
@@ -170,11 +170,11 @@ Case is preserved here; stream B needs it.
 
 ### Curation (one-time for 0.1.0)
 
-1. korcen: expand the `general`, `sexual`, `parent`, `race`, `belittle` patterns into literal entries; skip regex constructs that do not expand finitely and record them in the research doc. Its false-positive list becomes `!` entries. Skip `minor`, `politics`, `japanese`, `chinese`, `special`, `english`.
+1. korcen: its `*_PROFANITY_PATTERNS` lists are literal strings (joined with `re.escape`). Take `general`, `sexual`, `parent`, `race`, `belittle`; keep pure-Hangul entries (spaces removed) as Korean, pure-Latin entries as English (≤ 3 letters get `|…|` boundaries), and skip entries mixing digits/symbols/scripts (count recorded in the research doc). Matching `FALSE_POSITIVE_PATTERNS_*` become `!` entries. Skip `minor`, `politics`, `japanese`, `chinese`, `special`, `english`.
 2. doublems: add strong terms missing from step 1.
 3. dsojevic: severity 3–4 entries; `allow_partial: false` → `|` boundaries; `exceptions` → `!` entries.
 4. Romanized Korean (`sibal`, `byungsin`, …) goes to `en.txt`.
-5. False-positive sweep: run `Default` over NSMC (CC0, 200k sentences) downloaded to a scratch directory (never committed); review hits and add allow entries.
+5. False-positive sweeps (corpora in a scratch directory, never committed), via an `Assert.Ignore`-guarded dotnet-only test that reports `Explain` reasons: English over `google-10000-english-usa-no-swears` (every hit is a false positive → `!` entries, or a `|` boundary when one pattern has more than 10 hits); Korean over NSMC (CC0, 200k sentences; review the top 100 reasons). Add `!다시발` explicitly.
 6. Owner spot-checks the lists before merge.
 
 ## Tests
@@ -184,12 +184,15 @@ Shared NUnit sources under `Tests/Editor` run in both the Unity Test Runner and 
 1. **Rule regression table** (fake dictionaries): one case per rule above — step 0 removals/mappings, stream A drop + composition (compound vowel/final, final moving, precomposed flush, loose jamo kept), stream B mapping incl. Shift and the short-pattern whole-stream rule, stream C leet/boundary/single-letter join/scan 2 + ENc, `|` flags, allow covering fully vs. partially.
 2. **HangulComposer** unit cases.
 3. **Differential test**: seeded random small dictionaries (Latin and Hangul syllable alphabets) and random texts; automaton match sets equal naive `O(n·m)` search.
-4. **Default dictionary smoke**: must-block (`시발`, `ㅅㅂ`, `tlqkf`, `병신`, `fuck`, `sh1t`, `f u c k`, `fuuuck`) and must-pass (`시발점`, `다시 발견`, `수박`, `class`, `assassin`, `Scunthorpe`, `but`, a list of ordinary nicknames).
+4. **Default dictionary smoke**: must-block (`시발`, `ㅅㅂ`, `tlqkf`, `병신`, `fuck`, `b1tch`, `f u c k`, `fuuuck`) and must-pass (`시발점`, `다시 발견`, `수박`, `class`, `assassin`, `Scunthorpe`, `but`, `document`, `accumulate`, a list of ordinary nicknames). dsojevic rates `shit`, `dick`, `cock` severity 2, so they pass under the severity 3–4 rule.
 5. **Zero allocation**: ≤256-char and >256-char (after warm-up) inputs. Unity: `Is.Not.AllocatingGCMemory()`; dotnet: `GC.GetAllocatedBytesForCurrentThread()` delta = 0 (`#if UNITY_5_3_OR_NEWER`).
 6. **Thread safety**: `Parallel.For` over mixed inputs with `Default`; results equal the sequential run.
 7. **Constructor validation**: each malformed entry form throws `ArgumentException`.
 8. **Generated file up to date** (dotnet only).
 9. **Build cost report**: `Default` build time and retained bytes written to test output; not asserted.
+10. **Normalizer cases**: `TextNormalizer` step 0 and each stream on direct inputs.
+
+`BadWordFilter` also has an `internal string Explain(ReadOnlySpan<char>)` (allocating, diagnostics only) returning `"<Stream>:<normalized span>"` for curation and test messages.
 
 ## Known limits
 
@@ -197,6 +200,7 @@ Shared NUnit sources under `Tests/Editor` run in both the Unity Test Runner and 
 |---|---|
 | Initial-consonant projection of syllables | `수박` → `ㅅㅂ` false positive |
 | Symbols imitating jamo (`^`→ㅅ, `77`→ㄲ) | false-positive risk; add on real cases |
+| Digit puns mixed into Korean words (`18놈`, `10새끼`) | stream A drops digits; only the Hangul remainder is matched |
 | Two-letter splits (`fu ck`, `fu_ck`), self-censoring (`f*ck`), `!` as `i` | conflicts with boundary rules |
 | Leet digit adjacent to an end-boundary pattern (`ass1`) | digit maps to a letter, breaking the boundary |
 | Mathematical alphanumerics (𝐬), conjoining jamo U+1100 block | not rendered by typical game fonts / not produced by IMEs; consumers should pass NFC text |
