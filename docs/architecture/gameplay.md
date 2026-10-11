@@ -1,7 +1,7 @@
 # Bun3.Gameplay 구조 지도
 
 - 기준: `Bun3.Gameplay` 0.14.0 · `Bun3.Gameplay.Authoring` 0.3.0
-- 결정의 근거와 경위는 스펙이 정본이다 — [프레임워크](../superpowers/specs/2026-08-10-gameplay-framework-design.md) ·
+- 스펙: [프레임워크](../superpowers/specs/2026-08-10-gameplay-framework-design.md) ·
   [속성·효과](../superpowers/specs/2026-08-17-gameplay-slice2-attributes-effects-design.md) ·
   [어빌리티·유닛·월드](../superpowers/specs/2026-08-20-gameplay-slice3-ability-unit-world-design.md)
 
@@ -48,14 +48,14 @@ flowchart TB
   classDef default fill:#e2edf3,stroke:#255f80,color:#14303f
 ```
 
-## 2. 예: 가시 갑옷 — 코드 0줄로 만든 피해 반사
+## 2. 가시 갑옷 — 코드 0줄 피해 반사
 
 ```mermaid
 sequenceDiagram
   participant A as 공격자
   participant P as EffectPipeline
   participant D as 수비자 (thorns 보유)
-  Note over A,D: 데이터 정의 3개뿐 — bolt(즉발 피해) · thorns(무한, 반응 체인) · retaliate(즉발 반사)
+  Note over A,D: 데이터 정의: bolt(즉발 피해) · thorns(무한, 반응 체인) · retaliate(즉발 반사)
   A->>P: bolt 적용<br/>Modifiers: Hp Add −40 · RaiseEvents: event.damage.taken
   P->>D: Hp Base 100 → 60
   P->>P: 이벤트 발생<br/>Tag event.damage.taken · Source 공격자 · Target 수비자<br/>Magnitude −40 (클램프 후 실제 변화량)
@@ -70,19 +70,17 @@ sequenceDiagram
 ```mermaid
 %%{init: {"flowchart": {"wrappingWidth": 640}}}%%
 flowchart LR
-  H1["지킨 원칙"]:::head ~~~ H2["어떻게"]:::head ~~~ H3["확인 · 결과"]:::head
-  P1["데이터가 정본<br/>콘텐츠는 코드 없이"] --> M1["효과 · 어빌리티 · 아키타입 = JSON 데이터<br/>로드 시 컴파일 · 검증, 수식은 한 번만 파싱<br/>새 공식이 필요할 때만 확장점 코드"] --> R1["피해 반사 · 쿨다운 20% 감소 반지<br/>코드 0줄 (테스트로 고정)"]:::ok
+  H1["지킨 원칙"]:::head ~~~ H2["어떻게"]:::head ~~~ H3["확인 · 결과<br/>i7-13700K · 현실 인구 벤치 3회 최솟값"]:::head
+  P1["데이터가 정본<br/>콘텐츠는 코드 없이"] --> M1["효과 · 어빌리티 · 아키타입 = JSON 데이터<br/>로드 시 컴파일 · 검증, 수식은 한 번만 파싱<br/>새 공식이 필요할 때만 확장점 코드"] --> R1["피해 반사 · 쿨다운 20% 감소 반지<br/>코드 0줄"]:::ok
   P2["결정론<br/>같은 입력이면 같은 결과"] --> M2["시간 = 틱 카운터뿐 · 난수 = 시드 주입 IRng<br/>처리 · 집계 순서 고정"] --> R2["골든 해시 테스트<br/>스냅샷 복원 · 효과 제거 후 비트 동일"]:::ok
   P3["틱 경계 규율<br/>틱 밖에서는 상태가 안 바뀐다"] --> M3["틱 밖 = 명령 큐 적재 · 조회만<br/>결과 = 관찰 버퍼 4종"] --> R3["명령은 쌓인 순서대로 처리<br/>틱 중 외부 변경 경합 없음"]:::ok
   P4["핫패스 무할당"] --> M4["풀 · 버퍼 재사용<br/>클로저 · LINQ · 문자열 생성 금지"] --> R4["부하 벤치 측정 구간<br/>GC 할당 0"]:::ok
   P5["캐시에 맞는 유닛"] --> M5["아키타입별 속성 레이아웃 · 시작 어빌리티 공유<br/>수정자가 붙은 슬롯만 합산 기록<br/>기한이 된 유닛만 시간 진행"] --> R5["몹 2.8 → 1.5KB · 영웅 7.8 → 5.1KB<br/>유닛 · 틱당 100 → 70ns (월드 50개)"]:::ok
-  P6["프레임워크는 도메인을 모른다"] --> M6["게임 지식은 확장점 3종 · IRng · 태그로만 들어온다"] --> R6["다음 게임도<br/>콘텐츠와 확장점만 새로 짠다"]:::ok
+  P6["프레임워크는 도메인을 모른다"] --> M6["게임 지식은 확장점 3종 · IRng · 태그로만 들어온다"]
   classDef head fill:#255f80,stroke:#255f80,color:#ffffff,font-weight:bold
   classDef ok fill:#dff0e6,stroke:#2f7a4f,color:#123a24
   classDef default fill:#e2edf3,stroke:#255f80,color:#14303f
 ```
-
-수치는 i7-13700K에서 현실 인구 벤치(영웅 + 몹 웨이브)를 번갈아 3회 돌린 최솟값이다.
 
 ## 4. 패키지와 기술 스택
 
@@ -130,7 +128,7 @@ flowchart TB
   classDef default fill:#e2edf3,stroke:#255f80,color:#14303f
 ```
 
-## 5. 콘텐츠 파이프라인 — 저작부터 실행까지
+## 5. 콘텐츠 파이프라인
 
 ```mermaid
 %%{init: {"flowchart": {"wrappingWidth": 640}}}%%
@@ -181,7 +179,7 @@ flowchart TB
   classDef default fill:#e2edf3,stroke:#255f80,color:#14303f
 ```
 
-## 6. 기동 순서 — 코드로 월드 하나 띄우기
+## 6. 기동 순서
 
 ```mermaid
 %%{init: {"flowchart": {"wrappingWidth": 640}}}%%
@@ -202,7 +200,7 @@ flowchart TD
   classDef default fill:#e2edf3,stroke:#255f80,color:#14303f
 ```
 
-## 7. 게임과의 경계 — 누가 무엇을 만드나
+## 7. 게임과의 경계
 
 ```mermaid
 %%{init: {"flowchart": {"wrappingWidth": 640}}}%%
@@ -320,7 +318,7 @@ stateDiagram-v2
   조기제거 --> [*]: RemovedPrematurely<br/>OnCompletePrematurely 체인
 ```
 
-## 11. 시간은 필요할 때만 흐른다
+## 11. 기한 기반 시간 진행
 
 ```mermaid
 %%{init: {"flowchart": {"wrappingWidth": 640}}}%%
