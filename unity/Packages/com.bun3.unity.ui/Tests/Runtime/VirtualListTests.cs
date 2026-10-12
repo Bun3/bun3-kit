@@ -398,5 +398,89 @@ namespace Bun3.Unity.UI.Tests
             yield return null;
             foreach (var cell in Visible()) Assert.That(cell.Id, Is.EqualTo(source.Items[cell.Index].Id));
         }
+
+        [UnityTest]
+        public IEnumerator WidthChangeRemeasuresOnlyVisibleItemsAndKeepsTheAnchor()
+        {
+            source.WidthDependent = true;
+            list.EstimatedItemHeight = 120;
+            Fill(source, 500);
+            list.SetSource(source);
+            ScrollTop = 2000;
+            yield return null;
+            var watched = TopVisible();
+            int id = watched.Id;
+            float before = FromTop(watched);
+            source.Bound = 0;
+            ((RectTransform)scroll.transform).sizeDelta = new Vector2(300, ViewportHeight);
+            yield return null;
+            Assert.That(source.Bound, Is.LessThanOrEqualTo(Visible().Count + 1));
+            var after = Find(id);
+            Assert.That(after, Is.Not.Null);
+            Assert.That(FromTop(after!), Is.EqualTo(before).Within(0.5f));
+        }
+
+        [UnityTest]
+        public IEnumerator DragIsRebasedWhenTheListMovesContent()
+        {
+            events = new GameObject("EventSystem", typeof(EventSystem));
+            Fill(source, 300);
+            list.SetSource(source);
+            list.ScrollToEnd();
+            yield return null;
+            ScrollTop -= 500;
+            yield return null;
+            var pointer = new PointerEventData(EventSystem.current)
+            {
+                button = PointerEventData.InputButton.Left,
+                position = new Vector2(200, 150),
+            };
+            ExecuteEvents.Execute(scroll.gameObject, pointer, ExecuteEvents.beginDragHandler);
+            var watched = TopVisible();
+            int id = watched.Id;
+            float before = FromTop(watched);
+            source.Items.RemoveRange(0, 5);
+            list.NotifyRemovedFromStart(5);
+            float corrected = ScrollTop;
+            ExecuteEvents.Execute(scroll.gameObject, pointer, ExecuteEvents.dragHandler);
+            Assert.That(ScrollTop, Is.EqualTo(corrected).Within(0.01f));
+            Assert.That(FromTop(Find(id)!), Is.EqualTo(before).Within(0.5f));
+            ExecuteEvents.Execute(scroll.gameObject, pointer, ExecuteEvents.endDragHandler);
+        }
+
+        [UnityTest]
+        public IEnumerator NotificationsWhileInactiveAreAppliedOnActivation()
+        {
+            Fill(source, 50);
+            list.SetSource(source);
+            yield return null;
+            scroll.gameObject.SetActive(false);
+            Fill(source, 20);
+            list.NotifyAppended(20);
+            source.Items.RemoveRange(0, 10);
+            list.NotifyRemovedFromStart(10);
+            Fill(source, 1);
+            list.NotifyAppended(5); // deliberately wrong: absorbed while a refresh is pending
+            list.ScrollToEnd();
+            scroll.gameObject.SetActive(true);
+            yield return null;
+            Assert.That(list.IsAtEnd, Is.True);
+            var cells = Visible();
+            Assert.That(cells.Count, Is.GreaterThan(0));
+            foreach (var cell in cells) Assert.That(cell.Id, Is.EqualTo(source.Items[cell.Index].Id));
+            Assert.That(cells[cells.Count - 1].Index, Is.EqualTo(source.Count - 1));
+        }
+
+        [UnityTest]
+        public IEnumerator ScrollWithoutMeasurementLeavesElasticOverscrollAlone()
+        {
+            scroll.movementType = ScrollRect.MovementType.Elastic;
+            Fill(source, 100);
+            list.SetSource(source);
+            yield return null;
+            ScrollTop = -40;
+            scroll.onValueChanged.Invoke(scroll.normalizedPosition);
+            Assert.That(ScrollTop, Is.EqualTo(-40).Within(0.01f));
+        }
     }
 }
