@@ -240,9 +240,9 @@ namespace Bun3.Gameplay
         /// the restored state. Queued spawns and despawns are applied first so the registry can match the snapshot.</summary>
         /// <param name="snapshot">Snapshot to restore.</param>
         /// <exception cref="ArgumentException">Thrown when the snapshot's unit set does not match the
-        /// registry — spawn and despawn are not part of a snapshot. Validated against every unit id
-        /// before any unit is restored, so a mismatch leaves the whole registry untouched. Also thrown, before
-        /// anything changes, when the snapshot's RNG state does not fit this world's RNG.</exception>
+        /// registry — spawn and despawn are not part of a snapshot — or when the snapshot's RNG state does not
+        /// fit this world's RNG. Both are validated before any unit or the RNG is restored, so a failed restore
+        /// changes nothing beyond the queued spawns and despawns, which are applied first.</exception>
         /// <exception cref="InvalidOperationException">Thrown when the world's RNG is not an
         /// <see cref="IRestorableRng"/>.</exception>
         public void RestoreSnapshot(WorldSnapshot snapshot)

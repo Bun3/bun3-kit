@@ -85,7 +85,7 @@ namespace Bun3.Gameplay.Effects
         /// <summary>Number of apply requests left in the queue this tick because the budget was exceeded.</summary>
         public int PendingApplyCount => _queue.Count;
 
-        // A restored snapshot never has pending work, so whatever is queued or observed belongs to the abandoned timeline.
+        /// <summary>Clears the apply queue and the observation buffers; a world restore calls it after the units are restored.</summary>
         internal void DiscardPendingWork()
         {
             _queue.Clear();
