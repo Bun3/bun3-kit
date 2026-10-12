@@ -125,6 +125,15 @@
         "com.cysharp.unitask": "https://github.com/Cysharp/UniTask.git?path=src/UniTask/Assets/Plugins/UniTask"
       }
     },
+    "com.bun3.unity.rooms.steam.ngo": {
+      "version": "file:com.bun3.unity.rooms.steam.ngo",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {
+        "com.bun3.unity.rooms.ngo": "0.1.0",
+        "com.bun3.unity.steam.ngo": "0.1.0"
+      }
+    },
     "com.bun3.unity.sound-events": {
       "version": "file:com.bun3.unity.sound-events",
       "depth": 0,
