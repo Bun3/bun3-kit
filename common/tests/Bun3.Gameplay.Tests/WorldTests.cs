@@ -439,6 +439,45 @@ public sealed class WorldTests
     }
 
     [Test]
+    public void Restore_then_replay_reproduces_chance_rolls_bit_identically()
+    {
+        var kit = EffectTestKit.Create();
+        var bolt = Bolt();
+        bolt.ChanceToApply = new MagnitudeDef
+        {
+            Base = Bun3.Gameplay.Attributes.Operand.Constant(Bun3.Gameplay.Numerics.BigNum.FromParts(5, -1)),
+        };
+        kit.AddEffect(bolt);
+        var world = MakeWorld(kit, new XorShiftRng(2024));
+        var unit = MakeUnit(kit, 1);
+        world.Spawn(unit);
+        world.Tick();
+        unit.Attributes.SetBase(EffectTestKit.MaxHp, 1000);
+        unit.Attributes.SetBase(EffectTestKit.Hp, 1000);
+        var snapshot = world.CreateSnapshot();
+
+        var first = Replay();
+        world.RestoreSnapshot(snapshot);
+        var second = Replay();
+
+        Assert.That(second, Is.EqualTo(first));
+        Assert.That(first[^1], Is.InRange((Bun3.Gameplay.Numerics.BigNum)810, (Bun3.Gameplay.Numerics.BigNum)990), "the rolls both hit and miss");
+
+        Bun3.Gameplay.Numerics.BigNum[] Replay()
+        {
+            var hp = new Bun3.Gameplay.Numerics.BigNum[20];
+            for (var i = 0; i < hp.Length; i++)
+            {
+                world.EnqueueApply(kit.EffectId("bolt"), unit.Id, unit.Id);
+                world.Tick();
+                hp[i] = unit.Attributes.GetBase(EffectTestKit.Hp);
+            }
+
+            return hp;
+        }
+    }
+
+    [Test]
     public void Snapshot_needs_a_restorable_rng()
     {
         var kit = EffectTestKit.Create();
