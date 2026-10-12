@@ -9,6 +9,8 @@ namespace Bun3.Chat.Tests
         [TestCase("a\nb", "a b")]
         [TestCase("a\tb\r\n", "a b")]
         [TestCase("  hi  ", "hi")]
+        [TestCase("a\u2028b", "a b")]
+        [TestCase("a\u2029b", "a b")]
         public void ControlCharactersBecomeSpacesAndEdgesAreTrimmed(string input, string expected)
         {
             Assert.That(ChatText.TryNormalize(input, 100, out var text), Is.True);
@@ -19,6 +21,13 @@ namespace Bun3.Chat.Tests
         public void FormatCharactersAreRemoved()
         {
             Assert.That(ChatText.TryNormalize("a\u200Bb\u202Ec", 100, out var text), Is.True);
+            Assert.That(text, Is.EqualTo("abc"));
+        }
+
+        [Test]
+        public void NonBmpFormatCharactersAreRemoved()
+        {
+            Assert.That(ChatText.TryNormalize("a\U000E0041b\U0001D173c", 100, out var text), Is.True);
             Assert.That(text, Is.EqualTo("abc"));
         }
 
@@ -37,10 +46,26 @@ namespace Bun3.Chat.Tests
         [TestCase("\n\t")]
         [TestCase("\u200B")]
         [TestCase("\u0301\u0301")]
+        [TestCase("\uFE0F")]
+        [TestCase("\u3164")]
+        [TestCase("\u115F\u1160")]
+        [TestCase("\uFFA0")]
         public void InvisibleTextIsRejected(string? input)
         {
             Assert.That(ChatText.TryNormalize(input, 100, out var text), Is.False);
             Assert.That(text, Is.Empty);
+        }
+
+        [Test]
+        public void NonBmpInvisibleOnlyTextIsRejected()
+        {
+            var inputs = new[]
+            {
+                string.Concat(System.Linq.Enumerable.Repeat("\U000E0041", 50)),
+                string.Concat(System.Linq.Enumerable.Repeat("\U000E0100", 50)),
+            };
+            foreach (var input in inputs)
+                Assert.That(ChatText.TryNormalize(input, 100, out _), Is.False);
         }
 
         [Test]
