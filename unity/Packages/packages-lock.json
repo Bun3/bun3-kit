@@ -129,6 +129,15 @@
         "com.bun3.unity.core": "0.5.2"
       }
     },
+    "com.bun3.unity.steam.ngo": {
+      "version": "file:com.bun3.unity.steam.ngo",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {
+        "com.bun3.unity.steam": "0.1.0",
+        "com.unity.netcode.gameobjects": "2.13.1"
+      }
+    },
     "com.bun3.unity.ui": {
       "version": "file:com.bun3.unity.ui",
       "depth": 0,
