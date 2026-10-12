@@ -146,8 +146,8 @@ namespace Bun3.Unity.Rooms.Ngo
                     catch (Exception error) { Debug.LogException(error); }
                 }
             }
-            await StopNgoAsync();
             await Room.LeaveAsync();
+            await StopNgoAsync();
         }
 
         private async UniTask StartHostAsync(int newEpoch)
@@ -191,7 +191,7 @@ namespace Bun3.Unity.Rooms.Ngo
         private void OnClientStopped(bool wasHost)
         {
             clientStopped = true;
-            if (!wasHost) ScheduleHostCheck();
+            ScheduleHostCheck();
         }
 
         private void OnRoomClosed()
@@ -285,7 +285,8 @@ namespace Bun3.Unity.Rooms.Ngo
                 return;
             }
             SetState(RoomSessionState.Connected);
-            HostMigrated?.Invoke();
+            try { HostMigrated?.Invoke(); }
+            catch (Exception error) { Debug.LogException(error); }
         }
 
         private void Fail()
@@ -313,7 +314,8 @@ namespace Bun3.Unity.Rooms.Ngo
         {
             if (State == value) return;
             State = value;
-            StateChanged?.Invoke(value);
+            try { StateChanged?.Invoke(value); }
+            catch (Exception error) { Debug.LogException(error); }
         }
 
         private double Deadline() => Time.realtimeSinceStartupAsDouble + options.MigrationTimeout.TotalSeconds;

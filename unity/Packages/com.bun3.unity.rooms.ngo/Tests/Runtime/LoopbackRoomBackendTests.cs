@@ -32,10 +32,15 @@ namespace Bun3.Unity.Rooms.Ngo.Tests
                 Assert.That(hostRoom.IsJoinable, Is.False);
                 Assert.That(dataChanges, Is.EqualTo(1));
                 await hostRoom.SetJoinableAsync(true);
+                Assert.That(dataChanges, Is.EqualTo(2));
+                await hostRoom.SetDataAsync("k", "v");
+                Assert.That(dataChanges, Is.EqualTo(3), "Host data writes raise DataChanged.");
 
                 Assert.That(RoomCode.TryNormalize(hostRoom.Code.ToString().ToLowerInvariant(), out var typed), Is.True);
                 var clientTransport = NgoTestPeers.Transport(client);
                 IRoom clientRoom = await new LoopbackRoomBackend(client, clientTransport).JoinByCodeAsync(typed, default);
+                int clientDataChanges = 0;
+                clientRoom.DataChanged += () => clientDataChanges++;
                 var clientSession = new NgoRoomSession(client, clientRoom, clientTransport);
                 await clientSession.StartAsync().Timeout(TimeSpan.FromSeconds(10));
 
@@ -53,6 +58,36 @@ namespace Bun3.Unity.Rooms.Ngo.Tests
                 await hostSession.LeaveAsync();
                 await UniTask.WaitUntil(() => clientSession.State == RoomSessionState.Closed).Timeout(TimeSpan.FromSeconds(10));
                 Assert.That(closed, Is.True);
+                Assert.That(clientDataChanges, Is.EqualTo(0), "A loopback client never raises DataChanged.");
+            }
+            finally
+            {
+                await NgoTestPeers.DestroyAsync(host, client);
+            }
+        });
+
+        [UnityTest]
+        public IEnumerator ClientLeavingDoesNotRaiseClosed() => UniTask.ToCoroutine(async () =>
+        {
+            var host = NgoTestPeers.Create("Host");
+            var client = NgoTestPeers.Create("Client");
+            try
+            {
+                var hostTransport = NgoTestPeers.Transport(host);
+                IRoom hostRoom = await new LoopbackRoomBackend(host, hostTransport).CreateAsync(new RoomCreateOptions { MaxMembers = 4 });
+                await new NgoRoomSession(host, hostRoom, hostTransport).StartAsync();
+
+                var clientTransport = NgoTestPeers.Transport(client);
+                IRoom clientRoom = await new LoopbackRoomBackend(client, clientTransport).JoinByCodeAsync(hostRoom.Code, default);
+                var clientSession = new NgoRoomSession(client, clientRoom, clientTransport);
+                await clientSession.StartAsync().Timeout(TimeSpan.FromSeconds(10));
+                bool closed = false;
+                clientRoom.Closed += () => closed = true;
+
+                await clientSession.LeaveAsync();
+                await UniTask.DelayFrame(5);
+                Assert.That(closed, Is.False, "Closed is only for rooms that end without LeaveAsync.");
+                Assert.That(client.IsListening, Is.False);
             }
             finally
             {

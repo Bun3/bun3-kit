@@ -1,7 +1,10 @@
 using System;
+using System.Linq;
 using System.Collections;
 using Cysharp.Threading.Tasks;
+using System.Text.RegularExpressions;
 using NUnit.Framework;
+using UnityEngine;
 using Unity.Netcode;
 using UnityEngine.TestTools;
 
@@ -42,6 +45,13 @@ namespace Bun3.Unity.Rooms.Ngo.Tests
         private static UniTask WaitAsync(Func<bool> condition, double seconds = 20) =>
             UniTask.WaitUntil(condition).Timeout(TimeSpan.FromSeconds(seconds));
 
+        // Closing every session first keeps the teardown shutdown from starting migrations on destroyed managers.
+        private static UniTask CleanupAsync(Peer[] peers)
+        {
+            foreach (var peer in peers) peer.Room.RaiseClosed();
+            return NgoTestPeers.DestroyAsync(Managers(peers));
+        }
+
         private static NetworkManager[] Managers(Peer[] peers) => Array.ConvertAll(peers, peer => peer.Manager);
 
         [UnityTest]
@@ -56,7 +66,7 @@ namespace Bun3.Unity.Rooms.Ngo.Tests
                 Assert.That(hub.Data[NgoRoomSession.HostMemberKey], Is.EqualTo("A"));
 
                 hub.Remove("A");               // ownership falls to the newest member, C
-                peers[0].Manager.Shutdown();   // crash without LeaveAsync
+                peers[0].Room.RaiseClosed();   // the crashed process is gone: its session closes and stops NGO
 
                 await WaitAsync(() => peers[1].Migrations == 1 && peers[2].Migrations == 1 &&
                     peers[1].Session.State == RoomSessionState.Connected && peers[2].Session.State == RoomSessionState.Connected);
@@ -69,7 +79,7 @@ namespace Bun3.Unity.Rooms.Ngo.Tests
             }
             finally
             {
-                if (peers != null) await NgoTestPeers.DestroyAsync(Managers(peers));
+                if (peers != null) await CleanupAsync(peers);
             }
         });
 
@@ -94,7 +104,61 @@ namespace Bun3.Unity.Rooms.Ngo.Tests
             }
             finally
             {
-                if (peers != null) await NgoTestPeers.DestroyAsync(Managers(peers));
+                if (peers != null) await CleanupAsync(peers);
+            }
+        });
+
+        [UnityTest]
+        public IEnumerator HostWhoseNgoStopsHandsTheRoomOver() => UniTask.ToCoroutine(async () =>
+        {
+            var hub = new FakeRoomHub();
+            Peer[] peers = null;
+            try
+            {
+                peers = await StartRoomAsync(hub, Options(true), "A", "B", "C");
+                peers[0].Manager.Shutdown();   // A stays in the room but its NGO stops
+
+                await WaitAsync(() => peers.All(peer => peer.Migrations == 1 && peer.Session.State == RoomSessionState.Connected));
+                Assert.That(hub.OwnerId, Is.EqualTo("B"));
+                Assert.That(hub.Data[NgoRoomSession.HostMemberKey], Is.EqualTo("B"));
+                Assert.That(hub.Data[NgoRoomSession.HostEpochKey], Is.EqualTo("2"));
+                Assert.That(peers[1].Manager.IsHost, Is.True);
+                Assert.That(peers[0].Manager.IsConnectedClient, Is.True);
+                await WaitAsync(() => peers[1].Manager.ConnectedClientsIds.Count == 3);
+                Assert.That(peers[2].Manager.IsConnectedClient, Is.True);
+            }
+            finally
+            {
+                if (peers != null) await CleanupAsync(peers);
+            }
+        });
+
+        [UnityTest]
+        public IEnumerator ThrowingHostMigratedSubscriberDoesNotDisturbTheSession() => UniTask.ToCoroutine(async () =>
+        {
+            var hub = new FakeRoomHub();
+            Peer[] peers = null;
+            try
+            {
+                peers = await StartRoomAsync(hub, Options(true), "A", "B", "C");
+                peers[1].Session.HostMigrated += () => throw new InvalidOperationException("boom");
+                peers[2].Session.HostMigrated += () => throw new InvalidOperationException("boom");
+                LogAssert.Expect(LogType.Exception, new Regex("boom"));
+                LogAssert.Expect(LogType.Exception, new Regex("boom"));
+
+                hub.Remove("A");
+                peers[0].Room.RaiseClosed();
+
+                await WaitAsync(() => peers[1].Migrations == 1 && peers[2].Migrations == 1);
+                await UniTask.DelayFrame(10);
+                Assert.That(peers[1].Session.State, Is.EqualTo(RoomSessionState.Connected));
+                Assert.That(peers[2].Session.State, Is.EqualTo(RoomSessionState.Connected));
+                Assert.That(peers[1].Manager.IsHost, Is.True);
+                Assert.That(peers[2].Manager.IsConnectedClient, Is.True);
+            }
+            finally
+            {
+                if (peers != null) await CleanupAsync(peers);
             }
         });
 
@@ -114,7 +178,7 @@ namespace Bun3.Unity.Rooms.Ngo.Tests
             }
             finally
             {
-                if (peers != null) await NgoTestPeers.DestroyAsync(Managers(peers));
+                if (peers != null) await CleanupAsync(peers);
             }
         });
 
@@ -138,7 +202,7 @@ namespace Bun3.Unity.Rooms.Ngo.Tests
             }
             finally
             {
-                if (peers != null) await NgoTestPeers.DestroyAsync(Managers(peers));
+                if (peers != null) await CleanupAsync(peers);
             }
         });
     }
