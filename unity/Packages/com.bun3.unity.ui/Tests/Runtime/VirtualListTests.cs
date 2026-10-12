@@ -233,6 +233,28 @@ namespace Bun3.Unity.UI.Tests
         }
 
         [UnityTest]
+        public IEnumerator ScrollingUpInsideEndThresholdKeepsTheReadingPosition()
+        {
+            list.EndThreshold = 50;
+            Fill(source, 200);
+            list.SetSource(source);
+            list.ScrollToEnd();
+            yield return null;
+            for (int step = 0; step < 60; step++)
+            {
+                ScrollTop -= step == 0 ? 30 : 15;
+                var anchor = TopVisible();
+                int id = anchor.Id;
+                float before = FromTop(anchor);
+                yield return null;
+                var after = Find(id);
+                Assert.That(after, Is.Not.Null);
+                Assert.That(FromTop(after!), Is.EqualTo(before).Within(0.5f));
+                if (step == 0) Assert.That(MaxScroll - ScrollTop, Is.EqualTo(30).Within(0.5f));
+            }
+        }
+
+        [UnityTest]
         public IEnumerator AppendFollowsTheEndOnlyWhenAtTheEnd()
         {
             Fill(source, 100);

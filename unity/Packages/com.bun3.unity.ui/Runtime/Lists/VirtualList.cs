@@ -228,7 +228,8 @@ namespace Bun3.Unity.UI.Lists
         void OnScrolled(Vector2 _)
         {
             if (settling || refreshPending || source == null || !isActiveAndEnabled) return;
-            Settle(Capture(), restore: false);
+            // No end anchor here: scrolling up inside EndThreshold must not snap back when a revealed item is measured.
+            Settle(Capture(allowEnd: false), restore: false);
         }
 
         // Deferred calls are applied by the next Refresh, which restarts from source.Count.
@@ -263,9 +264,9 @@ namespace Bun3.Unity.UI.Lists
             return height > 0 && !float.IsInfinity(height) ? height : estimatedItemHeight;
         }
 
-        Anchor Capture()
+        Anchor Capture(bool allowEnd = true)
         {
-            if (layout.Count == 0 || IsAtEnd) return Anchor.End;
+            if (layout.Count == 0 || allowEnd && IsAtEnd) return Anchor.End;
             float top = ScrollTop - padding.top;
             int a = layout.IndexAt(top);
             int b = layout.IndexAt(top + ViewportHeight);
