@@ -283,6 +283,23 @@ public sealed class WorldTests
     }
 
     [Test]
+    public void Enqueue_apply_rejects_an_effect_id_outside_the_catalog_at_the_call()
+    {
+        var kit = EffectTestKit.Create();
+        kit.AddEffect(EffectTestKit.MinimalInstant("bolt"));
+        var world = MakeWorld(kit);
+        var unit = MakeUnit(kit, 1);
+
+        Assert.That(() => world.EnqueueApply(-1, unit.Id, unit.Id), Throws.InstanceOf<ArgumentOutOfRangeException>());
+        Assert.That(() => world.EnqueueApply(1, unit.Id, unit.Id), Throws.InstanceOf<ArgumentOutOfRangeException>());
+        Assert.That(world.PendingCommandCount, Is.Zero);
+
+        Assert.That(() => world.Pipeline.EnqueueApply(-1, unit.Id, unit.Id), Throws.InstanceOf<ArgumentOutOfRangeException>());
+        Assert.That(() => world.Pipeline.EnqueueApply(1, unit.Id, unit.Id), Throws.InstanceOf<ArgumentOutOfRangeException>());
+        Assert.That(world.Pipeline.PendingApplyCount, Is.Zero);
+    }
+
+    [Test]
     public void World_snapshot_round_trip_restores_units_and_counters()
     {
         var kit = EffectTestKit.Create();

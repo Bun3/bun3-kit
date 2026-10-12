@@ -105,8 +105,14 @@ namespace Bun3.Gameplay.Effects
         /// <param name="source">Caster target identifier.</param>
         /// <param name="target">Receiving target identifier.</param>
         /// <param name="level">Effect level.</param>
-        public void EnqueueApply(int effectId, TargetId source, TargetId target, int level = 1) =>
+        /// <exception cref="ArgumentOutOfRangeException">Thrown at the call when the effect id is outside the
+        /// catalog.</exception>
+        public void EnqueueApply(int effectId, TargetId source, TargetId target, int level = 1)
+        {
+            if ((uint)effectId >= (uint)_catalog.Count)
+                throw new ArgumentOutOfRangeException(nameof(effectId), effectId, "Effect id is outside the catalog.");
             EnqueueApply(effectId, source, target, level, BigNum.Zero);
+        }
 
         internal void EnqueueApply(int effectId, TargetId source, TargetId target, int level, BigNum eventMagnitude)
         {

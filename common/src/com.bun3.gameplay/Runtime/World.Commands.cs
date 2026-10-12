@@ -54,8 +54,14 @@ namespace Bun3.Gameplay
         /// <param name="source">Caster id.</param>
         /// <param name="target">Receiving unit id.</param>
         /// <param name="level">Effect level.</param>
-        public void EnqueueApply(int effectId, TargetId source, TargetId target, int level = 1) =>
+        /// <exception cref="ArgumentOutOfRangeException">Thrown at the call when the effect id is outside the
+        /// catalog.</exception>
+        public void EnqueueApply(int effectId, TargetId source, TargetId target, int level = 1)
+        {
+            if ((uint)effectId >= (uint)_effects.Count)
+                throw new ArgumentOutOfRangeException(nameof(effectId), effectId, "Effect id is outside the catalog.");
             _commands.Add(new Command { Kind = CommandKind.Apply, Unit = target, Source = source, Id = effectId, Level = level });
+        }
 
         /// <summary>Queues an ability activation. The result appears in <see cref="PendingActivations"/>
         /// after the next <see cref="Tick"/>.</summary>
