@@ -52,8 +52,8 @@ namespace Bun3.Unity.Chat.Ngo
         }
 
         /// <summary>
-        /// Raised for each live message the server relays to this peer. Handlers must not call <see cref="Send"/>
-        /// synchronously, because on the host the event is raised inside the relay's fan-out.
+        /// Raised for each live message the server relays to this peer. On the host it is raised after the remote
+        /// peers were sent the message.
         /// </summary>
         public event Action<ChatMessage>? Received;
 
@@ -104,6 +104,9 @@ namespace Bun3.Unity.Chat.Ngo
                 current.RegisterNamedMessageHandler(HistoryName, OnHistory);
             }
             if (manager.IsHost) MarkReady(manager.LocalClientId);
+            // A scope created mid-session never sees OnClientConnectedCallback for clients that joined earlier.
+            if (manager.IsServer && manager.IsListening)
+                foreach (var id in manager.ConnectedClientsIds) MarkReady(id);
             if (manager.IsServer && !submitRegistered)
             {
                 current.RegisterNamedMessageHandler(SubmitName, OnSubmit);
@@ -177,10 +180,15 @@ namespace Bun3.Unity.Chat.Ngo
             catch (OverflowException) { return; }
             if (relay.Submit(senderClientId, text, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), out var message) != ChatRejectReason.None) return;
             relay.CollectRecipients(message, ready, recipients);
-            if (recipients.Count == 0) return;
-            using var writer = new FastBufferWriter(SizeOf(message), Allocator.Temp);
-            Write(writer, message);
-            messaging.SendNamedMessage(MessageName, recipients, writer, Delivery);
+            // The host's own copy is delivered last: NGO would run its handler before sending to the remote peers.
+            bool local = manager.IsHost && recipients.Remove(manager.LocalClientId);
+            if (recipients.Count > 0)
+            {
+                using var writer = new FastBufferWriter(SizeOf(message), Allocator.Temp);
+                Write(writer, message);
+                messaging.SendNamedMessage(MessageName, recipients, writer, Delivery);
+            }
+            if (local) Received?.Invoke(message);
         }
 
         void OnMessage(ulong senderClientId, FastBufferReader reader)

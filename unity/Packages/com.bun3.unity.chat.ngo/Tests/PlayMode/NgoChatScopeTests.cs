@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using System.Text.RegularExpressions;
 using Bun3.Chat;
 using NUnit.Framework;
 using Unity.Collections;
@@ -66,7 +67,7 @@ namespace Bun3.Unity.Chat.Ngo.Tests
         {
             foreach (var peer in peers)
             {
-                peer.Scope.Dispose();
+                peer.Scope?.Dispose();
                 if (peer.Manager != null && peer.Manager.IsListening) peer.Manager.Shutdown();
             }
             yield return null;
@@ -84,7 +85,7 @@ namespace Bun3.Unity.Chat.Ngo.Tests
             return (ushort)((IPEndPoint)socket.Client.LocalEndPoint).Port;
         }
 
-        Peer Create(string name, ushort port, Policy policy, ChatRelayOptions? options = null, Action<NetworkManager>? beforeScope = null)
+        Peer Create(string name, ushort port, Policy policy, ChatRelayOptions? options = null, Action<NetworkManager>? beforeScope = null, bool attachScope = true)
         {
             var root = new GameObject(name);
             var transport = root.AddComponent<UnityTransport>();
@@ -93,15 +94,20 @@ namespace Bun3.Unity.Chat.Ngo.Tests
             manager.NetworkConfig = new NetworkConfig { NetworkTransport = transport, EnableSceneManagement = false };
             beforeScope?.Invoke(manager);
             var peer = new Peer { Manager = manager, Relay = new ChatRelay(policy, options) };
-            peer.Scope = new NgoChatScope(manager, peer.Relay);
+            peers.Add(peer);
+            if (attachScope) AttachScope(peer);
+            return peer;
+        }
+
+        static void AttachScope(Peer peer)
+        {
+            peer.Scope = new NgoChatScope(peer.Manager, peer.Relay);
             peer.Scope.Received += message =>
             {
                 peer.Live.Add(message);
                 peer.Events.Add("live:" + message.Text);
             };
             peer.Scope.HistoryReceived += message => peer.Events.Add("history:" + message.Text);
-            peers.Add(peer);
-            return peer;
         }
 
         static IEnumerator Until(Func<bool> condition, float seconds = 10)
@@ -153,6 +159,33 @@ namespace Bun3.Unity.Chat.Ngo.Tests
             Assert.That(host.Scope.Send("from host"), Is.True);
             yield return Until(() => host.Live.Count == 1 && client.Live.Count == 1);
             Assert.That(client.Live[0].SenderId, Is.EqualTo(NetworkManager.ServerClientId));
+        }
+
+        [UnityTest]
+        public IEnumerator ScopeCreatedWhileListeningDeliversToAlreadyConnectedClients()
+        {
+            ushort port = FreePort();
+            var host = Create("Host", port, new Policy(), attachScope: false);
+            Assert.That(host.Manager.StartHost(), Is.True);
+            var client = Create("Client", port, new Policy());
+            Assert.That(client.Manager.StartClient(), Is.True);
+            yield return Until(() => client.Manager.IsConnectedClient && host.Manager.ConnectedClientsIds.Count == 2);
+            AttachScope(host);
+            Assert.That(host.Scope.Send("late"), Is.True);
+            yield return Until(() => host.Live.Count == 1 && client.Live.Count == 1);
+            Assert.That(client.Live[0].Text, Is.EqualTo("late"));
+        }
+
+        [UnityTest]
+        public IEnumerator ThrowingHostHandlerDoesNotBlockRemoteDelivery()
+        {
+            Peer host = null!, client = null!;
+            yield return HostAndClient(new Policy(), null, (h, c) => { host = h; client = c; });
+            host.Scope.Received += _ => throw new InvalidOperationException("boom");
+            LogAssert.Expect(LogType.Exception, new Regex("boom"));
+            Assert.That(client.Scope.Send("hello"), Is.True);
+            yield return Until(() => client.Live.Count == 1);
+            Assert.That(client.Live[0].Text, Is.EqualTo("hello"));
         }
 
         [UnityTest]
