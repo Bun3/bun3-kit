@@ -162,7 +162,7 @@ namespace Bun3.Gameplay.Tests
 
             var catalog = TagCatalog.Create(
                 BuildCatalogTagNames(catalogSize, exactKinds, depth),
-                new List<TagCatalog.RedirectDefinition>());
+                new List<TagCatalog.ParsedRedirect>());
             var exact = new GameplayTag[exactKinds];
             var parents = new GameplayTag[exactKinds];
             var misses = new GameplayTag[exactKinds];

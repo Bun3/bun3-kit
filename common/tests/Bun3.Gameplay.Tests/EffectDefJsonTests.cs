@@ -12,27 +12,20 @@ using NUnit.Framework;
 namespace Bun3.Gameplay.Tests;
 
 [TestFixture]
-public sealed class EffectSpecJsonTests
+public sealed class EffectDefJsonTests
 {
-    // Name map aligned with EffectTestKit's attribute id constants.
-    private static readonly Dictionary<string, ushort> AttributeNames = new Dictionary<string, ushort>
-    {
-        ["Hp"] = EffectTestKit.Hp,
-        ["MaxHp"] = EffectTestKit.MaxHp,
-        ["Mp"] = EffectTestKit.Mp,
-        ["Attack"] = EffectTestKit.Attack,
-    };
+    private static readonly AttributeRegistry Attributes = EffectTestKit.BuildAttributeRegistry();
 
-    private static List<EffectSpec> Load(string json, IReadOnlyDictionary<string, ushort>? attributeNames = null)
+    private static List<EffectDef> Load(string json)
     {
         using var stream = new MemoryStream(Encoding.UTF8.GetBytes(json));
-        return EffectSpecJson.Load(stream, attributeNames ?? AttributeNames);
+        return EffectDefJson.Load(stream, Attributes);
     }
 
     private const string ChillSampleJson = """
     {
       "schemaVersion": 1,
-      "specs": [ {
+      "effects": [ {
         "name": "chill",
         "duration": { "type": "Duration", "ticks": 10, "periodTicks": 0 },
         "stack": { "maxStack": 3, "onReapply": "AddStack",
@@ -51,11 +44,11 @@ public sealed class EffectSpecJsonTests
     """;
 
     [Test]
-    public void Round_trip_parses_every_field_of_the_sample_spec()
+    public void Round_trip_parses_every_field_of_the_sample_effect()
     {
-        var specs = Load(ChillSampleJson);
-        Assert.That(specs, Has.Count.EqualTo(1));
-        var chill = specs[0];
+        var defs = Load(ChillSampleJson);
+        Assert.That(defs, Has.Count.EqualTo(1));
+        var chill = defs[0];
 
         Assert.That(chill.Name, Is.EqualTo("chill"));
         Assert.That(chill.DurationType, Is.EqualTo(EffectDurationType.Duration));
@@ -113,7 +106,7 @@ public sealed class EffectSpecJsonTests
     public void Unknown_field_throws_with_line_info()
     {
         const string json = """
-        { "schemaVersion": 1, "specs": [ {
+        { "schemaVersion": 1, "effects": [ {
           "name": "x", "duration": { "type": "Instant" }, "modifiers": [], "executions": [],
           "applicationConditions": [], "ongoingConditions": [], "grantedTags": [], "assetTags": [],
           "immunityTags": [], "chains": [], "bogus": 1 } ] }
@@ -121,13 +114,15 @@ public sealed class EffectSpecJsonTests
         var ex = Assert.Throws<TagCatalogException>(() => Load(json));
         Assert.That(ex!.LineNumber, Is.GreaterThan(0));
         Assert.That(ex.Message, Does.Contain("bogus"));
+        Assert.That(ex.Message, Does.Contain("effects[0]").And.Contain($"line {ex.LineNumber}"),
+            "the location travels in the message, not only in properties");
     }
 
     [Test]
     public void BigNum_as_json_number_throws_with_line_info()
     {
         const string json = """
-        { "schemaVersion": 1, "specs": [ {
+        { "schemaVersion": 1, "effects": [ {
           "name": "x", "duration": { "type": "Instant" },
           "modifiers": [ { "attribute": "Hp", "op": "Add", "magnitude": { "constant": -5 } } ],
           "executions": [], "applicationConditions": [], "ongoingConditions": [], "grantedTags": [],
@@ -141,7 +136,7 @@ public sealed class EffectSpecJsonTests
     public void Unknown_enum_name_throws_with_line_info()
     {
         const string json = """
-        { "schemaVersion": 1, "specs": [ {
+        { "schemaVersion": 1, "effects": [ {
           "name": "x", "duration": { "type": "Bogus" }, "modifiers": [], "executions": [],
           "applicationConditions": [], "ongoingConditions": [], "grantedTags": [], "assetTags": [],
           "immunityTags": [], "chains": [] } ] }
@@ -154,7 +149,7 @@ public sealed class EffectSpecJsonTests
     public void Unknown_attribute_name_throws_with_line_info()
     {
         const string json = """
-        { "schemaVersion": 1, "specs": [ {
+        { "schemaVersion": 1, "effects": [ {
           "name": "x", "duration": { "type": "Instant" },
           "modifiers": [ { "attribute": "NoSuchAttribute", "op": "Add", "magnitude": { "constant": "-5" } } ],
           "executions": [], "applicationConditions": [], "ongoingConditions": [], "grantedTags": [],
@@ -168,7 +163,7 @@ public sealed class EffectSpecJsonTests
     // ---- Two-path equivalence: chill/frozen/poison catalog built in code vs loaded from JSON ----
 
     private const string TrioJson = """
-    { "schemaVersion": 1, "specs": [
+    { "schemaVersion": 1, "effects": [
       { "name": "chill",
         "duration": { "type": "Duration", "ticks": 10, "periodTicks": 0 },
         "stack": { "maxStack": 3, "onReapply": "AddStack",
@@ -191,7 +186,7 @@ public sealed class EffectSpecJsonTests
     private static void AddTrioByCode(EffectTestKit kit)
     {
         var chill = EffectTestKit.MinimalDuration("chill", ticks: 10);
-        chill.Stack = new StackPolicy
+        chill.Stack = new StackPolicyDef
         {
             MaxStack = 3, OnReapply = StackReapply.AddStack,
             OnOverflow = StackOverflow.ApplyEffect, OverflowEffectName = "frozen", ClearStacksOnOverflow = true,
@@ -202,11 +197,11 @@ public sealed class EffectSpecJsonTests
             Magnitude = new MagnitudeDef { Base = Operand.Constant(-5) },
         });
         chill.Chains.Add(EffectTestKit.Edge(ChainTrigger.OnStackOverflow, "frozen"));
-        kit.AddSpec(chill);
+        kit.AddEffect(chill);
 
         var frozen = EffectTestKit.MinimalDuration("frozen", ticks: 2);
         frozen.GrantedTags.Add("state.frozen");
-        kit.AddSpec(frozen);
+        kit.AddEffect(frozen);
 
         var poison = EffectTestKit.MinimalDuration("poison", ticks: 6);
         poison.PeriodTicks = 2;
@@ -215,14 +210,14 @@ public sealed class EffectSpecJsonTests
             AttributeId = EffectTestKit.Hp, Op = AttributeModifierOp.Add,
             Magnitude = new MagnitudeDef { Base = Operand.Constant(-10) },
         });
-        kit.AddSpec(poison);
+        kit.AddEffect(poison);
     }
 
     private static void AddTrioByJson(EffectTestKit kit)
     {
-        foreach (var spec in Load(TrioJson))
+        foreach (var def in Load(TrioJson))
         {
-            kit.AddSpec(spec);
+            kit.AddEffect(def);
         }
     }
 
@@ -235,11 +230,11 @@ public sealed class EffectSpecJsonTests
         var pipeline = kit.BuildPipeline();
         for (var i = 0; i < 4; i++)   // 4th reapply overflows the stack -> frozen
         {
-            pipeline.EnqueueApply(kit.SpecId("chill"), kit.Attacker.Id, kit.Defender.Id);
+            pipeline.EnqueueApply(kit.EffectId("chill"), kit.Attacker.Id, kit.Defender.Id);
             pipeline.Tick();
         }
 
-        pipeline.EnqueueApply(kit.SpecId("poison"), kit.Attacker.Id, kit.Defender.Id);
+        pipeline.EnqueueApply(kit.EffectId("poison"), kit.Attacker.Id, kit.Defender.Id);
         for (var i = 0; i < 20; i++)
         {
             pipeline.Tick();
@@ -270,16 +265,16 @@ public sealed class EffectSpecJsonTests
     public void PerLevelValues_form_round_trips()
     {
         const string json = """
-        { "schemaVersion": 1, "specs": [ {
+        { "schemaVersion": 1, "effects": [ {
           "name": "x", "maxLevel": 3, "duration": { "type": "Instant" },
           "modifiers": [ { "attribute": "Attack", "op": "Add",
                            "magnitude": { "perLevelValues": ["10", "25", "70"] } } ],
           "executions": [], "applicationConditions": [], "ongoingConditions": [], "grantedTags": [],
           "assetTags": [], "immunityTags": [], "chains": [] } ] }
         """;
-        var spec = Load(json)[0];
-        Assert.That(spec.MaxLevel, Is.EqualTo(3));
-        var magnitude = spec.Modifiers[0].Magnitude;
+        var def = Load(json)[0];
+        Assert.That(def.MaxLevel, Is.EqualTo(3));
+        var magnitude = def.Modifiers[0].Magnitude;
         Assert.That(magnitude.PerLevelValues, Is.EqualTo(new List<BigNum> { 10, 25, 70 }));
         Assert.That(magnitude.Tail, Is.EqualTo(LevelTail.Clamp));
         Assert.That(magnitude.ExtrapolateIncrement, Is.EqualTo(BigNum.Zero));
@@ -289,15 +284,15 @@ public sealed class EffectSpecJsonTests
     public void Formula_form_round_trips_with_tail_and_increment()
     {
         const string json = """
-        { "schemaVersion": 1, "specs": [ {
+        { "schemaVersion": 1, "effects": [ {
           "name": "x", "maxLevel": 5, "duration": { "type": "Instant" },
           "modifiers": [ { "attribute": "Attack", "op": "Add",
                            "magnitude": { "formula": "x*x", "tail": "Extrapolate", "extrapolateIncrement": "9" } } ],
           "executions": [], "applicationConditions": [], "ongoingConditions": [], "grantedTags": [],
           "assetTags": [], "immunityTags": [], "chains": [] } ] }
         """;
-        var spec = Load(json)[0];
-        var magnitude = spec.Modifiers[0].Magnitude;
+        var def = Load(json)[0];
+        var magnitude = def.Modifiers[0].Magnitude;
         Assert.That(magnitude.Formula, Is.EqualTo("x*x"));
         Assert.That(magnitude.Tail, Is.EqualTo(LevelTail.Extrapolate));
         Assert.That(magnitude.ExtrapolateIncrement, Is.EqualTo((BigNum)9));
@@ -307,7 +302,7 @@ public sealed class EffectSpecJsonTests
     public void CurveKeys_form_round_trips()
     {
         const string json = """
-        { "schemaVersion": 1, "specs": [ {
+        { "schemaVersion": 1, "effects": [ {
           "name": "x", "maxLevel": 50, "duration": { "type": "Instant" },
           "modifiers": [ { "attribute": "Attack", "op": "Add",
                            "magnitude": { "curveKeys": [
@@ -315,8 +310,8 @@ public sealed class EffectSpecJsonTests
           "executions": [], "applicationConditions": [], "ongoingConditions": [], "grantedTags": [],
           "assetTags": [], "immunityTags": [], "chains": [] } ] }
         """;
-        var spec = Load(json)[0];
-        var keys = spec.Modifiers[0].Magnitude.CurveKeys;
+        var def = Load(json)[0];
+        var keys = def.Modifiers[0].Magnitude.CurveKeys;
         Assert.That(keys, Has.Count.EqualTo(2));
         Assert.That(keys![0].Level, Is.EqualTo(1));
         Assert.That(keys[0].Value, Is.EqualTo((BigNum)10));
@@ -328,7 +323,7 @@ public sealed class EffectSpecJsonTests
     public void Magnitude_with_both_base_and_formula_throws()
     {
         const string json = """
-        { "schemaVersion": 1, "specs": [ {
+        { "schemaVersion": 1, "effects": [ {
           "name": "x", "maxLevel": 3, "duration": { "type": "Instant" },
           "modifiers": [ { "attribute": "Attack", "op": "Add",
                            "magnitude": { "base": { "constant": "1" }, "formula": "x" } } ],
@@ -338,12 +333,12 @@ public sealed class EffectSpecJsonTests
         Assert.Throws<TagCatalogException>(() => Load(json));
     }
 
-    // A formula spec built in code and the same spec loaded from JSON yield the same result (§15.1 notation ③ equivalence).
+    // A formula def built in code and the same def loaded from JSON yield the same result (§15.1 notation ③ equivalence).
     [Test]
-    public void Code_built_and_json_loaded_formula_spec_produce_identical_outcome()
+    public void Code_built_and_json_loaded_formula_effect_produce_identical_outcome()
     {
         const string json = """
-        { "schemaVersion": 1, "specs": [ {
+        { "schemaVersion": 1, "effects": [ {
           "name": "surge", "maxLevel": 5,
           "duration": { "type": "Duration", "ticks": 100, "periodTicks": 0 },
           "modifiers": [ { "attribute": "Attack", "op": "Add", "magnitude": { "formula": "x*x" } } ],
@@ -351,26 +346,26 @@ public sealed class EffectSpecJsonTests
           "assetTags": [], "immunityTags": [], "chains": [] } ] }
         """;
 
-        var codeSpec = EffectTestKit.MinimalDuration("surge", ticks: 100);
-        codeSpec.MaxLevel = 5;
-        codeSpec.Modifiers.Add(new ModifierDef
+        var codeDef = EffectTestKit.MinimalDuration("surge", ticks: 100);
+        codeDef.MaxLevel = 5;
+        codeDef.Modifiers.Add(new ModifierDef
         {
             AttributeId = EffectTestKit.Attack, Op = AttributeModifierOp.Add,
             Magnitude = new MagnitudeDef { Formula = "x*x" },
         });
 
         var codeKit = EffectTestKit.Create();
-        codeKit.AddSpec(codeSpec);
+        codeKit.AddEffect(codeDef);
         var codePipeline = codeKit.BuildPipeline();
         codeKit.Defender.Attributes.SetBase(EffectTestKit.Attack, 0);
-        codePipeline.EnqueueApply(codeKit.SpecId("surge"), codeKit.Attacker.Id, codeKit.Defender.Id, level: 4);
+        codePipeline.EnqueueApply(codeKit.EffectId("surge"), codeKit.Attacker.Id, codeKit.Defender.Id, level: 4);
         codePipeline.Tick();
 
         var jsonKit = EffectTestKit.Create();
-        foreach (var spec in Load(json)) jsonKit.AddSpec(spec);
+        foreach (var def in Load(json)) jsonKit.AddEffect(def);
         var jsonPipeline = jsonKit.BuildPipeline();
         jsonKit.Defender.Attributes.SetBase(EffectTestKit.Attack, 0);
-        jsonPipeline.EnqueueApply(jsonKit.SpecId("surge"), jsonKit.Attacker.Id, jsonKit.Defender.Id, level: 4);
+        jsonPipeline.EnqueueApply(jsonKit.EffectId("surge"), jsonKit.Attacker.Id, jsonKit.Defender.Id, level: 4);
         jsonPipeline.Tick();
 
         Assert.That(jsonKit.Defender.Attributes.GetCurrent(EffectTestKit.Attack),
@@ -384,7 +379,7 @@ public sealed class EffectSpecJsonTests
     public void T2_T3_new_fields_round_trip()
     {
         const string json = """
-        { "schemaVersion": 1, "specs": [ {
+        { "schemaVersion": 1, "effects": [ {
           "name": "kitchen_sink", "maxLevel": 3,
           "duration": { "type": "Duration", "ticks": 0, "periodTicks": 0 },
           "stack": { "maxStack": 3, "onReapply": "ExtendCapped", "onOverflow": "Deny",
@@ -398,47 +393,47 @@ public sealed class EffectSpecJsonTests
           "drCategory": "effect.frost", "drWindowTicks": 100,
           "drStageMultipliers": [ "0.5", "0" ] } ] }
         """;
-        var spec = Load(json)[0];
+        var def = Load(json)[0];
 
-        Assert.That(spec.RemoveOnApplyTags, Is.EqualTo(new[] { "effect.frost" }));
-        Assert.That(spec.ChanceToApply, Is.Not.Null);
-        Assert.That(spec.ChanceToApply!.Base, Is.EqualTo(Operand.Constant(BigNum.FromParts(75, -2))));
-        Assert.That(spec.DurationPerLevel, Is.EqualTo(new List<BigNum> { 10, 20, 30 }));
-        Assert.That(spec.DurationScale!.Base, Is.EqualTo(Operand.Constant(BigNum.FromParts(2, 0))));
-        Assert.That(spec.DrCategory, Is.EqualTo("effect.frost"));
-        Assert.That(spec.DrWindowTicks, Is.EqualTo(100));
-        Assert.That(spec.DrStageMultipliers,
+        Assert.That(def.RemoveOnApplyTags, Is.EqualTo(new[] { "effect.frost" }));
+        Assert.That(def.ChanceToApply, Is.Not.Null);
+        Assert.That(def.ChanceToApply!.Base, Is.EqualTo(Operand.Constant(BigNum.FromParts(75, -2))));
+        Assert.That(def.DurationPerLevel, Is.EqualTo(new List<BigNum> { 10, 20, 30 }));
+        Assert.That(def.DurationScale!.Base, Is.EqualTo(Operand.Constant(BigNum.FromParts(2, 0))));
+        Assert.That(def.DrCategory, Is.EqualTo("effect.frost"));
+        Assert.That(def.DrWindowTicks, Is.EqualTo(100));
+        Assert.That(def.DrStageMultipliers,
             Is.EqualTo(new List<BigNum> { BigNum.FromParts(5, -1), BigNum.Zero }));
-        Assert.That(spec.Stack.LevelFromStack, Is.True);
-        Assert.That(spec.Stack.ExtendCapMultiplier, Is.EqualTo(BigNum.FromParts(15, -1)));
+        Assert.That(def.Stack.LevelFromStack, Is.True);
+        Assert.That(def.Stack.ExtendCapMultiplier, Is.EqualTo(BigNum.FromParts(15, -1)));
     }
 
     [Test]
     public void New_fields_absent_keep_model_defaults()
     {
         const string json = """
-        { "schemaVersion": 1, "specs": [ {
+        { "schemaVersion": 1, "effects": [ {
           "name": "x", "duration": { "type": "Instant" },
           "modifiers": [], "executions": [], "applicationConditions": [], "ongoingConditions": [],
           "grantedTags": [], "assetTags": [], "immunityTags": [], "chains": [] } ] }
         """;
-        var spec = Load(json)[0];
+        var def = Load(json)[0];
 
-        Assert.That(spec.RemoveOnApplyTags, Is.Empty);
-        Assert.That(spec.ChanceToApply, Is.Null);
-        Assert.That(spec.DurationPerLevel, Is.Null);
-        Assert.That(spec.DurationScale, Is.Null);
-        Assert.That(spec.DrCategory, Is.Null);
-        Assert.That(spec.DrWindowTicks, Is.EqualTo(0));
-        Assert.That(spec.DrStageMultipliers, Is.Empty);
-        Assert.That(spec.Stack.LevelFromStack, Is.False);
-        Assert.That(spec.Stack.ExtendCapMultiplier, Is.EqualTo(BigNum.FromParts(13, -1)));
+        Assert.That(def.RemoveOnApplyTags, Is.Empty);
+        Assert.That(def.ChanceToApply, Is.Null);
+        Assert.That(def.DurationPerLevel, Is.Null);
+        Assert.That(def.DurationScale, Is.Null);
+        Assert.That(def.DrCategory, Is.Null);
+        Assert.That(def.DrWindowTicks, Is.EqualTo(0));
+        Assert.That(def.DrStageMultipliers, Is.Empty);
+        Assert.That(def.Stack.LevelFromStack, Is.False);
+        Assert.That(def.Stack.ExtendCapMultiplier, Is.EqualTo(BigNum.FromParts(13, -1)));
     }
 
-    // ---- Two-path equivalence: DR spec (G6) ----
+    // ---- Two-path equivalence: DR def (G6) ----
 
     private const string DrJson = """
-    { "schemaVersion": 1, "specs": [ {
+    { "schemaVersion": 1, "effects": [ {
       "name": "cc", "duration": { "type": "Duration", "ticks": 10, "periodTicks": 0 },
       "modifiers": [], "executions": [], "applicationConditions": [], "ongoingConditions": [],
       "grantedTags": [], "assetTags": [], "immunityTags": [], "chains": [],
@@ -446,19 +441,19 @@ public sealed class EffectSpecJsonTests
     """;
 
     [Test]
-    public void Code_built_and_json_loaded_dr_spec_produce_identical_duration_stages()
+    public void Code_built_and_json_loaded_dr_effect_produce_identical_duration_stages()
     {
-        var codeSpec = EffectTestKit.MinimalDuration("cc", ticks: 10);
-        codeSpec.DrCategory = "effect.frost";
-        codeSpec.DrWindowTicks = 100;
-        codeSpec.DrStageMultipliers = new List<BigNum> { BigNum.FromParts(5, -1), BigNum.Zero };
+        var codeDef = EffectTestKit.MinimalDuration("cc", ticks: 10);
+        codeDef.DrCategory = "effect.frost";
+        codeDef.DrWindowTicks = 100;
+        codeDef.DrStageMultipliers = new List<BigNum> { BigNum.FromParts(5, -1), BigNum.Zero };
 
         var codeKit = EffectTestKit.Create();
-        codeKit.AddSpec(codeSpec);
+        codeKit.AddEffect(codeDef);
         var codeSecondDuration = RunDrTwiceAndGetSecondDuration(codeKit);
 
         var jsonKit = EffectTestKit.Create();
-        foreach (var spec in Load(DrJson)) jsonKit.AddSpec(spec);
+        foreach (var def in Load(DrJson)) jsonKit.AddEffect(def);
         var jsonSecondDuration = RunDrTwiceAndGetSecondDuration(jsonKit);
 
         Assert.That(jsonSecondDuration, Is.EqualTo(codeSecondDuration));
@@ -468,24 +463,133 @@ public sealed class EffectSpecJsonTests
     private static int RunDrTwiceAndGetSecondDuration(EffectTestKit kit)
     {
         var pipeline = kit.BuildPipeline();
-        pipeline.EnqueueApply(kit.SpecId("cc"), kit.Attacker.Id, kit.Defender.Id);
+        pipeline.EnqueueApply(kit.EffectId("cc"), kit.Attacker.Id, kit.Defender.Id);
         pipeline.Tick();
         for (var i = 0; i < 50 && kit.Defender.ActiveEffectCount > 0; i++) pipeline.Tick();
 
-        pipeline.EnqueueApply(kit.SpecId("cc"), kit.Attacker.Id, kit.Defender.Id);
+        pipeline.EnqueueApply(kit.EffectId("cc"), kit.Attacker.Id, kit.Defender.Id);
         pipeline.Tick();
-        return kit.Defender.ActiveEffects[0].RemainingTicks;
+        return kit.Defender.GetActiveEffect(0).RemainingTicks;
     }
 
     [Test]
     public void MaxLevel_missing_at_root_defaults_to_zero()
     {
         const string json = """
-        { "schemaVersion": 1, "specs": [ {
+        { "schemaVersion": 1, "effects": [ {
           "name": "x", "duration": { "type": "Instant" },
           "modifiers": [], "executions": [], "applicationConditions": [], "ongoingConditions": [],
           "grantedTags": [], "assetTags": [], "immunityTags": [], "chains": [] } ] }
         """;
         Assert.That(Load(json)[0].MaxLevel, Is.EqualTo(0));
+    }
+
+    // ---- raiseEvents / grantedAbilities / OnEvent chain field round trip ----
+
+    [Test]
+    public void Raise_events_granted_abilities_and_event_chains_load()
+    {
+        var defs = Load("""
+        {
+          "schemaVersion": 1,
+          "effects": [
+            {
+              "name": "bolt", "duration": { "type": "Instant" },
+              "modifiers": [ { "attribute": "Hp", "op": "Add", "magnitude": { "constant": "-10" } } ],
+              "executions": [], "applicationConditions": [], "ongoingConditions": [],
+              "grantedTags": [], "assetTags": [], "immunityTags": [], "chains": [],
+              "raiseEvents": [ { "tag": "event.damage.taken", "attribute": "Hp" } ]
+            },
+            {
+              "name": "thorns", "duration": { "type": "Infinite" },
+              "modifiers": [], "executions": [], "applicationConditions": [], "ongoingConditions": [],
+              "grantedTags": [], "assetTags": [], "immunityTags": [],
+              "grantedAbilities": ["fireball"],
+              "chains": [
+                { "trigger": "OnEvent", "eventTag": "event.damage.taken", "listen": "AsTarget",
+                  "effect": "bolt", "selector": "selector.event.source", "level": "Inherit" }
+              ]
+            }
+          ]
+        }
+        """);
+
+        Assert.That(defs[0].RaiseEvents.Count, Is.EqualTo(1));
+        Assert.That(defs[0].RaiseEvents[0].Tag, Is.EqualTo("event.damage.taken"));
+        Assert.That(defs[0].RaiseEvents[0].AttributeId, Is.EqualTo(EffectTestKit.Hp));
+        Assert.That(defs[1].GrantedAbilities, Is.EqualTo(new[] { "fireball" }));
+        Assert.That(defs[1].Chains[0].Trigger, Is.EqualTo(ChainTrigger.OnEvent));
+        Assert.That(defs[1].Chains[0].EventTag, Is.EqualTo("event.damage.taken"));
+        Assert.That(defs[1].Chains[0].Listen, Is.EqualTo(ChainListen.AsTarget));
+    }
+
+    [Test]
+    public void Raise_events_granted_abilities_and_chain_event_fields_default_when_absent()
+    {
+        const string json = """
+        { "schemaVersion": 1, "effects": [ {
+          "name": "x", "duration": { "type": "Instant" },
+          "modifiers": [], "executions": [], "applicationConditions": [], "ongoingConditions": [],
+          "grantedTags": [], "assetTags": [], "immunityTags": [],
+          "chains": [ { "trigger": "OnStackOverflow", "effect": "x" } ] } ] }
+        """;
+        var def = Load(json)[0];
+
+        Assert.That(def.RaiseEvents, Is.Empty);
+        Assert.That(def.GrantedAbilities, Is.Empty);
+        Assert.That(def.Chains[0].EventTag, Is.Null);
+        Assert.That(def.Chains[0].Listen, Is.EqualTo(ChainListen.AsTarget));
+    }
+
+    [Test]
+    public void Unknown_raiseEvents_key_throws_with_line_info()
+    {
+        const string json = """
+        { "schemaVersion": 1, "effects": [ {
+          "name": "x", "duration": { "type": "Instant" },
+          "modifiers": [], "executions": [], "applicationConditions": [], "ongoingConditions": [],
+          "grantedTags": [], "assetTags": [], "immunityTags": [], "chains": [],
+          "raiseEvents": [ { "tag": "event.damage.taken", "attribute": "Hp", "bogus": 1 } ] } ] }
+        """;
+        var ex = Assert.Throws<TagCatalogException>(() => Load(json));
+        Assert.That(ex!.LineNumber, Is.GreaterThan(0));
+        Assert.That(ex.Message, Does.Contain("bogus"));
+    }
+
+    // A thorns/bolt catalog authored with raiseEvents/grantedAbilities/OnEvent-chain JSON builds cleanly
+    // through EffectCatalogBuilder — proving the loaded graph, not just the parse, is buildable.
+    [Test]
+    public void Json_loaded_raiseEvents_and_OnEvent_chain_effect_builds_through_EffectCatalogBuilder()
+    {
+        const string json = """
+        {
+          "schemaVersion": 1,
+          "effects": [
+            {
+              "name": "bolt", "duration": { "type": "Instant" },
+              "modifiers": [ { "attribute": "Hp", "op": "Add", "magnitude": { "constant": "-10" } } ],
+              "executions": [], "applicationConditions": [], "ongoingConditions": [],
+              "grantedTags": [], "assetTags": [], "immunityTags": [], "chains": [],
+              "raiseEvents": [ { "tag": "event.damage.taken", "attribute": "Hp" } ]
+            },
+            {
+              "name": "thorns", "duration": { "type": "Infinite" },
+              "modifiers": [], "executions": [], "applicationConditions": [], "ongoingConditions": [],
+              "grantedTags": [], "assetTags": [], "immunityTags": [],
+              "grantedAbilities": ["fireball"],
+              "chains": [
+                { "trigger": "OnEvent", "eventTag": "event.damage.taken", "listen": "AsTarget",
+                  "effect": "bolt", "selector": "selector.event.source", "level": "Inherit" }
+              ]
+            }
+          ]
+        }
+        """;
+
+        var builder = new EffectCatalogBuilder();
+        foreach (var def in Load(json)) builder.Add(def);
+        var catalog = EffectTestKit.BuildCatalog(builder);
+
+        Assert.That(catalog.Count, Is.EqualTo(2));
     }
 }

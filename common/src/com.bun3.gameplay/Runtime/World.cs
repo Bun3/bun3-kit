@@ -1,0 +1,356 @@
+#nullable enable
+using System;
+using System.Collections.Generic;
+using Bun3.Gameplay.Abilities;
+using Bun3.Gameplay.Attributes;
+using Bun3.Gameplay.Effects;
+
+namespace Bun3.Gameplay
+{
+    /// <summary>
+    /// Unit registry and tick driver for one simulation. Implements
+    /// <see cref="IEffectTargetResolver"/> for the pipeline it owns, so effects address units by
+    /// <see cref="TargetId"/> without knowing about units at all. Structural changes (spawn,
+    /// despawn) are queued in call order and applied only at a phase boundary — the registry must
+    /// never mutate while a tick iterates it. Outside <see cref="Tick"/> only queueing (spawn, despawn,
+    /// <c>Enqueue*</c> commands) and read-only queries are allowed. Composed of this file plus
+    /// <c>World.Ability.cs</c> and <c>World.Commands.cs</c>.
+    /// </summary>
+    public sealed partial class World : IEffectTargetResolver
+    {
+        private readonly List<Unit> _units = new List<Unit>();
+        private readonly List<TargetId> _unitIds = new List<TargetId>();
+        private readonly List<(Unit? Unit, TargetId Id)> _pendingOps = new List<(Unit? Unit, TargetId Id)>();
+        private readonly EffectCatalog _effects;
+        private readonly AbilityCatalog _abilities;
+        private readonly IRng _rng;
+        private readonly int[][] _grantedAbilityIds;
+        private readonly int _applyBudgetPerUnit;
+
+        /// <summary>Creates a world running on a compiled database.</summary>
+        /// <param name="database">Compiled catalogs and registries.</param>
+        /// <param name="rng">Seeded random source; shared with the pipeline.</param>
+        /// <param name="applyBudgetPerUnit">Effect applications drained per tick for each registered unit.
+        /// The budget is pooled: a tick drains up to this value times the unit count (at least one unit's
+        /// worth), in queue order. It exists to bound runaway chains such as mutual reflection; the
+        /// surplus carries over to the next tick.</param>
+        public World(GameplayDatabase database, IRng rng, int applyBudgetPerUnit = 32)
+        {
+            Database = database ?? throw new ArgumentNullException(nameof(database));
+            var effects = _effects = database.Effects;
+            var abilities = _abilities = database.Abilities;
+            _rng = rng ?? throw new ArgumentNullException(nameof(rng));
+            if (applyBudgetPerUnit <= 0)
+                throw new ArgumentOutOfRangeException(nameof(applyBudgetPerUnit), "Apply budget per unit must be at least 1.");
+            _applyBudgetPerUnit = applyBudgetPerUnit;
+            Pipeline = new EffectPipeline(effects, this, rng, applyBudgetPerUnit);
+
+            // AbilityCatalogBuilder.Build already proved every GrantedAbilityNames entry resolves
+            // against abilities, so this cache is built over references already known to be valid.
+            _grantedAbilityIds = new int[effects.Count][];
+            for (var effectId = 0; effectId < effects.Count; effectId++)
+            {
+                var names = effects.GetEffect(effectId).GrantedAbilityNames;
+                var ids = new int[names.Length];
+                for (var i = 0; i < names.Length; i++)
+                {
+                    ids[i] = abilities.GetRequiredId(names[i]);
+                }
+
+                _grantedAbilityIds[effectId] = ids;
+            }
+
+            Pipeline.AbilityGrantHook = OnEffectAbilityGrant;
+        }
+
+        private void OnEffectAbilityGrant(EffectTarget target, EffectInstance instance, bool granting)
+        {
+            var ids = _grantedAbilityIds[instance.EffectId];
+            if (ids.Length == 0) return;
+            if (!TryGetUnit(target.Id, out var unit) || unit is null) return;
+
+            var source = GrantSource.Effect(instance.Id);
+            if (!granting)
+            {
+                unit.Abilities.Revoke(source);
+                return;
+            }
+
+            for (var i = 0; i < ids.Length; i++)
+            {
+                unit.Abilities.Grant(ids[i], source, instance.Level);
+            }
+        }
+
+        /// <summary>Compiled catalogs and registries this world runs on.</summary>
+        public GameplayDatabase Database { get; }
+
+        /// <summary>Effect pipeline this world drives. Read from it freely, but do not call its mutating
+        /// members (<c>EnqueueApply</c>, <c>RemoveByTags</c>, <c>RemoveById</c>, <c>Tick</c>) on a world:
+        /// they bypass the command queue and its call order, the events they raise between ticks are cleared
+        /// when the next <see cref="Tick"/> starts, and the pipeline's own tick skips structural changes and
+        /// commands. Use the world's <c>Enqueue*</c> commands and <see cref="Tick"/> instead.</summary>
+        public EffectPipeline Pipeline { get; }
+
+        /// <summary>Gameplay events raised by the last <see cref="Tick"/>, in raise order.</summary>
+        public ReadOnlySpan<GameplayEvent> PendingGameplayEvents => Pipeline.PendingGameplayEvents;
+
+        /// <summary>This tick's effect lifecycle events of every unit, in occurrence order. Cleared when the next
+        /// <see cref="Tick"/> starts.</summary>
+        public ReadOnlySpan<EffectLifecycleEvent> PendingEffectEvents => Pipeline.PendingEffectEvents;
+
+        /// <summary>This tick's attribute Current changes of every registered unit, in occurrence order. Changes
+        /// made before a unit is spawned or after it is despawned are not recorded. Cleared when the next
+        /// <see cref="Tick"/> starts.</summary>
+        public ReadOnlySpan<AttributeChange> PendingAttributeChanges => Pipeline.PendingAttributeChanges;
+
+        /// <summary>Ticks processed so far. The pipeline owns the counter; this world keeps none of its own.</summary>
+        public long CurrentTick => Pipeline.CurrentTick;
+
+        /// <summary>Number of registered units.</summary>
+        public int UnitCount => _units.Count;
+
+        /// <summary>Registered unit ids, ascending.</summary>
+        public IReadOnlyList<TargetId> TargetIds => _unitIds;
+
+        /// <summary>Effect target of the unit whose id is <c>TargetIds[index]</c>.</summary>
+        /// <param name="index">Index in [0, <see cref="UnitCount"/>).</param>
+        /// <returns>The unit's effect target.</returns>
+        public EffectTarget TargetAt(int index) => _units[index].Effects;
+
+        /// <summary>Resolves a unit's effect target by id.</summary>
+        /// <param name="id">Target id to resolve.</param>
+        /// <param name="target">Resolved effect target.</param>
+        /// <returns>True when a unit with that id is registered.</returns>
+        public bool TryResolve(TargetId id, out EffectTarget? target)
+        {
+            if (TryGetUnit(id, out var unit))
+            {
+                target = unit!.Effects;
+                return true;
+            }
+
+            target = null;
+            return false;
+        }
+
+        /// <summary>Looks up a registered unit by id.</summary>
+        /// <param name="id">Unit id.</param>
+        /// <param name="unit">Resolved unit.</param>
+        /// <returns>True when the unit is registered.</returns>
+        public bool TryGetUnit(TargetId id, out Unit? unit)
+        {
+            var index = IndexOf(id);
+            unit = index >= 0 ? _units[index] : null;
+            return index >= 0;
+        }
+
+        /// <summary>Creates a unit from an archetype: its declared attributes with their initial Base values
+        /// (applied in clamp evaluation order) and its starting abilities granted from the archetype origin.
+        /// The unit is not registered yet — finish any initialization, then <see cref="Spawn"/> it.</summary>
+        /// <param name="id">Unit id.</param>
+        /// <param name="archetypeId">Archetype id in <see cref="GameplayDatabase.Archetypes"/>.</param>
+        /// <param name="ownerId">Owner id the unit carries.</param>
+        /// <returns>The new, unregistered unit.</returns>
+        /// <exception cref="ArgumentOutOfRangeException">Thrown when the archetype id is outside the catalog.</exception>
+        public Unit CreateUnit(TargetId id, int archetypeId, ulong ownerId = 0)
+        {
+            if ((uint)archetypeId >= (uint)Database.Archetypes.Count)
+                throw new ArgumentOutOfRangeException(nameof(archetypeId), archetypeId, "Archetype id is outside the catalog.");
+
+            var archetype = Database.Archetypes.GetArchetype(archetypeId);
+            var unit = new Unit(id, archetype.Layout, archetype.Grants, Database.Tags, ownerId);
+            for (var i = 0; i < archetype.AttributeIds.Length; i++)
+            {
+                unit.Attributes.SetBase(archetype.AttributeIds[i], archetype.Bases[i]);
+            }
+
+            return unit;
+        }
+
+        /// <summary>Queues a unit for registration. It becomes visible at the start of the next
+        /// <see cref="Tick"/>, in the order this call takes relative to other queued spawns and
+        /// despawns — and before every queued command, whatever the call order.</summary>
+        /// <param name="unit">Unit to register.</param>
+        /// <exception cref="InvalidOperationException">Thrown when the id will already be registered at
+        /// this point in the queue — registered and not queued for despawn, or already queued for
+        /// spawn. The rejected call leaves the queue untouched.</exception>
+        public void Spawn(Unit unit)
+        {
+            if (unit is null) throw new ArgumentNullException(nameof(unit));
+            if (WillBeRegistered(unit.Id))
+                throw new InvalidOperationException($"Unit id {unit.Id.Value} is already registered.");
+            _pendingOps.Add((unit, unit.Id));
+        }
+
+        /// <summary>Queues a unit for removal. The removal takes effect at the start of the next
+        /// <see cref="Tick"/>, in the order this call takes relative to other queued spawns and
+        /// despawns — a despawn queued after a spawn of the same id cancels it out. It also precedes every
+        /// queued command whatever the call order, so a command for this unit queued earlier finds it gone.</summary>
+        /// <param name="id">Unit id to remove.</param>
+        public void Despawn(TargetId id)
+        {
+            _pendingOps.Add((null, id));
+        }
+
+        /// <summary>Applies queued structural changes, clears the observation buffers, processes queued
+        /// commands in call order, then runs the pipeline phases. Read the buffers after this call — they
+        /// hold exactly this tick's output, and the next call clears them, so a catch-up loop that ticks several
+        /// times in a row must read them after each call.</summary>
+        public void Tick()
+        {
+            FlushStructuralChanges();
+            Pipeline.ClearObservationBuffers();
+            _activationCount = 0;
+            ProcessCommands();
+            Pipeline.RunPhases();
+        }
+
+        /// <summary>Creates a deep-copy snapshot of every registered unit plus the world counters and the RNG state.</summary>
+        /// <returns>Snapshot of the whole world.</returns>
+        /// <exception cref="InvalidOperationException">Thrown when applications, structural changes or
+        /// commands are still pending — all are outside snapshot scope, so snapshotting mid-drain would
+        /// silently lose work or omit not-yet-flushed units — or when the world's RNG is not an
+        /// <see cref="IRestorableRng"/>, since a restore could not replay the same rolls.</exception>
+        public WorldSnapshot CreateSnapshot()
+        {
+            if (Pipeline.PendingApplyCount > 0)
+                throw new InvalidOperationException("Cannot snapshot a world with pending applications.");
+            if (_pendingOps.Count > 0)
+                throw new InvalidOperationException("Cannot snapshot a world with pending structural changes.");
+            if (_commands.Count > 0)
+                throw new InvalidOperationException("Cannot snapshot a world with pending commands.");
+            var rng = RestorableRng();
+
+            var units = new UnitSnapshot[_units.Count];
+            for (var i = 0; i < _units.Count; i++) units[i] = _units[i].CreateSnapshot();
+            var rngState = new byte[rng.StateSize];
+            rng.SaveState(rngState);
+            return new WorldSnapshot(units, Pipeline.CurrentTick, Pipeline.NextInstanceId, rngState);
+        }
+
+        private IRestorableRng RestorableRng() =>
+            _rng as IRestorableRng
+            ?? throw new InvalidOperationException(
+                "World snapshots need an IRestorableRng so a restored world replays the same rolls.");
+
+        /// <summary>Restores every unit, the world counters and the RNG from a snapshot. Pending work is discarded like the
+        /// rest of the abandoned timeline: queued commands, applications left over from the apply budget,
+        /// <see cref="PendingActivations"/> and the observation buffers are empty afterwards, so refresh views from
+        /// the restored state. Queued spawns and despawns are applied first so the registry can match the snapshot.</summary>
+        /// <param name="snapshot">Snapshot to restore.</param>
+        /// <exception cref="ArgumentException">Thrown when the snapshot's unit set does not match the
+        /// registry — spawn and despawn are not part of a snapshot — or when the snapshot's RNG state does not
+        /// fit this world's RNG. Both are validated before any unit or the RNG is restored, so a failed restore
+        /// changes nothing beyond the queued spawns and despawns, which are applied first.</exception>
+        /// <exception cref="InvalidOperationException">Thrown when the world's RNG is not an
+        /// <see cref="IRestorableRng"/>.</exception>
+        public void RestoreSnapshot(WorldSnapshot snapshot)
+        {
+            if (snapshot is null) throw new ArgumentNullException(nameof(snapshot));
+
+            FlushStructuralChanges();
+            if (snapshot.Units.Length != _units.Count)
+                throw new ArgumentException("Snapshot unit count does not match the registry.", nameof(snapshot));
+
+            for (var i = 0; i < _units.Count; i++)
+            {
+                if (snapshot.Units[i].UnitId != _units[i].Id)
+                {
+                    throw new ArgumentException(
+                        $"Snapshot unit at index {i} has id {snapshot.Units[i].UnitId.Value}, "
+                        + $"but the registry has id {_units[i].Id.Value} at that index.",
+                        nameof(snapshot));
+                }
+            }
+
+            var rng = RestorableRng();
+            if (snapshot.RngState.Length != rng.StateSize)
+                throw new ArgumentException("Snapshot RNG state does not fit this world's RNG.", nameof(snapshot));
+
+            rng.RestoreState(snapshot.RngState);
+            for (var i = 0; i < _units.Count; i++)
+            {
+                _units[i].RestoreSnapshot(snapshot.Units[i], _effects);
+            }
+
+            Pipeline.RestoreClock(snapshot.CurrentTick);
+            Pipeline.NextInstanceId = snapshot.NextInstanceId;
+            _commands.Clear();
+            _activationCount = 0;
+            Pipeline.DiscardPendingWork();
+        }
+
+        /// <summary>Applies the pending queue in call order. <see cref="Spawn"/> already rejected every
+        /// duplicate, so replaying the queue cannot fail.</summary>
+        private void FlushStructuralChanges()
+        {
+            if (_pendingOps.Count == 0) return;
+
+            for (var i = 0; i < _pendingOps.Count; i++)
+            {
+                var op = _pendingOps[i];
+                if (op.Unit is null)
+                {
+                    var index = IndexOf(op.Id);
+                    if (index < 0) continue;
+                    Pipeline.Untrack(_units[index].Effects);
+                    _units.RemoveAt(index);
+                    _unitIds.RemoveAt(index);
+                }
+                else
+                {
+                    var position = InsertPosition(op.Unit.Id);
+                    Pipeline.Track(op.Unit.Effects);
+                    _units.Insert(position, op.Unit);
+                    _unitIds.Insert(position, op.Unit.Id);
+                }
+            }
+
+            _pendingOps.Clear();
+            Pipeline.ApplyBudgetPerTick = (int)Math.Min(int.MaxValue, (long)_applyBudgetPerUnit * Math.Max(1, _units.Count));
+        }
+
+        // ponytail: linear scan of the pending queue, O(M^2) for M spawns in one frame; add a pending-id
+        // set if mass spawns show up in profiles.
+        private bool WillBeRegistered(TargetId id)
+        {
+            for (var i = _pendingOps.Count - 1; i >= 0; i--)
+            {
+                if (_pendingOps[i].Id == id) return _pendingOps[i].Unit is not null;
+            }
+
+            return IndexOf(id) >= 0;
+        }
+
+        private int IndexOf(TargetId id)
+        {
+            var low = 0;
+            var high = _unitIds.Count - 1;
+            while (low <= high)
+            {
+                var mid = low + ((high - low) >> 1);
+                var order = _unitIds[mid].CompareTo(id);
+                if (order == 0) return mid;
+                if (order < 0) low = mid + 1;
+                else high = mid - 1;
+            }
+
+            return -1;
+        }
+
+        private int InsertPosition(TargetId id)
+        {
+            var low = 0;
+            var high = _unitIds.Count;
+            while (low < high)
+            {
+                var mid = low + ((high - low) >> 1);
+                if (_unitIds[mid].CompareTo(id) < 0) low = mid + 1;
+                else high = mid;
+            }
+
+            return low;
+        }
+    }
+}

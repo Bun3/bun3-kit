@@ -1,6 +1,7 @@
 #nullable enable
 using System;
 using Bun3.Gameplay.Attributes;
+using Bun3.Gameplay.Effects;
 using Bun3.Gameplay.Numerics;
 using NUnit.Framework;
 
@@ -9,6 +10,19 @@ namespace Bun3.Gameplay.Tests;
 [TestFixture]
 public sealed class AttributeSetBasicTests
 {
+    [Test]
+    public void A_clamp_bound_missing_from_the_declaration_is_named_in_the_error()
+    {
+        var builder = new AttributeRegistryBuilder();
+        builder.Register(10, "Health", min: Operand.Constant(0), max: Operand.Attribute(11));
+        builder.Register(11, "MaxHealth");
+        var registry = builder.Build();
+
+        var declared = new ushort[] { 10 };
+        var ex = Assert.Throws<ArgumentException>(() => new AttributeSet(registry, declared));
+        Assert.That(ex!.Message, Does.Contain("'Health'").And.Contain("'MaxHealth'"));
+    }
+
     private const ushort Hp = 1;
     private const ushort MaxHp = 2;
     private const ushort Attack = 5;
@@ -16,9 +30,9 @@ public sealed class AttributeSetBasicTests
     private static AttributeRegistry BuildRegistry()
     {
         var builder = new AttributeRegistryBuilder();
-        builder.Register(MaxHp, min: Operand.Constant(1));
-        builder.Register(Hp, min: Operand.Constant(0), max: Operand.Attribute(MaxHp));
-        builder.Register(Attack);
+        builder.Register(MaxHp, "MaxHp", min: Operand.Constant(1));
+        builder.Register(Hp, "Hp", min: Operand.Constant(0), max: Operand.Attribute(MaxHp));
+        builder.Register(Attack, "Attack");
         return builder.Build();
     }
 
@@ -50,18 +64,21 @@ public sealed class AttributeSetBasicTests
     public void Change_events_carry_old_and_new_and_skip_no_ops()
     {
         var set = CreateSet();
-        set.SetBase(MaxHp, 1000);
-        set.ClearChanges();
+        set.SetBase(MaxHp, 1000);                   // not attached yet — not recorded
+        var log = new AttributeChangeLog();
+        set.AttachChangeLog(log, new TargetId(7));
 
         set.SetBase(Hp, 800);
         set.SetBase(Hp, 800);                       // same value — no event
-        Assert.That(set.PendingChanges.Length, Is.EqualTo(1));
-        Assert.That(set.PendingChanges[0].AttributeId, Is.EqualTo(Hp));
-        Assert.That(set.PendingChanges[0].OldCurrent, Is.EqualTo(BigNum.Zero));
-        Assert.That(set.PendingChanges[0].NewCurrent, Is.EqualTo((BigNum)800));
+        Assert.That(log.Pending.Length, Is.EqualTo(1));
+        Assert.That(log.Pending[0].Target, Is.EqualTo(new TargetId(7)));
+        Assert.That(log.Pending[0].AttributeId, Is.EqualTo(Hp));
+        Assert.That(log.Pending[0].OldCurrent, Is.EqualTo(BigNum.Zero));
+        Assert.That(log.Pending[0].NewCurrent, Is.EqualTo((BigNum)800));
 
-        set.ClearChanges();
-        Assert.That(set.PendingChanges.Length, Is.Zero);
+        set.AttachChangeLog(null, default);
+        set.SetBase(Hp, 700);
+        Assert.That(log.Pending.Length, Is.EqualTo(1), "detached sets record nothing");
     }
 
     [Test]
@@ -79,8 +96,8 @@ public sealed class AttributeSetBasicTests
     {
         // registry: Hp(max→MaxHp), MaxHp(no clamp)
         var builder = new AttributeRegistryBuilder();
-        builder.Register(MaxHp);
-        builder.Register(Hp, min: Operand.Constant(0), max: Operand.Attribute(MaxHp));
+        builder.Register(MaxHp, "MaxHp");
+        builder.Register(Hp, "Hp", min: Operand.Constant(0), max: Operand.Attribute(MaxHp));
         var registry = builder.Build();
 
         // creation fails when the set omits MaxHp

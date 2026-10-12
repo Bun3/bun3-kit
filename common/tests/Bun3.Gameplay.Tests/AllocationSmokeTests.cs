@@ -1,6 +1,10 @@
 using System;
 using System.Runtime.CompilerServices;
+using Bun3.Gameplay.Abilities;
+using Bun3.Gameplay.Attributes;
+using Bun3.Gameplay.Effects;
 using Bun3.Gameplay.Numerics;
+using Bun3.Gameplay.Seams;
 using Bun3.Gameplay.Tags;
 using NUnit.Framework;
 
@@ -145,5 +149,186 @@ public class AllocationSmokeTests
                 counts.Remove(leaves[i]);
             }
         }
+    }
+
+    [Test]
+    public void Settled_world_tick_with_event_listeners_allocates_nothing()
+    {
+        var (world, _, _, _, _) = BuildWorldWithEventListeners();
+
+        // Settle: both units already carry an active "Listener" instance from setup; run enough
+        // idle ticks that every phase (RebuildAll/EvaluateOngoing/RebuildToggled) has walked them
+        // at least once before measuring, so no first-touch lazy state shows up as a false positive.
+        for (var i = 0; i < 10; i++) world.Tick();
+
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        for (var i = 0; i < 100; i++) world.Tick();
+        var after = GC.GetAllocatedBytesForCurrentThread();
+
+        var allocated = after - before;
+        Assert.That(allocated, Is.Zero, "idle World.Tick() with active event listeners allocated on the heap");
+    }
+
+    [Test]
+    public void Queued_commands_and_observation_reads_allocate_nothing_in_steady_state()
+    {
+        var (world, damageEffectId, attackerId, defenderId, strikeId) = BuildWorldWithEventListeners();
+        world.TryGetUnit(attackerId, out var attacker);
+        var cooldownTag = attacker!.Tags.Catalog.GetRequired("cooldown.fireball");
+
+        // Warm-up grows every buffer these paths touch to its steady capacity before measuring.
+        for (var i = 0; i < 10; i++) DriveCommandTick(world, damageEffectId, attackerId, defenderId, strikeId, attacker, cooldownTag);
+
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        for (var i = 0; i < 100; i++) DriveCommandTick(world, damageEffectId, attackerId, defenderId, strikeId, attacker, cooldownTag);
+        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+
+        Assert.That(allocated, Is.Zero, "queued commands or observation reads allocated on the heap");
+    }
+
+    private static long DriveCommandTick(
+        World world, int damageEffectId, TargetId attackerId, TargetId defenderId, int strikeId, Unit attacker,
+        GameplayTag cooldownTag)
+    {
+        world.EnqueueActivation(attackerId, strikeId);
+        world.EnqueueApply(damageEffectId, attackerId, defenderId);
+        world.EnqueueSetBase(attackerId, EffectTestKit.Mp, 1_000);
+        world.EnqueueRemoveByTag(attackerId, cooldownTag);
+        world.Tick();
+
+        long sink = world.PendingActivations.Length + world.Pipeline.PendingGameplayEvents.Length;
+        for (var i = 0; i < attacker.Effects.ActiveEffectCount; i++) sink += attacker.Effects.GetActiveEffect(i).RemainingTicks;
+        world.TryGetCooldown(attackerId, strikeId, out var remaining, out _);
+        sink += remaining + (int)world.CanActivateAbility(attackerId, strikeId);
+        return sink;
+    }
+
+    [Test]
+    public void Raising_events_on_a_settled_world_allocates_nothing()
+    {
+        var (world, damageEffectId, attackerId, defenderId, _) = BuildWorldWithEventListeners();
+
+        // Settle by pumping the exact operation under measurement (apply -> event -> OnEvent chain
+        // -> counter-application) 10 times first. Every buffer this path touches — the pipeline's
+        // apply queue, and each unit's attribute-change and effect-event lists — is cleared every
+        // tick but never shrunk, so 10 cycles is enough for each to reach its steady capacity; letting
+        // that growth happen during the pre-measurement warm-up (rather than the measured region)
+        // is exactly what keeps the measurement itself from tripping on a one-time list resize.
+        for (var i = 0; i < 10; i++)
+        {
+            world.EnqueueApply(damageEffectId, attackerId, defenderId);
+            world.Tick();
+        }
+
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        for (var i = 0; i < 100; i++)
+        {
+            world.EnqueueApply(damageEffectId, attackerId, defenderId);
+            world.Tick();
+        }
+
+        var after = GC.GetAllocatedBytesForCurrentThread();
+        var allocated = after - before;
+        Assert.That(allocated, Is.Zero, "raising a gameplay event on a settled world allocated on the heap");
+    }
+
+    // Attacker and Defender each carry an Infinite "Listener" effect (OnEvent/AsTarget) so that
+    // applying Damage to either raises event.damage.taken and fires a counter-application (Echo)
+    // back onto the attacker via the built-in EventSource selector — real event dispatch, not a
+    // no-op catalog.
+    private static (World World, int DamageEffectId, TargetId AttackerId, TargetId DefenderId, int StrikeId) BuildWorldWithEventListeners()
+    {
+        var tags = EffectTestKit.LoadCatalog();
+        var attributes = EffectTestKit.BuildAttributeRegistry();
+        var seams = new SeamRegistryBuilder().Build(tags);
+
+        var effectBuilder = new EffectCatalogBuilder();
+        effectBuilder.Add(new EffectDef
+        {
+            Name = "Damage",
+            DurationType = EffectDurationType.Instant,
+            Modifiers =
+            {
+                new ModifierDef
+                {
+                    AttributeId = EffectTestKit.Hp, Op = AttributeModifierOp.Add,
+                    Magnitude = new MagnitudeDef { Base = Operand.Constant(-5) },
+                },
+            },
+            RaiseEvents = { new RaiseEventDef { Tag = "event.damage.taken", AttributeId = EffectTestKit.Hp } },
+        });
+        effectBuilder.Add(new EffectDef
+        {
+            Name = "Echo",
+            DurationType = EffectDurationType.Instant,
+            Modifiers =
+            {
+                new ModifierDef
+                {
+                    AttributeId = EffectTestKit.Hp, Op = AttributeModifierOp.Add,
+                    Magnitude = new MagnitudeDef { Base = Operand.Constant(-1) },
+                },
+            },
+        });
+        effectBuilder.Add(new EffectDef
+        {
+            Name = "Listener",
+            DurationType = EffectDurationType.Infinite,
+            Chains =
+            {
+                new ChainEdgeDef
+                {
+                    Trigger = ChainTrigger.OnEvent,
+                    EffectName = "Echo",
+                    EventTag = "event.damage.taken",
+                    Listen = ChainListen.AsTarget,
+                    SelectorTag = BuiltInSelectors.EventSourceTag,
+                    LevelRule = ChainLevelRule.Inherit,
+                },
+            },
+        });
+        effectBuilder.Add(new EffectDef
+        {
+            Name = "StrikeCooldown",
+            DurationType = EffectDurationType.Duration,
+            DurationTicks = 1,
+            GrantedTags = { "cooldown.fireball" },
+            AssetTags = { "cooldown.fireball" },
+        });
+        var effects = effectBuilder.Build(tags, seams, attributes);
+        var abilityBuilder = new AbilityCatalogBuilder();
+        abilityBuilder.Add(new AbilityDef
+        {
+            Name = "Strike",
+            MaxLevel = 1,
+            CooldownEffect = "StrikeCooldown",
+            Costs = { new CostDef { AttributeId = EffectTestKit.Mp, Magnitude = new MagnitudeDef { Base = Operand.Constant(1) } } },
+            Effects = { new AbilityEffectDef { EffectName = "Damage" } },
+        });
+        var abilities = abilityBuilder.Build(tags, seams, attributes, effects);
+
+        var world = new World(new GameplayDatabase(tags, seams, attributes, effects, abilities, ArchetypeCatalog.Empty), new XorShiftRng(1));
+        Span<ushort> attributeIds = stackalloc ushort[]
+        {
+            EffectTestKit.Hp, EffectTestKit.MaxHp, EffectTestKit.Attack, EffectTestKit.Mp, EffectTestKit.Resistance,
+        };
+        var attacker = new Unit(new TargetId(1), attributes, attributeIds, tags);
+        var defender = new Unit(new TargetId(2), attributes, attributeIds, tags);
+        attacker.Attributes.SetBase(EffectTestKit.MaxHp, 10_000);
+        attacker.Attributes.SetBase(EffectTestKit.Hp, 10_000);
+        attacker.Attributes.SetBase(EffectTestKit.Mp, 1_000);
+        defender.Attributes.SetBase(EffectTestKit.MaxHp, 10_000);
+        defender.Attributes.SetBase(EffectTestKit.Hp, 10_000);
+        world.Spawn(attacker);
+        world.Spawn(defender);
+        attacker.Abilities.Grant(abilities.GetRequiredId("Strike"), GrantSource.Archetype(), level: 1);
+        world.Tick();
+
+        var listenerEffectId = effects.GetRequiredId("Listener");
+        world.EnqueueApply(listenerEffectId, attacker.Id, attacker.Id);
+        world.EnqueueApply(listenerEffectId, defender.Id, defender.Id);
+        world.Tick();
+
+        return (world, effects.GetRequiredId("Damage"), attacker.Id, defender.Id, abilities.GetRequiredId("Strike"));
     }
 }

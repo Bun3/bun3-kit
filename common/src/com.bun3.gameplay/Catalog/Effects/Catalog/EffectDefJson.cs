@@ -2,205 +2,147 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Text;
 using Bun3.Gameplay.Attributes;
 using Bun3.Gameplay.Effects;
 using Bun3.Gameplay.Numerics;
 using Bun3.Gameplay.Tags;
 using Bun3.Gameplay.Tags.Catalog;
-using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+
+using static Bun3.Gameplay.Effects.Catalog.JsonFields;
 
 namespace Bun3.Gameplay.Effects.Catalog
 {
     /// <summary>
-    /// Authoring JSON loader for effect specs. Strictly validates syntax and shape (rejects
+    /// Authoring JSON loader for effect definitions. Strictly validates syntax and shape (rejects
     /// duplicate keys, unknown fields, unknown enum values; BigNum literals are always strings)
     /// but performs no semantic validation of tag or seam references — that is
     /// <see cref="EffectCatalogBuilder.Build"/>'s job. Its only semantic step is resolving
-    /// attribute name strings to ushort ids via <see cref="Load"/>'s attributeNames dictionary.
+    /// attribute name strings to ushort ids through the <see cref="Load"/> attribute registry.
     /// </summary>
-    public static class EffectSpecJson
+    public static class EffectDefJson
     {
-        /// <summary>Reads the UTF-8 JSON stream from its current position to the end into a list of effect specs.</summary>
+        /// <summary>Reads the UTF-8 JSON stream from its current position to the end into a list of effect definitions.</summary>
         /// <param name="utf8Json">Readable UTF-8 JSON stream.</param>
-        /// <param name="attributeNames">Dictionary resolving attribute names in Operand/ModifierDef to ids.</param>
-        /// <returns>Effect specs in the order they appear in the JSON.</returns>
+        /// <param name="attributes">Attribute registry resolving attribute names in Operand/ModifierDef to ids.</param>
+        /// <returns>Effect definitions in the order they appear in the JSON.</returns>
         /// <exception cref="ArgumentNullException">
-        /// <paramref name="utf8Json"/> or <paramref name="attributeNames"/> is null.
+        /// <paramref name="utf8Json"/> or <paramref name="attributes"/> is null.
         /// </exception>
         /// <exception cref="ArgumentException">The stream is not readable.</exception>
-        /// <exception cref="TagCatalogException">The JSON syntax or spec shape is invalid.</exception>
-        public static List<EffectSpec> Load(Stream utf8Json, IReadOnlyDictionary<string, ushort> attributeNames)
-        {
-            if (utf8Json is null) throw new ArgumentNullException(nameof(utf8Json));
-            if (!utf8Json.CanRead) throw new ArgumentException("A readable stream is required.", nameof(utf8Json));
-            if (attributeNames is null) throw new ArgumentNullException(nameof(attributeNames));
+        /// <exception cref="TagCatalogException">The JSON syntax or effect shape is invalid.</exception>
+        public static List<EffectDef> Load(Stream utf8Json, AttributeRegistry attributes) =>
+            LoadDocument(
+                utf8Json, (attributes ?? throw new ArgumentNullException(nameof(attributes))).NameToId, "effects", ReadEffect);
 
-            string text;
-            try
-            {
-                using var streamReader = new StreamReader(utf8Json, new UTF8Encoding(false, true), false, 1024, true);
-                text = streamReader.ReadToEnd();
-            }
-            catch (DecoderFallbackException exception)
-            {
-                throw new TagCatalogException(exception.Message, string.Empty, 1, 1);
-            }
-
-            TagCatalogJson.StrictJsonSyntax.Validate(text);
-
-            try
-            {
-                using var stringReader = new StringReader(text);
-                using var reader = new JsonTextReader(stringReader)
-                {
-                    DateParseHandling = DateParseHandling.None,
-                    FloatParseHandling = FloatParseHandling.Decimal,
-                    MaxDepth = 16,
-                };
-                var root = JObject.Load(reader, new JsonLoadSettings
-                {
-                    DuplicatePropertyNameHandling = DuplicatePropertyNameHandling.Error,
-                    LineInfoHandling = LineInfoHandling.Load,
-                });
-                if (reader.Read())
-                {
-                    throw Error("Unexpected token after the root JSON value.", root);
-                }
-
-                return ReadRoot(root, attributeNames);
-            }
-            catch (TagCatalogException)
-            {
-                throw;
-            }
-            catch (JsonReaderException exception)
-            {
-                throw new TagCatalogException(
-                    exception.Message, string.Empty,
-                    Math.Max(1, exception.LineNumber), Math.Max(1, exception.LinePosition));
-            }
-        }
-
-        private static List<EffectSpec> ReadRoot(JObject root, IReadOnlyDictionary<string, ushort> attributeNames)
-        {
-            RequireAllowedProperties(root, "schemaVersion", "specs");
-            RequireSchemaVersion(root);
-
-            var specsArray = RequireArray(root, "specs");
-            var result = new List<EffectSpec>(specsArray.Count);
-            foreach (var item in specsArray)
-            {
-                result.Add(ReadSpec(AsObject(item, "specs items must be objects."), attributeNames));
-            }
-
-            return result;
-        }
-
-        private static void RequireSchemaVersion(JObject root)
-        {
-            var token = RequireProperty(root, "schemaVersion");
-            if (token.Type != JTokenType.Integer || token is not JValue { Value: long value } || value != 1)
-            {
-                throw Error("schemaVersion must be the integer 1.", token);
-            }
-        }
-
-        private static EffectSpec ReadSpec(JObject spec, IReadOnlyDictionary<string, ushort> attributeNames)
+        private static EffectDef ReadEffect(JObject effect, IReadOnlyDictionary<string, ushort> attributeNames)
         {
             RequireAllowedProperties(
-                spec, "name", "maxLevel", "duration", "stack", "modifiers", "executions",
+                effect, "name", "maxLevel", "duration", "stack", "modifiers", "executions",
                 "applicationConditions", "ongoingConditions", "grantedTags", "assetTags",
                 "immunityTags", "chains", "removeOnApplyTags", "chanceToApply",
-                "durationPerLevel", "durationScale", "drCategory", "drWindowTicks", "drStageMultipliers");
+                "durationPerLevel", "durationScale", "drCategory", "drWindowTicks", "drStageMultipliers",
+                "raiseEvents", "grantedAbilities");
 
-            var name = RequireString(spec, "name");
-            var maxLevel = ReadOptionalInt(spec, "maxLevel", 0);
-            var (durationType, durationTicks, periodTicks) = ReadDuration(RequireObject(spec, "duration"));
-            var stack = spec.Property("stack", StringComparison.Ordinal) is { } stackProperty
+            var name = RequireString(effect, "name");
+            var maxLevel = ReadOptionalInt(effect, "maxLevel", 0);
+            var (durationType, durationTicks, periodTicks) = ReadDuration(RequireObject(effect, "duration"));
+            var stack = effect.Property("stack", StringComparison.Ordinal) is { } stackProperty
                 ? ReadStack(AsObject(stackProperty.Value, "stack must be an object."))
-                : new StackPolicy();
+                : new StackPolicyDef();
 
             var modifiers = new List<ModifierDef>();
-            foreach (var item in RequireArray(spec, "modifiers"))
+            foreach (var item in RequireArray(effect, "modifiers"))
             {
                 modifiers.Add(ReadModifier(AsObject(item, "modifiers items must be objects."), attributeNames));
             }
 
             var executions = new List<ExecutionDef>();
-            foreach (var item in RequireArray(spec, "executions"))
+            foreach (var item in RequireArray(effect, "executions"))
             {
                 executions.Add(ReadExecution(AsObject(item, "executions items must be objects."), attributeNames));
             }
 
             var applicationConditions = new List<ConditionDef>();
-            foreach (var item in RequireArray(spec, "applicationConditions"))
+            foreach (var item in RequireArray(effect, "applicationConditions"))
             {
                 applicationConditions.Add(
                     ReadCondition(AsObject(item, "applicationConditions items must be objects."), attributeNames));
             }
 
             var ongoingConditions = new List<ConditionDef>();
-            foreach (var item in RequireArray(spec, "ongoingConditions"))
+            foreach (var item in RequireArray(effect, "ongoingConditions"))
             {
                 ongoingConditions.Add(
                     ReadCondition(AsObject(item, "ongoingConditions items must be objects."), attributeNames));
             }
 
-            var grantedTags = ReadStringArray(RequireArray(spec, "grantedTags"));
-            var assetTags = ReadStringArray(RequireArray(spec, "assetTags"));
-            var immunityTags = ReadStringArray(RequireArray(spec, "immunityTags"));
+            var grantedTags = ReadStringArray(RequireArray(effect, "grantedTags"));
+            var assetTags = ReadStringArray(RequireArray(effect, "assetTags"));
+            var immunityTags = ReadStringArray(RequireArray(effect, "immunityTags"));
 
             var chains = new List<ChainEdgeDef>();
-            foreach (var item in RequireArray(spec, "chains"))
+            foreach (var item in RequireArray(effect, "chains"))
             {
                 chains.Add(ReadChain(AsObject(item, "chains items must be objects."), attributeNames));
             }
 
-            var removeOnApplyTags = spec.Property("removeOnApplyTags", StringComparison.Ordinal) != null
-                ? ReadStringArray(RequireArray(spec, "removeOnApplyTags"))
+            var removeOnApplyTags = effect.Property("removeOnApplyTags", StringComparison.Ordinal) != null
+                ? ReadStringArray(RequireArray(effect, "removeOnApplyTags"))
                 : new List<string>();
 
             MagnitudeDef? chanceToApply = null;
-            if (spec.Property("chanceToApply", StringComparison.Ordinal) is { } chanceToApplyProperty)
+            if (effect.Property("chanceToApply", StringComparison.Ordinal) is { } chanceToApplyProperty)
             {
                 chanceToApply = ReadMagnitude(
                     AsObject(chanceToApplyProperty.Value, "chanceToApply must be an object."), attributeNames);
             }
 
             List<BigNum>? durationPerLevel = null;
-            if (spec.Property("durationPerLevel", StringComparison.Ordinal) != null)
+            if (effect.Property("durationPerLevel", StringComparison.Ordinal) != null)
             {
                 durationPerLevel = new List<BigNum>();
-                foreach (var item in RequireArray(spec, "durationPerLevel"))
+                foreach (var item in RequireArray(effect, "durationPerLevel"))
                 {
                     durationPerLevel.Add(RequireBigNumToken(item));
                 }
             }
 
             MagnitudeDef? durationScale = null;
-            if (spec.Property("durationScale", StringComparison.Ordinal) is { } durationScaleProperty)
+            if (effect.Property("durationScale", StringComparison.Ordinal) is { } durationScaleProperty)
             {
                 durationScale = ReadMagnitude(
                     AsObject(durationScaleProperty.Value, "durationScale must be an object."), attributeNames);
             }
 
-            var drCategory = spec.Property("drCategory", StringComparison.Ordinal) != null
-                ? RequireString(spec, "drCategory")
+            var drCategory = effect.Property("drCategory", StringComparison.Ordinal) != null
+                ? RequireString(effect, "drCategory")
                 : null;
-            var drWindowTicks = ReadOptionalInt(spec, "drWindowTicks", 0);
+            var drWindowTicks = ReadOptionalInt(effect, "drWindowTicks", 0);
 
             var drStageMultipliers = new List<BigNum>();
-            if (spec.Property("drStageMultipliers", StringComparison.Ordinal) != null)
+            if (effect.Property("drStageMultipliers", StringComparison.Ordinal) != null)
             {
-                foreach (var item in RequireArray(spec, "drStageMultipliers"))
+                foreach (var item in RequireArray(effect, "drStageMultipliers"))
                 {
                     drStageMultipliers.Add(RequireBigNumToken(item));
                 }
             }
 
-            return new EffectSpec
+            var raiseEvents = new List<RaiseEventDef>();
+            if (effect.Property("raiseEvents", StringComparison.Ordinal) != null)
+            {
+                foreach (var item in RequireArray(effect, "raiseEvents"))
+                {
+                    raiseEvents.Add(ReadRaiseEvent(AsObject(item, "raiseEvents items must be objects."), attributeNames));
+                }
+            }
+
+            var grantedAbilities = effect.Property("grantedAbilities", StringComparison.Ordinal) != null
+                ? ReadStringArray(RequireArray(effect, "grantedAbilities"))
+                : new List<string>();
+
+            return new EffectDef
             {
                 Name = name,
                 MaxLevel = maxLevel,
@@ -223,7 +165,17 @@ namespace Bun3.Gameplay.Effects.Catalog
                 DrCategory = drCategory,
                 DrWindowTicks = drWindowTicks,
                 DrStageMultipliers = drStageMultipliers,
+                RaiseEvents = raiseEvents,
+                GrantedAbilities = grantedAbilities,
             };
+        }
+
+        private static RaiseEventDef ReadRaiseEvent(JObject raiseEvent, IReadOnlyDictionary<string, ushort> attributeNames)
+        {
+            RequireAllowedProperties(raiseEvent, "tag", "attribute");
+            var tag = RequireString(raiseEvent, "tag");
+            var attributeId = ResolveAttributeId(raiseEvent, "attribute", attributeNames);
+            return new RaiseEventDef { Tag = tag, AttributeId = attributeId };
         }
 
         private static (EffectDurationType Type, int Ticks, int PeriodTicks) ReadDuration(JObject duration)
@@ -235,14 +187,14 @@ namespace Bun3.Gameplay.Effects.Catalog
             return (type, ticks, periodTicks);
         }
 
-        private static StackPolicy ReadStack(JObject stack)
+        private static StackPolicyDef ReadStack(JObject stack)
         {
             RequireAllowedProperties(
                 stack, "maxStack", "onReapply", "addStackCount", "refreshDurationOnReapply",
                 "resetPeriodOnReapply", "onExpiration", "onOverflow", "overflowEffect", "clearStacksOnOverflow",
                 "levelFromStack", "extendCapMultiplier");
 
-            var result = new StackPolicy
+            var result = new StackPolicyDef
             {
                 MaxStack = RequireInt(stack, "maxStack"),
                 OnReapply = RequireEnum<StackReapply>(stack, "onReapply"),
@@ -306,7 +258,8 @@ namespace Bun3.Gameplay.Effects.Catalog
         }
 
         // magnitude JSON is discriminated into one of three shapes: calc | base(+perLevel?) | bare operand.
-        private static MagnitudeDef ReadMagnitude(JObject magnitude, IReadOnlyDictionary<string, ushort> attributeNames)
+        // internal: shared with AbilityDefJson's CostDef.Magnitude parsing.
+        internal static MagnitudeDef ReadMagnitude(JObject magnitude, IReadOnlyDictionary<string, ushort> attributeNames)
         {
             if (magnitude.Property("calc", StringComparison.Ordinal) != null)
             {
@@ -351,12 +304,12 @@ namespace Bun3.Gameplay.Effects.Catalog
             if (magnitude.Property("curveKeys", StringComparison.Ordinal) != null)
             {
                 RequireAllowedProperties(magnitude, "curveKeys", "tail", "extrapolateIncrement");
-                var keys = new List<LevelKey>();
+                var keys = new List<LevelKeyDef>();
                 foreach (var item in RequireArray(magnitude, "curveKeys"))
                 {
                     var keyObject = AsObject(item, "curveKeys items must be objects.");
                     RequireAllowedProperties(keyObject, "level", "value");
-                    keys.Add(new LevelKey
+                    keys.Add(new LevelKeyDef
                     {
                         Level = RequireInt(keyObject, "level"), Value = RequireBigNum(keyObject, "value"),
                     });
@@ -392,7 +345,8 @@ namespace Bun3.Gameplay.Effects.Catalog
             return new ExecutionDef { CalcTag = calcTag, Inputs = inputs };
         }
 
-        private static ConditionDef ReadCondition(JObject condition, IReadOnlyDictionary<string, ushort> attributeNames)
+        // internal: shared with AbilityDefJson's ActivationConditions parsing.
+        internal static ConditionDef ReadCondition(JObject condition, IReadOnlyDictionary<string, ushort> attributeNames)
         {
             RequireAllowedProperties(condition, "left", "op", "right");
             var left = ReadOperand(RequireObject(condition, "left"), attributeNames);
@@ -403,7 +357,8 @@ namespace Bun3.Gameplay.Effects.Catalog
 
         private static ChainEdgeDef ReadChain(JObject chain, IReadOnlyDictionary<string, ushort> attributeNames)
         {
-            RequireAllowedProperties(chain, "trigger", "effect", "selector", "selectorParams", "conditions", "level");
+            RequireAllowedProperties(
+                chain, "trigger", "effect", "selector", "selectorParams", "conditions", "level", "eventTag", "listen");
             var trigger = RequireEnum<ChainTrigger>(chain, "trigger");
             var effectName = RequireString(chain, "effect");
 
@@ -413,14 +368,9 @@ namespace Bun3.Gameplay.Effects.Catalog
                 selectorTag = RequireString(chain, "selector");
             }
 
-            var selectorParams = new List<BigNum>();
-            if (chain.Property("selectorParams", StringComparison.Ordinal) is { } selectorParamsProperty)
-            {
-                foreach (var item in AsArray(selectorParamsProperty.Value, "selectorParams must be an array."))
-                {
-                    selectorParams.Add(RequireBigNumToken(item));
-                }
-            }
+            var selectorParams = chain.Property("selectorParams", StringComparison.Ordinal) is { } selectorParamsProperty
+                ? ReadBigNumArray(AsArray(selectorParamsProperty.Value, "selectorParams must be an array."))
+                : new List<BigNum>();
 
             var conditions = new List<ConditionDef>();
             if (chain.Property("conditions", StringComparison.Ordinal) is { } conditionsProperty)
@@ -438,6 +388,16 @@ namespace Bun3.Gameplay.Effects.Catalog
                 (levelRule, fixedLevel) = ReadChainLevel(levelProperty.Value);
             }
 
+            string? eventTag = null;
+            if (chain.Property("eventTag", StringComparison.Ordinal) != null)
+            {
+                eventTag = RequireString(chain, "eventTag");
+            }
+
+            var listen = chain.Property("listen", StringComparison.Ordinal) != null
+                ? RequireEnum<ChainListen>(chain, "listen")
+                : ChainListen.AsTarget;
+
             return new ChainEdgeDef
             {
                 Trigger = trigger,
@@ -447,11 +407,15 @@ namespace Bun3.Gameplay.Effects.Catalog
                 Conditions = conditions,
                 LevelRule = levelRule,
                 FixedLevel = fixedLevel,
+                EventTag = eventTag,
+                Listen = listen,
             };
         }
 
         // level must be either the string "Inherit" or a JSON integer (fixed level).
-        private static (ChainLevelRule Rule, int Fixed) ReadChainLevel(JToken token)
+        // internal: shared with AbilityDefJson's AbilityEffectDef.level parsing -- one authoring
+        // shape for ChainLevelRule + FixedLevel across both loaders.
+        internal static (ChainLevelRule Rule, int Fixed) ReadChainLevel(JToken token)
         {
             if (token.Type == JTokenType.String)
             {
@@ -504,7 +468,8 @@ namespace Bun3.Gameplay.Effects.Catalog
             return Operand.SourceAttribute(sourceAttributeId, sourceCoefficient);
         }
 
-        private static ushort ResolveAttributeId(
+        // internal: shared with AbilityDefJson's CostDef.AttributeId / RaiseEventDef.AttributeId parsing.
+        internal static ushort ResolveAttributeId(
             JObject value, string propertyName, IReadOnlyDictionary<string, ushort> attributeNames)
         {
             var token = RequireProperty(value, propertyName);
@@ -517,7 +482,8 @@ namespace Bun3.Gameplay.Effects.Catalog
             return id;
         }
 
-        private static List<string> ReadStringArray(JArray array)
+        // internal: shared with AbilityDefJson's tag-array field parsing (assetTags/requiredTags/blockedTags).
+        internal static List<string> ReadStringArray(JArray array)
         {
             var result = new List<string>(array.Count);
             foreach (var item in array)
@@ -528,136 +494,16 @@ namespace Bun3.Gameplay.Effects.Catalog
             return result;
         }
 
-        // ---- Primitive field readers (same pattern as TagCatalogJson/TagSourceJson) ----
-
-        private static JToken RequireProperty(JObject value, string propertyName)
+        // internal: shared with AbilityDefJson's AbilityEffectDef.SelectorParams parsing.
+        internal static List<BigNum> ReadBigNumArray(JArray array)
         {
-            var property = value.Property(propertyName, StringComparison.Ordinal);
-            if (property is null)
+            var result = new List<BigNum>(array.Count);
+            foreach (var item in array)
             {
-                throw Error($"Missing required field {propertyName}.", value);
+                result.Add(RequireBigNumToken(item));
             }
 
-            return property.Value;
-        }
-
-        private static void RequireAllowedProperties(JObject value, params string[] allowed)
-        {
-            foreach (var property in value.Properties())
-            {
-                var permitted = false;
-                for (var i = 0; i < allowed.Length; i++)
-                {
-                    if (string.Equals(property.Name, allowed[i], StringComparison.Ordinal))
-                    {
-                        permitted = true;
-                        break;
-                    }
-                }
-
-                if (!permitted)
-                {
-                    throw Error($"Field not allowed: {property.Name}", property);
-                }
-            }
-        }
-
-        private static JObject RequireObject(JObject value, string propertyName) =>
-            AsObject(RequireProperty(value, propertyName), $"{propertyName} must be an object.");
-
-        private static JArray RequireArray(JObject value, string propertyName) =>
-            AsArray(RequireProperty(value, propertyName), $"{propertyName} must be an array.");
-
-        private static string RequireString(JObject value, string propertyName) =>
-            RequireStringValue(RequireProperty(value, propertyName), propertyName);
-
-        private static string RequireStringValue(JToken token, string propertyName)
-        {
-            if (token.Type != JTokenType.String)
-            {
-                throw Error($"{propertyName} must be a string.", token);
-            }
-
-            return token.Value<string>()!;
-        }
-
-        private static int RequireInt(JObject value, string propertyName)
-        {
-            var token = RequireProperty(value, propertyName);
-            if (token.Type != JTokenType.Integer || token is not JValue { Value: long longValue }
-                || longValue < int.MinValue || longValue > int.MaxValue)
-            {
-                throw Error($"{propertyName} must be an integer.", token);
-            }
-
-            return (int)longValue;
-        }
-
-        private static int ReadOptionalInt(JObject value, string propertyName, int fallback) =>
-            value.Property(propertyName, StringComparison.Ordinal) != null ? RequireInt(value, propertyName) : fallback;
-
-        private static bool RequireBool(JObject value, string propertyName)
-        {
-            var token = RequireProperty(value, propertyName);
-            if (token.Type != JTokenType.Boolean || token is not JValue { Value: bool boolValue })
-            {
-                throw Error($"{propertyName} must be a boolean.", token);
-            }
-
-            return boolValue;
-        }
-
-        private static bool ReadOptionalBool(JObject value, string propertyName, bool fallback) =>
-            value.Property(propertyName, StringComparison.Ordinal) != null ? RequireBool(value, propertyName) : fallback;
-
-        // BigNum literals must always be JSON strings — a JSON number (a detour through double) is an error.
-        private static BigNum RequireBigNum(JObject value, string propertyName) =>
-            RequireBigNumToken(RequireProperty(value, propertyName));
-
-        private static BigNum RequireBigNumToken(JToken token)
-        {
-            if (token.Type != JTokenType.String)
-            {
-                throw Error("A BigNum value must be a string.", token);
-            }
-
-            var text = token.Value<string>()!;
-            if (!BigNum.TryParse(text, out var parsed))
-            {
-                throw Error($"Cannot parse as BigNum: {text}", token);
-            }
-
-            return parsed;
-        }
-
-        private static BigNum ReadOptionalBigNum(JObject value, string propertyName, BigNum fallback) =>
-            value.Property(propertyName, StringComparison.Ordinal) != null
-                ? RequireBigNum(value, propertyName)
-                : fallback;
-
-        private static T RequireEnum<T>(JObject value, string propertyName) where T : struct, Enum
-        {
-            var token = RequireProperty(value, propertyName);
-            var text = RequireStringValue(token, propertyName);
-            if (!Enum.TryParse<T>(text, false, out var parsed) || !Enum.IsDefined(typeof(T), parsed))
-            {
-                throw Error($"Value not allowed: {propertyName} = {text}", token);
-            }
-
-            return parsed;
-        }
-
-        private static JObject AsObject(JToken token, string message) => token as JObject ?? throw Error(message, token);
-
-        private static JArray AsArray(JToken token, string message) => token as JArray ?? throw Error(message, token);
-
-        private static TagCatalogException Error(string message, JToken token)
-        {
-            var lineInfo = (IJsonLineInfo)token;
-            return new TagCatalogException(
-                message, token.Path,
-                lineInfo.HasLineInfo() ? lineInfo.LineNumber : 1,
-                lineInfo.HasLineInfo() ? lineInfo.LinePosition : 1);
+            return result;
         }
     }
 }

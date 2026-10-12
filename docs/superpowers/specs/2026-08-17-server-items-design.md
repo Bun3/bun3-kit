@@ -19,7 +19,7 @@ idlez-server 실물 조사(`PlayerItem.proto`): 아이템은 "정의 id + 수량
 | 아이템 정의 형태 | **게임 몫** — 프레임워크는 정의를 불투명 `TDefinition`으로만 보관 |
 | 인스턴스 아이템(고유 id·레벨 등) | **게임 몫으로 제외** — 프레임워크는 스택만. 인스턴스는 게임 도메인 상태(스키마·성장 규칙)와 분리 불가 |
 | 슬롯 | **게임 몫** — 컨테이너는 무슬롯 (ItemId → 수량 맵) |
-| 수량 타입 | **long 기본 + BigNum 확장** — 값타입 제네릭 ops 시섬으로 두 구현 제공 |
+| 수량 타입 | **long 기본 + BigNum 확장** — 값타입 제네릭 ops 확장점으로 두 구현 제공 |
 | maxStack | **프레임워크 메타데이터** — 정의 등록 시 선택 지정(long). 프레임워크는 숫자만 알고 도메인은 모름 |
 | 저장/DB | **게임 몫** — 컨테이너는 변경 통지(onChanged)만 제공, 게임이 `Player.MarkDirty`를 연결 |
 | 동시성 | **락 없음** — Player 상태는 세션 액터 안에서 단일 스레드 접근(Players 계약과 동일). 문서로 명시 |
@@ -31,10 +31,10 @@ server/src/Bun3.Server.Items/     netstandard2.1 · → Bun3.Gameplay (BigNum �
 ├── ItemId.cs                      인터닝된 정의 식별자 (readonly struct, default=None)
 ├── ItemCatalog.cs                 비제네릭 코어 — 인터닝 문자열/maxStack/역색인
 ├── ItemCatalogOfT.cs              ItemCatalog<TDefinition> — 불투명 정의 보관
-├── ItemCatalogBuilder.cs          기동 시 1회 빌드 + 검증 델리게이트 시섬
+├── ItemCatalogBuilder.cs          기동 시 1회 빌드 + 검증 델리게이트 확장점
 ├── ItemCatalogException.cs        빌드/검증 실패
 ├── ItemError.cs                   실패 사유 enum
-├── IQuantityOps.cs                수량 산술 시섬 (struct 제약 제네릭 — 무박싱)
+├── IQuantityOps.cs                수량 산술 확장점 (struct 제약 제네릭 — 무박싱)
 ├── LongQuantityOps.cs             long 기본 구현
 ├── BigNumQuantityOps.cs           BigNum 구현 (방치형 확장)
 ├── ItemDelta.cs                   부호 있는 변경량 { ItemId, TQuantity }
@@ -69,7 +69,7 @@ ItemCatalog<MyItemDef> catalog = builder.Build();              // 검증 델리�
 - 빌드 후 카탈로그는 불변. 로드 델리게이트(정의 소스)는 게임이 빌더를 채우는 코드
   자체다 — Auth의 검증기처럼 별도 인터페이스를 파지 않는다(호출 지점이 기동 1곳뿐).
 
-## 4. 수량 시섬 — long 기본, BigNum 확장
+## 4. 수량 확장점 — long 기본, BigNum 확장
 
 netstandard2.1에는 generic math가 없으므로 값타입 ops 제네릭으로 devirtualize한다:
 
@@ -153,7 +153,7 @@ ItemError err = container.TryApply(deltas, out int failedIndex);
 |---|---|
 | 카탈로그 네이밍 | **ItemCatalog 유지** — TagCatalog 선례·업계 표준(PlayFab/Unity/EOS). 문서에 "idlez ResourceItem 표 포지션" 명시로 소통 문제 해결 |
 | 정의의 정식 키 | **문자열 + 선택적 externalId(long) 역색인** — 저장 데이터에는 문자열 id(등록 순서 내성), ItemId 인덱스는 저장 금지. DB 정수 컬럼·Steam itemdefid 연동은 `Register(..., externalId:)` + `TryGetExternalId`/`TryGetByExternalId` |
-| Steam Inventory 수용 | 가능 — Steam도 "수량 가진 인스턴스(uint64 itemid + uint16 quantity + 플래그) + 원자적 ExchangeItems + 동적 프로퍼티" 모델로, idlez·growninja에 이은 세 번째 수렴 증거. v0.2 요건: 인스턴스 id 발급 시섬(외부 권위 id 수용 경로 포함), externalId 매핑(완료), 권위 경계 명시(컨테이너는 미러, 동기화는 `Items.Steam` 후보 패키지) |
+| Steam Inventory 수용 | 가능 — Steam도 "수량 가진 인스턴스(uint64 itemid + uint16 quantity + 플래그) + 원자적 ExchangeItems + 동적 프로퍼티" 모델로, idlez·growninja에 이은 세 번째 수렴 증거. v0.2 요건: 인스턴스 id 발급 확장점(외부 권위 id 수용 경로 포함), externalId 매핑(완료), 권위 경계 명시(컨테이너는 미러, 동기화는 `Items.Steam` 후보 패키지) |
 | 인스턴스 아이템 | v0.1 범위 밖 유지, **v0.2 후보로 승격** — 두 게임이 동일 기계장치(스택/인스턴스 판정·level/exp·만료·상태플래그·per-item dirty·id 발급)를 독립 재구현한 것이 근거. 스코프 확정은 사용자 결정 대기 |
 
 ## 8. 테스트 계획

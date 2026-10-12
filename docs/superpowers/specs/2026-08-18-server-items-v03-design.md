@@ -9,7 +9,7 @@
 | 질문 | 결정 |
 |---|---|
 | 실패 enum 네이밍 | **`InventoryError`** — 주어(인벤토리 조작)를 이름에 노출. `Item`Error는 대상이 모호, Process/Behaviour는 정보 없는 접미어라 기각 |
-| 컨테이너 일원화 | **재화도 아이템 행(스택형 정의)으로 처리, count는 BigNum** — idlez가 골드를 아이템 행으로 다루는 실물 구조 채택. `ItemStackContainer` 계열·수량 제네릭 시섬(`IQuantityOps`) 전체 삭제 |
+| 컨테이너 일원화 | **재화도 아이템 행(스택형 정의)으로 처리, count는 BigNum** — idlez가 골드를 아이템 행으로 다루는 실물 구조 채택. `ItemStackContainer` 계열·수량 제네릭 확장점(`IQuantityOps`) 전체 삭제 |
 | 트랜잭션 | **`BeginTransaction()` 빌더 도입** — 정의 단위 + **인스턴스 지정** 연산 혼합 원자 배치(기존 `TryApply`로는 "특정 검 파괴+골드 지급"이 원자 불가). 프레임워크 전역 트랜잭션 승격은 두 번째 소비자 모듈이 나올 때 |
 | 카탈로그 쿼리 | **선언적 보조 색인 `CreateIndex`/`CreateMultiIndex`** — idlez 7개·growninja 4개 손색인의 프레임워크 흡수. `GetRequired("...")` 하드코딩은 네이티브 아이템 예외 경로로 강등 |
 

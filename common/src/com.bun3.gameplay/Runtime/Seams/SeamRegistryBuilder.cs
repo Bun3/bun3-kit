@@ -1,6 +1,7 @@
 #nullable enable
 using System;
 using System.Collections.Generic;
+using Bun3.Gameplay.Effects;
 using Bun3.Gameplay.Tags;
 
 namespace Bun3.Gameplay.Seams
@@ -65,6 +66,9 @@ namespace Bun3.Gameplay.Seams
         public SeamRegistry Build(TagCatalog catalog)
         {
             _built = true;
+            RegisterBuiltInSelector(_targetSelectors, catalog, BuiltInSelectors.EventSourceTag, BuiltInSelectors.EventSource);
+            RegisterBuiltInSelector(_targetSelectors, catalog, BuiltInSelectors.EventTargetTag, BuiltInSelectors.EventTarget);
+
             const string magnitudeRoot = "calc.magnitude";
             const string executionRoot = "calc.execution";
             const string selectorRoot = "selector";
@@ -122,6 +126,16 @@ namespace Bun3.Gameplay.Seams
                 new Dictionary<ushort, IMagnitudeCalc>(_magnitudeCalcs),
                 new Dictionary<ushort, IExecutionCalc>(_executionCalcs),
                 new Dictionary<ushort, ITargetSelector>(_targetSelectors));
+        }
+
+        // Built-ins are registered only when the tag exists in the catalog and the game did not
+        // claim it — a game that never uses event chains need not declare the tags.
+        private static void RegisterBuiltInSelector(
+            Dictionary<ushort, ITargetSelector> selectors, TagCatalog catalog, string path, ITargetSelector selector)
+        {
+            if (!catalog.TryGet(path, out var tag)) return;
+            if (selectors.ContainsKey(tag.Index)) return;
+            selectors.Add(tag.Index, selector);
         }
     }
 }

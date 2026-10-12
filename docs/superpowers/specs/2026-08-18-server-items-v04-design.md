@@ -8,7 +8,7 @@
 
 | # | 레거시 실물 | 프레임워크 흡수 |
 |---|---|---|
-| A | idlez `AddItemGroup`/`PickerGroup`(가중 추첨+prob+min/max 롤), growninja `AddItem` 40필드("게임 달라도 80% 동일") | **RewardTable** — 그룹(발동 확률·전체/1건 추첨) → 항목(가중치·수량 롤). RNG 시섬으로 결정론 지원(idlez의 crypto/IRng 이중 경로 교훈) |
+| A | idlez `AddItemGroup`/`PickerGroup`(가중 추첨+prob+min/max 롤), growninja `AddItem` 40필드("게임 달라도 80% 동일") | **RewardTable** — 그룹(발동 확률·전체/1건 추첨) → 항목(가중치·수량 롤). RNG 확장점으로 결정론 지원(idlez의 crypto/IRng 이중 경로 교훈) |
 | B | idlez maxCount 초과분 버림/param1 이월, growninja 우편 폴백 — 상한 도달은 실패가 아니라 **부분 지급** | **TryAddUpTo** — 가능한 만큼 지급하고 실제 지급량 반환(잔여는 게임이 우편 등으로) |
 | C | 양쪽 다 `until_at` 승격 컬럼 + 조회 필터 + 만료 스윕 + 누적 연장 | **ExpiresAtTicksUtc 프레임워크 필드** + `CollectExpired` — 만료 처리(소모/후속 보상)는 게임 몫, 자동 삭제 안 함(idlez: 만료 ≠ 삭제) |
 | D | idlez `GetItemsByDataId` 등 6개 조회 메서드 복붙 | **CollectInstances(ItemId, buffer)** — 정의별 인스턴스 수집 |
@@ -39,7 +39,7 @@ inventory.TryGrant(table, rng, out failedIndex);    // 샘플 → 원자 지급 
 ```
 
 - 확률은 만분율 int(0~10000) — float 비결정성 회피. 수량 롤은 long [min,max] 균등.
-- `IRandomSource { long Next(long maxExclusive) }` 시섬 + `SystemRandomSource` 어댑터 —
+- `IRandomSource { long Next(long maxExclusive) }` 확장점 + `SystemRandomSource` 어댑터 —
   서버 권위 RNG든 결정론 시뮬레이션 RNG든 게임이 주입.
 - 생성자에서 데이터 오류(가중 0 합, min>max, 만분율 범위 밖) 즉시 던짐 — 기동 검증.
 - 게임 몫: 항목 게이트(레벨 요건·배타 목록 — 게임이 테이블을 상황별로 만들거나 필터),

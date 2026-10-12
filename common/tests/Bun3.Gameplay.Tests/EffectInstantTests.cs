@@ -22,12 +22,12 @@ public sealed class EffectInstantTests
             Op = AttributeModifierOp.Add,
             Magnitude = new MagnitudeDef { Base = Operand.Constant(-30) },
         });
-        kit.AddSpec(damage);
+        kit.AddEffect(damage);
         var pipeline = kit.BuildPipeline();
 
         kit.Defender.Attributes.SetBase(EffectTestKit.MaxHp, 100);
         kit.Defender.Attributes.SetBase(EffectTestKit.Hp, 100);
-        pipeline.EnqueueApply(kit.SpecId("hit"), kit.Attacker.Id, kit.Defender.Id);
+        pipeline.EnqueueApply(kit.EffectId("hit"), kit.Attacker.Id, kit.Defender.Id);
         pipeline.Tick();
 
         Assert.That(kit.Defender.Attributes.GetBase(EffectTestKit.Hp), Is.EqualTo((BigNum)70));
@@ -45,12 +45,12 @@ public sealed class EffectInstantTests
             CalcTag = "calc.execution.dmg",
             Inputs = { Operand.Attribute(EffectTestKit.MaxHp, BigNum.FromParts(5, -1)) }, // 50% of MaxHp
         });
-        kit.AddSpec(spell);
+        kit.AddEffect(spell);
         var pipeline = kit.BuildPipeline();
 
         kit.Defender.Attributes.SetBase(EffectTestKit.MaxHp, 200);
         kit.Defender.Attributes.SetBase(EffectTestKit.Hp, 150);
-        pipeline.EnqueueApply(kit.SpecId("spell"), kit.Attacker.Id, kit.Defender.Id);
+        pipeline.EnqueueApply(kit.EffectId("spell"), kit.Attacker.Id, kit.Defender.Id);
         pipeline.Tick();
 
         Assert.That(kit.Defender.Attributes.GetCurrent(EffectTestKit.Hp), Is.EqualTo((BigNum)50));
@@ -72,11 +72,11 @@ public sealed class EffectInstantTests
             AttributeId = EffectTestKit.Hp, Op = AttributeModifierOp.Add,
             Magnitude = new MagnitudeDef { Base = Operand.Constant(-10) },
         });
-        kit.AddSpec(gated);
+        kit.AddEffect(gated);
 
         var ward = EffectTestKit.MinimalInfinite("ward");
         ward.ImmunityTags.Add("effect.fire");
-        kit.AddSpec(ward);
+        kit.AddEffect(ward);
         var fireball = EffectTestKit.MinimalInstant("fireball");
         fireball.AssetTags.Add("effect.fire.bolt");
         fireball.Modifiers.Add(new ModifierDef
@@ -84,19 +84,19 @@ public sealed class EffectInstantTests
             AttributeId = EffectTestKit.Hp, Op = AttributeModifierOp.Add,
             Magnitude = new MagnitudeDef { Base = Operand.Constant(-25) },
         });
-        kit.AddSpec(fireball);
+        kit.AddEffect(fireball);
         var pipeline = kit.BuildPipeline();
 
         kit.Defender.Attributes.SetBase(EffectTestKit.MaxHp, 100);
         kit.Defender.Attributes.SetBase(EffectTestKit.Hp, 90);
 
-        pipeline.EnqueueApply(kit.SpecId("gated"), kit.Attacker.Id, kit.Defender.Id);
+        pipeline.EnqueueApply(kit.EffectId("gated"), kit.Attacker.Id, kit.Defender.Id);
         pipeline.Tick();
         Assert.That(kit.Defender.Attributes.GetBase(EffectTestKit.Hp), Is.EqualTo((BigNum)90)); // Hp<30% not met
 
-        pipeline.EnqueueApply(kit.SpecId("ward"), kit.Defender.Id, kit.Defender.Id);
+        pipeline.EnqueueApply(kit.EffectId("ward"), kit.Defender.Id, kit.Defender.Id);
         pipeline.Tick();
-        pipeline.EnqueueApply(kit.SpecId("fireball"), kit.Attacker.Id, kit.Defender.Id);
+        pipeline.EnqueueApply(kit.EffectId("fireball"), kit.Attacker.Id, kit.Defender.Id);
         pipeline.Tick();
         Assert.That(kit.Defender.Attributes.GetBase(EffectTestKit.Hp), Is.EqualTo((BigNum)90)); // blocked by immunity
     }
@@ -112,14 +112,14 @@ public sealed class EffectInstantTests
             Op = AttributeModifierOp.Add,
             Magnitude = new MagnitudeDef { Base = Operand.SourceAttribute(EffectTestKit.Attack, BigNum.FromParts(-12, -1)) },
         });
-        kit.AddSpec(slash);
+        kit.AddEffect(slash);
         var pipeline = kit.BuildPipeline();
 
         kit.Attacker.Attributes.SetBase(EffectTestKit.Attack, 100);
         kit.Defender.Attributes.SetBase(EffectTestKit.MaxHp, 200);
         kit.Defender.Attributes.SetBase(EffectTestKit.Hp, 150);
 
-        pipeline.EnqueueApply(kit.SpecId("slash"), kit.Attacker.Id, kit.Defender.Id);
+        pipeline.EnqueueApply(kit.EffectId("slash"), kit.Attacker.Id, kit.Defender.Id);
         pipeline.Tick();
 
         // Attack 100 x -1.2 = -120 -> Hp 150 - 120 = 30.
@@ -137,11 +137,11 @@ public sealed class EffectInstantTests
 
         var frost = EffectTestKit.MinimalInfinite("frost");
         frost.GrantedTags.Add("state.frozen");
-        kit.AddSpec(frost);
+        kit.AddEffect(frost);
 
         var haste = EffectTestKit.MinimalInfinite("haste");
         haste.GrantedTags.Add("state.hasted");
-        kit.AddSpec(haste);
+        kit.AddEffect(haste);
 
         var hitTarget = EffectTestKit.MinimalInstant("hitTarget");
         hitTarget.Modifiers.Add(new ModifierDef
@@ -149,7 +149,7 @@ public sealed class EffectInstantTests
             AttributeId = EffectTestKit.Hp, Op = AttributeModifierOp.Add,
             Magnitude = new MagnitudeDef { CalcTag = "calc.magnitude.x" },
         });
-        kit.AddSpec(hitTarget);
+        kit.AddEffect(hitTarget);
 
         var hitSource = EffectTestKit.MinimalInstant("hitSource");
         hitSource.Modifiers.Add(new ModifierDef
@@ -157,33 +157,33 @@ public sealed class EffectInstantTests
             AttributeId = EffectTestKit.Hp, Op = AttributeModifierOp.Add,
             Magnitude = new MagnitudeDef { CalcTag = "calc.magnitude.y" },
         });
-        kit.AddSpec(hitSource);
+        kit.AddEffect(hitSource);
 
         var pipeline = kit.BuildPipeline();
         kit.Defender.Attributes.SetBase(EffectTestKit.MaxHp, 200);
         kit.Defender.Attributes.SetBase(EffectTestKit.Hp, 200);
 
         // TargetHasTag: target lacks frozen -> plain -10.
-        pipeline.EnqueueApply(kit.SpecId("hitTarget"), kit.Attacker.Id, kit.Defender.Id);
+        pipeline.EnqueueApply(kit.EffectId("hitTarget"), kit.Attacker.Id, kit.Defender.Id);
         pipeline.Tick();
         Assert.That(kit.Defender.Attributes.GetBase(EffectTestKit.Hp), Is.EqualTo((BigNum)190));
 
         // After granting frozen to the target -> doubled, -20.
-        pipeline.EnqueueApply(kit.SpecId("frost"), kit.Attacker.Id, kit.Defender.Id);
+        pipeline.EnqueueApply(kit.EffectId("frost"), kit.Attacker.Id, kit.Defender.Id);
         pipeline.Tick();
-        pipeline.EnqueueApply(kit.SpecId("hitTarget"), kit.Attacker.Id, kit.Defender.Id);
+        pipeline.EnqueueApply(kit.EffectId("hitTarget"), kit.Attacker.Id, kit.Defender.Id);
         pipeline.Tick();
         Assert.That(kit.Defender.Attributes.GetBase(EffectTestKit.Hp), Is.EqualTo((BigNum)170));
 
         // SourceHasTag: caster (Attacker) lacks hasted -> plain -10.
-        pipeline.EnqueueApply(kit.SpecId("hitSource"), kit.Attacker.Id, kit.Defender.Id);
+        pipeline.EnqueueApply(kit.EffectId("hitSource"), kit.Attacker.Id, kit.Defender.Id);
         pipeline.Tick();
         Assert.That(kit.Defender.Attributes.GetBase(EffectTestKit.Hp), Is.EqualTo((BigNum)160));
 
         // After granting hasted to the caster -> doubled, -20.
-        pipeline.EnqueueApply(kit.SpecId("haste"), kit.Attacker.Id, kit.Attacker.Id);
+        pipeline.EnqueueApply(kit.EffectId("haste"), kit.Attacker.Id, kit.Attacker.Id);
         pipeline.Tick();
-        pipeline.EnqueueApply(kit.SpecId("hitSource"), kit.Attacker.Id, kit.Defender.Id);
+        pipeline.EnqueueApply(kit.EffectId("hitSource"), kit.Attacker.Id, kit.Defender.Id);
         pipeline.Tick();
         Assert.That(kit.Defender.Attributes.GetBase(EffectTestKit.Hp), Is.EqualTo((BigNum)140));
     }

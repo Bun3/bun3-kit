@@ -4,7 +4,7 @@
 
 **Goal:** Attribute 집계와 Effect 수명·스택·체인 기계를 결정론·무할당 규율로 구현한다 — "이속 +20% 8초"와 "빙결 3중첩 → 동결"이 코드 0줄.
 
-**Architecture:** Effect는 순수 데이터(EffectSpec), 로직은 시섬 3종(IMagnitudeCalc/IExecutionCalc/ITargetSelector, GameplayTag 식별)만. 기동 Build 체인(TagCatalog → SeamRegistry → AttributeRegistry → EffectCatalog)이 모든 문자열을 id/직결 참조로 컴파일하고, 런타임 틱은 6페이즈 파이프라인이 canonical 순서로 돈다.
+**Architecture:** Effect는 순수 데이터(EffectSpec), 로직은 확장점 3종(IMagnitudeCalc/IExecutionCalc/ITargetSelector, GameplayTag 식별)만. 기동 Build 체인(TagCatalog → SeamRegistry → AttributeRegistry → EffectCatalog)이 모든 문자열을 id/직결 참조로 컴파일하고, 런타임 틱은 6페이즈 파이프라인이 canonical 순서로 돈다.
 
 **Tech Stack:** netstandard2.1 + C#9, BigNum(기존), GameplayTag/TagCatalog(기존), NUnit(net10 테스트), Newtonsoft.Json(저작 어셈블리만).
 
@@ -1206,7 +1206,7 @@ public sealed class AttributeClampPolicyTests
 
 ---
 
-### Task 6: 시섬 계약 — 인터페이스 · IRng · SeamRegistry
+### Task 6: 확장점 계약 — 인터페이스 · IRng · SeamRegistry
 
 **Files:**
 - Create: `common/src/com.bun3.gameplay/Runtime/IRng.cs`
@@ -1303,7 +1303,7 @@ public sealed class SeamRegistryTests
 - [ ] **Step 2: 실패 확인.**
 - [ ] **Step 3: 구현.** `IRng.cs`(xorshift64\*: `x ^= x >> 12; x ^= x << 25; x ^= x >> 27; return (uint)((x * 0x2545F4914F6CDD1D) >> 32)`), `TargetId.cs`, `Seams.cs`(인터페이스 3종 + 빈 `MagnitudeContext`/`ExecutionContext`/`SelectorContext` ref struct 선언), `SeamRegistryBuilder`/`SeamRegistry`(딕셔너리 3개, Build에서 카탈로그로 루트 태그 해석 후 `IsAncestorOrSelf(root, tag) && tag != root` 검증 — 루트 미존재 시 "예약 루트 태그가 카탈로그에 없습니다" 예외).
 - [ ] **Step 4: 통과 확인.**
-- [ ] **Step 5: 커밋** — `✨ 시섬 인터페이스·IRng·SeamRegistry`.
+- [ ] **Step 5: 커밋** — `✨ 확장점 인터페이스·IRng·SeamRegistry`.
 
 ---
 
@@ -1336,7 +1336,7 @@ public sealed class SeamRegistryTests
 3. Duration: `DurationTicks > 0`. Infinite: `DurationTicks == 0`.
 4. Executions는 Instant 또는 `PeriodTicks > 0`에서만.
 5. `Stack.MaxStack == 0`인데 Overflow 정책이 ApplyEffect·`OnReapply == AddStack` → 예외.
-6. 모든 태그 문자열·CalcTag·SelectorTag는 카탈로그·SeamRegistry에서 해석(미해석 = 예외). 시섬 태그 루트는 SeamRegistry가 이미 검증.
+6. 모든 태그 문자열·CalcTag·SelectorTag는 카탈로그·SeamRegistry에서 해석(미해석 = 예외). 확장점 태그 루트는 SeamRegistry가 이미 검증.
 7. 모든 Operand의 속성 참조는 AttributeRegistry에 존재해야 함. `Kind == SourceAttribute`인
    Operand가 OngoingConditions에 있으면 예외 (클램프 경계의 금지는 Task 2의
    AttributeRegistryBuilder.Build가 담당 — min/max Operand의 Kind가 SourceAttribute면 예외).
@@ -1512,7 +1512,7 @@ public sealed class EffectInstantTests
 - [ ] **Step 2: 실패 확인.**
 - [ ] **Step 3: 구현** — `EffectTestKit`에 조립 헬퍼(카탈로그 JSON에 `effect.fire.bolt` 포함, 딕셔너리 리졸버 스텁, `SubtractHpCalc`), 파이프라인 ①: `Queue<PendingApply>`(struct: SpecId/Source/Target/Level), 드레인 예산, 대상 해석 실패 드랍, 면역→적용조건→Instant 처리(Modifiers는 `MagnitudeDef` 평가 후 `AddBase`, Executions는 `ExecutionContext` 구성 후 호출), 각 드레인 항목 후 `RebuildDirty()`는 불필요(Instant는 Base 경로 즉시) — Duration 수정자 부착이 생기는 Task 9부터 ③이 유의미.
 - [ ] **Step 4: 통과 확인.**
-- [ ] **Step 5: 커밋** — `✨ EffectPipeline Instant 경로와 시섬 컨텍스트`.
+- [ ] **Step 5: 커밋** — `✨ EffectPipeline Instant 경로와 확장점 컨텍스트`.
 
 ---
 
@@ -1876,6 +1876,6 @@ public void Dispel_fires_premature_chain_but_not_normal()
 
 ## Self-Review 결과 (플랜 확정 전 수행)
 
-- 스펙 §4(Operand)→T1, §5(집계·정책)→T2–T5, §6(스펙·스택)→T7·T9, §7(조건·체인)→T10, §8(시섬)→T6·T8, §9(EffectTarget·페이즈)→T8–T11, §10(카탈로그·데이터)→T7·T12, §11(불변식)→T4(무흔적)·T13(스냅샷·이벤트 id는 `EffectLifecycleEvent.InstanceId`), §13(테스트)→T4·T5·T13. 커버리지 갭 없음.
+- 스펙 §4(Operand)→T1, §5(집계·정책)→T2–T5, §6(스펙·스택)→T7·T9, §7(조건·체인)→T10, §8(확장점)→T6·T8, §9(EffectTarget·페이즈)→T8–T11, §10(카탈로그·데이터)→T7·T12, §11(불변식)→T4(무흔적)·T13(스냅샷·이벤트 id는 `EffectLifecycleEvent.InstanceId`), §13(테스트)→T4·T5·T13. 커버리지 갭 없음.
 - 타입 일관성: `Operand`/`MagnitudeDef`/`CompiledEffectSpec`/컨텍스트 시그니처를 Interfaces 블록에 고정 — 태스크 간 참조는 해당 블록 기준.
 - 미결 주의점(구현자가 알아야 할 것): ① Operand는 세 kind(Constant/Attribute/SourceAttribute) — 자리별 허용은 Global Constraints 참조, 소스 미해석 = Zero. ② `EffectTestKit`은 T7에서 만들고 T8~13이 확장한다 — 시그니처 변경 시 이전 태스크 테스트도 같이 컴파일되므로 주의.

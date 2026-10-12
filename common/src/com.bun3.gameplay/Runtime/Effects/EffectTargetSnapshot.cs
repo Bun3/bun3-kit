@@ -44,16 +44,17 @@ namespace Bun3.Gameplay.Effects
         internal sealed class InstanceRow
         {
             internal InstanceRow(
-                ulong id, int specId, TargetId source, int level, int stack,
-                int remainingTicks, int periodCountdown, bool enabled, long createdTick,
+                ulong id, int effectId, TargetId source, int level, int stack,
+                int remainingTicks, int durationTicks, int periodCountdown, bool enabled, long createdTick,
                 ModifierRow[] modifiers)
             {
                 Id = id;
-                SpecId = specId;
+                EffectId = effectId;
                 Source = source;
                 Level = level;
                 Stack = stack;
                 RemainingTicks = remainingTicks;
+                DurationTicks = durationTicks;
                 PeriodCountdown = periodCountdown;
                 Enabled = enabled;
                 CreatedTick = createdTick;
@@ -61,11 +62,12 @@ namespace Bun3.Gameplay.Effects
             }
 
             internal ulong Id { get; }
-            internal int SpecId { get; }
+            internal int EffectId { get; }
             internal TargetId Source { get; }
             internal int Level { get; }
             internal int Stack { get; }
             internal int RemainingTicks { get; }
+            internal int DurationTicks { get; }
             internal int PeriodCountdown { get; }
             internal bool Enabled { get; }
             internal long CreatedTick { get; }

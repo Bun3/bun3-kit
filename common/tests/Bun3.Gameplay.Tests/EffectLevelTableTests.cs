@@ -10,27 +10,27 @@ namespace Bun3.Gameplay.Tests;
 [TestFixture]
 public sealed class EffectLevelTableTests
 {
-    private static EffectSpec FormulaBuff(string name, LevelTail tail = LevelTail.Clamp, BigNum increment = default)
+    private static EffectDef FormulaBuff(string name, LevelTail tail = LevelTail.Clamp, BigNum increment = default)
     {
-        var spec = EffectTestKit.MinimalDuration(name, ticks: 100);
-        spec.MaxLevel = 5;
-        spec.Modifiers.Add(new ModifierDef
+        var def = EffectTestKit.MinimalDuration(name, ticks: 100);
+        def.MaxLevel = 5;
+        def.Modifiers.Add(new ModifierDef
         {
             AttributeId = EffectTestKit.Attack, Op = AttributeModifierOp.Add,
             Magnitude = new MagnitudeDef { Formula = "x*x", Tail = tail, ExtrapolateIncrement = increment },
         });
-        return spec;
+        return def;
     }
 
     [Test]
     public void Formula_level_table_applies_precomputed_value_at_level()
     {
         var kit = EffectTestKit.Create();
-        kit.AddSpec(FormulaBuff("buff"));
+        kit.AddEffect(FormulaBuff("buff"));
         var pipeline = kit.BuildPipeline();
         kit.Defender.Attributes.SetBase(EffectTestKit.Attack, 0);
 
-        pipeline.EnqueueApply(kit.SpecId("buff"), kit.Attacker.Id, kit.Defender.Id, level: 3);
+        pipeline.EnqueueApply(kit.EffectId("buff"), kit.Attacker.Id, kit.Defender.Id, level: 3);
         pipeline.Tick();
 
         Assert.That(kit.Defender.Attributes.GetCurrent(EffectTestKit.Attack), Is.EqualTo((BigNum)9)); // 3*3
@@ -40,11 +40,11 @@ public sealed class EffectLevelTableTests
     public void Formula_level_table_clamps_beyond_max_level_by_default()
     {
         var kit = EffectTestKit.Create();
-        kit.AddSpec(FormulaBuff("buff"));
+        kit.AddEffect(FormulaBuff("buff"));
         var pipeline = kit.BuildPipeline();
         kit.Defender.Attributes.SetBase(EffectTestKit.Attack, 0);
 
-        pipeline.EnqueueApply(kit.SpecId("buff"), kit.Attacker.Id, kit.Defender.Id, level: 7);
+        pipeline.EnqueueApply(kit.EffectId("buff"), kit.Attacker.Id, kit.Defender.Id, level: 7);
         pipeline.Tick();
 
         Assert.That(kit.Defender.Attributes.GetCurrent(EffectTestKit.Attack), Is.EqualTo((BigNum)25)); // 5*5, clamped
@@ -54,11 +54,11 @@ public sealed class EffectLevelTableTests
     public void Formula_level_table_extrapolates_with_auto_increment_beyond_max_level()
     {
         var kit = EffectTestKit.Create();
-        kit.AddSpec(FormulaBuff("buff", LevelTail.Extrapolate)); // increment auto = 25-16 = 9
+        kit.AddEffect(FormulaBuff("buff", LevelTail.Extrapolate)); // increment auto = 25-16 = 9
         var pipeline = kit.BuildPipeline();
         kit.Defender.Attributes.SetBase(EffectTestKit.Attack, 0);
 
-        pipeline.EnqueueApply(kit.SpecId("buff"), kit.Attacker.Id, kit.Defender.Id, level: 7);
+        pipeline.EnqueueApply(kit.EffectId("buff"), kit.Attacker.Id, kit.Defender.Id, level: 7);
         pipeline.Tick();
 
         Assert.That(kit.Defender.Attributes.GetCurrent(EffectTestKit.Attack), Is.EqualTo((BigNum)43)); // 25+(25-16)*2
@@ -69,7 +69,7 @@ public sealed class EffectLevelTableTests
     {
         var kit = EffectTestKit.Create();
         var target = FormulaBuff("target"); // MaxLevel = 5
-        kit.AddSpec(target);
+        kit.AddEffect(target);
 
         var source = EffectTestKit.MinimalInstant("source");
         source.Chains.Add(new ChainEdgeDef
@@ -77,7 +77,7 @@ public sealed class EffectLevelTableTests
             Trigger = ChainTrigger.OnApplication, EffectName = "target",
             LevelRule = ChainLevelRule.Fixed, FixedLevel = 6,
         });
-        kit.AddSpec(source);
+        kit.AddEffect(source);
 
         Assert.Throws<InvalidOperationException>(() => kit.BuildPipeline());
     }
@@ -87,7 +87,7 @@ public sealed class EffectLevelTableTests
     {
         var kit = EffectTestKit.Create();
         var target = FormulaBuff("target"); // MaxLevel = 5
-        kit.AddSpec(target);
+        kit.AddEffect(target);
 
         var source = EffectTestKit.MinimalInstant("source");
         source.Chains.Add(new ChainEdgeDef
@@ -95,7 +95,7 @@ public sealed class EffectLevelTableTests
             Trigger = ChainTrigger.OnApplication, EffectName = "target",
             LevelRule = ChainLevelRule.Fixed, FixedLevel = 5,
         });
-        kit.AddSpec(source);
+        kit.AddEffect(source);
 
         Assert.DoesNotThrow(() => kit.BuildPipeline());
     }
@@ -103,77 +103,77 @@ public sealed class EffectLevelTableTests
     [Test]
     public void PerLevelValues_length_mismatch_with_max_level_fails_build()
     {
-        var spec = EffectTestKit.MinimalInstant("bad");
-        spec.MaxLevel = 3;
-        spec.Modifiers.Add(new ModifierDef
+        var def = EffectTestKit.MinimalInstant("bad");
+        def.MaxLevel = 3;
+        def.Modifiers.Add(new ModifierDef
         {
             AttributeId = EffectTestKit.Attack, Op = AttributeModifierOp.Add,
             Magnitude = new MagnitudeDef { PerLevelValues = new System.Collections.Generic.List<BigNum> { 1, 2 } },
         });
         var builder = new EffectCatalogBuilder();
-        builder.Add(spec);
+        builder.Add(def);
         Assert.Throws<InvalidOperationException>(() => EffectTestKit.BuildCatalog(builder));
     }
 
     [Test]
     public void Level_table_without_max_level_declared_fails_build()
     {
-        var spec = EffectTestKit.MinimalInstant("bad");
-        spec.Modifiers.Add(new ModifierDef
+        var def = EffectTestKit.MinimalInstant("bad");
+        def.Modifiers.Add(new ModifierDef
         {
             AttributeId = EffectTestKit.Attack, Op = AttributeModifierOp.Add,
             Magnitude = new MagnitudeDef { Formula = "x" },
         });
         var builder = new EffectCatalogBuilder();
-        builder.Add(spec);
+        builder.Add(def);
         Assert.Throws<InvalidOperationException>(() => EffectTestKit.BuildCatalog(builder));
     }
 
     [Test]
     public void CurveKeys_not_starting_at_level_one_fails_build()
     {
-        var spec = EffectTestKit.MinimalInstant("bad");
-        spec.MaxLevel = 5;
-        spec.Modifiers.Add(new ModifierDef
+        var def = EffectTestKit.MinimalInstant("bad");
+        def.MaxLevel = 5;
+        def.Modifiers.Add(new ModifierDef
         {
             AttributeId = EffectTestKit.Attack, Op = AttributeModifierOp.Add,
             Magnitude = new MagnitudeDef
             {
-                CurveKeys = new System.Collections.Generic.List<LevelKey>
+                CurveKeys = new System.Collections.Generic.List<LevelKeyDef>
                 {
-                    new LevelKey { Level = 2, Value = 10 },
+                    new LevelKeyDef { Level = 2, Value = 10 },
                 },
             },
         });
         var builder = new EffectCatalogBuilder();
-        builder.Add(spec);
+        builder.Add(def);
         Assert.Throws<InvalidOperationException>(() => EffectTestKit.BuildCatalog(builder));
     }
 
     [Test]
     public void CurveKeys_interpolates_linearly_between_keys()
     {
-        var spec = EffectTestKit.MinimalDuration("curve", ticks: 100);
-        spec.MaxLevel = 5;
-        spec.Modifiers.Add(new ModifierDef
+        var def = EffectTestKit.MinimalDuration("curve", ticks: 100);
+        def.MaxLevel = 5;
+        def.Modifiers.Add(new ModifierDef
         {
             AttributeId = EffectTestKit.Attack, Op = AttributeModifierOp.Add,
             Magnitude = new MagnitudeDef
             {
-                CurveKeys = new System.Collections.Generic.List<LevelKey>
+                CurveKeys = new System.Collections.Generic.List<LevelKeyDef>
                 {
-                    new LevelKey { Level = 1, Value = 10 },
-                    new LevelKey { Level = 5, Value = 50 },
+                    new LevelKeyDef { Level = 1, Value = 10 },
+                    new LevelKeyDef { Level = 5, Value = 50 },
                 },
             },
         });
 
         var kit = EffectTestKit.Create();
-        kit.AddSpec(spec);
+        kit.AddEffect(def);
         var pipeline = kit.BuildPipeline();
         kit.Defender.Attributes.SetBase(EffectTestKit.Attack, 0);
 
-        pipeline.EnqueueApply(kit.SpecId("curve"), kit.Attacker.Id, kit.Defender.Id, level: 3);
+        pipeline.EnqueueApply(kit.EffectId("curve"), kit.Attacker.Id, kit.Defender.Id, level: 3);
         pipeline.Tick();
 
         // 10 + (50-10) * (3-1)/(5-1) = 10 + 20 = 30

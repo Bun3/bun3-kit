@@ -6,28 +6,29 @@ namespace Bun3.Gameplay.Effects
 {
     /// <summary>
     /// Runtime instance of one effect applied to a target. The monotonically increasing
-    /// <see cref="Id"/> issued by World is the basis of the canonical aggregation order.
-    /// Creation and return go through an internal static pool.
+    /// <see cref="Id"/> issued by the pipeline is the basis of the canonical aggregation order.
+    /// Instances are pooled per <see cref="EffectPipeline"/>. <see cref="RemainingTicks"/> and
+    /// <see cref="PeriodCountdown"/> are stored counters that may lag behind skipped time steps — read them
+    /// through <see cref="EffectTarget.GetActiveEffect"/>, which catches up first.
     /// </summary>
-    public sealed class EffectInstance : IAttributeModifierSource
+    internal sealed class EffectInstance : IAttributeModifierSource
     {
-        // ponytail: process-global static pool — assumes one world per thread (unsafe if multiple
-        // worlds share a thread concurrently or multiple threads touch the pool). Move the pool to
-        // a world/pipeline-owned instance when needed.
-        private static readonly Stack<EffectInstance> Pool = new Stack<EffectInstance>();
-
         private EffectInstance()
         {
         }
 
-        /// <summary>Monotonically increasing id issued by World.</summary>
+        /// <summary>Monotonically increasing id issued by the pipeline.</summary>
         public ulong Id { get; private set; }
 
-        /// <summary>Effect spec id.</summary>
-        public int SpecId { get; private set; }
+        /// <summary>Effect id.</summary>
+        public int EffectId { get; private set; }
 
         /// <summary>Remaining ticks of a Duration effect. Meaningless for Infinite/Instant.</summary>
         public int RemainingTicks { get; internal set; }
+
+        /// <summary>Total ticks of the current Duration lifetime — the scaled, DR-adjusted value set at
+        /// creation and again on every refresh, extension or stack-drop refresh. -1 for Infinite.</summary>
+        public int DurationTicks { get; internal set; }
 
         /// <summary>Ticks until the next periodic execution. -1 when there is no periodic execution.</summary>
         public int PeriodCountdown { get; internal set; }
@@ -49,20 +50,22 @@ namespace Bun3.Gameplay.Effects
         /// Pipeline tick this instance was created on. Lifetime (RemainingTicks) and period
         /// (PeriodCountdown) do not advance on the creation tick; they advance from the next tick.
         /// </summary>
-        public long CreatedTick { get; private set; }
+        public long CreatedTick { get; internal set; }
 
-        /// <summary>Rents an instance from the pool and initializes its fields.</summary>
+        /// <summary>Rents an instance from the pool (or creates one when the pool is absent or empty)
+        /// and initializes its fields.</summary>
         internal static EffectInstance Rent(
-            ulong id, int specId, TargetId source, int level, int stack,
+            Stack<EffectInstance>? pool, ulong id, int effectId, TargetId source, int level, int stack,
             int remainingTicks, int periodCountdown, long createdTick)
         {
-            var instance = Pool.Count > 0 ? Pool.Pop() : new EffectInstance();
+            var instance = pool != null && pool.Count > 0 ? pool.Pop() : new EffectInstance();
             instance.Id = id;
-            instance.SpecId = specId;
+            instance.EffectId = effectId;
             instance.Source = source;
             instance.Level = level;
             instance.Stack = stack;
             instance.RemainingTicks = remainingTicks;
+            instance.DurationTicks = remainingTicks;
             instance.PeriodCountdown = periodCountdown;
             instance.CreatedTick = createdTick;
             instance.Enabled = true;
@@ -70,10 +73,50 @@ namespace Bun3.Gameplay.Effects
         }
 
         /// <summary>Disables the instance and returns it to the pool.</summary>
-        internal static void Return(EffectInstance instance)
+        internal static void Return(Stack<EffectInstance> pool, EffectInstance instance)
         {
             instance.Enabled = false;
-            Pool.Push(instance);
+            pool.Push(instance);
         }
+    }
+
+    /// <summary>Value copy of one active effect instance, safe to keep after the instance is pooled.</summary>
+    public readonly struct ActiveEffectInfo
+    {
+        internal ActiveEffectInfo(EffectInstance instance)
+        {
+            InstanceId = instance.Id;
+            EffectId = instance.EffectId;
+            Source = instance.Source;
+            Level = instance.Level;
+            Stack = instance.Stack;
+            RemainingTicks = instance.RemainingTicks;
+            DurationTicks = instance.DurationTicks;
+            Enabled = instance.Enabled;
+        }
+
+        /// <summary>Instance id.</summary>
+        public ulong InstanceId { get; }
+
+        /// <summary>Effect id.</summary>
+        public int EffectId { get; }
+
+        /// <summary>Caster that applied the effect.</summary>
+        public TargetId Source { get; }
+
+        /// <summary>Effect level.</summary>
+        public int Level { get; }
+
+        /// <summary>Stack count.</summary>
+        public int Stack { get; }
+
+        /// <summary>Remaining ticks of a Duration effect; -1 for Infinite.</summary>
+        public int RemainingTicks { get; }
+
+        /// <summary>Total ticks of the current Duration lifetime; -1 for Infinite.</summary>
+        public int DurationTicks { get; }
+
+        /// <summary>Whether the instance currently participates in aggregation.</summary>
+        public bool Enabled { get; }
     }
 }

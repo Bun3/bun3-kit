@@ -78,4 +78,19 @@ public sealed class OperandTests
         Assert.That(c, Is.EqualTo(d));
         Assert.That(c.GetHashCode(), Is.EqualTo(d.GetHashCode()));
     }
+
+    [Test]
+    public void Event_magnitude_operand_carries_its_coefficient()
+    {
+        // BigNum has no decimal conversion operator — (BigNum)(-0.3m) silently truncates through the
+        // decimal->long predefined conversion instead of the double one, so use FromParts (as elsewhere
+        // in this file) to construct the fractional coefficient exactly.
+        var coefficient = BigNum.FromParts(-3, -1);
+        var operand = Operand.EventMagnitude(coefficient);
+
+        Assert.That(operand.Kind, Is.EqualTo(OperandKind.EventMagnitude));
+        Assert.That(operand.Value, Is.EqualTo(coefficient));
+        Assert.That(operand.AttributeId, Is.Zero);
+        Assert.That(Operand.EventMagnitude().Value, Is.EqualTo(BigNum.One));
+    }
 }

@@ -3,8 +3,8 @@
 - 날짜: 2026-08-18
 - 상태: 승인 대기 (사용자 "ㄱㄱ" — 방향 승인, 세부는 합리적 기본값)
 - 범위: 스택/인스턴스 통합 인벤토리(`ItemInventory<TState>`), 카탈로그 unstackable
-  메타, 인스턴스 id 발급 시섬, per-instance 변경 추적(저장/전송 연계)
-- 선행 문서: `2026-08-17-server-items-design.md` (v0.1 — 카탈로그·스택 컨테이너·수량 시섬)
+  메타, 인스턴스 id 발급 확장점, per-instance 변경 추적(저장/전송 연계)
+- 선행 문서: `2026-08-17-server-items-design.md` (v0.1 — 카탈로그·스택 컨테이너·수량 확장점)
 
 ## 1. 근거 — 세 시스템의 수렴
 
@@ -21,7 +21,7 @@ idlez(`CashItemManager`)·growninja(`player_items`)·Steam Inventory Service가 
 | id=0 함정 | `AddedItemStuff` 우회 | 동일 | 없음 (플랫폼 발급) |
 
 프레임워크 결론: 판정은 **컨테이너 내부에서 정확히 한 번**, 상태는 불투명 `TState`,
-id는 발급 시섬(외부 권위 id 수용).
+id는 발급 확장점(외부 권위 id 수용).
 
 ## 2. 입력 결정
 

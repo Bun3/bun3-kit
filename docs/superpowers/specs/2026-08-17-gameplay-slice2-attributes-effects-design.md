@@ -11,7 +11,7 @@
 Attribute/AttributeSet(수치 집계)과 Effect(수명·스택·체인을 가진 상태 변경 단위)를 구현한다.
 "이속 +20% 8초"가 코드 0줄, "빙결 3중첩 → 동결"이 코드 0줄이 되는 것이 합격선이다.
 
-**핵심 접근 — Effect는 순수 데이터, 로직은 유형별 좁은 시섬(seam).**
+**핵심 접근 — Effect는 순수 데이터, 로직은 유형별 좁은 확장점(seam).**
 GameplayEffect에 자유 훅(OnApplied/OnEvent류)을 두지 않는다. 로직이 필요한 지점을
 유형별로 해부해 각각 좁은 시그니처의 확장점으로 만들고(GAS의 data-only GE + MMC/ExecCalc
 구도), 조건부·연쇄 동작은 태그·조건·체인 데이터 어휘로 커버한다.
@@ -24,8 +24,8 @@ GameplayEffect에 자유 훅(OnApplied/OnEvent류)을 두지 않는다. 로직�
 | 주제 | 결정 |
 |---|---|
 | Hp 등 소모 리소스 | GAS식 — Hp도 Attribute. Instant가 Base를 영구 변경 |
-| Effect의 로직 | 자유 훅 없음. 시섬 3종(MagnitudeCalc/ExecutionCalc/TargetSelector)만 |
-| 시섬 식별자 | GameplayTag (예약 루트 `calc.*`, `selector.*`) — raw string 금지 |
+| Effect의 로직 | 자유 훅 없음. 확장점 3종(MagnitudeCalc/ExecutionCalc/TargetSelector)만 |
+| 확장점 식별자 | GameplayTag (예약 루트 `calc.*`, `selector.*`) — raw string 금지 |
 | 조건 표현 | `[피연산자, 비교, 피연산자]` 행 — Modifier와 평행한 데이터 어휘 |
 | 체인 | 트리거 4종 + 만감. 값(페이로드)은 나르지 않음 |
 | 적용 실행 | FIFO 큐 + 틱당 예산. 순환은 컴파일 경고 |
@@ -42,7 +42,7 @@ GameplayEffect에 자유 훅(OnApplied/OnEvent류)을 두지 않는다. 로직�
 |---|---|---|
 | L0 파라미터 | 수치·수명·스택·태그·조건·체인 변경 | 스펙 데이터 |
 | L1 재배선 | 어떤 calc/selector/스펙을 쓸지 교체 | 태그 참조 (redirect로 리네임도 생존) |
-| L2 신규 로직 | 새 공식·새 선택기 | 시섬 구현 = 바이너리. 미래: 결정론 스크립트 백엔드가 같은 시섬 ABI에 등록 |
+| L2 신규 로직 | 새 공식·새 선택기 | 확장점 구현 = 바이너리. 미래: 결정론 스크립트 백엔드가 같은 확장점 ABI에 등록 |
 
 EffectSpec은 로직 필드가 없는 순수 데이터 형태로 강제하며, **직렬화 가능한 데이터
 스키마가 정본이다.** JSON 저작 스키마와 로더를 본 슬라이스에서 함께 출하한다 —
@@ -206,7 +206,7 @@ EffectInstance (풀드)
 | OngoingConditions | 페이즈 ④, 틱당 1회 | enabled=false 토글(수정자·GrantedTags 꺼짐, 제거 아님) |
 | ChainEdge.conditions | 엣지 발화 시 1회 | 엣지 불발 |
 
-조건에 시섬 참조는 불허(데이터 조건의 정적 분석 가능성 유지). "저체력 태그" 같은 임계값
+조건에 확장점 참조는 불허(데이터 조건의 정적 분석 가능성 유지). "저체력 태그" 같은 임계값
 물화는 프리미티브가 아니라 조합으로 창발한다:
 `Infinite + OngoingConditions[[Hp, <, MaxHp×0.3]] + GrantedTags[state.lowhealth]`.
 
@@ -229,23 +229,23 @@ ChainEdge = { trigger:  OnApplication | OnCompleteNormal | OnCompletePrematurely
 ### 7.3 표현력 경계 (문서화하는 한계)
 
 체인+태그+스택+주기 = 타이머·카운터 달린 상태기계. 다음은 구조적으로 데이터 밖이다:
-이벤트 페이로드 소비(→시섬·슬라이스 3), 임의 수식(→MagnitudeCalc), 공간·조건 대상
+이벤트 페이로드 소비(→확장점·슬라이스 3), 임의 수식(→MagnitudeCalc), 공간·조건 대상
 선택(→TargetSelector), 교차 개체 조율(→슬라이스 3).
 
-## 8. 시섬 (확장점) 3종
+## 8. 확장점 3종
 
 ### 8.1 식별 — GameplayTag
 
-시섬 식별자는 raw string이 아니라 태그다(GAS GameplayCue가 태그 식별자인 것과 동일
+확장점 식별자는 raw string이 아니라 태그다(GAS GameplayCue가 태그 식별자인 것과 동일
 패턴). 예약 루트 `calc.magnitude.*` / `calc.execution.*` / `selector.*`.
 
 - 구현 클래스에 `[NativeGameplayTag("calc.execution.damage.physical")]` 선언 — 기존
   Native 추출 파이프라인에 실리고, provenance(Native Source)가 분류 태그와의 정체성
   구분을 담당한다. 예약 루트는 검증·Picker 필터 용도.
 - 이득: 문법·중복 검증(저작 시점), **redirect로 리네임 생존**(패치 데이터 수명),
-  Unity Picker 재사용, 카탈로그 fingerprint에 시섬 계약이 포함되어 서버
+  Unity Picker 재사용, 카탈로그 fingerprint에 확장점 계약이 포함되어 서버
   ExpectedFingerprint 검증이 데이터-코드 계약 검증을 겸함.
-- 용량: 시섬 수는 콘텐츠가 아니라 코드 규모에 비례(스펙이 늘지 시섬이 늘지 않는다).
+- 용량: 확장점 수는 콘텐츠가 아니라 코드 규모에 비례(스펙이 늘지 확장점이 늘지 않는다).
   카탈로그 컴파일이 Source·루트별 태그 카운트를 진단 출력한다.
 
 ### 8.2 계약
@@ -261,7 +261,7 @@ public interface ITargetSelector { int Select(in SelectorContext ctx, Span<Targe
 - `MagnitudeContext`(readonly ref struct): Source/Target 속성 Current 읽기, 태그 읽기 뷰,
   Level, StackCount, WorldTick.
 - `ExecutionContext`(ref struct): 위 + `Input(n)`(Executions.inputs 평가값),
-  `WriteTarget(id, value)`(항상 규칙·즉시 전파·이벤트 강제 통과 — 시섬이 불변식을 우회할
+  `WriteTarget(id, value)`(항상 규칙·즉시 전파·이벤트 강제 통과 — 확장점이 불변식을 우회할
   수 없다), `ApplyToTarget(specId)`(직접 아님 — 적용 큐 적재), `Rng`(World 시드 IRng).
 - `SelectorContext`: World 읽기 뷰, source, BigNum 파라미터, Rng. 출력은 caller 버퍼.
 
@@ -320,7 +320,7 @@ Infinite는 디스펠·Ongoing 미충족 제거·소유 소스 소멸(슬라이�
 
 빌더 수집 → `Build(tagCatalog, seamRegistry, attributeRegistry)`:
 
-- **전수 해석**: 스펙 참조·시섬 태그·속성 id·태그 문자열 → 전부 id/인스턴스 직결로
+- **전수 해석**: 스펙 참조·확장점 태그·속성 id·태그 문자열 → 전부 id/인스턴스 직결로
   컴파일. 미해석 = 기동 예외. **런타임에 문자열·딕셔너리 조회 없음.**
 - **정합성 거부**(문서화 대신 컴파일 오류): Instant에 Ongoing 조건·GrantedTags·Period,
   maxStack 없는 만감 정책, Period 없는 Duration/Infinite 스펙에 Executions(실행 시점이
@@ -333,7 +333,7 @@ Infinite는 디스펠·Ongoing 미충족 제거·소유 소스 소멸(슬라이�
 - **스펙 식별자는 문자열 이름**(태그 아님 — 스펙 수는 콘텐츠에 비례해 수백~수천으로
   자라므로 태그 공간을 쓰지 않는다). 체인의 스펙 참조도 이름이며, Build에서 밀집 id로
   인터닝된다. 런타임에 문자열 없음은 §10 본문과 동일.
-- **JSON 저작 스키마**: Operand는 kind 판별 객체, 시섬 참조는 태그 경로 문자열,
+- **JSON 저작 스키마**: Operand는 kind 판별 객체, 확장점 참조는 태그 경로 문자열,
   enum(스택 정책 등)은 이름 문자열. strict 검증은 태그 Source에서 확립한 방식 재사용
   (`StrictJsonSyntax`, 중복 키 거부, 줄·열 진단).
 - **로더는 저작 어셈블리**(`Bun3.Gameplay.Catalog` / Authoring 패키지) — Newtonsoft
@@ -372,7 +372,7 @@ FPredictionKey류 기계는 만들지 않는다(복제 계층 몫, 모델 미정
 | 아이템·스킬의 EffectTarget 보유 여부 | 슬라이스 4 안건 |
 | 인스턴스 상태 proto 직렬화, dirty 추적 | 슬라이스 4 (필드는 §6에서 원시 값으로 준비됨) |
 | EffectSpec 컴파일 바이너리 산출물(+fingerprint) | 출하 최적화 수요 시 — 저작 JSON이 정본, Unity 플레이어 소비 시점에 |
-| Expression 노드(결정론 수식 트리), 스크립트 백엔드 | 로드맵 — Operand kind·시섬 ABI가 자리 |
+| Expression 노드(결정론 수식 트리), 스크립트 백엔드 | 로드맵 — Operand kind·확장점 ABI가 자리 |
 | MaxChange `Scale`(비율 보존) 정책 | 첫 수요 시 |
 | 시간 소스 아날라이저(WorldTick 강제) | 백로그 |
 
@@ -400,7 +400,7 @@ Build 예외 전 경로(오류 하나당 테스트 하나).
 
 ## 14. 버전
 
-기능 추가(파괴 없음): `Bun3.Gameplay` 0.12.0 → 0.13.0, UPM 동반. 시섬 태그 예약 루트가
+기능 추가(파괴 없음): `Bun3.Gameplay` 0.12.0 → 0.13.0, UPM 동반. 확장점 태그 예약 루트가
 게임 카탈로그에 처음 등장하므로 카탈로그 스키마 영향은 없음(일반 태그일 뿐).
 
 ## 15. 부록 — 슬라이스 2.1 어휘 확장 (2026-08-19 승인)
@@ -438,4 +438,4 @@ Unity `AnimationCurve`는 **저작 스킨**이다 — 인스펙터 커브 편집
 | G5 | `StackReapply.ExtendCapped` | WoW Pandemic 관례, growninja AddTime의 유계판 | 재적용 시 남은 지속 += 신규 지속, 상한 = 신규 지속 × 상한 배수(기본 1.3) |
 | G6 | 체감 저항(DR) | WoW CC 관례 | 스펙에 DR 계열 태그 + 대상별 (계열→적용 횟수·마지막 틱) 이력, 리셋 창(틱), 단계별 지속 배수 테이블(BigNum[], 마지막 단계 0 = 면역). G3의 지속 배수 경로에 합성 |
 
-2차원 레벨(growninja outLevel/inLevel)은 **비채택** — 레벨 1개 + 시섬으로 근사한다(사용자 결정).
+2차원 레벨(growninja outLevel/inLevel)은 **비채택** — 레벨 1개 + 확장점으로 근사한다(사용자 결정).

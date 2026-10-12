@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using Bun3.Gameplay.Abilities;
 using Bun3.Gameplay.Attributes;
 using Bun3.Gameplay.Effects;
 using Bun3.Gameplay.Numerics;
@@ -12,9 +13,9 @@ using Bun3.Gameplay.Tags.Catalog;
 namespace Bun3.Gameplay.Tests;
 
 /// <summary>
-/// Shared tag catalog, attribute registry, and minimal-spec helpers for EffectCatalogBuilder /
-/// EffectPipeline tests. Static helpers cover catalog and spec skeletons; the instance side
-/// (Create/Attacker/Defender/AddSpec/BuildPipeline) serves tests that need pipeline assembly.
+/// Shared tag catalog, attribute registry, and minimal-def helpers for EffectCatalogBuilder /
+/// EffectPipeline tests. Static helpers cover catalog and def skeletons; the instance side
+/// (Create/Attacker/Defender/AddEffect/BuildPipeline) serves tests that need pipeline assembly.
 /// </summary>
 internal sealed class EffectTestKit
 {
@@ -41,15 +42,25 @@ internal sealed class EffectTestKit
         { "name": "state.lowhealth" },
         { "name": "effect.fire.bolt" },
         { "name": "effect.frost" },
-        { "name": "effect.magic.curse" }
+        { "name": "effect.magic.curse" },
+        { "name": "event.damage.taken" },
+        { "name": "event.damage" },
+        { "name": "event.heal.taken" },
+        { "name": "selector.event.source" },
+        { "name": "selector.event.target" },
+        { "name": "cooldown.fireball" },
+        { "name": "state.silenced" },
+        { "name": "state.armed" }
       ]
     }
     """;
 
     /// <summary>Loads a fresh copy of the shared tag catalog.</summary>
-    public static TagCatalog LoadCatalog()
+    public static TagCatalog LoadCatalog() => LoadCatalog(CatalogJson);
+
+    private static TagCatalog LoadCatalog(string catalogJson)
     {
-        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(CatalogJson));
+        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(catalogJson));
         return TagCatalogJson.Load(stream);
     }
 
@@ -57,31 +68,31 @@ internal sealed class EffectTestKit
     public static AttributeRegistry BuildAttributeRegistry()
     {
         var builder = new AttributeRegistryBuilder();
-        builder.Register(MaxHp, min: Operand.Constant(1));
-        builder.Register(Hp, min: Operand.Constant(0), max: Operand.Attribute(MaxHp));
-        builder.Register(Attack, min: Operand.Constant(0));
-        builder.Register(Mp);
-        builder.Register(Resistance);
+        builder.Register(MaxHp, "MaxHp", min: Operand.Constant(1));
+        builder.Register(Hp, "Hp", min: Operand.Constant(0), max: Operand.Attribute(MaxHp));
+        builder.Register(Attack, "Attack", min: Operand.Constant(0));
+        builder.Register(Mp, "Mp");
+        builder.Register(Resistance, "Resistance");
         return builder.Build();
     }
 
-    /// <summary>Creates a minimal Instant spec with all fields at defaults.</summary>
-    public static EffectSpec MinimalInstant(string name) => new EffectSpec
+    /// <summary>Creates a minimal Instant def with all fields at defaults.</summary>
+    public static EffectDef MinimalInstant(string name) => new EffectDef
     {
         Name = name,
         DurationType = EffectDurationType.Instant,
     };
 
-    /// <summary>Creates a minimal Duration spec lasting the given number of ticks.</summary>
-    public static EffectSpec MinimalDuration(string name, int ticks) => new EffectSpec
+    /// <summary>Creates a minimal Duration def lasting the given number of ticks.</summary>
+    public static EffectDef MinimalDuration(string name, int ticks) => new EffectDef
     {
         Name = name,
         DurationType = EffectDurationType.Duration,
         DurationTicks = ticks,
     };
 
-    /// <summary>Creates a minimal Infinite spec with all fields at defaults.</summary>
-    public static EffectSpec MinimalInfinite(string name) => new EffectSpec
+    /// <summary>Creates a minimal Infinite def with all fields at defaults.</summary>
+    public static EffectDef MinimalInfinite(string name) => new EffectDef
     {
         Name = name,
         DurationType = EffectDurationType.Infinite,
@@ -111,11 +122,12 @@ internal sealed class EffectTestKit
     private readonly EffectCatalogBuilder _effectCatalogBuilder = new EffectCatalogBuilder();
     private readonly Dictionary<ulong, EffectTarget> _targetsById = new Dictionary<ulong, EffectTarget>();
     private readonly List<TargetId> _targetIds = new List<TargetId>();
+    private SeamRegistry? _seams;
     private EffectCatalog? _catalog;
 
-    private EffectTestKit()
+    private EffectTestKit(string catalogJson)
     {
-        _tagCatalog = LoadCatalog();
+        _tagCatalog = LoadCatalog(catalogJson);
         _attributeRegistry = BuildAttributeRegistry();
         Attacker = CreateTarget(1);
         Defender = CreateTarget(2);
@@ -131,7 +143,16 @@ internal sealed class EffectTestKit
     public IReadOnlyList<EffectTarget> AllTargets => _targetIds.ConvertAll(id => _targetsById[id.Value]);
 
     /// <summary>Creates a kit wired with the catalog, the standard attribute registry, and the attacker/defender targets.</summary>
-    public static EffectTestKit Create() => new EffectTestKit();
+    public static EffectTestKit Create() => new EffectTestKit(CatalogJson);
+
+    /// <summary>Creates a kit whose tag catalog has one extra tag, so its fingerprint differs.</summary>
+    /// <param name="extraTagPath">Canonical path of the tag to append.</param>
+    public static EffectTestKit CreateWithExtraTag(string extraTagPath)
+    {
+        var json = CatalogJson.Replace(
+            "\"tags\": [", $"\"tags\": [\n        {{ \"name\": \"{extraTagPath}\" }},");
+        return new EffectTestKit(json);
+    }
 
     private EffectTarget CreateTarget(ulong id)
     {
@@ -142,8 +163,8 @@ internal sealed class EffectTestKit
         return target;
     }
 
-    /// <summary>Registers an effect spec with the catalog builder. Call before BuildPipeline.</summary>
-    public void AddSpec(EffectSpec spec) => _effectCatalogBuilder.Add(spec);
+    /// <summary>Registers an effect def with the catalog builder. Call before BuildPipeline.</summary>
+    public void AddEffect(EffectDef def) => _effectCatalogBuilder.Add(def);
 
     /// <summary>Registers an execution calc under a tag. Call before BuildPipeline.</summary>
     public void RegisterExecutionCalc(string calcTag, IExecutionCalc calc) =>
@@ -167,14 +188,28 @@ internal sealed class EffectTestKit
     /// <summary>The shared tag catalog.</summary>
     public TagCatalog TagCatalog => _tagCatalog;
 
+    /// <summary>Seam registry backing this kit.</summary>
+    public SeamRegistry Seams => BuiltSeams;
+
+    /// <summary>Attribute registry backing this kit.</summary>
+    public AttributeRegistry Attributes => BuiltAttributes;
+
     /// <summary>Gets the catalog id of a registered effect name. Call after BuildPipeline.</summary>
-    public int SpecId(string name) => BuiltCatalog.GetRequiredId(name);
+    public int EffectId(string name) => BuiltCatalog.GetRequiredId(name);
 
     /// <summary>The built effect catalog (for calls needing it, e.g. RestoreSnapshot). Call after BuildPipeline.</summary>
     public EffectCatalog Catalog => BuiltCatalog;
 
+    private SeamRegistry BuiltSeams => _seams ??= _seamRegistryBuilder.Build(_tagCatalog);
+
+    private AttributeRegistry BuiltAttributes => _attributeRegistry;
+
     private EffectCatalog BuiltCatalog =>
-        _catalog ??= _effectCatalogBuilder.Build(_tagCatalog, _seamRegistryBuilder.Build(_tagCatalog), _attributeRegistry);
+        _catalog ??= _effectCatalogBuilder.Build(_tagCatalog, BuiltSeams, BuiltAttributes);
+
+    /// <summary>Bundles the kit's catalogs with an ability catalog (and optionally archetypes) for a World.</summary>
+    public GameplayDatabase Database(AbilityCatalog abilities, ArchetypeCatalog? archetypes = null) =>
+        new GameplayDatabase(TagCatalog, Seams, Attributes, BuiltCatalog, abilities, archetypes ?? ArchetypeCatalog.Empty);
 
     /// <summary>Freezes the catalog with everything registered so far and creates a pipeline.</summary>
     public EffectPipeline BuildPipeline(int applyBudgetPerTick = 64) =>
@@ -195,6 +230,8 @@ internal sealed class EffectTestKit
         public bool TryResolve(TargetId id, out EffectTarget? target) => _targets.TryGetValue(id.Value, out target);
 
         public IReadOnlyList<TargetId> TargetIds => _ids;
+
+        public EffectTarget TargetAt(int index) => _targets[_ids[index].Value];
     }
 
     /// <summary>Test execution calc that subtracts Input(0) from the target's Hp.</summary>
@@ -216,7 +253,7 @@ internal sealed class EffectTestKit
             var ids = _allTargetIds ?? throw new InvalidOperationException("Bind via RegisterSelector first.");
             var count = Math.Min(ids.Count, results.Length);
             for (var i = 0; i < count; i++) results[i] = ids[i];
-            return count;
+            return ids.Count;
         }
     }
 }

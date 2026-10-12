@@ -41,12 +41,12 @@ namespace Bun3.Gameplay.Tags
         }
 
         /// <summary>
-        /// Assembles a catalog from canonical tag names and redirect definitions — the format-agnostic entry point.
+        /// Assembles a catalog from canonical tag names and parsed redirects — the format-agnostic entry point.
         /// </summary>
-        internal static TagCatalog Create(List<string> canonicalTagNames, List<RedirectDefinition> definitions)
+        internal static TagCatalog Create(List<string> canonicalTagNames, List<ParsedRedirect> parsedRedirects)
         {
             var build = Build(canonicalTagNames);
-            var redirects = BuildRedirects(definitions, build.ByCanonicalName, out var fingerprintRedirects);
+            var redirects = BuildRedirects(parsedRedirects, build.ByCanonicalName, out var fingerprintRedirects);
             var canonicalNames = CreateCanonicalNames(build.ByCanonicalName, build.Parents.Length);
             var fingerprint = ComputeFingerprint(
                 2,
@@ -125,42 +125,42 @@ namespace Bun3.Gameplay.Tags
         }
 
         private static Dictionary<string, ushort> BuildRedirects(
-            List<RedirectDefinition> definitions,
+            List<ParsedRedirect> parsedRedirects,
             Dictionary<string, ushort> byCanonicalName,
             out RedirectEntry[] fingerprintRedirects)
         {
-            var redirects = new Dictionary<string, ushort>(definitions.Count, StringComparer.Ordinal);
-            var entries = new List<RedirectEntry>(definitions.Count);
-            foreach (var definition in definitions)
+            var redirects = new Dictionary<string, ushort>(parsedRedirects.Count, StringComparer.Ordinal);
+            var entries = new List<RedirectEntry>(parsedRedirects.Count);
+            foreach (var redirect in parsedRedirects)
             {
-                if (byCanonicalName.ContainsKey(definition.From))
+                if (byCanonicalName.ContainsKey(redirect.From))
                 {
                     throw new TagCatalogException(
                         "Redirect source must not collide with an active tag.",
-                        definition.FromJsonPath,
-                        definition.FromLineNumber,
-                        definition.FromLinePosition);
+                        redirect.FromJsonPath,
+                        redirect.FromLineNumber,
+                        redirect.FromLinePosition);
                 }
 
-                if (!byCanonicalName.TryGetValue(definition.To, out var target))
+                if (!byCanonicalName.TryGetValue(redirect.To, out var target))
                 {
                     throw new TagCatalogException(
                         "Redirect target must be an active tag.",
-                        definition.ToJsonPath,
-                        definition.ToLineNumber,
-                        definition.ToLinePosition);
+                        redirect.ToJsonPath,
+                        redirect.ToLineNumber,
+                        redirect.ToLinePosition);
                 }
 
-                if (!redirects.TryAdd(definition.From, target))
+                if (!redirects.TryAdd(redirect.From, target))
                 {
                     throw new TagCatalogException(
                         "Duplicate redirect source (case-insensitive).",
-                        definition.FromJsonPath,
-                        definition.FromLineNumber,
-                        definition.FromLinePosition);
+                        redirect.FromJsonPath,
+                        redirect.FromLineNumber,
+                        redirect.FromLinePosition);
                 }
 
-                entries.Add(new RedirectEntry(definition.From, definition.To));
+                entries.Add(new RedirectEntry(redirect.From, redirect.To));
             }
 
             entries.Sort((left, right) => StringComparer.Ordinal.Compare(left.From, right.From));
@@ -324,9 +324,9 @@ namespace Bun3.Gameplay.Tags
         }
 
         /// <summary>One redirect's canonical name pair and its source JSON positions.</summary>
-        internal readonly struct RedirectDefinition
+        internal readonly struct ParsedRedirect
         {
-            internal RedirectDefinition(
+            internal ParsedRedirect(
                 string from,
                 string to,
                 string fromJsonPath,

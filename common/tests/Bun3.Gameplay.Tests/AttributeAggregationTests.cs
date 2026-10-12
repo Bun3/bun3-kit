@@ -22,7 +22,7 @@ public sealed class AttributeAggregationTests
     private static AttributeSet CreateSet()
     {
         var builder = new AttributeRegistryBuilder();
-        builder.Register(Attack, min: Operand.Constant(0));
+        builder.Register(Attack, "Attack", min: Operand.Constant(0));
         Span<ushort> ids = stackalloc ushort[] { Attack };
         return new AttributeSet(builder.Build(), ids);
     }
@@ -41,6 +41,37 @@ public sealed class AttributeAggregationTests
 
         // (100 + 20) × (1 + 0.3 + 0.2) = 180 — aggregation formula
         Assert.That(set.GetCurrent(Attack), Is.EqualTo((BigNum)180));
+    }
+
+    [Test]
+    public void Modifiers_on_several_attributes_each_reach_their_own_attribute()
+    {
+        const ushort hp = 1, armor = 3;
+        var builder = new AttributeRegistryBuilder();
+        builder.Register(hp, "Hp");
+        builder.Register(armor, "Armor");
+        builder.Register(Attack, "Attack");
+        Span<ushort> ids = stackalloc ushort[] { Attack, armor, hp };
+        var set = new AttributeSet(builder.Build(), ids);
+        set.SetBase(hp, 100);
+        set.SetBase(armor, 10);
+        set.SetBase(Attack, 50);
+
+        var gear = new FakeSource { Id = 2 };
+        var buff = new FakeSource { Id = 1 };
+        set.AttachModifier(gear, 0, Attack, AttributeModifierOp.Add, 5, scaleWithStack: false);
+        set.AttachModifier(gear, 1, armor, AttributeModifierOp.Add, 7, scaleWithStack: false);
+        set.AttachModifier(buff, 0, Attack, AttributeModifierOp.Multiply, BigNum.FromParts(1, -1), scaleWithStack: false);
+        set.RebuildDirty();
+
+        Assert.That(set.GetCurrent(hp), Is.EqualTo((BigNum)100));
+        Assert.That(set.GetCurrent(armor), Is.EqualTo((BigNum)17));
+        Assert.That(set.GetCurrent(Attack), Is.EqualTo(BigNum.FromParts(605, -1)));   // (50 + 5) × 1.1
+
+        set.DetachModifiers(gear);
+        set.RebuildDirty();
+        Assert.That(set.GetCurrent(armor), Is.EqualTo((BigNum)10));
+        Assert.That(set.GetCurrent(Attack), Is.EqualTo((BigNum)55));
     }
 
     [Test]

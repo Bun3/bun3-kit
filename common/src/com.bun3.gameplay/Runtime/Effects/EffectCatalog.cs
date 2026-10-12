@@ -11,19 +11,19 @@ namespace Bun3.Gameplay.Effects
     public sealed class EffectCatalog
     {
         private readonly Dictionary<string, int> _nameToId;
-        private readonly CompiledEffectSpec[] _specs;
+        private readonly CompiledEffect[] _effects;
         private readonly string[] _buildWarnings;
 
         internal EffectCatalog(
-            Dictionary<string, int> nameToId, CompiledEffectSpec[] specs, List<string> buildWarnings)
+            Dictionary<string, int> nameToId, CompiledEffect[] effects, List<string> buildWarnings)
         {
             _nameToId = nameToId;
-            _specs = specs;
+            _effects = effects;
             _buildWarnings = buildWarnings.ToArray();
         }
 
         /// <summary>Number of effects registered in the catalog.</summary>
-        public int Count => _specs.Length;
+        public int Count => _effects.Length;
 
         /// <summary>Looks up an effect id by name, throwing when absent.</summary>
         /// <param name="name">Effect name to look up.</param>
@@ -45,8 +45,8 @@ namespace Bun3.Gameplay.Effects
         /// <returns>True if the name is registered.</returns>
         public bool TryGetId(string name, out int id) => _nameToId.TryGetValue(name, out id);
 
-        /// <summary>Gets the compiled spec by id.</summary>
-        internal CompiledEffectSpec GetSpec(int id) => _specs[id];
+        /// <summary>Gets the compiled effect by id.</summary>
+        internal CompiledEffect GetEffect(int id) => _effects[id];
 
         /// <summary>Chain-cycle warnings found during Build. They accumulate here instead of throwing.</summary>
         public IReadOnlyList<string> BuildWarnings => _buildWarnings;
@@ -57,7 +57,7 @@ namespace Bun3.Gameplay.Effects
     {
         internal CompiledModifier(
             ushort attributeId, AttributeModifierOp op,
-            Operand? @base, Operand? perLevel, IMagnitudeCalc? calc,
+            Operand? @base, Operand? perLevel, IMagnitudeCalc? calc, GameplayTag calcTag,
             BigNum[]? byLevel, LevelTail tail, BigNum increment, bool scaleWithStack)
         {
             AttributeId = attributeId;
@@ -65,6 +65,7 @@ namespace Bun3.Gameplay.Effects
             Base = @base;
             PerLevel = perLevel;
             Calc = calc;
+            CalcTag = calcTag;
             ByLevel = byLevel;
             Tail = tail;
             Increment = increment;
@@ -86,6 +87,10 @@ namespace Bun3.Gameplay.Effects
         /// <summary>Resolved magnitude-calc contract; null for constant/attribute/level-table magnitudes.</summary>
         internal IMagnitudeCalc? Calc { get; }
 
+        /// <summary>Tag <see cref="Calc"/> was resolved from; <see cref="GameplayTag.None"/> when Calc is null.
+        /// Kept so a compiled catalog can be persisted and the seam re-resolved on load.</summary>
+        internal GameplayTag CalcTag { get; }
+
         /// <summary>Level table (notations ②③④ compiled to a dense array); null when absent (notation ① or Calc).</summary>
         internal BigNum[]? ByLevel { get; }
 
@@ -105,12 +110,13 @@ namespace Bun3.Gameplay.Effects
     internal sealed class CompiledMagnitude
     {
         internal CompiledMagnitude(
-            Operand? @base, Operand? perLevel, IMagnitudeCalc? calc,
+            Operand? @base, Operand? perLevel, IMagnitudeCalc? calc, GameplayTag calcTag,
             BigNum[]? byLevel, LevelTail tail, BigNum increment)
         {
             Base = @base;
             PerLevel = perLevel;
             Calc = calc;
+            CalcTag = calcTag;
             ByLevel = byLevel;
             Tail = tail;
             Increment = increment;
@@ -125,6 +131,10 @@ namespace Bun3.Gameplay.Effects
         /// <summary>Resolved magnitude-calc contract; null for constant/attribute/level-table magnitudes.</summary>
         internal IMagnitudeCalc? Calc { get; }
 
+        /// <summary>Tag <see cref="Calc"/> was resolved from; <see cref="GameplayTag.None"/> when Calc is null.
+        /// Kept so a compiled catalog can be persisted and the seam re-resolved on load.</summary>
+        internal GameplayTag CalcTag { get; }
+
         /// <summary>Level table (notations ②③④ compiled to a dense array); null when absent (notation ① or Calc).</summary>
         internal BigNum[]? ByLevel { get; }
 
@@ -138,14 +148,19 @@ namespace Bun3.Gameplay.Effects
     /// <summary>Compiled effect execution.</summary>
     internal sealed class CompiledExecution
     {
-        internal CompiledExecution(IExecutionCalc calc, Operand[] inputs)
+        internal CompiledExecution(IExecutionCalc calc, GameplayTag calcTag, Operand[] inputs)
         {
             Calc = calc;
+            CalcTag = calcTag;
             Inputs = inputs;
         }
 
         /// <summary>Resolved execution contract.</summary>
         internal IExecutionCalc Calc { get; }
+
+        /// <summary>Tag <see cref="Calc"/> was resolved from. Kept so a compiled catalog can be
+        /// persisted and the seam re-resolved on load.</summary>
+        internal GameplayTag CalcTag { get; }
 
         /// <summary>Input operands passed to the execution.</summary>
         internal Operand[] Inputs { get; }
@@ -171,20 +186,40 @@ namespace Bun3.Gameplay.Effects
         internal Operand Right { get; }
     }
 
-    /// <summary>Compiled chain edge.</summary>
-    internal sealed class CompiledChain
+    /// <summary>One compiled event declaration.</summary>
+    internal readonly struct CompiledRaiseEvent
     {
-        internal CompiledChain(
-            ChainTrigger trigger, int effectId, ITargetSelector? selector, BigNum[] selectorParams,
-            CompiledCondition[] conditions, ChainLevelRule levelRule, int fixedLevel)
+        internal CompiledRaiseEvent(GameplayTag tag, ushort attributeId)
+        {
+            Tag = tag;
+            AttributeId = attributeId;
+        }
+
+        /// <summary>Event tag.</summary>
+        internal GameplayTag Tag { get; }
+
+        /// <summary>Attribute whose Base change becomes the event magnitude.</summary>
+        internal ushort AttributeId { get; }
+    }
+
+    /// <summary>Compiled chain edge.</summary>
+    internal sealed class CompiledChainEdge
+    {
+        internal CompiledChainEdge(
+            ChainTrigger trigger, int effectId, ITargetSelector? selector, GameplayTag selectorTag,
+            BigNum[] selectorParams, CompiledCondition[] conditions, ChainLevelRule levelRule,
+            int fixedLevel, GameplayTag eventTag, ChainListen listen)
         {
             Trigger = trigger;
             EffectId = effectId;
             Selector = selector;
+            SelectorTag = selectorTag;
             SelectorParams = selectorParams;
             Conditions = conditions;
             LevelRule = levelRule;
             FixedLevel = fixedLevel;
+            EventTag = eventTag;
+            Listen = listen;
         }
 
         /// <summary>Trigger timing.</summary>
@@ -195,6 +230,10 @@ namespace Bun3.Gameplay.Effects
 
         /// <summary>Resolved target-selector contract, or null (use the source target as is).</summary>
         internal ITargetSelector? Selector { get; }
+
+        /// <summary>Tag <see cref="Selector"/> was resolved from; <see cref="GameplayTag.None"/> when
+        /// Selector is null. Kept so a compiled catalog can be persisted and the seam re-resolved on load.</summary>
+        internal GameplayTag SelectorTag { get; }
 
         /// <summary>Parameters passed to target selection.</summary>
         internal BigNum[] SelectorParams { get; }
@@ -207,25 +246,100 @@ namespace Bun3.Gameplay.Effects
 
         /// <summary>Level to use when LevelRule is Fixed.</summary>
         internal int FixedLevel { get; }
+
+        /// <summary>Event tag this edge listens for. Only meaningful when <see cref="Trigger"/> is
+        /// <see cref="ChainTrigger.OnEvent"/>.</summary>
+        internal GameplayTag EventTag { get; }
+
+        /// <summary>Which side of the event this edge listens on. Only meaningful when <see cref="Trigger"/> is
+        /// <see cref="ChainTrigger.OnEvent"/>.</summary>
+        internal ChainListen Listen { get; }
     }
 
-    /// <summary>Effect spec fully validated and resolved by Build.</summary>
-    internal sealed class CompiledEffectSpec
+    /// <summary>Stack policy resolved by Build. Values are copied from the authoring
+    /// <see cref="StackPolicyDef"/> so the compiled catalog stays immutable even if the caller
+    /// keeps mutating the authoring object after Build.</summary>
+    internal sealed class CompiledStackPolicy
     {
-        internal CompiledEffectSpec(
+        internal CompiledStackPolicy(
+            int maxStack,
+            StackReapply onReapply,
+            int addStackCount,
+            bool refreshDurationOnReapply,
+            bool resetPeriodOnReapply,
+            StackExpiration onExpiration,
+            StackOverflow onOverflow,
+            string? overflowEffectName,
+            bool clearStacksOnOverflow,
+            bool levelFromStack,
+            BigNum extendCapMultiplier)
+        {
+            MaxStack = maxStack;
+            OnReapply = onReapply;
+            AddStackCount = addStackCount;
+            RefreshDurationOnReapply = refreshDurationOnReapply;
+            ResetPeriodOnReapply = resetPeriodOnReapply;
+            OnExpiration = onExpiration;
+            OnOverflow = onOverflow;
+            OverflowEffectName = overflowEffectName;
+            ClearStacksOnOverflow = clearStacksOnOverflow;
+            LevelFromStack = levelFromStack;
+            ExtendCapMultiplier = extendCapMultiplier;
+        }
+
+        /// <summary>Maximum stack count; 0 means the effect does not stack.</summary>
+        internal int MaxStack { get; }
+
+        /// <summary>Behavior when a stackable effect is reapplied.</summary>
+        internal StackReapply OnReapply { get; }
+
+        /// <summary>Stacks added per reapplication.</summary>
+        internal int AddStackCount { get; }
+
+        /// <summary>Whether reapplication refreshes the duration.</summary>
+        internal bool RefreshDurationOnReapply { get; }
+
+        /// <summary>Whether reapplication resets the periodic execution timer.</summary>
+        internal bool ResetPeriodOnReapply { get; }
+
+        /// <summary>Behavior when a stack expires.</summary>
+        internal StackExpiration OnExpiration { get; }
+
+        /// <summary>Behavior when the maximum stack count is exceeded.</summary>
+        internal StackOverflow OnOverflow { get; }
+
+        /// <summary>Name of the effect to apply instead when <see cref="OnOverflow"/> is ApplyEffect.</summary>
+        internal string? OverflowEffectName { get; }
+
+        /// <summary>Whether an overflow application clears all existing stacks.</summary>
+        internal bool ClearStacksOnOverflow { get; }
+
+        /// <summary>If true, merging (reapplication) syncs the instance Level to the Stack value.</summary>
+        internal bool LevelFromStack { get; }
+
+        /// <summary>Multiplier that caps the duration for <see cref="StackReapply.ExtendCapped"/>.</summary>
+        internal BigNum ExtendCapMultiplier { get; }
+    }
+
+    /// <summary>Effect fully validated and resolved by Build.</summary>
+    internal sealed class CompiledEffect
+    {
+        internal CompiledEffect(
             string name,
+            int maxLevel,
             EffectDurationType durationType,
             int durationTicks,
             int periodTicks,
-            StackPolicy stack,
+            CompiledStackPolicy stack,
             CompiledModifier[] modifiers,
             CompiledExecution[] executions,
             CompiledCondition[] applicationConditions,
             CompiledCondition[] ongoingConditions,
             GameplayTag[] grantedTags,
+            string[] grantedAbilityNames,
             GameplayTag[] assetTags,
             GameplayTag[] immunityTags,
-            CompiledChain[] chains,
+            CompiledChainEdge[] chains,
             int overflowEffectId,
             GameplayTag[] removeOnApplyTags,
             CompiledMagnitude? chanceToApply,
@@ -233,9 +347,11 @@ namespace Bun3.Gameplay.Effects
             CompiledMagnitude? durationScale,
             GameplayTag drCategory,
             int drWindowTicks,
-            BigNum[] drStageMultipliers)
+            BigNum[] drStageMultipliers,
+            CompiledRaiseEvent[] raiseEvents)
         {
             Name = name;
+            MaxLevel = maxLevel;
             DurationType = durationType;
             DurationTicks = durationTicks;
             PeriodTicks = periodTicks;
@@ -245,6 +361,7 @@ namespace Bun3.Gameplay.Effects
             ApplicationConditions = applicationConditions;
             OngoingConditions = ongoingConditions;
             GrantedTags = grantedTags;
+            GrantedAbilityNames = grantedAbilityNames;
             AssetTags = assetTags;
             ImmunityTags = immunityTags;
             Chains = chains;
@@ -256,10 +373,22 @@ namespace Bun3.Gameplay.Effects
             DrCategory = drCategory;
             DrWindowTicks = drWindowTicks;
             DrStageMultipliers = drStageMultipliers;
+            RaiseEvents = raiseEvents;
+
+            HasEventChains = false;
+            for (var i = 0; i < chains.Length; i++)
+            {
+                if (chains[i].Trigger != ChainTrigger.OnEvent) continue;
+                HasEventChains = true;
+                break;
+            }
         }
 
         /// <summary>Effect name.</summary>
         internal string Name { get; }
+
+        /// <summary>Declared maximum level; 0 means undeclared.</summary>
+        internal int MaxLevel { get; }
 
         /// <summary>How the effect persists.</summary>
         internal EffectDurationType DurationType { get; }
@@ -271,7 +400,7 @@ namespace Bun3.Gameplay.Effects
         internal int PeriodTicks { get; }
 
         /// <summary>Stack policy.</summary>
-        internal StackPolicy Stack { get; }
+        internal CompiledStackPolicy Stack { get; }
 
         /// <summary>Compiled attribute modifiers.</summary>
         internal CompiledModifier[] Modifiers { get; }
@@ -288,6 +417,12 @@ namespace Bun3.Gameplay.Effects
         /// <summary>Resolved granted tags.</summary>
         internal GameplayTag[] GrantedTags { get; }
 
+        /// <summary>Names of the abilities this effect grants while active and enabled. Kept as names
+        /// rather than resolved ids because <see cref="EffectCatalog"/> builds before the ability
+        /// catalog exists; the owning world resolves them once against the ability catalog it is
+        /// handed and caches the ids.</summary>
+        internal string[] GrantedAbilityNames { get; }
+
         /// <summary>Resolved asset tags.</summary>
         internal GameplayTag[] AssetTags { get; }
 
@@ -295,7 +430,7 @@ namespace Bun3.Gameplay.Effects
         internal GameplayTag[] ImmunityTags { get; }
 
         /// <summary>Compiled chain edges.</summary>
-        internal CompiledChain[] Chains { get; }
+        internal CompiledChainEdge[] Chains { get; }
 
         /// <summary>Id of the effect applied instead on stack overflow; -1 when none.</summary>
         internal int OverflowEffectId { get; }
@@ -308,7 +443,7 @@ namespace Bun3.Gameplay.Effects
         internal CompiledMagnitude? ChanceToApply { get; }
 
         /// <summary>Per-level duration ticks (notation ② only); null when absent
-        /// (single <see cref="EffectSpec.DurationTicks"/> value is used).</summary>
+        /// (single <see cref="EffectDef.DurationTicks"/> value is used).</summary>
         internal BigNum[]? DurationPerLevel { get; }
 
         /// <summary>Duration multiplier evaluated once on application; null when absent (same as multiplier 1).</summary>
@@ -322,5 +457,12 @@ namespace Bun3.Gameplay.Effects
 
         /// <summary>Per-stage DR duration multipliers; empty when <see cref="DrCategory"/> is unused.</summary>
         internal BigNum[] DrStageMultipliers { get; }
+
+        /// <summary>Gameplay events raised when this effect applies instantly or executes periodically.</summary>
+        internal CompiledRaiseEvent[] RaiseEvents { get; }
+
+        /// <summary>Whether any chain edge on this effect listens with <see cref="ChainTrigger.OnEvent"/>.
+        /// Lets event dispatch skip the inner chain loop for the common case.</summary>
+        internal bool HasEventChains { get; }
     }
 }

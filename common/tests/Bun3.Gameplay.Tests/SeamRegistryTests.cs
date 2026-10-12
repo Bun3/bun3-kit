@@ -77,4 +77,149 @@ public sealed class SeamRegistryTests
             Assert.That(a.NextUInt32(), Is.EqualTo(b.NextUInt32()));
         Assert.Throws<ArgumentOutOfRangeException>(() => _ = new XorShiftRng(0));
     }
+
+    [Test]
+    public void XorShift_state_round_trip_replays_the_same_sequence()
+    {
+        var rng = new XorShiftRng(7);
+        for (var i = 0; i < 3; i++) rng.NextUInt32();
+        var state = new byte[rng.StateSize];
+        rng.SaveState(state);
+        var first = new uint[5];
+        for (var i = 0; i < first.Length; i++) first[i] = rng.NextUInt32();
+
+        rng.RestoreState(state);
+
+        Assert.That(rng.StateSize, Is.EqualTo(8));
+        for (var i = 0; i < first.Length; i++) Assert.That(rng.NextUInt32(), Is.EqualTo(first[i]));
+    }
+
+    [Test]
+    public void XorShift_rejects_a_short_buffer_a_wrong_length_or_a_zero_state_without_changing()
+    {
+        var rng = new XorShiftRng(7);
+        var expected = new XorShiftRng(7).NextUInt32();
+
+        Assert.Throws<ArgumentException>(() => rng.SaveState(new byte[7]));
+        Assert.Throws<ArgumentException>(() => rng.RestoreState(new byte[7]));
+        Assert.Throws<ArgumentException>(() => rng.RestoreState(new byte[9]));
+        Assert.Throws<ArgumentException>(() => rng.RestoreState(new byte[8]));
+        Assert.That(rng.NextUInt32(), Is.EqualTo(expected));
+    }
+
+    private sealed class OverflowSelector : ITargetSelector
+    {
+        private readonly int _desired;
+
+        internal OverflowSelector(int desired) => _desired = desired;
+
+        public int Select(in SelectorContext ctx, Span<TargetId> results)
+        {
+            var written = _desired < results.Length ? _desired : results.Length;
+            for (var i = 0; i < written; i++) results[i] = new TargetId((ulong)(i + 1));
+            return _desired;
+        }
+    }
+
+    [Test]
+    public void Selector_returning_more_than_the_buffer_increments_the_truncation_counter()
+    {
+        var kit = EffectTestKit.Create();
+        kit.RegisterSelector("selector.everyone", new OverflowSelector(desired: 40));
+
+        var source = EffectTestKit.MinimalInstant("source");
+        var edge = EffectTestKit.Edge(ChainTrigger.OnApplication, "chained");
+        edge.SelectorTag = "selector.everyone";
+        source.Chains.Add(edge);
+        kit.AddEffect(source);
+        kit.AddEffect(EffectTestKit.MinimalInstant("chained"));
+        var pipeline = kit.BuildPipeline();
+
+        pipeline.EnqueueApply(kit.EffectId("source"), kit.Attacker.Id, kit.Defender.Id);
+        pipeline.Tick();
+
+        Assert.That(pipeline.SelectorTruncationCount, Is.EqualTo(1));
+    }
+
+    [Test]
+    public void Selector_within_the_buffer_does_not_increment_the_truncation_counter()
+    {
+        var kit = EffectTestKit.Create();
+        kit.RegisterSelector("selector.everyone", new OverflowSelector(desired: 2));
+
+        var source = EffectTestKit.MinimalInstant("source");
+        var edge = EffectTestKit.Edge(ChainTrigger.OnApplication, "chained");
+        edge.SelectorTag = "selector.everyone";
+        source.Chains.Add(edge);
+        kit.AddEffect(source);
+        kit.AddEffect(EffectTestKit.MinimalInstant("chained"));
+        var pipeline = kit.BuildPipeline();
+
+        pipeline.EnqueueApply(kit.EffectId("source"), kit.Attacker.Id, kit.Defender.Id);
+        pipeline.Tick();
+
+        Assert.That(pipeline.SelectorTruncationCount, Is.Zero);
+    }
+
+    private sealed class EmptyResolver : IEffectTargetResolver
+    {
+        public bool TryResolve(TargetId id, out EffectTarget? target)
+        {
+            target = null;
+            return false;
+        }
+
+        public System.Collections.Generic.IReadOnlyList<TargetId> TargetIds => System.Array.Empty<TargetId>();
+
+        public EffectTarget TargetAt(int index) => throw new System.ArgumentOutOfRangeException(nameof(index));
+    }
+
+    [Test]
+    public void AllTargetsSelector_with_many_targets_returns_total_count_not_written_count()
+    {
+        var manyTargets = new System.Collections.Generic.List<TargetId>();
+        for (var i = 0; i < 40; i++) manyTargets.Add(new TargetId((ulong)(i + 1)));
+
+        Span<TargetId> buffer = stackalloc TargetId[32];
+        var selector = new EffectTestKit.AllTargetsSelector();
+        selector.Bind(manyTargets);
+
+        var selectorCtx = new SelectorContext(
+            new TargetId(1), new TargetId(1), System.Array.Empty<BigNum>(), new XorShiftRng(1), new EmptyResolver(),
+            default(GameplayEvent));
+        var returned = selector.Select(in selectorCtx, buffer);
+
+        Assert.That(returned, Is.EqualTo(40), "AllTargetsSelector should return total count (40), not written count (32)");
+    }
+
+    private sealed class StubSelector : ITargetSelector
+    {
+        public int Select(in SelectorContext ctx, Span<TargetId> results) => 0;
+    }
+
+    [Test]
+    public void Games_own_selector_registration_wins_over_the_built_in()
+    {
+        const string json = "{\"schemaVersion\":1,\"tags\":[{\"name\":\"selector.event.source\"}]}";
+        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(json));
+        var catalog = TagCatalogJson.Load(stream);
+
+        var builder = new SeamRegistryBuilder();
+        var stub = new StubSelector();
+        builder.RegisterTargetSelector(catalog.GetRequired(BuiltInSelectors.EventSourceTag), stub);
+        var registry = builder.Build(catalog);
+
+        Assert.That(
+            registry.GetTargetSelector(catalog.GetRequired(BuiltInSelectors.EventSourceTag)), Is.SameAs(stub));
+    }
+
+    [Test]
+    public void Build_skips_the_built_ins_when_the_catalog_has_no_event_selector_tags()
+    {
+        const string json = "{\"schemaVersion\":1,\"tags\":[{\"name\":\"state.dead\"}]}";
+        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(json));
+        var catalog = TagCatalogJson.Load(stream);
+
+        Assert.That(() => new SeamRegistryBuilder().Build(catalog), Throws.Nothing);
+    }
 }

@@ -1,34 +1,42 @@
 #nullable enable
 using System;
+using Bun3.Gameplay.Effects;
 using Bun3.Gameplay.Numerics;
 
 namespace Bun3.Gameplay.Attributes
 {
     /// <summary>
     /// Dense slot set for the attributes an archetype declares. Base writes always pass through
-    /// clamping; Current changes are appended to the event buffer.
+    /// clamping; Current changes are recorded into the change log of the pipeline the set is attached to
+    /// (none when detached, e.g. before spawn).
     /// </summary>
     public sealed class AttributeSet
     {
         private struct Slot
         {
-            public ushort AttributeId;
             public BigNum Base;
+            public BigNum Current;
+            public int Aggregate;   // index into _aggregates once a modifier has attached, -1 before
+            public ushort AttributeId;
+            public bool Dirty;
+        }
+
+        // Cached modifier sums of one slot, so a Base write reapplies the formula without re-summing.
+        private struct Aggregate
+        {
             public BigNum SumAdd;
             public BigNum SumMulPct;
-            public bool HasOverride;
             public BigNum OverrideValue;
-            public BigNum Current;
-            public bool Dirty;
-            public System.Collections.Generic.List<ModifierEntry>? Modifiers;
+            public bool HasOverride;
         }
 
         private struct ModifierEntry
         {
             public IAttributeModifierSource Source;
-            public int RowIndex;
-            public AttributeModifierOp Op;
             public BigNum Magnitude;
+            public int RowIndex;
+            public ushort Slot;
+            public AttributeModifierOp Op;
             public bool ScaleWithStack;
         }
 
@@ -53,70 +61,44 @@ namespace Bun3.Gameplay.Attributes
             internal bool ScaleWithStack { get; }
         }
 
-        private readonly AttributeRegistry _registry;
+        private readonly AttributeLayout _layout;
         private readonly Slot[] _slots;                    // canonical: ascending AttributeId
-        private readonly int[] _slotByAttributeId;         // sparse → dense (size = max registered id + 1, -1 = absent)
-        private AttributeChange[] _changes = new AttributeChange[8];
-        private int _changeCount;
+        private Aggregate[] _aggregates = Array.Empty<Aggregate>();
+        private int _aggregateCount;
+        private ModifierEntry[] _modifiers = Array.Empty<ModifierEntry>();   // sorted by (Slot, Source.Id, RowIndex)
+        private int _modifierCount;
+        private AttributeChangeLog? _changeLog;
+        private TargetId _targetId;
+        private bool _anyDirty;
 
         /// <summary>Builds dense slots from the attribute ids the archetype declares. Declaration order is irrelevant.</summary>
         public AttributeSet(AttributeRegistry registry, ReadOnlySpan<ushort> attributeIds)
+            : this(new AttributeLayout(registry, attributeIds))
         {
-            _registry = registry ?? throw new ArgumentNullException(nameof(registry));
-            var ids = attributeIds.ToArray();
-            Array.Sort(ids);
-            var maxId = 0;
-            for (var i = 0; i < ids.Length; i++)
-            {
-                if (!registry.Contains(ids[i]))
-                    throw new ArgumentException($"Attribute {ids[i]} is not registered.", nameof(attributeIds));
-                if (i > 0 && ids[i] == ids[i - 1])
-                    throw new ArgumentException($"Attribute {ids[i]} is declared more than once.", nameof(attributeIds));
-                if (ids[i] > maxId) maxId = ids[i];
-            }
+        }
 
+        internal AttributeSet(AttributeLayout layout)
+        {
+            _layout = layout;
+            var ids = layout.AttributeIds;
             _slots = new Slot[ids.Length];
-            _slotByAttributeId = new int[maxId + 1];
-            Array.Fill(_slotByAttributeId, -1);
             for (var i = 0; i < ids.Length; i++)
             {
                 _slots[i].AttributeId = ids[i];
-                _slotByAttributeId[ids[i]] = i;
-            }
-
-            for (var i = 0; i < ids.Length; i++)
-            {
-                var id = ids[i];
-                var definition = registry.GetDefinition(id);
-                if (definition.Min.HasValue && definition.Min.Value.Kind == OperandKind.Attribute)
-                {
-                    var refId = definition.Min.Value.AttributeId;
-                    if (!Has(refId))
-                        throw new ArgumentException(
-                            $"Clamp of attribute {id} references {refId}, which is not in the archetype declaration.",
-                            nameof(attributeIds));
-                }
-
-                if (definition.Max.HasValue && definition.Max.Value.Kind == OperandKind.Attribute)
-                {
-                    var refId = definition.Max.Value.AttributeId;
-                    if (!Has(refId))
-                        throw new ArgumentException(
-                            $"Clamp of attribute {id} references {refId}, which is not in the archetype declaration.",
-                            nameof(attributeIds));
-                }
+                _slots[i].Aggregate = -1;
             }
         }
 
+        internal AttributeLayout Layout => _layout;
+
         /// <summary>Returns whether this set declares the attribute.</summary>
-        public bool Has(ushort attributeId) =>
-            attributeId < _slotByAttributeId.Length && _slotByAttributeId[attributeId] >= 0;
+        public bool Has(ushort attributeId) => _layout.Has(attributeId);
 
         private int SlotIndex(ushort attributeId)
         {
             if (!Has(attributeId))
                 throw new ArgumentOutOfRangeException(nameof(attributeId), attributeId, "Attribute is not declared.");
-            return _slotByAttributeId[attributeId];
+            return _layout.SlotByAttributeId[attributeId];
         }
 
         /// <summary>Gets the persistent Base value.</summary>
@@ -141,22 +123,18 @@ namespace Bun3.Gameplay.Attributes
         {
             _slots[index].Base = rawBase;
             _slots[index].Dirty = true;
+            _anyDirty = true;
         }
 
-        /// <summary>Snapshot save only — collects the modifier rows attached by this source via a slot scan.</summary>
+        /// <summary>Snapshot save only — collects the modifier rows attached by this source, in canonical order.</summary>
         internal void CollectModifiers(IAttributeModifierSource source, System.Collections.Generic.List<ModifierSnapshotRow> output)
         {
-            for (var i = 0; i < _slots.Length; i++)
+            for (var i = 0; i < _modifierCount; i++)
             {
-                var modifiers = _slots[i].Modifiers;
-                if (modifiers is null) continue;
-                for (var j = 0; j < modifiers.Count; j++)
-                {
-                    var entry = modifiers[j];
-                    if (!ReferenceEquals(entry.Source, source)) continue;
-                    output.Add(new ModifierSnapshotRow(
-                        _slots[i].AttributeId, entry.RowIndex, entry.Op, entry.Magnitude, entry.ScaleWithStack));
-                }
+                var entry = _modifiers[i];
+                if (!ReferenceEquals(entry.Source, source)) continue;
+                output.Add(new ModifierSnapshotRow(
+                    _slots[entry.Slot].AttributeId, entry.RowIndex, entry.Op, entry.Magnitude, entry.ScaleWithStack));
             }
         }
 
@@ -181,35 +159,46 @@ namespace Bun3.Gameplay.Attributes
         private BigNum ResolveBound(Operand bound)
         {
             if (bound.Kind == OperandKind.Constant) return bound.Value;
-            // attribute-referencing bounds are validated in the constructor — existence guaranteed
-            return _slots[_slotByAttributeId[bound.AttributeId]].Current * bound.Value;
+            // attribute-referencing bounds are validated by the layout — the slot exists
+            return _slots[_layout.SlotByAttributeId[bound.AttributeId]].Current * bound.Value;
         }
 
         private BigNum ClampToBounds(int slotIndex, BigNum value)
         {
-            var definition = _registry.GetDefinition(_slots[slotIndex].AttributeId);
-            if (definition.Min.HasValue)
+            var attribute = _layout.Registry.GetCompiledAttribute(_slots[slotIndex].AttributeId);
+            if (attribute.Min.HasValue)
             {
-                var min = ResolveBound(definition.Min.Value);
+                var min = ResolveBound(attribute.Min.Value);
                 if (value < min) value = min;
             }
 
-            if (definition.Max.HasValue)
+            if (attribute.Max.HasValue)
             {
-                var max = ResolveBound(definition.Max.Value);
+                var max = ResolveBound(attribute.Max.Value);
                 if (value > max) value = max;
             }
 
             return value;
         }
 
-        // O(1) formula reapply via cached Σ aggregates.
-        internal void ReapplyFormula(int slotIndex)
+        // O(1) formula reapply via cached Σ aggregates. A slot no modifier has touched is (Base + 0) × (1 + 0),
+        // whose canonical BigNum is Base itself.
+        private void ReapplyFormula(int slotIndex)
         {
             ref var slot = ref _slots[slotIndex];
-            var value = slot.HasOverride
-                ? slot.OverrideValue
-                : (slot.Base + slot.SumAdd) * (BigNum.One + slot.SumMulPct);
+            BigNum value;
+            if (slot.Aggregate < 0)
+            {
+                value = slot.Base;
+            }
+            else
+            {
+                ref var aggregate = ref _aggregates[slot.Aggregate];
+                value = aggregate.HasOverride
+                    ? aggregate.OverrideValue
+                    : (slot.Base + aggregate.SumAdd) * (BigNum.One + aggregate.SumMulPct);
+            }
+
             var clamped = ClampToBounds(slotIndex, value);
             var old = slot.Current;
             if (clamped.Equals(old)) return;
@@ -224,90 +213,108 @@ namespace Bun3.Gameplay.Attributes
         // The dependency graph is a DAG validated at registry build, so recursion is safe.
         private void PropagateToDependents(ushort changedAttributeId, BigNum oldValue, BigNum newValue)
         {
-            var dependents = _registry.GetClampDependents(changedAttributeId);
+            var dependents = _layout.Registry.GetClampDependents(changedAttributeId);
             for (var i = 0; i < dependents.Length; i++)
             {
                 if (!Has(dependents[i])) continue;
-                var index = _slotByAttributeId[dependents[i]];
-                var definition = _registry.GetDefinition(dependents[i]);
-                var maxOperand = definition.Max.GetValueOrDefault();
-                var referencesAsMax = definition.Max.HasValue
+                var index = _layout.SlotByAttributeId[dependents[i]];
+                var attribute = _layout.Registry.GetCompiledAttribute(dependents[i]);
+                var maxOperand = attribute.Max.GetValueOrDefault();
+                var referencesAsMax = attribute.Max.HasValue
                     && maxOperand.Kind == OperandKind.Attribute
                     && maxOperand.AttributeId == changedAttributeId;
 
                 if (referencesAsMax && newValue > oldValue
-                    && definition.OnMaxIncrease == MaxIncreasePolicy.Follow)
+                    && attribute.OnMaxIncrease == MaxIncreasePolicy.Follow)
                 {
                     var delta = (newValue - oldValue) * maxOperand.Value;   // coefficient applied
                     _slots[index].Base = ClampToBounds(index, _slots[index].Base + delta);
                 }
 
                 if (referencesAsMax && newValue < oldValue
-                    && definition.OnMaxDecrease == MaxDecreasePolicy.Follow)
+                    && attribute.OnMaxDecrease == MaxDecreasePolicy.Follow)
                 {
                     _slots[index].Base = ClampToBounds(index, _slots[index].Base);    // truncate Base to the lowered bound
                 }
 
-                ReapplyFormula(index);   // Stay: reapply alone is the safety net
+                ReapplyFormula(index);   // the Stay policies keep Base and only re-clamp Current
             }
         }
 
-        /// <summary>Attaches a modifier. Insertion-sorted ascending by (source.Id, rowIndex) to keep canonical order.</summary>
+        /// <summary>Attaches a modifier. Insertion-sorted ascending by (slot, source.Id, rowIndex) to keep canonical order.</summary>
         internal void AttachModifier(
             IAttributeModifierSource source, int rowIndex, ushort attributeId,
             AttributeModifierOp op, BigNum magnitude, bool scaleWithStack)
         {
             var index = SlotIndex(attributeId);
             ref var slot = ref _slots[index];
-            slot.Modifiers ??= new System.Collections.Generic.List<ModifierEntry>(4);
-            var entry = new ModifierEntry
+            if (slot.Aggregate < 0)
             {
-                Source = source, RowIndex = rowIndex, Op = op,
-                Magnitude = magnitude, ScaleWithStack = scaleWithStack,
-            };
-            var position = slot.Modifiers.Count;
+                if (_aggregateCount == _aggregates.Length) Array.Resize(ref _aggregates, Math.Max(4, _aggregates.Length * 2));
+                slot.Aggregate = _aggregateCount++;
+            }
+
+            var position = _modifierCount;
             while (position > 0)
             {
-                var previous = slot.Modifiers[position - 1];
-                if (previous.Source.Id < source.Id
-                    || (previous.Source.Id == source.Id && previous.RowIndex <= rowIndex)) break;
+                var previous = _modifiers[position - 1];
+                if (previous.Slot < index) break;
+                if (previous.Slot == index
+                    && (previous.Source.Id < source.Id
+                        || (previous.Source.Id == source.Id && previous.RowIndex <= rowIndex))) break;
                 position--;
             }
-            slot.Modifiers.Insert(position, entry);
+
+            if (_modifierCount == _modifiers.Length) Array.Resize(ref _modifiers, Math.Max(4, _modifiers.Length * 2));
+            Array.Copy(_modifiers, position, _modifiers, position + 1, _modifierCount - position);
+            _modifiers[position] = new ModifierEntry
+            {
+                Source = source, RowIndex = rowIndex, Slot = (ushort)index, Op = op,
+                Magnitude = magnitude, ScaleWithStack = scaleWithStack,
+            };
+            _modifierCount++;
             slot.Dirty = true;
+            _anyDirty = true;
         }
 
         /// <summary>Removes all modifiers attached by the source.</summary>
         internal void DetachModifiers(IAttributeModifierSource source)
         {
-            for (var i = 0; i < _slots.Length; i++)
+            var kept = 0;
+            for (var i = 0; i < _modifierCount; i++)
             {
-                var modifiers = _slots[i].Modifiers;
-                if (modifiers is null) continue;
-                for (var j = modifiers.Count - 1; j >= 0; j--)
+                var entry = _modifiers[i];
+                if (ReferenceEquals(entry.Source, source))
                 {
-                    if (ReferenceEquals(modifiers[j].Source, source))
-                    {
-                        modifiers.RemoveAt(j);
-                        _slots[i].Dirty = true;
-                    }
+                    _slots[entry.Slot].Dirty = true;
+                    _anyDirty = true;
+                    continue;
                 }
+
+                _modifiers[kept++] = entry;
             }
+
+            Array.Clear(_modifiers, kept, _modifierCount - kept);
+            _modifierCount = kept;
         }
 
         /// <summary>Marks the attribute slot dirty (e.g. on an Enabled toggle).</summary>
-        internal void MarkDirty(ushort attributeId) => _slots[SlotIndex(attributeId)].Dirty = true;
+        internal void MarkDirty(ushort attributeId)
+        {
+            _slots[SlotIndex(attributeId)].Dirty = true;
+            _anyDirty = true;
+        }
 
         /// <summary>Rebuilds all dirty slots in canonical order, following the clamp topology (registry EvaluationOrder).</summary>
         internal void RebuildDirty()
         {
-            var order = _registry.EvaluationOrder;
+            if (!_anyDirty) return;
+            _anyDirty = false;
+
+            var order = _layout.EvaluationSlots;
             for (var i = 0; i < order.Length; i++)
             {
-                if (!Has(order[i])) continue;
-                var index = _slotByAttributeId[order[i]];
-                if (!_slots[index].Dirty) continue;
-                RebuildSlot(index);
+                if (_slots[order[i]].Dirty) RebuildSlot(order[i]);
             }
         }
 
@@ -315,29 +322,28 @@ namespace Bun3.Gameplay.Attributes
         {
             ref var slot = ref _slots[index];
             slot.Dirty = false;
-            slot.SumAdd = BigNum.Zero;
-            slot.SumMulPct = BigNum.Zero;
-            slot.HasOverride = false;
-            slot.OverrideValue = BigNum.Zero;
-            var modifiers = slot.Modifiers;
-            if (modifiers is not null)
+            if (slot.Aggregate >= 0)
             {
-                for (var i = 0; i < modifiers.Count; i++)   // list is kept in canonical order
+                ref var aggregate = ref _aggregates[slot.Aggregate];
+                aggregate = default;
+                // The slot's entries are contiguous and in canonical order — summation order is part of the
+                // result, since BigNum addition truncates and is not associative.
+                for (var i = FirstModifierOf(index); i < _modifierCount && _modifiers[i].Slot == index; i++)
                 {
-                    var entry = modifiers[i];
+                    var entry = _modifiers[i];
                     if (!entry.Source.Enabled) continue;
                     var magnitude = entry.ScaleWithStack ? entry.Magnitude * entry.Source.Stack : entry.Magnitude;
                     switch (entry.Op)
                     {
                         case AttributeModifierOp.Add:
-                            slot.SumAdd += magnitude;
+                            aggregate.SumAdd += magnitude;
                             break;
                         case AttributeModifierOp.Multiply:
-                            slot.SumMulPct += magnitude;
+                            aggregate.SumMulPct += magnitude;
                             break;
-                        default:   // Override — list is Id-ordered, so the last enabled entry wins
-                            slot.HasOverride = true;
-                            slot.OverrideValue = magnitude;
+                        default:   // Override — entries are Id-ordered, so the last enabled entry wins
+                            aggregate.HasOverride = true;
+                            aggregate.OverrideValue = magnitude;
                             break;
                     }
                 }
@@ -346,17 +352,28 @@ namespace Bun3.Gameplay.Attributes
             ReapplyFormula(index);
         }
 
-        private void EmitChange(ushort attributeId, BigNum oldCurrent, BigNum newCurrent)
+        private int FirstModifierOf(int slotIndex)
         {
-            if (_changeCount == _changes.Length)
-                Array.Resize(ref _changes, _changes.Length * 2);
-            _changes[_changeCount++] = new AttributeChange(attributeId, oldCurrent, newCurrent);
+            var low = 0;
+            var high = _modifierCount;
+            while (low < high)
+            {
+                var mid = low + ((high - low) >> 1);
+                if (_modifiers[mid].Slot < slotIndex) low = mid + 1;
+                else high = mid;
+            }
+
+            return low;
         }
 
-        /// <summary>Change events not yet consumed.</summary>
-        public ReadOnlySpan<AttributeChange> PendingChanges => _changes.AsSpan(0, _changeCount);
+        /// <summary>Routes Current changes into a pipeline's log under the owning unit's id; null detaches.</summary>
+        internal void AttachChangeLog(AttributeChangeLog? log, TargetId targetId)
+        {
+            _changeLog = log;
+            _targetId = targetId;
+        }
 
-        /// <summary>Clears the change event buffer.</summary>
-        public void ClearChanges() => _changeCount = 0;
+        private void EmitChange(ushort attributeId, BigNum oldCurrent, BigNum newCurrent) =>
+            _changeLog?.Append(new AttributeChange(_targetId, attributeId, oldCurrent, newCurrent));
     }
 }

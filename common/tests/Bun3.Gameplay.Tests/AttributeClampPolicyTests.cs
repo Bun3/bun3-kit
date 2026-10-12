@@ -15,8 +15,8 @@ public sealed class AttributeClampPolicyTests
     private static AttributeSet CreateSet(MaxIncreasePolicy increase, MaxDecreasePolicy decrease)
     {
         var builder = new AttributeRegistryBuilder();
-        builder.Register(MaxHp, min: Operand.Constant(1));
-        builder.Register(Hp,
+        builder.Register(MaxHp, "MaxHp", min: Operand.Constant(1));
+        builder.Register(Hp, "Hp",
             min: Operand.Constant(0),
             max: Operand.Attribute(MaxHp),
             onMaxIncrease: increase,

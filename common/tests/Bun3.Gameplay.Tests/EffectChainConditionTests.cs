@@ -15,19 +15,19 @@ public sealed class EffectChainConditionTests
         var kit = EffectTestKit.Create();
         var frozen = EffectTestKit.MinimalDuration("frozen", ticks: 2);
         frozen.GrantedTags.Add("state.frozen");
-        kit.AddSpec(frozen);
+        kit.AddEffect(frozen);
         var chill = EffectTestKit.MinimalDuration("chill", ticks: 10);
-        chill.Stack = new StackPolicy
+        chill.Stack = new StackPolicyDef
         {
             MaxStack = 3, OnReapply = StackReapply.AddStack,
             OnOverflow = StackOverflow.ApplyEffect, OverflowEffectName = "frozen", ClearStacksOnOverflow = true,
         };
-        kit.AddSpec(chill);
+        kit.AddEffect(chill);
         var pipeline = kit.BuildPipeline();
 
         for (var i = 0; i < 4; i++)   // 4th application overflows the stack
         {
-            pipeline.EnqueueApply(kit.SpecId("chill"), kit.Attacker.Id, kit.Defender.Id);
+            pipeline.EnqueueApply(kit.EffectId("chill"), kit.Attacker.Id, kit.Defender.Id);
             pipeline.Tick();
         }
         pipeline.Tick();              // process the carried-over chain apply
@@ -46,12 +46,12 @@ public sealed class EffectChainConditionTests
             Right = Operand.Attribute(EffectTestKit.MaxHp, BigNum.FromParts(3, -1)),
         });
         lowHp.GrantedTags.Add("state.lowhealth");
-        kit.AddSpec(lowHp);
+        kit.AddEffect(lowHp);
         var pipeline = kit.BuildPipeline();
         kit.Defender.Attributes.SetBase(EffectTestKit.MaxHp, 100);
         kit.Defender.Attributes.SetBase(EffectTestKit.Hp, 100);
 
-        pipeline.EnqueueApply(kit.SpecId("lowhp"), kit.Defender.Id, kit.Defender.Id);
+        pipeline.EnqueueApply(kit.EffectId("lowhp"), kit.Defender.Id, kit.Defender.Id);
         pipeline.Tick();
         Assert.That(kit.Defender.Tags.Has(kit.Tag("state.lowhealth")), Is.False);
 
@@ -66,6 +66,93 @@ public sealed class EffectChainConditionTests
     }
 
     [Test]
+    public void An_ongoing_toggle_reaches_current_in_the_same_tick()
+    {
+        var kit = EffectTestKit.Create();
+        var berserk = EffectTestKit.MinimalInfinite("berserk");
+        berserk.OngoingConditions.Add(new ConditionDef
+        {
+            Left = Operand.Attribute(EffectTestKit.Hp),
+            Op = ComparisonOp.Less,
+            Right = Operand.Attribute(EffectTestKit.MaxHp, BigNum.FromParts(3, -1)),
+        });
+        berserk.Modifiers.Add(new ModifierDef
+        {
+            AttributeId = EffectTestKit.Attack, Op = AttributeModifierOp.Add,
+            Magnitude = new MagnitudeDef { Base = Operand.Constant(10) },
+        });
+        kit.AddEffect(berserk);
+        var pipeline = kit.BuildPipeline();
+        kit.Defender.Attributes.SetBase(EffectTestKit.MaxHp, 100);
+        kit.Defender.Attributes.SetBase(EffectTestKit.Hp, 100);
+        pipeline.EnqueueApply(kit.EffectId("berserk"), kit.Defender.Id, kit.Defender.Id);
+        pipeline.Tick();
+        Assert.That(kit.Defender.Attributes.GetCurrent(EffectTestKit.Attack), Is.EqualTo(BigNum.Zero));
+
+        kit.Defender.Attributes.SetBase(EffectTestKit.Hp, 20);
+        pipeline.Tick();
+
+        Assert.That(kit.Defender.Attributes.GetCurrent(EffectTestKit.Attack), Is.EqualTo((BigNum)10));
+    }
+
+    [Test]
+    public void Ongoing_conditions_see_modifiers_applied_earlier_in_the_same_tick()
+    {
+        var kit = EffectTestKit.Create();
+        var frenzy = EffectTestKit.MinimalInfinite("frenzy");
+        frenzy.OngoingConditions.Add(new ConditionDef
+        {
+            Left = Operand.Attribute(EffectTestKit.Attack), Op = ComparisonOp.GreaterOrEqual, Right = Operand.Constant(50),
+        });
+        frenzy.GrantedTags.Add("state.hasted");
+        kit.AddEffect(frenzy);
+        var might = EffectTestKit.MinimalInfinite("might");
+        might.Modifiers.Add(new ModifierDef
+        {
+            AttributeId = EffectTestKit.Attack, Op = AttributeModifierOp.Add,
+            Magnitude = new MagnitudeDef { Base = Operand.Constant(60) },
+        });
+        kit.AddEffect(might);
+        var pipeline = kit.BuildPipeline();
+        pipeline.EnqueueApply(kit.EffectId("frenzy"), kit.Defender.Id, kit.Defender.Id);
+        pipeline.Tick();
+        Assert.That(kit.Defender.Tags.Has(kit.Tag("state.hasted")), Is.False);
+
+        pipeline.EnqueueApply(kit.EffectId("might"), kit.Defender.Id, kit.Defender.Id);
+        pipeline.Tick();
+
+        Assert.That(kit.Defender.Tags.Has(kit.Tag("state.hasted")), Is.True);
+    }
+
+    [Test]
+    public void A_removed_ongoing_effect_is_no_longer_evaluated()
+    {
+        var kit = EffectTestKit.Create();
+        var lowHp = EffectTestKit.MinimalInfinite("lowhp");
+        lowHp.OngoingConditions.Add(new ConditionDef
+        {
+            Left = Operand.Attribute(EffectTestKit.Hp),
+            Op = ComparisonOp.Less,
+            Right = Operand.Attribute(EffectTestKit.MaxHp, BigNum.FromParts(3, -1)),
+        });
+        lowHp.GrantedTags.Add("state.lowhealth");
+        kit.AddEffect(lowHp);
+        var pipeline = kit.BuildPipeline();
+        kit.Defender.Attributes.SetBase(EffectTestKit.MaxHp, 100);
+        kit.Defender.Attributes.SetBase(EffectTestKit.Hp, 100);
+        pipeline.EnqueueApply(kit.EffectId("lowhp"), kit.Defender.Id, kit.Defender.Id);
+        pipeline.Tick();
+
+        pipeline.RemoveById(kit.Defender.Id, kit.Defender.GetActiveEffect(0).InstanceId);
+        foreach (var hp in new[] { 20, 80, 20 })
+        {
+            kit.Defender.Attributes.SetBase(EffectTestKit.Hp, hp);
+            pipeline.Tick();
+            Assert.That(kit.Defender.Tags.Count(kit.Tag("state.lowhealth")), Is.Zero, $"Hp {hp}");
+        }
+    }
+
+    [Test]
     public void Expiry_chain_fires_next_tick_and_selector_routes_targets()
     {
         var kit = EffectTestKit.Create();
@@ -76,17 +163,17 @@ public sealed class EffectChainConditionTests
             AttributeId = EffectTestKit.Hp, Op = AttributeModifierOp.Add,
             Magnitude = new MagnitudeDef { Base = Operand.Constant(-15) },
         });
-        kit.AddSpec(blast);
+        kit.AddEffect(blast);
         var bomb = EffectTestKit.MinimalDuration("bomb", ticks: 2);
         bomb.Chains.Add(new ChainEdgeDef
         {
             Trigger = ChainTrigger.OnCompleteNormal, EffectName = "blast", SelectorTag = "selector.everyone",
         });
-        kit.AddSpec(bomb);
+        kit.AddEffect(bomb);
         var pipeline = kit.BuildPipeline();
         foreach (var target in kit.AllTargets) { target.Attributes.SetBase(EffectTestKit.MaxHp, 100); target.Attributes.SetBase(EffectTestKit.Hp, 100); }
 
-        pipeline.EnqueueApply(kit.SpecId("bomb"), kit.Attacker.Id, kit.Defender.Id);
+        pipeline.EnqueueApply(kit.EffectId("bomb"), kit.Attacker.Id, kit.Defender.Id);
         pipeline.Tick(); pipeline.Tick(); pipeline.Tick();     // after expiry (2 ticks)
         Assert.That(kit.Defender.Attributes.GetBase(EffectTestKit.Hp), Is.EqualTo((BigNum)100)); // not yet — one tick of delay
         pipeline.Tick();                                        // blast fires in the next tick's apply phase
@@ -100,10 +187,10 @@ public sealed class EffectChainConditionTests
         var kit = EffectTestKit.Create();
         var a = EffectTestKit.MinimalInstant("a"); a.Chains.Add(EffectTestKit.Edge(ChainTrigger.OnApplication, "b"));
         var b = EffectTestKit.MinimalInstant("b"); b.Chains.Add(EffectTestKit.Edge(ChainTrigger.OnApplication, "a"));
-        kit.AddSpec(a); kit.AddSpec(b);
+        kit.AddEffect(a); kit.AddEffect(b);
         var pipeline = kit.BuildPipeline(applyBudgetPerTick: 8);
 
-        pipeline.EnqueueApply(kit.SpecId("a"), kit.Attacker.Id, kit.Defender.Id);
+        pipeline.EnqueueApply(kit.EffectId("a"), kit.Attacker.Id, kit.Defender.Id);
         for (var i = 0; i < 10; i++) pipeline.Tick();          // progresses without livelock
         Assert.That(pipeline.PendingApplyCount, Is.LessThanOrEqualTo(1));   // bounded by the per-tick budget
     }
