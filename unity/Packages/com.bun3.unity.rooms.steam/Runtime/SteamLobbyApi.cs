@@ -100,7 +100,7 @@ namespace Bun3.Unity.Rooms.Steam
                 result.Set(call);
                 try
                 {
-                    return await source.Task.Timeout(RequestTimeout).AttachExternalCancellation(cancellationToken);
+                    return await source.Task.Timeout(RequestTimeout, DelayType.Realtime).AttachExternalCancellation(cancellationToken);
                 }
                 catch (TimeoutException)
                 {

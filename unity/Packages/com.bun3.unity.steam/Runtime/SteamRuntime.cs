@@ -67,9 +67,9 @@ namespace Bun3.Unity.Steam
                 if (SteamAPI.InitEx(out error) != ESteamAPIInitResult.k_ESteamAPIInitResult_OK)
                     return SteamInitResult.Unavailable;
             }
-            catch (DllNotFoundException missing)
+            catch (Exception broken) when (broken is DllNotFoundException || broken is EntryPointNotFoundException || broken is BadImageFormatException)
             {
-                error = missing.Message;
+                error = broken.Message;
                 return SteamInitResult.Unavailable;
             }
             error = string.Empty;

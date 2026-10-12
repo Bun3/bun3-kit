@@ -1,8 +1,10 @@
 using System;
+using System.Text.RegularExpressions;
 using NUnit.Framework;
 using Steamworks;
 using Unity.Netcode;
 using UnityEngine;
+using UnityEngine.TestTools;
 using Object = UnityEngine.Object;
 
 namespace Bun3.Unity.Steam.Ngo.Tests
@@ -170,6 +172,48 @@ namespace Bun3.Unity.Steam.Ngo.Tests
             int flags = SteamSocketsTransport.SendFlags(delivery);
             Assert.That((flags & Constants.k_nSteamNetworkingSend_Reliable) != 0, Is.EqualTo(reliable));
             Assert.That(flags & Constants.k_nSteamNetworkingSend_NoNagle, Is.Not.Zero);
+        }
+
+        [Test]
+        public void RejectedReliableSendDropsThePeer()
+        {
+            transport.StartServer();
+            ConnectPeer(101, 7);
+            sockets.SendResult = EResult.k_EResultLimitExceeded;
+            LogAssert.Expect(LogType.Error, new Regex("k_EResultLimitExceeded"));
+            transport.Send(101, new ArraySegment<byte>(new byte[] { 1 }), NetworkDelivery.ReliableFragmentedSequenced);
+            Assert.That(sockets.Closed, Does.Contain(101u));
+            Assert.That(Poll(out ulong id, out _), Is.EqualTo(NetworkEvent.Disconnect));
+            Assert.That(id, Is.EqualTo(101ul));
+        }
+
+        [Test]
+        public void RejectedUnreliableSendIsSilent()
+        {
+            transport.StartServer();
+            ConnectPeer(101, 7);
+            sockets.SendResult = EResult.k_EResultLimitExceeded;
+            transport.Send(101, new ArraySegment<byte>(new byte[] { 1 }), NetworkDelivery.Unreliable);
+            Assert.That(sockets.Closed.Contains(101u), Is.False);
+            Assert.That(Poll(out _, out _), Is.EqualTo(NetworkEvent.Nothing));
+        }
+
+        [Test]
+        public void ReliableSendOnAGoneConnectionIsSilent()
+        {
+            transport.StartServer();
+            ConnectPeer(101, 7);
+            sockets.SendResult = EResult.k_EResultNoConnection;
+            transport.Send(101, new ArraySegment<byte>(new byte[] { 1 }), NetworkDelivery.Reliable);
+            Assert.That(Poll(out _, out _), Is.EqualTo(NetworkEvent.Nothing));
+        }
+
+        [Test]
+        public void DestroyingTheTransportWhileHostingClosesTheListenSocket()
+        {
+            transport.StartServer();
+            transport.OnDestroy(); // Edit Mode does not send Unity messages on DestroyImmediate.
+            Assert.That(sockets.ListenSocketClosed, Is.True);
         }
 
         [Test]

@@ -56,6 +56,9 @@ namespace Bun3.Unity.Steam.Ngo
         /// <inheritdoc/>
         public override void Initialize(NetworkManager networkManager = null)
         {
+            if (networkManager != null)
+                networkManager.MaximumFragmentedMessageSize = Math.Min(networkManager.MaximumFragmentedMessageSize,
+                    Constants.k_cbMaxSteamNetworkingSocketsMessageSizeSend);
         }
 
         /// <inheritdoc/>
@@ -93,7 +96,19 @@ namespace Bun3.Unity.Steam.Ngo
         public override void Send(ulong clientId, ArraySegment<byte> payload, NetworkDelivery networkDelivery)
         {
             uint connection = joined ? hostConnection : (uint)clientId;
-            if (connection != 0) Sockets.Send(connection, payload, SendFlags(networkDelivery));
+            if (connection == 0) return;
+            var result = Sockets.Send(connection, payload, SendFlags(networkDelivery));
+            if (result == EResult.k_EResultOK || result == EResult.k_EResultNoConnection || result == EResult.k_EResultInvalidState) return;
+            if (networkDelivery == NetworkDelivery.Unreliable || networkDelivery == NetworkDelivery.UnreliableSequenced) return;
+            // A dropped reliable message would desync NGO silently, so the peer is dropped instead.
+            Debug.LogError($"Steam rejected a reliable send ({result}); closing the connection.");
+            ulong transportId = joined ? HostTransportId : clientId;
+            Sockets.Close(connection, false);
+            rtts.Remove(connection);
+            if (joined) hostConnection = 0;
+            else if (!steamIds.Remove(clientId)) return;
+            SetDisconnectEvent(DisconnectEvents.ProtocolTimeout);
+            events.Enqueue(new PendingEvent(NetworkEvent.Disconnect, transportId));
         }
 
         /// <inheritdoc/>
@@ -192,7 +207,11 @@ namespace Bun3.Unity.Steam.Ngo
                 ? Constants.k_nSteamNetworkingSend_Unreliable
                 : Constants.k_nSteamNetworkingSend_Reliable) | Constants.k_nSteamNetworkingSend_NoNagle;
 
-        private void OnDestroy() => (sockets as IDisposable)?.Dispose();
+        internal void OnDestroy()
+        {
+            Shutdown();
+            (sockets as IDisposable)?.Dispose();
+        }
 
         private void OnStatusChanged(SteamConnectionStatus status)
         {

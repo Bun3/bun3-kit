@@ -18,7 +18,7 @@ namespace Bun3.Unity.Steam.Ngo
         void SetPollGroup(uint connection, uint group);
         void Close(uint connection, bool linger);
         ulong GetRemoteSteamId(uint connection);
-        bool Send(uint connection, ArraySegment<byte> payload, int flags);
+        EResult Send(uint connection, ArraySegment<byte> payload, int flags);
         // Copies the next message from a poll group or a connection into buffer, growing it when needed.
         bool TryReceive(uint source, bool pollGroup, ref byte[] buffer, out int size, out uint connection);
         void DiscardReceived();

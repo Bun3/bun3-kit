@@ -19,6 +19,7 @@ namespace Bun3.Unity.Steam.Ngo.Tests
         public int PingCalls;
         public bool ListenSocketClosed;
         public ulong ConnectedTo;
+        public EResult SendResult = EResult.k_EResultOK;
 
         public bool IsAvailable { get; set; } = true;
         public event Action<SteamConnectionStatus> StatusChanged;
@@ -45,10 +46,10 @@ namespace Bun3.Unity.Steam.Ngo.Tests
         public void Close(uint connection, bool linger) => Closed.Add(connection);
         public ulong GetRemoteSteamId(uint connection) => RemoteIds.TryGetValue(connection, out ulong id) ? id : 0;
 
-        public bool Send(uint connection, ArraySegment<byte> payload, int flags)
+        public EResult Send(uint connection, ArraySegment<byte> payload, int flags)
         {
             Sent.Add((connection, flags, payload.ToArray()));
-            return true;
+            return SendResult;
         }
 
         public bool TryReceive(uint source, bool pollGroup, ref byte[] buffer, out int size, out uint connection)

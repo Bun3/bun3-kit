@@ -27,11 +27,17 @@ namespace Bun3.Unity.Steam.Ngo
         public uint CreateListenSocket(int virtualPort) =>
             SteamNetworkingSockets.CreateListenSocketP2P(virtualPort, 0, null).m_HSteamListenSocket;
 
-        public void CloseListenSocket(uint socket) => SteamNetworkingSockets.CloseListenSocket(new HSteamListenSocket(socket));
+        public void CloseListenSocket(uint socket)
+        {
+            if (SteamRuntime.IsInitialized) SteamNetworkingSockets.CloseListenSocket(new HSteamListenSocket(socket));
+        }
 
         public uint CreatePollGroup() => SteamNetworkingSockets.CreatePollGroup().m_HSteamNetPollGroup;
 
-        public void DestroyPollGroup(uint group) => SteamNetworkingSockets.DestroyPollGroup(new HSteamNetPollGroup(group));
+        public void DestroyPollGroup(uint group)
+        {
+            if (SteamRuntime.IsInitialized) SteamNetworkingSockets.DestroyPollGroup(new HSteamNetPollGroup(group));
+        }
 
         public uint Connect(ulong steamId, int virtualPort)
         {
@@ -46,21 +52,23 @@ namespace Bun3.Unity.Steam.Ngo
         public void SetPollGroup(uint connection, uint group) =>
             SteamNetworkingSockets.SetConnectionPollGroup(new HSteamNetConnection(connection), new HSteamNetPollGroup(group));
 
-        public void Close(uint connection, bool linger) =>
-            SteamNetworkingSockets.CloseConnection(new HSteamNetConnection(connection), 0, null, linger);
+        public void Close(uint connection, bool linger)
+        {
+            if (SteamRuntime.IsInitialized) SteamNetworkingSockets.CloseConnection(new HSteamNetConnection(connection), 0, null, linger);
+        }
 
         public ulong GetRemoteSteamId(uint connection) =>
             SteamNetworkingSockets.GetConnectionInfo(new HSteamNetConnection(connection), out SteamNetConnectionInfo_t info)
                 ? info.m_identityRemote.GetSteamID64()
                 : 0;
 
-        public bool Send(uint connection, ArraySegment<byte> payload, int flags)
+        public EResult Send(uint connection, ArraySegment<byte> payload, int flags)
         {
             var pinned = GCHandle.Alloc(payload.Array, GCHandleType.Pinned);
             try
             {
                 return SteamNetworkingSockets.SendMessageToConnection(new HSteamNetConnection(connection),
-                    pinned.AddrOfPinnedObject() + payload.Offset, (uint)payload.Count, flags, out _) == EResult.k_EResultOK;
+                    pinned.AddrOfPinnedObject() + payload.Offset, (uint)payload.Count, flags, out _);
             }
             finally
             {
