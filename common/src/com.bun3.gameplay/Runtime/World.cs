@@ -223,7 +223,10 @@ namespace Bun3.Gameplay
             return new WorldSnapshot(units, Pipeline.CurrentTick, Pipeline.NextInstanceId);
         }
 
-        /// <summary>Restores every unit and the world counters from a snapshot.</summary>
+        /// <summary>Restores every unit and the world counters from a snapshot. Pending work is discarded like the
+        /// rest of the abandoned timeline: queued commands, applications left over from the apply budget,
+        /// <see cref="PendingActivations"/> and the observation buffers are empty afterwards, so refresh views from
+        /// the restored state. Queued spawns and despawns are applied first so the registry can match the snapshot.</summary>
         /// <param name="snapshot">Snapshot to restore.</param>
         /// <exception cref="ArgumentException">Thrown when the snapshot's unit set does not match the
         /// registry — spawn and despawn are not part of a snapshot. Validated against every unit id
@@ -254,6 +257,9 @@ namespace Bun3.Gameplay
 
             Pipeline.CurrentTick = snapshot.CurrentTick;
             Pipeline.NextInstanceId = snapshot.NextInstanceId;
+            _commands.Clear();
+            _activationCount = 0;
+            Pipeline.DiscardPendingWork();
         }
 
         /// <summary>Applies the pending queue in call order. <see cref="Spawn"/> already rejected every

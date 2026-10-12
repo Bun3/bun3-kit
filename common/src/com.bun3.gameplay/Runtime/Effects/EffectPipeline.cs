@@ -85,6 +85,13 @@ namespace Bun3.Gameplay.Effects
         /// <summary>Number of apply requests left in the queue this tick because the budget was exceeded.</summary>
         public int PendingApplyCount => _queue.Count;
 
+        // A restored snapshot never has pending work, so whatever is queued or observed belongs to the abandoned timeline.
+        internal void DiscardPendingWork()
+        {
+            _queue.Clear();
+            ClearObservationBuffers();
+        }
+
         /// <summary>Creates a pipeline from an effect catalog, target resolver, RNG, and per-tick apply budget.</summary>
         /// <param name="catalog">Effect catalog for effect lookup.</param>
         /// <param name="resolver">Resolver mapping TargetId to EffectTarget.</param>

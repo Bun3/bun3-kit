@@ -327,6 +327,76 @@ public sealed class WorldTests
         Assert.That(unit.Effects.ActiveEffectCount, Is.EqualTo(1));
     }
 
+    private static EffectDef Bolt()
+    {
+        var bolt = EffectTestKit.MinimalInstant("bolt");
+        bolt.Modifiers.Add(new ModifierDef
+        {
+            AttributeId = EffectTestKit.Hp,
+            Op = Bun3.Gameplay.Attributes.AttributeModifierOp.Add,
+            Magnitude = new MagnitudeDef { Base = Bun3.Gameplay.Attributes.Operand.Constant(-10) },
+        });
+        bolt.RaiseEvents.Add(new RaiseEventDef { Tag = "event.damage.taken", AttributeId = EffectTestKit.Hp });
+        return bolt;
+    }
+
+    [Test]
+    public void Restore_discards_pending_commands_and_the_last_ticks_output()
+    {
+        var kit = EffectTestKit.Create();
+        kit.AddEffect(Bolt());
+        var world = MakeWorld(kit);
+        var unit = MakeUnit(kit, 1);
+        world.Spawn(unit);
+        world.Tick();
+        unit.Attributes.SetBase(EffectTestKit.MaxHp, 100);
+        unit.Attributes.SetBase(EffectTestKit.Hp, 80);
+        var snapshot = world.CreateSnapshot();
+
+        world.EnqueueApply(kit.EffectId("bolt"), unit.Id, unit.Id);
+        world.EnqueueActivation(unit.Id, abilityId: 999);
+        world.Tick();
+        world.EnqueueApply(kit.EffectId("bolt"), unit.Id, unit.Id);
+        Assert.That(world.PendingActivations.Length, Is.EqualTo(1), "precondition");
+        Assert.That(world.PendingGameplayEvents.Length, Is.EqualTo(1), "precondition");
+        Assert.That(world.PendingAttributeChanges.Length, Is.EqualTo(1), "precondition");
+
+        world.RestoreSnapshot(snapshot);
+
+        Assert.That(world.PendingCommandCount, Is.Zero);
+        Assert.That(world.PendingActivations.Length, Is.Zero);
+        Assert.That(world.PendingGameplayEvents.Length, Is.Zero);
+        Assert.That(world.PendingEffectEvents.Length, Is.Zero);
+        Assert.That(world.PendingAttributeChanges.Length, Is.Zero);
+        world.Tick();
+        Assert.That(unit.Attributes.GetBase(EffectTestKit.Hp), Is.EqualTo((Bun3.Gameplay.Numerics.BigNum)80), "the discarded bolt never lands");
+    }
+
+    [Test]
+    public void Restore_discards_applications_left_over_from_the_apply_budget()
+    {
+        var kit = EffectTestKit.Create();
+        kit.AddEffect(Bolt());
+        var abilities = new AbilityCatalogBuilder().Build(kit.TagCatalog, kit.Seams, kit.Attributes, kit.Catalog);
+        var world = new World(kit.Database(abilities), new XorShiftRng(12345), applyBudgetPerUnit: 1);
+        var unit = MakeUnit(kit, 1);
+        world.Spawn(unit);
+        world.Tick();
+        unit.Attributes.SetBase(EffectTestKit.MaxHp, 100);
+        unit.Attributes.SetBase(EffectTestKit.Hp, 80);
+        var snapshot = world.CreateSnapshot();
+
+        for (var i = 0; i < 3; i++) world.EnqueueApply(kit.EffectId("bolt"), unit.Id, unit.Id);
+        world.Tick();
+        Assert.That(world.Pipeline.PendingApplyCount, Is.EqualTo(2), "precondition");
+
+        world.RestoreSnapshot(snapshot);
+
+        Assert.That(world.Pipeline.PendingApplyCount, Is.Zero);
+        world.Tick();
+        Assert.That(unit.Attributes.GetBase(EffectTestKit.Hp), Is.EqualTo((Bun3.Gameplay.Numerics.BigNum)80));
+    }
+
     [Test]
     public void Snapshot_round_trip_keeps_duration_totals()
     {
