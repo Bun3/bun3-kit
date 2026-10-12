@@ -78,6 +78,35 @@ public sealed class SeamRegistryTests
         Assert.Throws<ArgumentOutOfRangeException>(() => _ = new XorShiftRng(0));
     }
 
+    [Test]
+    public void XorShift_state_round_trip_replays_the_same_sequence()
+    {
+        var rng = new XorShiftRng(7);
+        for (var i = 0; i < 3; i++) rng.NextUInt32();
+        var state = new byte[rng.StateSize];
+        rng.SaveState(state);
+        var first = new uint[5];
+        for (var i = 0; i < first.Length; i++) first[i] = rng.NextUInt32();
+
+        rng.RestoreState(state);
+
+        Assert.That(rng.StateSize, Is.EqualTo(8));
+        for (var i = 0; i < first.Length; i++) Assert.That(rng.NextUInt32(), Is.EqualTo(first[i]));
+    }
+
+    [Test]
+    public void XorShift_rejects_a_short_buffer_a_wrong_length_or_a_zero_state_without_changing()
+    {
+        var rng = new XorShiftRng(7);
+        var expected = new XorShiftRng(7).NextUInt32();
+
+        Assert.Throws<ArgumentException>(() => rng.SaveState(new byte[7]));
+        Assert.Throws<ArgumentException>(() => rng.RestoreState(new byte[7]));
+        Assert.Throws<ArgumentException>(() => rng.RestoreState(new byte[9]));
+        Assert.Throws<ArgumentException>(() => rng.RestoreState(new byte[8]));
+        Assert.That(rng.NextUInt32(), Is.EqualTo(expected));
+    }
+
     private sealed class OverflowSelector : ITargetSelector
     {
         private readonly int _desired;

@@ -397,6 +397,81 @@ public sealed class WorldTests
         Assert.That(unit.Attributes.GetBase(EffectTestKit.Hp), Is.EqualTo((Bun3.Gameplay.Numerics.BigNum)80));
     }
 
+    private sealed class PlainRng : IRng
+    {
+        public uint NextUInt32() => 4;
+    }
+
+    private sealed class WideRng : IRestorableRng
+    {
+        public uint NextUInt32() => 4;
+
+        public int StateSize => 16;
+
+        public void SaveState(Span<byte> destination) => destination.Slice(0, StateSize).Fill(1);
+
+        public void RestoreState(ReadOnlySpan<byte> source)
+        {
+        }
+    }
+
+    private static World MakeWorld(EffectTestKit kit, IRng rng)
+    {
+        var abilities = new AbilityCatalogBuilder().Build(kit.TagCatalog, kit.Seams, kit.Attributes, kit.Catalog);
+        return new World(kit.Database(abilities), rng);
+    }
+
+    [Test]
+    public void Restore_rewinds_the_rng_to_the_snapshot_position()
+    {
+        var kit = EffectTestKit.Create();
+        var rng = new XorShiftRng(99);
+        var world = MakeWorld(kit, rng);
+        world.Spawn(MakeUnit(kit, 1));
+        world.Tick();
+        var snapshot = world.CreateSnapshot();
+        var nextAtSnapshot = rng.NextUInt32();
+        rng.NextUInt32();
+
+        world.RestoreSnapshot(snapshot);
+
+        Assert.That(rng.NextUInt32(), Is.EqualTo(nextAtSnapshot));
+    }
+
+    [Test]
+    public void Snapshot_needs_a_restorable_rng()
+    {
+        var kit = EffectTestKit.Create();
+        var world = MakeWorld(kit, new PlainRng());
+        world.Spawn(MakeUnit(kit, 1));
+        world.Tick();
+
+        Assert.That(() => world.CreateSnapshot(), Throws.InvalidOperationException);
+    }
+
+    [Test]
+    public void Restoring_another_rngs_state_is_rejected_before_anything_changes()
+    {
+        var kit = EffectTestKit.Create();
+        kit.AddEffect(Bolt());
+        var source = MakeWorld(kit, new XorShiftRng(5));
+        source.Spawn(MakeUnit(kit, 1));
+        source.Tick();
+        var snapshot = source.CreateSnapshot();
+        var world = MakeWorld(kit, new WideRng());
+        var unit = MakeUnit(kit, 1);
+        world.Spawn(unit);
+        world.Tick();
+        unit.Attributes.SetBase(EffectTestKit.MaxHp, 100);
+        unit.Attributes.SetBase(EffectTestKit.Hp, 42);
+        world.EnqueueApply(kit.EffectId("bolt"), unit.Id, unit.Id);
+
+        Assert.That(() => world.RestoreSnapshot(snapshot), Throws.ArgumentException);
+
+        Assert.That(unit.Attributes.GetBase(EffectTestKit.Hp), Is.EqualTo((Bun3.Gameplay.Numerics.BigNum)42));
+        Assert.That(world.PendingCommandCount, Is.EqualTo(1));
+    }
+
     [Test]
     public void Snapshot_round_trip_keeps_duration_totals()
     {

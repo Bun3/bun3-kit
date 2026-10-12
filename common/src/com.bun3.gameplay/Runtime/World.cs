@@ -204,11 +204,12 @@ namespace Bun3.Gameplay
             Pipeline.RunPhases();
         }
 
-        /// <summary>Creates a deep-copy snapshot of every registered unit plus the world counters.</summary>
+        /// <summary>Creates a deep-copy snapshot of every registered unit plus the world counters and the RNG state.</summary>
         /// <returns>Snapshot of the whole world.</returns>
         /// <exception cref="InvalidOperationException">Thrown when applications, structural changes or
         /// commands are still pending — all are outside snapshot scope, so snapshotting mid-drain would
-        /// silently lose work or omit not-yet-flushed units.</exception>
+        /// silently lose work or omit not-yet-flushed units — or when the world's RNG is not an
+        /// <see cref="IRestorableRng"/>, since a restore could not replay the same rolls.</exception>
         public WorldSnapshot CreateSnapshot()
         {
             if (Pipeline.PendingApplyCount > 0)
@@ -217,20 +218,31 @@ namespace Bun3.Gameplay
                 throw new InvalidOperationException("Cannot snapshot a world with pending structural changes.");
             if (_commands.Count > 0)
                 throw new InvalidOperationException("Cannot snapshot a world with pending commands.");
+            var rng = RestorableRng();
 
             var units = new UnitSnapshot[_units.Count];
             for (var i = 0; i < _units.Count; i++) units[i] = _units[i].CreateSnapshot();
-            return new WorldSnapshot(units, Pipeline.CurrentTick, Pipeline.NextInstanceId);
+            var rngState = new byte[rng.StateSize];
+            rng.SaveState(rngState);
+            return new WorldSnapshot(units, Pipeline.CurrentTick, Pipeline.NextInstanceId, rngState);
         }
 
-        /// <summary>Restores every unit and the world counters from a snapshot. Pending work is discarded like the
+        private IRestorableRng RestorableRng() =>
+            _rng as IRestorableRng
+            ?? throw new InvalidOperationException(
+                "World snapshots need an IRestorableRng so a restored world replays the same rolls.");
+
+        /// <summary>Restores every unit, the world counters and the RNG from a snapshot. Pending work is discarded like the
         /// rest of the abandoned timeline: queued commands, applications left over from the apply budget,
         /// <see cref="PendingActivations"/> and the observation buffers are empty afterwards, so refresh views from
         /// the restored state. Queued spawns and despawns are applied first so the registry can match the snapshot.</summary>
         /// <param name="snapshot">Snapshot to restore.</param>
         /// <exception cref="ArgumentException">Thrown when the snapshot's unit set does not match the
         /// registry — spawn and despawn are not part of a snapshot. Validated against every unit id
-        /// before any unit is restored, so a mismatch leaves the whole registry untouched.</exception>
+        /// before any unit is restored, so a mismatch leaves the whole registry untouched. Also thrown, before
+        /// anything changes, when the snapshot's RNG state does not fit this world's RNG.</exception>
+        /// <exception cref="InvalidOperationException">Thrown when the world's RNG is not an
+        /// <see cref="IRestorableRng"/>.</exception>
         public void RestoreSnapshot(WorldSnapshot snapshot)
         {
             if (snapshot is null) throw new ArgumentNullException(nameof(snapshot));
@@ -250,6 +262,11 @@ namespace Bun3.Gameplay
                 }
             }
 
+            var rng = RestorableRng();
+            if (snapshot.RngState.Length != rng.StateSize)
+                throw new ArgumentException("Snapshot RNG state does not fit this world's RNG.", nameof(snapshot));
+
+            rng.RestoreState(snapshot.RngState);
             for (var i = 0; i < _units.Count; i++)
             {
                 _units[i].RestoreSnapshot(snapshot.Units[i], _effects);
