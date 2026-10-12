@@ -84,13 +84,14 @@ namespace Bun3.Unity.Chat.Ngo.Tests
             return (ushort)((IPEndPoint)socket.Client.LocalEndPoint).Port;
         }
 
-        Peer Create(string name, ushort port, Policy policy, ChatRelayOptions? options = null)
+        Peer Create(string name, ushort port, Policy policy, ChatRelayOptions? options = null, Action<NetworkManager>? beforeScope = null)
         {
             var root = new GameObject(name);
             var transport = root.AddComponent<UnityTransport>();
             transport.SetConnectionData("127.0.0.1", port, "127.0.0.1");
             var manager = root.AddComponent<NetworkManager>();
             manager.NetworkConfig = new NetworkConfig { NetworkTransport = transport, EnableSceneManagement = false };
+            beforeScope?.Invoke(manager);
             var peer = new Peer { Manager = manager, Relay = new ChatRelay(policy, options) };
             peer.Scope = new NgoChatScope(manager, peer.Relay);
             peer.Scope.Received += message =>
@@ -232,6 +233,26 @@ namespace Bun3.Unity.Chat.Ngo.Tests
             host.Scope.Send("four");
             yield return Until(() => client.Events.Count == 3);
             Assert.That(client.Events, Is.EqualTo(new[] { "history:two", "history:three", "live:four" }));
+        }
+
+        [UnityTest]
+        public IEnumerator MessageSentBeforeReplayIsNotDeliveredLive()
+        {
+            var options = new ChatRelayOptions { HistoryCapacity = 10, HistoryReplayCount = 10 };
+            ushort port = FreePort();
+            Peer host = null!;
+            host = Create("Host", port, new Policy(), options, m => m.OnClientConnectedCallback += id =>
+            {
+                if (id != m.LocalClientId) host.Scope.Send("during");
+            });
+            Assert.That(host.Manager.StartHost(), Is.True);
+            var client = Create("Client", port, new Policy(), options);
+            Assert.That(client.Manager.StartClient(), Is.True);
+            yield return Until(() => client.Events.Count == 1);
+            host.Scope.Send("after");
+            yield return Until(() => client.Events.Count == 2);
+            yield return Frames(10);
+            Assert.That(client.Events, Is.EqualTo(new[] { "history:during", "live:after" }));
         }
 
         [UnityTest]

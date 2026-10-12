@@ -11,7 +11,8 @@ namespace Bun3.Unity.Chat.Ngo
     /// <summary>
     /// Carries <see cref="ChatRelay"/> traffic over Netcode for GameObjects named messages.
     /// The server validates and fans out submissions; peers display only what the server sends back.
-    /// Newly connected clients receive the relay's replay before any later live message.
+    /// Newly connected clients receive the relay's replay before any later live message: the server relays live
+    /// messages only to peers whose replay has already been queued.
     /// </summary>
     public sealed class NgoChatScope : IDisposable
     {
@@ -26,6 +27,7 @@ namespace Bun3.Unity.Chat.Ngo
         readonly NetworkManager manager;
         readonly ChatRelay relay;
         readonly List<ulong> recipients = new List<ulong>();
+        readonly List<ulong> ready = new List<ulong>();
         readonly List<ChatMessage> buffer = new List<ChatMessage>();
         CustomMessagingManager? messaging;
         bool submitRegistered;
@@ -49,19 +51,23 @@ namespace Bun3.Unity.Chat.Ngo
             if (manager.IsListening) Register();
         }
 
-        /// <summary>Raised for each live message the server relays to this peer.</summary>
+        /// <summary>
+        /// Raised for each live message the server relays to this peer. Handlers must not call <see cref="Send"/>
+        /// synchronously, because on the host the event is raised inside the relay's fan-out.
+        /// </summary>
         public event Action<ChatMessage>? Received;
 
         /// <summary>Raised for each replayed history message, oldest first, after this peer connects.</summary>
         public event Action<ChatMessage>? HistoryReceived;
 
         /// <summary>
-        /// Sends normalized text to the server. Returns false when not connected, disposed, or the text is invalid.
+        /// Sends normalized text to the server. Returns false when disposed, the text is invalid, or this peer is
+        /// neither a connected client nor a host (a server without a local client cannot send).
         /// Nothing is shown locally until the server relays the message back.
         /// </summary>
         public bool Send(string text)
         {
-            if (disposed || messaging == null || !(manager.IsServer || manager.IsConnectedClient)) return false;
+            if (disposed || messaging == null || !(manager.IsHost || manager.IsConnectedClient)) return false;
             if (!ChatText.TryNormalize(text, relay.MaxLength, out var normalized)) return false;
             var bytes = Encoding.UTF8.GetBytes(normalized);
             using var writer = new FastBufferWriter(sizeof(ushort) + bytes.Length, Allocator.Temp);
@@ -77,6 +83,7 @@ namespace Bun3.Unity.Chat.Ngo
             if (disposed) return;
             disposed = true;
             Unregister();
+            ready.Clear();
             manager.OnServerStarted -= Register;
             manager.OnClientStarted -= Register;
             manager.OnServerStopped -= OnServerStopped;
@@ -96,6 +103,7 @@ namespace Bun3.Unity.Chat.Ngo
                 current.RegisterNamedMessageHandler(MessageName, OnMessage);
                 current.RegisterNamedMessageHandler(HistoryName, OnHistory);
             }
+            if (manager.IsHost) MarkReady(manager.LocalClientId);
             if (manager.IsServer && !submitRegistered)
             {
                 current.RegisterNamedMessageHandler(SubmitName, OnSubmit);
@@ -113,8 +121,14 @@ namespace Bun3.Unity.Chat.Ngo
             submitRegistered = false;
         }
 
+        void MarkReady(ulong clientId)
+        {
+            if (!ready.Contains(clientId)) ready.Add(clientId);
+        }
+
         void OnServerStopped(bool _)
         {
+            ready.Clear();
             relay.Clear();
             Unregister();
         }
@@ -123,12 +137,19 @@ namespace Bun3.Unity.Chat.Ngo
 
         void OnClientDisconnected(ulong clientId)
         {
-            if (manager.IsServer) relay.Forget(clientId);
+            if (!manager.IsServer) return;
+            ready.Remove(clientId);
+            relay.Forget(clientId);
         }
 
         void OnClientConnected(ulong clientId)
         {
-            if (!manager.IsServer || messaging == null || clientId == manager.LocalClientId || relay.HistoryReplayCount == 0) return;
+            if (!manager.IsServer || messaging == null) return;
+            if (clientId == manager.LocalClientId || relay.HistoryReplayCount == 0)
+            {
+                MarkReady(clientId);
+                return;
+            }
             relay.CollectReplay(clientId, buffer);
             // ponytail: the whole replay is queued at once; spread chunks across ticks if join-time spikes matter.
             for (int start = 0; start < buffer.Count;)
@@ -142,6 +163,7 @@ namespace Bun3.Unity.Chat.Ngo
                 start = end;
             }
             buffer.Clear();
+            MarkReady(clientId);
         }
 
         void OnSubmit(ulong senderClientId, FastBufferReader reader)
@@ -154,7 +176,7 @@ namespace Bun3.Unity.Chat.Ngo
             }
             catch (OverflowException) { return; }
             if (relay.Submit(senderClientId, text, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), out var message) != ChatRejectReason.None) return;
-            relay.CollectRecipients(message, manager.ConnectedClientsIds, recipients);
+            relay.CollectRecipients(message, ready, recipients);
             if (recipients.Count == 0) return;
             using var writer = new FastBufferWriter(SizeOf(message), Allocator.Temp);
             Write(writer, message);
@@ -167,7 +189,7 @@ namespace Bun3.Unity.Chat.Ngo
             ChatMessage message;
             try
             {
-                if (!TryRead(reader, out message)) return;
+                if (!TryRead(reader, relay.MaxLength * 4, out message)) return;
             }
             catch (OverflowException) { return; }
             Received?.Invoke(message);
@@ -182,7 +204,7 @@ namespace Bun3.Unity.Chat.Ngo
                 reader.ReadValueSafe(out ushort count);
                 for (int i = 0; i < count; i++)
                 {
-                    if (!TryRead(reader, out var message)) break;
+                    if (!TryRead(reader, relay.MaxLength * 4, out var message)) break;
                     buffer.Add(message);
                 }
             }
@@ -205,15 +227,15 @@ namespace Bun3.Unity.Chat.Ngo
             WriteUtf8(writer, message.Text);
         }
 
-        static bool TryRead(FastBufferReader reader, out ChatMessage message)
+        static bool TryRead(FastBufferReader reader, int maxTextBytes, out ChatMessage message)
         {
             message = default;
             reader.ReadValueSafe(out ulong senderId);
             reader.ReadValueSafe(out byte channel);
             reader.ReadValueSafe(out long timestampMs);
             if (!TryReadUtf8(reader, ChatMessage.MaxIdentityBytes, out var playerId) ||
-                !TryReadUtf8(reader, ChatMessage.MaxIdentityBytes, out var name) ||
-                !TryReadUtf8(reader, ChunkBytes, out var text)) return false;
+                !TryReadUtf8(reader, ChatMessage.MaxIdentityBytes - Encoding.UTF8.GetByteCount(playerId), out var name) ||
+                !TryReadUtf8(reader, maxTextBytes, out var text)) return false;
             message = new ChatMessage(senderId, playerId, name, text, channel, timestampMs);
             return true;
         }

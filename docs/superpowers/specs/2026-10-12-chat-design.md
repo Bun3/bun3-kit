@@ -193,7 +193,7 @@ public sealed class NgoChatScope : IDisposable
 - **전송 방식**: 세 메시지 모두 `NetworkDelivery.ReliableFragmentedSequenced`다. 같은 파이프라인이라 기록과 실시간 메시지의 순서가 섞이지 않는다. NGO 기본 비분할 상한(약 1.26KB)을 넘는 기록 묶음도 보낼 수 있다.
 - **크기 상한**: 기록 묶음은 4KB 이하로 자른다. UnityTransport `MaxPayloadSize` 기본값이 6KB이기 때문이다. 메시지 하나가 묶음 하나에 들어가야 하므로, 생성자에서 `relay.MaxLength × 4 + 512 ≤ 4096`을 검사하고 어기면 `ArgumentOutOfRangeException`이다(`MaxLength` 896까지). 512바이트는 플레이어 ID·이름·고정 필드 몫이다.
 - **등록 수명**: NGO는 시작할 때마다 `CustomMessagingManager`를 새로 만든다. 스코프는 생성 시점에 이미 리스닝 중이면 즉시 등록한다. 그 외에는 `OnClientStarted`/`OnServerStarted`에서 등록하고, `OnClientStopped`/`OnServerStopped`에서 해제하며 릴레이 상태를 비운다. `Submit` 핸들러는 서버일 때만 등록한다. `Dispose`는 이벤트 구독과 핸들러를 모두 해제한다.
-- **호스트 처리**: `Submit`을 받으면 `relay.Submit(senderClientId, text, nowMs)`를 호출한다. 성공하면 `CollectRecipients(message, manager.ConnectedClientsIds, …)` 후 목록 전송 오버로드로 한 번에 보낸다. `nowMs`는 `DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()`. 거부는 조용히 버린다(송신자에게 사유를 돌려주지 않음, §7).
+- **호스트 처리**: `Submit`을 받으면 `relay.Submit(senderClientId, text, nowMs)`를 호출한다. 성공하면 `CollectRecipients(message, 준비된 피어 목록, …)` 후 목록 전송 오버로드로 한 번에 보낸다. 준비된 피어는 서버 시작 때의 호스트 자신과, `OnClientConnectedCallback`에서 재전송을 넣은 뒤의 클라이언트다. 연결 해제·서버 정지 때 뺀다. NGO 씬 관리가 켜져 있으면 승인 뒤 씬 동기화가 끝날 때까지 `ConnectedClientsIds`에는 있지만 연결 콜백은 아직 오지 않으므로, 그 사이 실시간 메시지를 보내면 재전송과 중복되고 순서가 뒤집히기 때문이다. `nowMs`는 `DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()`. 거부는 조용히 버린다(송신자에게 사유를 돌려주지 않음, §7).
 - **루프백 불필요**: NGO 2.13.1의 `SendNamedMessage`는 호스트가 `LocalClientId`로 보내면 로컬에서 바로 호출한다(`CustomMessageManager.cs` host 분기). 호스트의 `Send`도 서버 ID로 보내는 같은 경로를 탄다.
 - **신뢰 경계**:
   - `Message` 핸들러는 `senderClientId != NetworkManager.ServerClientId`이면 버린다.
