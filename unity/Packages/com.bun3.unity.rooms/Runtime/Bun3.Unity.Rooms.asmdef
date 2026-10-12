@@ -1,0 +1,6 @@
+{
+    "name": "Bun3.Unity.Rooms",
+    "rootNamespace": "Bun3.Unity.Rooms",
+    "references": [ "UniTask" ],
+    "autoReferenced": true
+}
