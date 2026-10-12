@@ -115,6 +115,16 @@
         "com.cysharp.unitask": "https://github.com/Cysharp/UniTask.git?path=src/UniTask/Assets/Plugins/UniTask"
       }
     },
+    "com.bun3.unity.rooms.steam": {
+      "version": "file:com.bun3.unity.rooms.steam",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {
+        "com.bun3.unity.rooms": "0.1.0",
+        "com.bun3.unity.steam": "0.1.0",
+        "com.cysharp.unitask": "https://github.com/Cysharp/UniTask.git?path=src/UniTask/Assets/Plugins/UniTask"
+      }
+    },
     "com.bun3.unity.sound-events": {
       "version": "file:com.bun3.unity.sound-events",
       "depth": 0,
