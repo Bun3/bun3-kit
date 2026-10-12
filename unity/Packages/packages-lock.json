@@ -62,7 +62,8 @@
       "source": "embedded",
       "dependencies": {
         "com.bun3.unity.audio.dissonance": "0.2.0",
-        "com.bun3.unity.audio.steamaudio": "0.4.0"
+        "com.bun3.unity.audio": "0.4.0",
+        "com.bun3.unity.audio.steamaudio": "0.5.0"
       }
     },
     "com.bun3.unity.audio.steamaudio": {
@@ -70,7 +71,8 @@
       "depth": 0,
       "source": "embedded",
       "dependencies": {
-        "com.bun3.unity.audio": "0.3.0"
+        "com.bun3.unity.audio": "0.4.0",
+        "com.bun3.unity.acoustics": "0.2.0"
       }
     },
     "com.bun3.unity.core": {
@@ -94,6 +96,14 @@
       "depth": 0,
       "source": "embedded",
       "dependencies": {}
+    },
+    "com.bun3.unity.rooms": {
+      "version": "file:com.bun3.unity.rooms",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {
+        "com.cysharp.unitask": "https://github.com/Cysharp/UniTask.git?path=src/UniTask/Assets/Plugins/UniTask"
+      }
     },
     "com.bun3.unity.sound-events": {
       "version": "file:com.bun3.unity.sound-events",
