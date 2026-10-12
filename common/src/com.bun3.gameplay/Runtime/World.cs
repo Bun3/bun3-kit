@@ -170,7 +170,7 @@ namespace Bun3.Gameplay
 
         /// <summary>Queues a unit for registration. It becomes visible at the start of the next
         /// <see cref="Tick"/>, in the order this call takes relative to other queued spawns and
-        /// despawns.</summary>
+        /// despawns — and before every queued command, whatever the call order.</summary>
         /// <param name="unit">Unit to register.</param>
         /// <exception cref="InvalidOperationException">Thrown when the id will already be registered at
         /// this point in the queue — registered and not queued for despawn, or already queued for
@@ -185,7 +185,8 @@ namespace Bun3.Gameplay
 
         /// <summary>Queues a unit for removal. The removal takes effect at the start of the next
         /// <see cref="Tick"/>, in the order this call takes relative to other queued spawns and
-        /// despawns — a despawn queued after a spawn of the same id cancels it out.</summary>
+        /// despawns — a despawn queued after a spawn of the same id cancels it out. It also precedes every
+        /// queued command whatever the call order, so a command for this unit queued earlier finds it gone.</summary>
         /// <param name="id">Unit id to remove.</param>
         public void Despawn(TargetId id)
         {
@@ -194,7 +195,8 @@ namespace Bun3.Gameplay
 
         /// <summary>Applies queued structural changes, clears the observation buffers, processes queued
         /// commands in call order, then runs the pipeline phases. Read the buffers after this call — they
-        /// hold exactly this tick's output.</summary>
+        /// hold exactly this tick's output, and the next call clears them, so a catch-up loop that ticks several
+        /// times in a row must read them after each call.</summary>
         public void Tick()
         {
             FlushStructuralChanges();
