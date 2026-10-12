@@ -299,4 +299,24 @@ public sealed class EffectDueTickTests
         for (var tick = 0; tick < 10; tick++) world.Tick();
         Assert.That(unit.Effects.GetActiveEffect(0).RemainingTicks, Is.EqualTo(expected));
     }
+
+    [Test]
+    public void Restoring_one_tick_back_rewinds_the_advanced_through_clock()
+    {
+        var kit = EffectTestKit.Create();
+        kit.AddEffect(EffectTestKit.MinimalDuration("ward", ticks: 60));
+        var world = new World(kit.Database(new AbilityCatalogBuilder().Build(kit.TagCatalog, kit.Seams, kit.Attributes, kit.Catalog)), new XorShiftRng(1));
+        ReadOnlySpan<ushort> attributes = stackalloc ushort[] { EffectTestKit.Hp, EffectTestKit.MaxHp };
+        var unit = new Unit(new TargetId(1), kit.Attributes, attributes, kit.TagCatalog);
+        world.Spawn(unit);
+        world.EnqueueApply(kit.EffectId("ward"), unit.Id, unit.Id);
+        for (var tick = 0; tick < 5; tick++) world.Tick();
+        var snapshot = world.CreateSnapshot();
+        world.Tick();
+
+        world.RestoreSnapshot(snapshot);
+        unit.Effects.SyncTime();
+
+        Assert.That(unit.Effects.AdvancedThrough, Is.EqualTo(world.CurrentTick - 1), "between ticks, phase 2 last ran on the previous tick");
+    }
 }

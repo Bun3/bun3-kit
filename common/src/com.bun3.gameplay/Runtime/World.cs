@@ -274,7 +274,7 @@ namespace Bun3.Gameplay
                 _units[i].RestoreSnapshot(snapshot.Units[i], _effects);
             }
 
-            Pipeline.CurrentTick = snapshot.CurrentTick;
+            Pipeline.RestoreClock(snapshot.CurrentTick);
             Pipeline.NextInstanceId = snapshot.NextInstanceId;
             _commands.Clear();
             _activationCount = 0;

@@ -10,6 +10,13 @@ namespace Bun3.Gameplay.Effects
     {
         private long _lastAdvancedTick = long.MinValue;
 
+        /// <summary>Sets the clock between ticks, as a snapshot restore does: phase 2 last ran on the previous tick.</summary>
+        internal void RestoreClock(long currentTick)
+        {
+            CurrentTick = currentTick;
+            _lastAdvancedTick = long.MinValue;
+        }
+
         // Phase 2: iterate targets in TargetId order and their timed instances (Duration or periodic) in Id
         // order; the other instances do nothing here. Instances created this tick are skipped. Period firing runs before the expiry check,
         // so the final period fire on the expiring tick is still applied. Normal expiry (the
