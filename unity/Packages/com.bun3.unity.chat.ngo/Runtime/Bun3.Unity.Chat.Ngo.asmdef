@@ -1,0 +1,10 @@
+{
+    "name": "Bun3.Unity.Chat.Ngo",
+    "rootNamespace": "Bun3.Unity.Chat.Ngo",
+    "references": [
+        "Bun3.Chat",
+        "Unity.Netcode.Runtime",
+        "Unity.Collections"
+    ],
+    "autoReferenced": true
+}
