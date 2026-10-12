@@ -288,7 +288,7 @@ Notifications (`NotifyAppended`, `NotifyRemovedFromStart`) and refreshes record 
 
 - Unity 6000.3
 - `UnityEngine.UI` and `UnityEngine.EventSystems` (built-in)
-- `com.bun3.unity.core` 0.3.0
+- `com.bun3.unity.core` 0.5.0
 - `com.cysharp.unitask` (popup lifecycle awaits)
 
 ## Package contents

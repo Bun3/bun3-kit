@@ -74,7 +74,7 @@ namespace Bun3.Chat
         /// <summary>Accepted messages kept by the host, or null when history is off. Shared across channels.</summary>
         public ChatLog? History { get; }
 
-        /// <summary>Validates and stamps a message. On success the message is also added to <see cref="History"/>.</summary>
+        /// <summary>Validates and stamps a message. On success the message is also added to <see cref="History"/>. On rejection <paramref name="message"/> is <c>default</c> (its <c>Text</c> is null).</summary>
         public ChatRejectReason Submit(ulong senderId, string? text, long nowMs, out ChatMessage message)
         {
             message = default;

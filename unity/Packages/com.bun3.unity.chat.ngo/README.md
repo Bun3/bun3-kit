@@ -6,6 +6,7 @@ Relays [`com.bun3.chat`](../../../common/src/com.bun3.chat) over Netcode for Gam
 - The server runs `ChatRelay.Submit`, sends to `CollectRecipients`, and replays `CollectReplay` in chunks of at most 4 KB when a client connects. Rejections are dropped silently.
 - `Send` never displays optimistically: only messages the server relays back raise `Received`.
 - Handlers are registered per session and released on stop; stopping the server clears the relay. `MaxLength` must be at most 896.
+- All peers must use the same `ChatRelayOptions.MaxLength`: clients use it as their read cap.
 
 ```csharp
 var relay = new ChatRelay(new MyPolicy(), new ChatRelayOptions { HistoryCapacity = 1000, HistoryReplayCount = 100 });

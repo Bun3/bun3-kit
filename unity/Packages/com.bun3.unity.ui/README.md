@@ -10,7 +10,7 @@ Dev kits for Unity UI. A small collection of utilities that simplify common patt
 ## Requirements
 
 - `UnityEngine.UI` (built-in)
-- [`com.bun3.unity.core`](../com.bun3.unity.core) 0.3.0
+- [`com.bun3.unity.core`](../com.bun3.unity.core) 0.5.0
 
 ## Installation
 
