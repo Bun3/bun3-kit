@@ -9,9 +9,14 @@ using Bun3.BadWords;
 
 bool rejected = BadWordFilter.Default.ContainsBadWord(nickname);
 
-// Consumer-specific additions on top of the bundled dictionary.
-var filter = new BadWordFilter(BadWordFilter.DefaultEntries.Concat(new[] { "customword", "!allowedword" }));
+// Consumer-specific additions on top of the bundled dictionary; the attribute lists the field in the editor tester.
+[BadWordTesterSource]
+static readonly BadWordFilter Filter = new BadWordFilter(BadWordFilter.DefaultEntries.Concat(new[] { "customword", "!allowedword" }));
 ```
+
+## Editor tester
+
+`Window > Bun3 > Bad Word Tester` checks text line by line against `Default` or any static field marked `[BadWordTesterSource]`, and shows the stream and normalized span that blocked each line. Fields are re-read after every script reload.
 
 `BadWordFilter.Default` builds on first access; touch it during boot to prewarm. Instances are immutable and thread-safe. `ContainsBadWord` allocates no managed memory.
 

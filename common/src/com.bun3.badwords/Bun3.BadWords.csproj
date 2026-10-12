@@ -13,6 +13,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Remove="Editor/**/*.cs" />
     <Compile Remove="Tests/**/*.cs" />
     <None Include="Third Party Notices.md;README.md" Pack="true" PackagePath="/" />
   </ItemGroup>
