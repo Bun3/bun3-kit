@@ -255,6 +255,33 @@ Behavior rules:
 - While `IsCloseBlocked` (any `BlockClose`/`BlockCloseWhile` lock held), back keys are consumed without routing and `Close` requests are deferred until the last lock releases. Hook `OnCloseBlockedChanged(bool)` to drive raycast blocking or spinners.
 - The push/pop/back paths allocate no closures, LINQ, or strings. (`*WithArg` uses generics — no boxing on the direct path; only queued args allocate a small holder, and that queue is a cold path.)
 
+## VirtualList
+
+`VirtualList` shows a vertical list whose items have different heights, creating cells only for visible items. Text is never clipped: each cell's preferred height becomes its row height.
+
+### Layout contract
+
+- Put `VirtualList` on the `ScrollRect` GameObject. The viewport is `ScrollRect.viewport`, or the `ScrollRect` itself.
+- The list forces the content and every cell to top-stretch anchors with pivot (0.5, 1) and sets their heights. Do not add a LayoutGroup or ContentSizeFitter to the content, or a ContentSizeFitter to cells.
+- Each cell root must report a preferred height, for example a `VerticalLayoutGroup` with *Control Child Size → Height*, or a `LayoutElement`.
+- `IVirtualListSource.Count` must change only together with a notification. A source backed by a ring buffer (where one add evicts the oldest item) should expose a displayed count and update it between `NotifyRemovedFromStart` and `NotifyAppended`.
+
+### Measurement and estimates
+
+- An item is measured once, the first time it becomes visible: the list sets the cell width, calls `BindCell`, rebuilds the cell layout, and reads its preferred height.
+- `SetSource`, `Refresh` and width changes mark every item unmeasured; only visible items are measured again.
+- Unmeasured items use `IVirtualListEstimator.EstimateHeight` when the source implements it, otherwise `EstimatedItemHeight`. The estimator runs for every item on a refresh, so keep it to arithmetic on your data. Overestimating keeps the view steadier.
+
+### Reading position
+
+Notifications (`NotifyAppended`, `NotifyRemovedFromStart`) and refreshes record an anchor first: the end when `IsAtEnd`, otherwise the topmost measured visible item and its offset. After the change the anchor is restored, so appending or removing from the start never moves what you are reading. Scrolling is different: it anchors on the topmost measured visible item, never the end, and moves the view only after measuring revealed items changed heights, so scrolling up inside `EndThreshold` does not snap back. While the user drags, the list rebases the `ScrollRect` drag origin after moving the content.
+
+### Limits
+
+- Vertical only; append at the end and remove from the start only.
+- The scrollbar size and position are approximate while estimates remain, and drift slightly as items are measured.
+- Calls made while the list is inactive are applied on the first `LateUpdate` after activation.
+
 # Technical details
 
 ## Requirements
@@ -272,6 +299,7 @@ Behavior rules:
 | `Runtime/Popups/` | One flat folder = one namespace (`Bun3.Unity.UI.Popups`). `Popup`(+`Popup<TResult>` in the same file, +`.CloseScope` partial), `PopupStack` partials (`.Push`/`.Close`/`.Result`/`.Queue`), `PopupKey`, `PopupPhase`, `PopupDuplicatePolicy`, `IPopupArg<TArg>`, `PopupCloseScope`, `PopupQueue`, `PopupPool`, `PopupSiblingArranger`, `PopupBackKeyRouter`, `PopupManager`(+`.Facade`), `PopupManagerBuilder`, delegates. |
 | `Runtime/Toasts/` | `ToastQueue<TData>`, `ToastView<TData>` — sequential toast display independent of the popup stack. |
 | `Runtime/Loading/` | `LoadingOverlay`(+`LoadingScope`), `LoadingView` — ref-counted, flash-free loading indicator. |
+| `Runtime/Lists/` | `VirtualList`, `VirtualListLayout` (internal), `IVirtualListSource`, `IVirtualListEstimator` — variable-height virtualized list. |
 | `Samples/ButtonInteractableScope/` | Sample MonoBehaviour and handler demonstrating typical usage. |
 | `Tests/Runtime/` | PlayMode tests (`Bun3.Unity.UI.Tests`). |
 | `Tests/Editor/` | EditMode tests (`Bun3.Unity.UI.Editor.Tests`), covering the popup stack. |
@@ -280,6 +308,7 @@ Behavior rules:
 
 | Date | Reason |
 |---|---|
+| 2026-10-12 | Added `VirtualList`. Matches package version 0.4.0. |
 | 2026-08-17 | Added the popup/modal stack (`Bun3.Unity.UI.Popups`). |
 | 2026-07-26 | Reworked for click-time reason replay. Matches package version 0.2.0. |
 | 2026-05-08 | Document created. Matches package version 0.1.0. |
