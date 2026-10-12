@@ -1,0 +1,13 @@
+{
+  "name": "com.bun3.chat",
+  "displayName": "Bun3 Chat",
+  "version": "0.1.0",
+  "unity": "2022.3",
+  "description": "Transport-agnostic text chat core: text normalization, rate limiting, policy-driven relay, and message logs. netstandard2.1; no UnityEngine dependency.",
+  "dependencies": {},
+  "author": {
+    "name": "Bun3",
+    "url": "https://github.com/Bun3",
+    "email": "bun3.dev@gmail.com"
+  }
+}
