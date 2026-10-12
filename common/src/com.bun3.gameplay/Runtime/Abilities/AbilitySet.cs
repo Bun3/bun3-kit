@@ -64,7 +64,8 @@ namespace Bun3.Gameplay.Abilities
             return new AbilityGrantInfo(grant.AbilityId, grant.Source, grant.Level);
         }
 
-        /// <summary>Grants an ability from one origin. Regranting the same pair updates the level only.</summary>
+        /// <summary>Grants an ability from one origin. Regranting the same pair updates the level only; at the
+        /// same level it changes nothing, <see cref="Version"/> included.</summary>
         /// <param name="abilityId">Compiled ability id.</param>
         /// <param name="source">Origin granting the ability.</param>
         /// <param name="level">Ability level this origin grants; must be at least 1.</param>
@@ -76,6 +77,7 @@ namespace Bun3.Gameplay.Abilities
             var position = FindInsertPosition(abilityId, source, out var exists);
             if (exists)
             {
+                if (_grants[position].Level == level) return;
                 Own(0);
                 _grants[position].Level = level;
                 Version++;

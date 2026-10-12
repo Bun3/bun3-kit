@@ -69,6 +69,23 @@ public sealed class AbilitySetTests
     }
 
     [Test]
+    public void Regranting_the_same_level_is_not_a_change_and_keeps_archetype_grants_shared()
+    {
+        var warmUp = new AbilitySet(AbilitySet.ForArchetype(new[] { 7 }, new[] { 2 }));
+        warmUp.Grant(7, GrantSource.Archetype(), level: 2);
+        var set = new AbilitySet(AbilitySet.ForArchetype(new[] { 7 }, new[] { 2 }));
+        var version = set.Version;
+
+        var before = System.GC.GetAllocatedBytesForCurrentThread();
+        set.Grant(7, GrantSource.Archetype(), level: 2);
+        var allocated = System.GC.GetAllocatedBytesForCurrentThread() - before;
+
+        Assert.That(set.Version, Is.EqualTo(version));
+        Assert.That(allocated, Is.Zero, "a no-op regrant must not copy the archetype's shared grants");
+        Assert.That(set.GetLevel(7), Is.EqualTo(2));
+    }
+
+    [Test]
     public void Regranting_the_same_source_updates_the_level_without_duplicating()
     {
         var set = new AbilitySet();
