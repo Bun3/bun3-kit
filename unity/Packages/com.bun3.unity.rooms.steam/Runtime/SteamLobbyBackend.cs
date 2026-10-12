@@ -128,7 +128,10 @@ namespace Bun3.Unity.Rooms.Steam
             return true;
         }
 
-        /// <summary>Stops listening for Steam callbacks.</summary>
+        /// <summary>
+        /// Stops listening for Steam callbacks. It does not leave the current room or clear rich presence (Steam clears
+        /// both when the API shuts down); call <c>LeaveAsync</c> on the room first.
+        /// </summary>
         public void Dispose()
         {
             api.LobbyJoinRequested -= OnLobbyJoinRequested;

@@ -23,6 +23,6 @@ The runtime assembly is `Bun3.Unity.Rooms.Steam` (Editor and Standalone, `BUN3_S
 - `SetJoinableAsync(false)` hides the lobby from search and stores `bun3.open = "0"`. Every member reads it into `IsJoinable` and clears its own `connect` rich presence, so no friend sees "Join Game" during a match. Locked rooms report `NotFound`.
 - `DataChanged` fires on each lobby data update (not on member data updates); re-read the keys you need.
 - Invites: while in an open room each member publishes rich presence `connect = "+connect_lobby <lobby id>"`. Overlay invites (`GameLobbyJoinRequested_t`), "Join Game" (`GameRichPresenceJoinRequested_t`) and a `+connect_lobby <id>` launch argument raise `JoinRequested` with the lobby id; the launch argument is raised on the next frame. `TryOpenInviteOverlay` opens the Steam invite dialog.
-- Kicks, lobby loss and the local member's own leave notification raise `Closed`.
+- A member leaving or disconnecting, and Steam handing lobby ownership to another member, refresh the member list and raise `OwnerChanged`; the room's owner is the Steam lobby owner. Kicks and the local member's own leave notification raise `Closed`.
 
 Known limit: members write their own `bun3.joined`, so a lobby member could claim an early time to win waiting-room host election.

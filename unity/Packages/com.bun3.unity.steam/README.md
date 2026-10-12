@@ -13,7 +13,7 @@ Steamworks.NET is not a package dependency. Install it in the game:
 }
 ```
 
-`com.bun3.unity.core` must also be installed. Every Bun3 Steam runtime and test assembly requires the `BUN3_STEAMWORKS` define and is limited to the Editor and Standalone platforms. After Steamworks.NET finishes compiling, run **Tools > Bun3 > Steam > Sync Installed Adapters** (or `-executeMethod Bun3.Unity.Steam.Editor.SteamSdkSetup.SyncInstalledAdapters`). It adds the define to Standalone only when the Steamworks.NET assembly definition and its types are present, and keeps other defines in place. Before removing Steamworks.NET, run **Tools > Bun3 > Steam > Disable Adapters**. Nothing runs automatically on domain reload.
+`com.bun3.unity.core` must also be installed. The Bun3 Steam runtime assemblies and their runtime tests require the `BUN3_STEAMWORKS` define and are limited to the Editor and Standalone platforms; `Bun3.Unity.Steam.Editor` and `Bun3.Unity.Steam.Editor.Tests` are ungated. After Steamworks.NET finishes compiling, run **Tools > Bun3 > Steam > Sync Installed Adapters** (or `-executeMethod Bun3.Unity.Steam.Editor.SteamSdkSetup.SyncInstalledAdapters`). It adds the define to Standalone only when the Steamworks.NET assembly definition and its types are present, and keeps other defines in place. Before removing Steamworks.NET, run **Tools > Bun3 > Steam > Disable Adapters**. Nothing runs automatically on domain reload.
 
 ## Usage
 

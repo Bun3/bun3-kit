@@ -23,9 +23,10 @@ session.HostMigrated += RestoreLobbyState;      // spawned objects are gone afte
 await session.LeaveAsync();
 ```
 
-- `StartAsync` hosts when the local member owns the room, otherwise waits for `bun3.hostEpoch` and connects. It throws `InvalidOperationException` and closes the session when NGO cannot start or connect (including admission rejection); leaving the room is the caller's call.
+- `StartAsync` hosts when the local member owns the room, otherwise waits for `bun3.hostEpoch` and connects. It closes the session and throws `InvalidOperationException` when NGO cannot start or connect (including admission rejection) or the session had already started, `FormatException` when the transport's host endpoint is malformed, and `OperationCanceledException` when cancelled; leaving the room is the caller's call.
 - Room data written by the host, in this order: `bun3.hostMember`, `bun3.host` (endpoint), `bun3.hostEpoch` (generation, +1 per host start).
 - Host loss (NGO disconnect, or the host member leaving the room) is judged one frame later. If `CanMigrate()` is false the session closes. Otherwise the member chosen by `ElectHost` (default `RoomOwnerElection.Oldest`) takes ownership and hosts, the others reconnect when the generation grows, and `HostMigrated` fires. Without `Connected` within `MigrationTimeout` (default 30 s) the session is `Failed`; the room stays joined.
+- A host must leave through `LeaveAsync`. Stopping NGO directly while hosting counts as host loss and starts a migration.
 - `LeaveAsync` from the owner hands the room to the elected member first when `CanMigrate()` allows it.
 - Main thread only. Restarting NGO destroys spawned NetworkObjects; restore state in `HostMigrated`.
 

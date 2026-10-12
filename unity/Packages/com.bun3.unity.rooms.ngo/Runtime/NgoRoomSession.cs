@@ -48,7 +48,9 @@ namespace Bun3.Unity.Rooms.Ngo
     /// When the host is lost and <see cref="NgoRoomSessionOptions.CanMigrate"/> allows it, the elected member
     /// takes ownership and hosts, and the others reconnect. Restarting NGO destroys spawned NetworkObjects:
     /// restore game state in <see cref="HostMigrated"/>. Set connection data such as
-    /// <c>NetworkConfig.ConnectionData</c> before <see cref="StartAsync"/>. Main thread only.
+    /// <c>NetworkConfig.ConnectionData</c> before <see cref="StartAsync"/>. A host must leave through
+    /// <see cref="LeaveAsync"/>: stopping NGO directly while hosting counts as host loss and starts a migration.
+    /// Main thread only.
     /// </summary>
     public sealed class NgoRoomSession
     {
@@ -95,7 +97,9 @@ namespace Bun3.Unity.Rooms.Ngo
         /// Hosts when the local member owns the room, otherwise waits for the host endpoint and connects.
         /// Completes once <see cref="State"/> is <see cref="RoomSessionState.Connected"/>.
         /// </summary>
-        /// <exception cref="InvalidOperationException">NGO did not start or connect; the session is closed and the room is still joined.</exception>
+        /// <exception cref="InvalidOperationException">NGO did not start or connect, or the session had already started; a failed start closes the session and the room is still joined.</exception>
+        /// <exception cref="FormatException">The transport returned a malformed host endpoint.</exception>
+        /// <exception cref="OperationCanceledException">The token was cancelled.</exception>
         public async UniTask StartAsync(CancellationToken cancellationToken = default)
         {
             if (State != RoomSessionState.Idle) throw new InvalidOperationException("The session has already started.");
@@ -130,6 +134,7 @@ namespace Bun3.Unity.Rooms.Ngo
         /// <summary>
         /// Stops NGO and leaves the room. An owner first hands the room to the elected member when
         /// <see cref="NgoRoomSessionOptions.CanMigrate"/> allows it; hand-off failures never block leaving. Idempotent.
+        /// A host must leave through this method; stopping NGO directly while hosting starts a migration.
         /// </summary>
         public async UniTask LeaveAsync()
         {
