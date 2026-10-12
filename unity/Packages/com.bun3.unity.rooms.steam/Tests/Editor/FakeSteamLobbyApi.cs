@@ -29,6 +29,8 @@ namespace Bun3.Unity.Rooms.Steam.Tests
         public bool LastSearchRequiredSlot;
         public uint JoinResponse = Success;
         public ulong InviteDialogLobby;
+        public bool JoinTimesOut;
+        public UniTaskCompletionSource<uint> JoinGate;
 
         public bool IsAvailable { get; set; } = true;
         public ulong LocalUserId { get; set; }
@@ -38,6 +40,7 @@ namespace Bun3.Unity.Rooms.Steam.Tests
         public event Action<ulong, ulong> LobbyDataUpdated;
         public event Action<ulong, ulong, uint> LobbyChatUpdated;
         public event Action<ulong> LobbyKicked;
+        public event Action<ulong> LobbyEntered;
         public event Action<ulong> LobbyJoinRequested;
         public event Action<string> RichPresenceJoinRequested;
 
@@ -60,6 +63,7 @@ namespace Bun3.Unity.Rooms.Steam.Tests
             var lobby = new Lobby { Owner = LocalUserId, MaxMembers = maxMembers };
             lobby.Members.Add(LocalUserId);
             Lobbies[id] = lobby;
+            LobbyEntered?.Invoke(id);
             return UniTask.FromResult(id);
         }
 
@@ -91,10 +95,13 @@ namespace Bun3.Unity.Rooms.Steam.Tests
 
         public UniTask<uint> JoinLobbyAsync(ulong lobby, CancellationToken cancellationToken)
         {
+            if (JoinTimesOut) throw new RoomException(RoomFailure.ServiceUnavailable);
+            if (JoinGate != null) return JoinGate.Task;
             if (JoinResponse != Success) return UniTask.FromResult(JoinResponse);
             if (!Lobbies.TryGetValue(lobby, out var entry))
                 return UniTask.FromResult((uint)EChatRoomEnterResponse.k_EChatRoomEnterResponseDoesntExist);
             entry.Members.Add(LocalUserId);
+            LobbyEntered?.Invoke(lobby);
             return UniTask.FromResult(Success);
         }
 
@@ -149,6 +156,7 @@ namespace Bun3.Unity.Rooms.Steam.Tests
 
         public void RaiseDataUpdated(ulong lobby, ulong member) => LobbyDataUpdated?.Invoke(lobby, member);
         public void RaiseChatUpdated(ulong lobby, ulong user, uint change) => LobbyChatUpdated?.Invoke(lobby, user, change);
+        public void RaiseLobbyEntered(ulong lobby) => LobbyEntered?.Invoke(lobby);
         public void RaiseKicked(ulong lobby) => LobbyKicked?.Invoke(lobby);
         public void RaiseLobbyJoinRequested(ulong lobby) => LobbyJoinRequested?.Invoke(lobby);
         public void RaiseRichPresenceJoinRequested(string connect) => RichPresenceJoinRequested?.Invoke(connect);

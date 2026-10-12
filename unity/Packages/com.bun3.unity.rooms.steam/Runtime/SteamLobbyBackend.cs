@@ -34,6 +34,7 @@ namespace Bun3.Unity.Rooms.Steam
         private const int MaxCodeAttempts = 5;
         private readonly ISteamLobbyApi api;
         private SteamLobbyRoom current;
+        private bool inFlight;
 
         /// <summary>Creates a backend on the initialized Steam client.</summary>
         public SteamLobbyBackend() : this(new SteamLobbyApi())
@@ -45,6 +46,7 @@ namespace Bun3.Unity.Rooms.Steam
             this.api = api;
             api.LobbyJoinRequested += OnLobbyJoinRequested;
             api.RichPresenceJoinRequested += OnRichPresenceJoinRequested;
+            api.LobbyEntered += OnLobbyEntered;
             // Raised next frame so the creator can subscribe first.
             if (TryParseConnect(api.CommandLine, out string launchLobby))
                 UniTask.Post(() => JoinRequested?.Invoke(launchLobby));
@@ -57,41 +59,65 @@ namespace Bun3.Unity.Rooms.Steam
         public async UniTask<IRoom> CreateAsync(RoomCreateOptions options, CancellationToken cancellationToken = default)
         {
             EnsureReady();
-            RoomCode code = default;
-            bool unique = false;
-            for (int attempt = 0; attempt < MaxCodeAttempts && !unique; attempt++)
+            inFlight = true;
+            try
             {
-                code = RoomCode.Generate();
-                int found = await api.FindLobbiesAsync(CodeKey, code.ToString(), false, cancellationToken);
-                if (found < 0) throw new RoomException(RoomFailure.ServiceUnavailable);
-                unique = found == 0;
+                RoomCode code = default;
+                bool unique = false;
+                for (int attempt = 0; attempt < MaxCodeAttempts && !unique; attempt++)
+                {
+                    code = RoomCode.Generate();
+                    int found = await api.FindLobbiesAsync(CodeKey, code.ToString(), false, cancellationToken);
+                    if (found < 0) throw new RoomException(RoomFailure.ServiceUnavailable);
+                    unique = found == 0;
+                }
+                if (!unique) throw new RoomException(RoomFailure.ServiceUnavailable);
+                ulong lobby = await api.CreateLobbyAsync(options.MaxMembers, cancellationToken);
+                if (lobby == 0) throw new RoomException(RoomFailure.ServiceUnavailable);
+                api.SetLobbyData(lobby, CodeKey, code.ToString());
+                api.SetLobbyData(lobby, VersionKey, options.Version ?? string.Empty);
+                api.SetLobbyData(lobby, NameKey, options.Name ?? string.Empty);
+                return Enter(lobby, code);
             }
-            if (!unique) throw new RoomException(RoomFailure.ServiceUnavailable);
-            ulong lobby = await api.CreateLobbyAsync(options.MaxMembers, cancellationToken);
-            if (lobby == 0) throw new RoomException(RoomFailure.ServiceUnavailable);
-            api.SetLobbyData(lobby, CodeKey, code.ToString());
-            api.SetLobbyData(lobby, VersionKey, options.Version ?? string.Empty);
-            api.SetLobbyData(lobby, NameKey, options.Name ?? string.Empty);
-            return Enter(lobby, code);
+            finally
+            {
+                inFlight = false;
+            }
         }
 
         /// <inheritdoc/>
         public async UniTask<IRoom> JoinByCodeAsync(RoomCode code, RoomJoinOptions options, CancellationToken cancellationToken = default)
         {
             EnsureReady();
-            int found = await api.FindLobbiesAsync(CodeKey, code.ToString(), true, cancellationToken);
-            if (found < 0) throw new RoomException(RoomFailure.ServiceUnavailable);
-            if (found == 0) throw new RoomException(RoomFailure.NotFound);
-            return await JoinAsync(api.GetLobbyByIndex(0), options, cancellationToken);
+            inFlight = true;
+            try
+            {
+                int found = await api.FindLobbiesAsync(CodeKey, code.ToString(), true, cancellationToken);
+                if (found < 0) throw new RoomException(RoomFailure.ServiceUnavailable);
+                if (found == 0) throw new RoomException(RoomFailure.NotFound);
+                return await JoinAsync(api.GetLobbyByIndex(0), options, cancellationToken);
+            }
+            finally
+            {
+                inFlight = false;
+            }
         }
 
         /// <summary>Joins by decimal lobby SteamID, as delivered by <see cref="JoinRequested"/>.</summary>
-        public UniTask<IRoom> JoinByIdAsync(string roomId, RoomJoinOptions options, CancellationToken cancellationToken = default)
+        public async UniTask<IRoom> JoinByIdAsync(string roomId, RoomJoinOptions options, CancellationToken cancellationToken = default)
         {
             EnsureReady();
-            return ulong.TryParse(roomId, NumberStyles.None, CultureInfo.InvariantCulture, out ulong lobby) && lobby != 0
-                ? JoinAsync(lobby, options, cancellationToken)
-                : throw new RoomException(RoomFailure.NotFound);
+            if (!ulong.TryParse(roomId, NumberStyles.None, CultureInfo.InvariantCulture, out ulong lobby) || lobby == 0)
+                throw new RoomException(RoomFailure.NotFound);
+            inFlight = true;
+            try
+            {
+                return await JoinAsync(lobby, options, cancellationToken);
+            }
+            finally
+            {
+                inFlight = false;
+            }
         }
 
         /// <summary>Opens the Steam overlay invite dialog for the current room.</summary>
@@ -107,6 +133,7 @@ namespace Bun3.Unity.Rooms.Steam
         {
             api.LobbyJoinRequested -= OnLobbyJoinRequested;
             api.RichPresenceJoinRequested -= OnRichPresenceJoinRequested;
+            api.LobbyEntered -= OnLobbyEntered;
             (api as IDisposable)?.Dispose();
         }
 
@@ -165,6 +192,14 @@ namespace Bun3.Unity.Rooms.Steam
         {
             if (!api.IsAvailable) throw new RoomException(RoomFailure.ServiceUnavailable);
             if (current != null) throw new InvalidOperationException("Leave the current room first.");
+            if (inFlight) throw new InvalidOperationException("Another room operation is still running.");
+        }
+
+        // Steam enters a lobby even after its request was abandoned; leave it so no orphan lobby or ghost member remains.
+        // Ceiling: a late enter that arrives while a NEW operation is in flight is not left.
+        private void OnLobbyEntered(ulong lobby)
+        {
+            if (!inFlight && (current == null || current.Lobby != lobby)) api.LeaveLobby(lobby);
         }
 
         private void OnLobbyJoinRequested(ulong lobby) => JoinRequested?.Invoke(lobby.ToString(CultureInfo.InvariantCulture));

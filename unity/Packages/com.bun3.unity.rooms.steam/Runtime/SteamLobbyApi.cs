@@ -12,6 +12,7 @@ namespace Bun3.Unity.Rooms.Steam
         private readonly Callback<LobbyDataUpdate_t> dataUpdated;
         private readonly Callback<LobbyChatUpdate_t> chatUpdated;
         private readonly Callback<LobbyKicked_t> kicked;
+        private readonly Callback<LobbyEnter_t> entered;
         private readonly Callback<GameLobbyJoinRequested_t> lobbyJoinRequested;
         private readonly Callback<GameRichPresenceJoinRequested_t> presenceJoinRequested;
 
@@ -21,6 +22,11 @@ namespace Bun3.Unity.Rooms.Steam
             chatUpdated = Callback<LobbyChatUpdate_t>.Create(data =>
                 LobbyChatUpdated?.Invoke(data.m_ulSteamIDLobby, data.m_ulSteamIDUserChanged, data.m_rgfChatMemberStateChange));
             kicked = Callback<LobbyKicked_t>.Create(data => LobbyKicked?.Invoke(data.m_ulSteamIDLobby));
+            entered = Callback<LobbyEnter_t>.Create(data =>
+            {
+                if (data.m_EChatRoomEnterResponse == (uint)EChatRoomEnterResponse.k_EChatRoomEnterResponseSuccess)
+                    LobbyEntered?.Invoke(data.m_ulSteamIDLobby);
+            });
             lobbyJoinRequested = Callback<GameLobbyJoinRequested_t>.Create(data => LobbyJoinRequested?.Invoke(data.m_steamIDLobby.m_SteamID));
             presenceJoinRequested = Callback<GameRichPresenceJoinRequested_t>.Create(data => RichPresenceJoinRequested?.Invoke(data.m_rgchConnect));
         }
@@ -33,6 +39,7 @@ namespace Bun3.Unity.Rooms.Steam
         public event Action<ulong, ulong> LobbyDataUpdated;
         public event Action<ulong, ulong, uint> LobbyChatUpdated;
         public event Action<ulong> LobbyKicked;
+        public event Action<ulong> LobbyEntered;
         public event Action<ulong> LobbyJoinRequested;
         public event Action<string> RichPresenceJoinRequested;
 
@@ -79,6 +86,7 @@ namespace Bun3.Unity.Rooms.Steam
             dataUpdated.Dispose();
             chatUpdated.Dispose();
             kicked.Dispose();
+            entered.Dispose();
             lobbyJoinRequested.Dispose();
             presenceJoinRequested.Dispose();
         }

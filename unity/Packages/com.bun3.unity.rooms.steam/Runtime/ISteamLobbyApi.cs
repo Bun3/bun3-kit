@@ -33,6 +33,8 @@ namespace Bun3.Unity.Rooms.Steam
         event Action<ulong, ulong> LobbyDataUpdated;
         event Action<ulong, ulong, uint> LobbyChatUpdated;
         event Action<ulong> LobbyKicked;
+        // Raised for every successfully entered lobby, including ones whose request was abandoned.
+        event Action<ulong> LobbyEntered;
         event Action<ulong> LobbyJoinRequested;
         event Action<string> RichPresenceJoinRequested;
     }

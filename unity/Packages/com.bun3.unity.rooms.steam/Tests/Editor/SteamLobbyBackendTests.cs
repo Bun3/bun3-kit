@@ -206,6 +206,46 @@ namespace Bun3.Unity.Rooms.Steam.Tests
             Assert.That(await backend.CreateAsync(Create), Is.Not.Null);
         });
 
+        [UnityTest]
+        public IEnumerator AbandonedJoinIsLeftWhenSteamLateEntersIt() => UniTask.ToCoroutine(async () =>
+        {
+            ulong lobby = api.AddLobby(Friend, "ABC234", "0.1", "900");
+            api.JoinTimesOut = true;
+            Assert.That(await FailureAsync(() => backend.JoinByIdAsync(lobby.ToString(), Join())), Is.EqualTo(RoomFailure.ServiceUnavailable));
+            api.JoinTimesOut = false;
+            api.RaiseLobbyEntered(lobby);
+            Assert.That(api.Left, Does.Contain(lobby));
+            Assert.That(await backend.CreateAsync(Create), Is.Not.Null);
+        });
+
+        [UnityTest]
+        public IEnumerator EntersDuringNormalCallsAreNotLeft() => UniTask.ToCoroutine(async () =>
+        {
+            var created = await backend.CreateAsync(Create);
+            Assert.That(api.Left, Is.Empty);
+            await created.LeaveAsync();
+            api.Left.Clear();
+            ulong lobby = api.AddLobby(Friend, "ABC234", "0.1", "900");
+            var joined = await backend.JoinByIdAsync(lobby.ToString(), Join());
+            Assert.That(api.Left, Is.Empty);
+            api.RaiseLobbyEntered(lobby);
+            Assert.That(api.Left, Is.Empty, "The current room's lobby is never left.");
+            Assert.That(joined.Id, Is.EqualTo(lobby.ToString()));
+        });
+
+        [UnityTest]
+        public IEnumerator OverlappingOperationsAreRejected() => UniTask.ToCoroutine(async () =>
+        {
+            ulong lobby = api.AddLobby(Friend, "ABC234", "0.1", "900");
+            api.JoinGate = new UniTaskCompletionSource<uint>();
+            var first = backend.JoinByIdAsync(lobby.ToString(), Join());
+            Assert.ThrowsAsync<InvalidOperationException>(async () => await backend.CreateAsync(Create));
+            Assert.ThrowsAsync<InvalidOperationException>(async () => await backend.JoinByIdAsync(lobby.ToString(), Join()));
+            api.Lobbies[lobby].Members.Add(Me);
+            api.JoinGate.TrySetResult((uint)EChatRoomEnterResponse.k_EChatRoomEnterResponseSuccess);
+            Assert.That((await first).Id, Is.EqualTo(lobby.ToString()));
+        });
+
         [Test]
         public void OverlayAndJoinGameRequestsReachJoinRequested()
         {
