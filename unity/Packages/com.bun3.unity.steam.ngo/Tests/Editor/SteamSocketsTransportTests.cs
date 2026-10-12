@@ -142,6 +142,24 @@ namespace Bun3.Unity.Steam.Ngo.Tests
             Assert.That(transport.DisconnectEvent, Is.EqualTo(NetworkTransport.DisconnectEvents.ProtocolTimeout));
         }
 
+        [Test]
+        public void RttIsCachedBetweenRefreshes()
+        {
+            double now = 100;
+            transport.Clock = () => now;
+            transport.TargetSteamId = 55;
+            transport.StartClient();
+
+            Assert.That(transport.GetCurrentRtt(transport.ServerClientId), Is.EqualTo(42ul));
+            now += 0.5;
+            transport.GetCurrentRtt(transport.ServerClientId);
+            Assert.That(sockets.PingCalls, Is.EqualTo(1), "Within the interval the cached value is returned.");
+
+            now += 1;
+            transport.GetCurrentRtt(transport.ServerClientId);
+            Assert.That(sockets.PingCalls, Is.EqualTo(2), "After the interval Steam is queried again.");
+        }
+
         [TestCase(NetworkDelivery.Reliable, true)]
         [TestCase(NetworkDelivery.ReliableSequenced, true)]
         [TestCase(NetworkDelivery.ReliableFragmentedSequenced, true)]

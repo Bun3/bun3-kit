@@ -16,8 +16,10 @@ namespace Bun3.Unity.Steam.Ngo
     public sealed class SteamSocketsTransport : NetworkTransport
     {
         private const ulong HostTransportId = 0;
+        private const double RttRefreshSeconds = 1;
         private readonly Queue<PendingEvent> events = new Queue<PendingEvent>();
         private readonly Dictionary<ulong, ulong> steamIds = new Dictionary<ulong, ulong>();
+        private readonly Dictionary<uint, (double At, ulong Rtt)> rtts = new Dictionary<uint, (double At, ulong Rtt)>();
         private byte[] buffer = new byte[1200];
         private ISteamSockets sockets;
         private uint listenSocket;
@@ -45,6 +47,8 @@ namespace Bun3.Unity.Steam.Ngo
             get => sockets ??= new SteamSockets();
             set => sockets = value;
         }
+
+        internal Func<double> Clock { get; set; } = () => Time.realtimeSinceStartupAsDouble;
 
         /// <summary>SteamID behind a transport id: a host's clients, or the host from a client.</summary>
         public bool TryGetSteamId(ulong transportId, out ulong steamId) => steamIds.TryGetValue(transportId, out steamId);
@@ -137,12 +141,14 @@ namespace Bun3.Unity.Steam.Ngo
         public override void DisconnectRemoteClient(ulong clientId)
         {
             if (steamIds.Remove(clientId)) Sockets.Close((uint)clientId, true);
+            rtts.Remove((uint)clientId);
         }
 
         /// <inheritdoc/>
         public override void DisconnectLocalClient()
         {
             if (hostConnection != 0) Sockets.Close(hostConnection, true);
+            rtts.Remove(hostConnection);
             hostConnection = 0;
         }
 
@@ -150,7 +156,13 @@ namespace Bun3.Unity.Steam.Ngo
         public override ulong GetCurrentRtt(ulong clientId)
         {
             uint connection = joined ? hostConnection : (uint)clientId;
-            return connection == 0 ? 0 : (ulong)Math.Max(0, Sockets.GetPing(connection));
+            if (connection == 0) return 0;
+            // Steam's status query allocates managed arrays, and NGO asks every frame.
+            double now = Clock();
+            if (rtts.TryGetValue(connection, out var cached) && now - cached.At < RttRefreshSeconds) return cached.Rtt;
+            ulong rtt = (ulong)Math.Max(0, Sockets.GetPing(connection));
+            rtts[connection] = (now, rtt);
+            return rtt;
         }
 
         /// <inheritdoc/>
@@ -165,6 +177,7 @@ namespace Bun3.Unity.Steam.Ngo
             if (pollGroup != 0) sockets.DestroyPollGroup(pollGroup);
             sockets.DiscardReceived();
             steamIds.Clear();
+            rtts.Clear();
             events.Clear();
             listenSocket = 0;
             pollGroup = 0;
@@ -207,6 +220,7 @@ namespace Bun3.Unity.Steam.Ngo
                 case ESteamNetworkingConnectionState.k_ESteamNetworkingConnectionState_ClosedByPeer:
                 case ESteamNetworkingConnectionState.k_ESteamNetworkingConnectionState_ProblemDetectedLocally:
                     Sockets.Close(status.Connection, false);
+                    rtts.Remove(status.Connection);
                     var reason = status.State == ESteamNetworkingConnectionState.k_ESteamNetworkingConnectionState_ClosedByPeer
                         ? DisconnectEvents.ClosedByRemote
                         : DisconnectEvents.ProtocolTimeout;

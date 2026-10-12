@@ -16,6 +16,7 @@ namespace Bun3.Unity.Steam.Ngo.Tests
         public uint PollGroup = 20;
         public uint OutgoingConnection = 30;
         public int RelayInits;
+        public int PingCalls;
         public bool ListenSocketClosed;
         public ulong ConnectedTo;
 
@@ -64,7 +65,11 @@ namespace Bun3.Unity.Steam.Ngo.Tests
         }
 
         public void DiscardReceived() => Inbox.Clear();
-        public int GetPing(uint connection) => 42;
+        public int GetPing(uint connection)
+        {
+            PingCalls++;
+            return 42;
+        }
 
         public void Raise(uint connection, ulong remote, ESteamNetworkingConnectionState state, uint listenSocket) =>
             StatusChanged?.Invoke(new SteamConnectionStatus(connection, listenSocket, remote, state));
