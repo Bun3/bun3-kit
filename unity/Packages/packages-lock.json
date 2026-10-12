@@ -121,6 +121,14 @@
       "source": "embedded",
       "dependencies": {}
     },
+    "com.bun3.unity.steam": {
+      "version": "file:com.bun3.unity.steam",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {
+        "com.bun3.unity.core": "0.5.2"
+      }
+    },
     "com.bun3.unity.ui": {
       "version": "file:com.bun3.unity.ui",
       "depth": 0,
@@ -168,6 +176,13 @@
       "source": "git",
       "dependencies": {},
       "hash": "168b6f4f2a7dcf4164aab93db81754bae737de40"
+    },
+    "com.rlabrecque.steamworks.net": {
+      "version": "https://github.com/rlabrecque/Steamworks.NET.git?path=/com.rlabrecque.steamworks.net",
+      "depth": 0,
+      "source": "git",
+      "dependencies": {},
+      "hash": "ba71581f1ed7349e8d0f17ddc6f135dd3bc8a6a3"
     },
     "com.unity.2d.animation": {
       "version": "13.0.5",
