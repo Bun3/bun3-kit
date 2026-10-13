@@ -14,6 +14,10 @@ namespace Bun3.BadWords.Tests
         [TestCase("b1tch")]
         [TestCase("f u c k")]
         [TestCase("fuuuck")]
+        [TestCase("개새끼")]
+        [TestCase("개 새끼")]
+        [TestCase("미친새끼")]
+        [TestCase("장애새끼")]
         public void BlocksStrongWords(string text) =>
             Assert.That(BadWordFilter.Default.ContainsBadWord(text), Is.True, text);
 
@@ -45,6 +49,36 @@ namespace Bun3.BadWords.Tests
         [TestCase("H")]
         [TestCase("Cocoon")]
         public void PassesOrdinaryText(string text) =>
+            Assert.That(BadWordFilter.Default.ContainsBadWord(text), Is.False, BadWordFilter.Default.Explain(text));
+
+        // Owner decision (2026-10-13): arguable words pass; compounds such as 개새끼 stay blocked.
+        [TestCase("개드립")]
+        [TestCase("개소리")]
+        [TestCase("운지")]
+        [TestCase("새끼")]
+        [TestCase("빨갱이")]
+        [TestCase("급식충")]
+        [TestCase("김치녀")]
+        [TestCase("꺼져")]
+        [TestCase("또라이")]
+        [TestCase("듣보잡")]
+        [TestCase("domination")]
+        [TestCase("collared")]
+        [TestCase("collaring")]
+        [TestCase("fingering")]
+        [TestCase("fingered")]
+        [TestCase("intercourse")]
+        [TestCase("nude")]
+        [TestCase("topless")]
+        [TestCase("bareback")]
+        [TestCase("skeet")]
+        [TestCase("playboy")]
+        [TestCase("bastard")]
+        [TestCase("panties")]
+        [TestCase("grope")]
+        [TestCase("enby")]
+        [TestCase("cishet")]
+        public void PassesOwnerAllowedWords(string text) =>
             Assert.That(BadWordFilter.Default.ContainsBadWord(text), Is.False, BadWordFilter.Default.Explain(text));
 
         [Test]
