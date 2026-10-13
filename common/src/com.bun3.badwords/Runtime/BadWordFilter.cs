@@ -32,7 +32,7 @@ namespace Bun3.BadWords
         /// Entries containing Hangul are Korean; others are English.
         /// </param>
         /// <exception cref="ArgumentNullException"><paramref name="entries"/> is null.</exception>
-        /// <exception cref="ArgumentException">An entry is null, has no letters, mixes Hangul with other characters, or puts a boundary on a Korean word.</exception>
+        /// <exception cref="ArgumentException">An entry is null, has no letters, has letters of another script, mixes Hangul with other characters, or puts a boundary on a Korean word.</exception>
         public BadWordFilter(IEnumerable<string> entries)
         {
             if (entries == null) throw new ArgumentNullException(nameof(entries));
@@ -120,14 +120,17 @@ namespace Bun3.BadWords
                 body = body.Substring(0, body.Length - 1);
             }
 
-            bool hangul = false, latin = false, other = false;
+            bool hangul = false, latin = false, foreign = false, other = false;
             foreach (char c in body)
             {
                 char clean = TextNormalizer.Clean(c);
                 if (TextNormalizer.IsHangul(clean)) hangul = true;
-                else if (TextNormalizer.IsLatinLetter(clean)) latin = true;
+                // Raw look-alikes count as foreign: Cyrillic "хуй" would otherwise register as the Latin "xy".
+                else if (TextNormalizer.IsLatinLetter(clean) && TextNormalizer.Lookalike(c) == TextNormalizer.Removed) latin = true;
+                else if (clean != TextNormalizer.Removed && char.IsLetter(c)) foreign = true;
                 else if (clean != TextNormalizer.Removed && !char.IsWhiteSpace(clean)) other = true;
             }
+            if (foreign) throw Malformed(entry, "has letters other than Hangul or Latin");
             if (!hangul && !latin) throw Malformed(entry, "has no Hangul or Latin letters");
             // Stream A drops non-Hangul characters, so a Korean entry with digits or symbols would silently shrink.
             if (hangul && (latin || other)) throw Malformed(entry, "mixes Hangul with other characters");

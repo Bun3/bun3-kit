@@ -22,7 +22,7 @@ static readonly BadWordFilter Filter = new BadWordFilter(BadWordFilter.DefaultEn
 
 ## Entry grammar
 
-`[!][|]word[|]` — `!` allow entry (suppresses block matches it fully covers), `|` word boundary before/after (English only). Entries containing Hangul are Korean; others are English.
+`[!][|]word[|]` — `!` allow entry (suppresses block matches it fully covers), `|` word boundary before/after (English only). Entries containing Hangul are Korean; others are English. Entries with letters of any other script, Cyrillic/Greek look-alikes included, are rejected.
 
 ## What is normalized
 

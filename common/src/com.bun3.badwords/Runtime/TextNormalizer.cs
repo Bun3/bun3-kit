@@ -172,7 +172,7 @@ namespace Bun3.BadWords
         };
 
         // Subset of Unicode UTS #39 confusables: Cyrillic and Greek letters drawn like Latin letters.
-        static char Lookalike(char c) => c switch
+        internal static char Lookalike(char c) => c switch
         {
             '\u0430' or '\u0410' or '\u03B1' or '\u0391' => 'a',
             '\u0412' or '\u0392' => 'b',

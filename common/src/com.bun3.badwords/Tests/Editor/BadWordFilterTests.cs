@@ -110,6 +110,10 @@ namespace Bun3.BadWords.Tests
         [TestCase("18놈")]
         [TestCase("|시발")]
         [TestCase("\u4E2D\u56FD")]
+        [TestCase("\u0445\u0443\u0439")]
+        [TestCase("fu\u0441k")]
+        [TestCase("\u03B1\u03B2\u03B3")]
+        [TestCase("stra\u00DFe")]
         public void MalformedEntryThrows(string entry) =>
             Assert.Throws<ArgumentException>(() => new BadWordFilter(new[] { entry }));
 
