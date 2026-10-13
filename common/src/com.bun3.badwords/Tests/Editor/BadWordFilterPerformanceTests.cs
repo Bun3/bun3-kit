@@ -17,13 +17,14 @@ namespace Bun3.BadWords.Tests
         {
             string shortText = "시1발 f.u.c.k 시발점 tlqkf class";
             string longText = new string('a', 300) + " fuck";
-            string cleanText = "hello world 다시 발견 class Player One";
+            // Clean texts must not match so every scan runs; the asserts also warm up the code paths.
+            string cleanText = "hello world class Player One 안녕하세요";
             string cleanLong = cleanText;
             while (cleanLong.Length <= 300) cleanLong += " " + cleanText;
-            filter.ContainsBadWord(shortText);
-            filter.ContainsBadWord(longText);
-            filter.ContainsBadWord(cleanText);
-            filter.ContainsBadWord(cleanLong);
+            Assert.That(filter.ContainsBadWord(shortText), Is.True);
+            Assert.That(filter.ContainsBadWord(longText), Is.True);
+            Assert.That(filter.ContainsBadWord(cleanText), Is.False);
+            Assert.That(filter.ContainsBadWord(cleanLong), Is.False);
 #if UNITY_5_3_OR_NEWER
             Assert.That(() =>
             {
