@@ -168,7 +168,6 @@
 쎼끼
 쌬끼
 샠끼
-세끼
 샊
 쌖
 섺
@@ -1434,7 +1433,7 @@
 후레자식
 
 # == owner decision 2026-10-13 ==
-# Standalone 새끼 and other arguable words pass; compounds that relied on the standalone 새끼 entry stay blocked.
+# Standalone 새끼, 세끼 (meals) and other arguable words pass; compounds that relied on the standalone 새끼 entry stay blocked.
 개새끼
 미친새끼
 장애새끼

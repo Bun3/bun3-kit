@@ -171,7 +171,6 @@ namespace Bun3.BadWords
             "\uC3BC\uB07C",
             "\uC32C\uB07C",
             "\uC0E0\uB07C",
-            "\uC138\uB07C",
             "\uC0CA",
             "\uC316",
             "\uC13A",

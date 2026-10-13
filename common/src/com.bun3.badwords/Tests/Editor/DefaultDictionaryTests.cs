@@ -18,6 +18,7 @@ namespace Bun3.BadWords.Tests
         [TestCase("개 새끼")]
         [TestCase("미친새끼")]
         [TestCase("장애새끼")]
+        [TestCase("개세끼")]
         public void BlocksStrongWords(string text) =>
             Assert.That(BadWordFilter.Default.ContainsBadWord(text), Is.True, text);
 
@@ -48,6 +49,7 @@ namespace Bun3.BadWords.Tests
         [TestCase("Siva")]
         [TestCase("H")]
         [TestCase("Cocoon")]
+        [TestCase("세끼")]
         public void PassesOrdinaryText(string text) =>
             Assert.That(BadWordFilter.Default.ContainsBadWord(text), Is.False, BadWordFilter.Default.Explain(text));
 
