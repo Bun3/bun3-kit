@@ -1,0 +1,11 @@
+syntax = "proto3";
+option csharp_namespace = "Bun3.Server.Tests.Protos";
+message TrackedOptions {
+  repeated TrackedOptionEntry reroll_options = 2;
+  TrackedOptionEntry product_option = 15;
+}
+message TrackedOptionEntry {
+  int32 id = 1;
+  int32 pool_id = 2;
+  int32 level = 3;
+}

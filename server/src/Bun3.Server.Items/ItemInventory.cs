@@ -11,12 +11,21 @@ namespace Bun3.Server.Items
     /// made exactly once internally from catalog metadata: stackables auto-merge into a
     /// singleton instance per definition, unstackables are N amount-1 instances. Amounts are
     /// <see cref="BigNum"/> (long converts implicitly).
-    /// All mutating operations are atomic; on failure the inventory is fully unchanged.
+    /// Mutating operations are atomic on validation failure. Notification exceptions leave the
+    /// applied state committed; independent channels are attempted and failed batches are not replayed.
     /// No locks (single-threaded session-actor contract).
     /// Query, enumeration, and consume paths are allocation-free; only instance creation
     /// allocates (low frequency).
     /// File layout: this file (construction, queries) / Operations (grant, consume, transactions) /
-    /// Crafting / Rewards / Regen / Transfer / Tracking (change tracking, load).
+    /// Crafting / Rewards / Regen / Transfer / Tracking (change tracking, load) /
+    /// Transaction (session transaction participation) / StateTracking (generated state journal) /
+    /// Notifications (stable batch delivery).
+    /// Failure reporting follows one rule across the outgame packages: domain failures the caller
+    /// must handle are returned (<see cref="InventoryError"/>), while programmer errors and save
+    /// data corruption throw.
+    /// Rollback buffers are created on the first mutation in an active transaction and reused.
+    /// The transaction is in-memory only, so a database commit cannot take part in it — claim
+    /// idempotency across the in-memory and persisted boundaries is the game's responsibility.
     /// </summary>
     /// <typeparam name="TState">Game-defined instance state type.</typeparam>
     public sealed partial class ItemInventory<TState>
@@ -29,10 +38,10 @@ namespace Bun3.Server.Items
         private readonly ItemCatalog _catalog;
         private readonly Func<long> _instanceIdIssuer;
         private readonly Func<ItemId, TState> _stateFactory;
-        private readonly Action? _onChanged;
+        private readonly Action? _onDirty;
         private readonly uint _removeBlockingFlags;
         private readonly Dictionary<long, ItemInstance<TState>> _instances;
-        private readonly Dictionary<ItemId, long> _stackSingletons;
+        private readonly Dictionary<ItemId, List<ItemInstance<TState>>> _instancesByItem;
         private readonly List<long> _removed = new List<long>();
         private readonly List<ItemInstance<TState>> _removeScratch = new List<ItemInstance<TState>>();
         private bool _hasChanges;
@@ -61,45 +70,67 @@ namespace Bun3.Server.Items
         private readonly ActionLog? _log;
         private readonly string? _logLabel;
 
+        // Session-wide transaction — when unset, no rollback storage is created.
+        private readonly Transaction? _transaction;
+
+        // Independent-copy delegate for mutable TState — used only by BeginStateChange inside a transaction.
+        private readonly Func<TState, TState>? _snapshotState;
+
         /// <summary>Creates the inventory.</summary>
         /// <param name="catalog">Item catalog.</param>
         /// <param name="instanceIdIssuer">Instance id issuer — must be unique across sessions
         /// (snowflake, hi-lo, DB sequence, etc. is the game's choice). Called only after validation passes.</param>
         /// <param name="stateFactory">Initial state factory for created instances.</param>
         /// <param name="capacity">Initial capacity (0 = default).</param>
-        /// <param name="onChanged">Called once per successful mutating operation plus once per
+        /// <param name="onDirty">Called once per successful mutating operation plus once per
         /// <see cref="ItemInstance{TState}.MarkChanged"/> — games pass Player.MarkDirty to tie
         /// into the save cadence.</param>
         /// <param name="removeBlockingFlags">Instances with flags matching this mask are excluded
         /// as consume candidates (e.g. in use, user-locked). 0 = no locking.</param>
         /// <param name="onApplied">Called once per successful commit with the applied net deltas —
-        /// for achievement/quest/ranking counting. No recording cost when unset.</param>
+        /// for achievement/quest/ranking counting. Synchronous reentry is supported: the span
+        /// remains unchanged until the callback returns. Log rows are recorded before reaction
+        /// hooks. No recording cost when both this handler and the log are unset.</param>
         /// <param name="log">Session-wide action log (<see cref="ActionLog"/>) — when set, every
         /// change of this inventory (delta and balance) is auto-attached to the currently open scope.
         /// Multiple inventories may share one log to land in a single action tree.</param>
         /// <param name="logLabel">Label distinguishing the change source when inventories share a log
         /// (e.g. "bag"/"warehouse").</param>
+        /// <param name="transaction">Session-wide transaction (<see cref="Transaction"/>) — when
+        /// set, changes made while it is open are reversible and notifications are buffered until
+        /// commit. Rollback storage is created only on the first active mutation, then retained
+        /// for reuse. No storage is created before that first mutation.</param>
+        /// <param name="snapshotState">Creates an independent copy of the saved pre-transaction
+        /// state when the first <see cref="ItemInstance{TState}.BeginStateChange"/> scope opens in
+        /// that transaction. Copy all mutable data owned by the state, including nested data in
+        /// value types; immutable data may be shared. The delegate must not modify its input or
+        /// reenter the inventory. Leave null for setter-only or generated state changes.
+        /// Generated state tracks edits without this delegate and cannot use mutable change scopes.</param>
         public ItemInventory(
             ItemCatalog catalog,
             Func<long> instanceIdIssuer,
             Func<ItemId, TState> stateFactory,
             int capacity = 0,
-            Action? onChanged = null,
+            Action? onDirty = null,
             uint removeBlockingFlags = 0,
             InventoryAppliedHandler? onApplied = null,
             ActionLog? log = null,
-            string? logLabel = null)
+            string? logLabel = null,
+            Transaction? transaction = null,
+            Func<TState, TState>? snapshotState = null)
         {
             _onApplied = onApplied;
             _log = log;
             _logLabel = logLabel;
+            _transaction = transaction;
+            _snapshotState = snapshotState;
             _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
             _instanceIdIssuer = instanceIdIssuer ?? throw new ArgumentNullException(nameof(instanceIdIssuer));
             _stateFactory = stateFactory ?? throw new ArgumentNullException(nameof(stateFactory));
-            _onChanged = onChanged;
+            _onDirty = onDirty;
             _removeBlockingFlags = removeBlockingFlags;
             _instances = new Dictionary<long, ItemInstance<TState>>(capacity);
-            _stackSingletons = new Dictionary<ItemId, long>();
+            _instancesByItem = new Dictionary<ItemId, List<ItemInstance<TState>>>();
         }
 
         /// <summary>The catalog this inventory is bound to.</summary>
@@ -112,23 +143,36 @@ namespace Bun3.Server.Items
         /// instance count for unstackables. 0 if not held.</summary>
         public BigNum GetQuantity(ItemId item)
         {
-            if (_stackSingletons.TryGetValue(item, out var singletonId))
+            if (TryGetSingleton(item, out var singleton))
             {
-                return _instances[singletonId].Quantity;
+                return singleton.Quantity;
             }
 
-            long count = 0;
-            // ponytail: full scan without a per-definition index (O(instance count)) — assumes
-            // player inventories in the hundreds.
-            foreach (var entry in _instances)
+            var held = GetHeld(item);
+            return held == null ? BigNum.Zero : (BigNum)(long)held.Count;
+        }
+
+        /// <summary>Held instances of the definition, or null when none are held. The list is
+        /// reused across refills, so an empty list is treated as "not held".</summary>
+        private List<ItemInstance<TState>>? GetHeld(ItemId item) =>
+            _instancesByItem.TryGetValue(item, out var held) && held.Count > 0 ? held : null;
+
+        /// <summary>The stack singleton of a stackable definition. False for unstackables and for
+        /// definitions with nothing held.</summary>
+        private bool TryGetSingleton(ItemId item, out ItemInstance<TState> singleton)
+        {
+            if (!_catalog.IsUnstackable(item))
             {
-                if (entry.Value.Item == item)
+                var held = GetHeld(item);
+                if (held != null)
                 {
-                    count++;
+                    singleton = held[0];
+                    return true;
                 }
             }
 
-            return count;
+            singleton = null!;
+            return false;
         }
 
         /// <summary>Looks up an instance by id.</summary>
@@ -152,17 +196,18 @@ namespace Bun3.Server.Items
                 throw new ArgumentNullException(nameof(buffer));
             }
 
-            var count = 0;
-            foreach (var entry in _instances)
+            var held = GetHeld(item);
+            if (held == null)
             {
-                if (entry.Value.Item == item)
-                {
-                    buffer.Add(entry.Value);
-                    count++;
-                }
+                return 0;
             }
 
-            return count;
+            for (var i = 0; i < held.Count; i++)
+            {
+                buffer.Add(held[i]);
+            }
+
+            return held.Count;
         }
 
         /// <summary>Appends expired instances (<see cref="ItemInstance{TState}.ExpiresAtTicksUtc"/>

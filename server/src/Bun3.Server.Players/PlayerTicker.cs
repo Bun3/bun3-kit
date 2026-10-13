@@ -10,7 +10,7 @@ namespace Bun3.Server.Players
 {
     /// <summary>
     /// TickLoop job driving tick/periodic save for connected players. Iteration (tick loop thread)
-    /// only posts; execution happens inside each Player's current session actor (zero locks).
+    /// only posts; execution happens inside each Player's current session actor and execution ownership.
     /// Players in grace are skipped — they were saved immediately on detach, so they are always saved.
     /// Hosting (AddPlayerServer) wires this automatically; non-hosting calls Register directly.
     /// </summary>
@@ -26,6 +26,7 @@ namespace Bun3.Server.Players
         public PlayerTicker(PlayerRegistry<TPlayer> registry, PlayersOptions? options = null, ILogger? logger = null)
         {
             _registry = registry ?? throw new ArgumentNullException(nameof(registry));
+            registry.RequireSessionSupport();
             var effective = options ?? new PlayersOptions();
             _tickInterval = effective.PlayerTickInterval;
             _saveInterval = effective.SaveInterval;
@@ -98,7 +99,7 @@ namespace Bun3.Server.Players
             if (now >= player.NextSaveAtTicksUtc && player.IsDirty)
             {
                 player.NextSaveAtTicksUtc = now + _saveInterval.Ticks;
-                await player.TrySaveAsync(_logger).ConfigureAwait(false);
+                await _registry.SaveAsync(player).ConfigureAwait(false);
             }
         };
     }

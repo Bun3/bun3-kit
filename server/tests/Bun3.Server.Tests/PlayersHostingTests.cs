@@ -20,7 +20,7 @@ public class PlayersHostingTests
         public long Gold = 100;
         public readonly TaskCompletionSource<bool> Retired = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        protected override ValueTask OnRetiredAsync()
+        protected internal override ValueTask OnRetiredAsync()
         {
             Retired.TrySetResult(true);
             return default;

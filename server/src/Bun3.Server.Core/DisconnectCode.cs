@@ -24,5 +24,8 @@ namespace Bun3.Server.Core
         /// <summary>Protocol violation judged by the Rpc layer (unknown channel, parse failure, etc.).
         /// Transport-level disconnects (packet size exceeded) cannot carry a reason.</summary>
         public const int ProtocolViolation = 5;
+
+        /// <summary>Player state was discarded after a persistence or mutation failure.</summary>
+        public const int PersistenceFailure = 6;
     }
 }

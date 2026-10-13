@@ -21,20 +21,20 @@ public class PlayersTests
         public readonly TaskCompletionSource<bool> Detached = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public readonly TaskCompletionSource<bool> Retired = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        protected override ValueTask OnAttachedAsync(bool isReconnect)
+        protected internal override ValueTask OnAttachedAsync(bool isReconnect)
         {
             AttachedReconnectFlags.Add(isReconnect);
             return default;
         }
 
-        protected override ValueTask OnDetachedAsync()
+        protected internal override ValueTask OnDetachedAsync()
         {
             DetachedCalls++;
             Detached.TrySetResult(true);
             return default;
         }
 
-        protected override ValueTask OnRetiredAsync()
+        protected internal override ValueTask OnRetiredAsync()
         {
             Retired.TrySetResult(true);
             return default;

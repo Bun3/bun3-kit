@@ -16,6 +16,7 @@ namespace Bun3.Server.Rpc
         ILogger Logger { get; }
         ValueTask ProcessPacketAsync(RpcSession session, ReadOnlyMemory<byte> packet);
         ValueTask SendUpdateAsync(Session session, IMessage update);
+        byte[] EncodeUpdate(IMessage update);
     }
 
     /// <summary>Channel branching, request dispatch, and response assembly — the server-side messaging core. All state is built at startup.</summary>
@@ -72,13 +73,16 @@ namespace Bun3.Server.Rpc
             }
         }
 
-        public ValueTask SendUpdateAsync(Session session, IMessage update)
+        public ValueTask SendUpdateAsync(Session session, IMessage update) =>
+            session.SendAsync(EncodeUpdate(update));
+
+        public byte[] EncodeUpdate(IMessage update)
         {
             var updateCase = _schema.UpdateMap.ByPayloadType(update.GetType())
                 ?? throw new ArgumentException($"Type not in Update oneof: {update.GetType().Name}", nameof(update));
             var envelope = new TUpdate();
             updateCase.Set(envelope, update);
-            return SendAsync(session, Channels.Update, envelope);
+            return PacketWriter.Wrap(Channels.Update, envelope);
         }
 
         private async ValueTask HandleControlAsync(RpcSession session, ReadOnlyMemory<byte> body)
@@ -147,8 +151,8 @@ namespace Bun3.Server.Rpc
             {
                 try
                 {
-                    (status, responsePayload) = await registration
-                        .Invoke((TSession)session, requestCase.Get(envelope)!)
+                    (status, responsePayload) = await session
+                        .InvokeRequestAsync(requestCase.Get(envelope)!, registration.Invoke)
                         .ConfigureAwait(false);
                 }
                 catch (Exception ex)

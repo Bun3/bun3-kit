@@ -1,7 +1,9 @@
 using System.Collections.Concurrent;
 using Bun3.Server.Abstractions;
+using Bun3.Server.Core;
 using Bun3.Server.Rpc;
 using Bun3.Server.Tests.PlayersProtocol;
+using Bun3.Server.Tests.Helpers;
 using Bun3.Server.Transport.Tcp;
 using Microsoft.Extensions.Logging;
 using NUnit.Framework;
@@ -12,6 +14,86 @@ namespace Bun3.Server.Tests;
 public class SessionPostTests
 {
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(5);
+
+    private sealed class ScopeSession : Session
+    {
+        public readonly ConcurrentQueue<string> Events = new();
+        public readonly TaskCompletionSource Disconnected = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public readonly TaskCompletionSource PostedHookFinished = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public ScopeSession(IConnection connection) : base(connection) { }
+        protected override IDisposable EnterExecutionScope()
+        {
+            Events.Enqueue("enter");
+            return new ScopeExit(Events);
+        }
+        protected override async ValueTask OnPostedWorkAsync(Func<ValueTask> work)
+        {
+            Events.Enqueue("hook-start");
+            await work();
+            Events.Enqueue("hook-end");
+            PostedHookFinished.TrySetResult();
+        }
+        protected override ValueTask OnPacketAsync(ReadOnlyMemory<byte> packet) => default;
+        protected override ValueTask OnDisconnectedAsync(Exception? error)
+        {
+            Events.Enqueue("disconnect");
+            Disconnected.TrySetResult();
+            throw new InvalidOperationException("disconnect failure");
+        }
+    }
+
+    private sealed class ScopeExit : IDisposable
+    {
+        private readonly ConcurrentQueue<string> _events;
+        public ScopeExit(ConcurrentQueue<string> events) => _events = events;
+        public void Dispose() => _events.Enqueue("exit");
+    }
+
+    private sealed class ScopeServer : ServerBase<ScopeSession>
+    {
+        public ScopeServer(ITransportListener transport) : base(transport) { }
+        protected override ScopeSession CreateSession(IConnection connection) => new(connection);
+    }
+
+    [Test]
+    public async Task Posted_work_uses_hook()
+    {
+        var transport = new FakeTransport();
+        var server = new ScopeServer(transport);
+        await server.StartAsync();
+        try
+        {
+            transport.Connect(1);
+            var session = server.Sessions.Single();
+            var done = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            Assert.That(session.Post(async () =>
+            {
+                session.Events.Enqueue("work-start");
+                await Task.Yield();
+                session.Events.Enqueue("work-end");
+                done.TrySetResult();
+            }), Is.True);
+            await done.Task.WaitAsync(Timeout);
+            await session.PostedHookFinished.Task.WaitAsync(Timeout);
+            Assert.That(session.Events.ToArray(), Is.EqualTo(new[]
+                { "enter", "hook-start", "work-start", "work-end", "hook-end" }));
+        }
+        finally { await server.StopAsync(); }
+    }
+
+    [Test]
+    public async Task Session_scope_disposes_when_disconnect_hook_throws()
+    {
+        var transport = new FakeTransport();
+        var server = new ScopeServer(transport);
+        await server.StartAsync();
+        var conn = transport.Connect(1);
+        var session = server.Sessions.Single();
+        conn.Close();
+        await session.Disconnected.Task.WaitAsync(Timeout);
+        await server.StopAsync();
+        Assert.That(session.Events.ToArray(), Is.EqualTo(new[] { "enter", "disconnect", "exit" }));
+    }
 
     /// <summary>Thread-safe collecting logger — for verifying watchdog warnings and work exception logs.</summary>
     private sealed class CollectingLogger : ILogger

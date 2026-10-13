@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <LangVersion>9.0</LangVersion>
+    <RootNamespace>Bun3.State</RootNamespace>
+    <AssemblyName>Bun3.State</AssemblyName>
+    <PackageId>Bun3.State</PackageId>
+    <Version>0.1.0</Version>
+    <Description>Generated tracking, ownership, and ordered rollback for game state.</Description>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <Authors>Bun3</Authors>
+    <RepositoryUrl>https://github.com/Bun3/bun3-kit</RepositoryUrl>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Bun3.State.Generator\Bun3.State.Generator.csproj"
+                      ReferenceOutputAssembly="false" />
+    <None Include="README.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);IncludeStateGeneratorBuildOutput</TargetsForTfmSpecificContentInPackage>
+  </PropertyGroup>
+
+  <Target Name="BuildStateGeneratorForPackage">
+    <MSBuild Projects="$(MSBuildProjectDirectory)\..\Bun3.State.Generator\Bun3.State.Generator.csproj"
+             Targets="Build"
+             Properties="Configuration=$(Configuration);TargetFramework=netstandard2.0;BuildProjectReferences=false" />
+  </Target>
+
+  <Target Name="IncludeStateGeneratorBuildOutput" DependsOnTargets="BuildStateGeneratorForPackage">
+    <ItemGroup>
+      <TfmSpecificPackageFile Include="$(ArtifactsPath)\bin\Bun3.State.Generator\$([System.String]::Copy('$(Configuration)').ToLowerInvariant())\Bun3.State.Generator.dll">
+        <PackagePath>analyzers/dotnet/cs</PackagePath>
+      </TfmSpecificPackageFile>
+    </ItemGroup>
+  </Target>
+
+</Project>

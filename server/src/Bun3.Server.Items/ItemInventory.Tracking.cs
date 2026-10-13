@@ -16,7 +16,10 @@ namespace Bun3.Server.Items
         /// with no tracking or notification. Duplicate ids and a second instance of a stackable
         /// definition return <see cref="InventoryError.DuplicateInstance"/>; unstackables with
         /// amount other than 1 return <see cref="InventoryError.InvalidAmount"/>; maxCount is checked.
+        /// Not available inside a transaction — loading is untracked and therefore not
+        /// rollback-safe, so load before the session's transactional lifecycle starts.
         /// </summary>
+        /// <exception cref="InvalidOperationException">When a transaction is active.</exception>
         public InventoryError TryLoadInstance(
             long instanceId,
             ItemId item,
@@ -25,6 +28,12 @@ namespace Bun3.Server.Items
             TState state,
             long expiresAtTicksUtc = 0)
         {
+            if (InTransaction)
+            {
+                throw new InvalidOperationException(
+                    "TryLoadInstance is not available inside a transaction — load before the transaction begins.");
+            }
+
             if (!_catalog.Contains(item))
             {
                 return InventoryError.UnknownItem;
@@ -55,7 +64,7 @@ namespace Bun3.Server.Items
             }
             else
             {
-                if (_stackSingletons.ContainsKey(item))
+                if (GetHeld(item) != null)
                 {
                     return InventoryError.DuplicateInstance;
                 }
@@ -69,11 +78,12 @@ namespace Bun3.Server.Items
                 {
                     return InventoryError.ExceedsMaxCount;
                 }
-
-                _stackSingletons.Add(item, instanceId);
             }
 
-            _instances.Add(instanceId, new ItemInstance<TState>(this, instanceId, item, quantity, flags, expiresAtTicksUtc, state));
+            var instance = new ItemInstance<TState>(this, instanceId, item, quantity, flags, expiresAtTicksUtc, state);
+            instance.InitializeStateTracking();
+            _instances.Add(instanceId, instance);
+            Index(instance);
             return InventoryError.None;
         }
 
@@ -83,13 +93,21 @@ namespace Bun3.Server.Items
         /// an in-memory snapshot and destructive — <b>the buffer takes ownership of the change set</b>,
         /// so the game keeps the buffer until persistence succeeds and retries with the same buffer
         /// on failure (Created/Updated hold instance references, so retries carry the latest state).
-        /// DB I/O belongs to the game's async save hook.
+        /// DB I/O belongs to the game's async save hook. Not available inside a transaction — its
+        /// bookkeeping (clearing the removed list, resetting Created/Updated flags) is not
+        /// rollback-safe, so drain after the transaction commits.
         /// </summary>
         public void DrainChanges(List<ItemChange<TState>> buffer)
         {
             if (buffer == null)
             {
                 throw new ArgumentNullException(nameof(buffer));
+            }
+
+            if (InTransaction)
+            {
+                throw new InvalidOperationException(
+                    "DrainChanges is not available inside a transaction — drain after the transaction commits.");
             }
 
             for (var i = 0; i < _removed.Count; i++)
@@ -121,7 +139,7 @@ namespace Bun3.Server.Items
         internal void OnInstanceChanged()
         {
             _hasChanges = true;
-            _onChanged?.Invoke();
+            NotifyDirty();
         }
     }
 }

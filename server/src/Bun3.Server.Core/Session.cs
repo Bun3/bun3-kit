@@ -45,6 +45,12 @@ namespace Bun3.Server.Core
         /// <summary>Called once when the session ends. error is null on a clean close.</summary>
         protected virtual ValueTask OnDisconnectedAsync(Exception? error) => default;
 
+        /// <summary>Enters a scope for the complete session run, including disconnect cleanup.</summary>
+        protected virtual IDisposable? EnterExecutionScope() => null;
+
+        /// <summary>Runs posted work in the actor lane. Overrides may wrap the work.</summary>
+        protected virtual ValueTask OnPostedWorkAsync(Func<ValueTask> work) => work();
+
         /// <summary>
         /// Policy for exceptions thrown by OnConnectedAsync/OnPacketAsync. Defaults to closing the
         /// session. Override only when the game knows the exception is safe to ignore.
@@ -125,6 +131,7 @@ namespace Bun3.Server.Core
 
         internal async Task RunAsync()
         {
+            using var executionScope = EnterExecutionScope();
             try
             {
                 try
@@ -164,7 +171,7 @@ namespace Bun3.Server.Core
                         var work = (Func<ValueTask>)item!;
                         try
                         {
-                            await WatchAsync(work(), "posted work").ConfigureAwait(false);
+                            await WatchAsync(OnPostedWorkAsync(work), "posted work").ConfigureAwait(false);
                         }
                         catch (Exception ex)
                         {

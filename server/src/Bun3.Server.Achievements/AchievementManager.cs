@@ -1,4 +1,5 @@
 using System;
+using Bun3.Server.Core;
 
 namespace Bun3.Server.Achievements
 {
@@ -6,15 +7,23 @@ namespace Bun3.Server.Achievements
     /// Per-player tracker for achievement progress, completion, claiming, and availability. Owned
     /// by the game's Player-derived class and lock-free under the same premise as player state
     /// (accessed only inside the session actor).
-    /// Condition evaluation is the game's job — the game routes its events by index/tag and calls
-    /// <see cref="Increase"/> / <see cref="IncreaseByTag(int, long)"/>.
+    /// Condition evaluation is the game's job — the game routes its events by identifier/tag and
+    /// calls <see cref="Increase"/> / <see cref="IncreaseByTag(AchievementTag, long)"/>.
     /// Hot paths are allocation-free: array indexing, integer arithmetic, and cached delegate calls.
     /// The completion count is monotonic, so the same completion never fires twice.
     /// Repeatable achievements accumulate progress; claiming subtracts one target — while a claim
     /// is pending the UI shows min(Progress, Target)/Target as "10/10 [Claim]".
+    /// Failure reporting follows one rule across the outgame packages: domain failures the caller
+    /// must handle are returned (the claim bool, the completion count), while programmer errors and
+    /// save data corruption throw.
+    /// Rollback buffers are created on the first mutation in an active transaction and reused.
+    /// Notification failures leave applied state committed. Log, dirty and completion delivery
+    /// are attempted independently, and failed notifications are not replayed. Ordinary mutations
+    /// may reenter synchronously without changing a pending committed notification.
+    /// File layout: this file (gameplay operations) / Transaction (rollback and notification phases).
     /// </summary>
     /// <typeparam name="TDef">Game achievement definition type.</typeparam>
-    public sealed class AchievementManager<TDef> where TDef : AchievementDefinition
+    public sealed partial class AchievementManager<TDef> where TDef : AchievementDefinition
     {
         private static readonly Func<long> DefaultClock = () => DateTime.UtcNow.Ticks;
 
@@ -22,29 +31,65 @@ namespace Bun3.Server.Achievements
         private readonly AchievementState[] _states;
         private readonly Action? _onDirty;
         private readonly Func<long> _utcNowTicks;
+        private readonly ActionLog? _log;
+        private readonly string? _logLabel;
+        private readonly Transaction? _transaction;
 
-        /// <summary>Hook fired right after completion — (index, definition, new completion count).
-        /// Called after state updates finish, so the hook may Increase/Activate other achievements
-        /// (chain/tier setups). Auto-rewards: call <see cref="TryClaim"/> here, then the game grants.</summary>
-        public Action<int, TDef, int>? OnCompleted { get; set; }
+        /// <summary>Hook fired right after completion — (identifier, definition, new completion
+        /// count). Called after state updates finish, so the hook may Increase/Activate other
+        /// achievements (chain/tier setups). Auto-rewards: call <see cref="TryClaim"/> here, then
+        /// the game grants. Log rows are recorded before dirty and completion hooks; inside a
+        /// transaction the hook runs only after every participant has finalized its state.</summary>
+        public Action<AchievementId, TDef, int>? OnCompleted { get; set; }
 
         /// <summary>Number of tracked achievements (= catalog definition count).</summary>
         public int Count => _states.Length;
 
         /// <summary>Creates the tracker. Initial availability follows each definition's
-        /// InitialAvailability. Pass the Player's MarkDirty as <paramref name="onDirty"/> to flag
-        /// the save sweep whenever state actually changes. <paramref name="utcNowTicks"/> is the
-        /// completion time source (default UTC now) — an injection point for tests.</summary>
-        public AchievementManager(AchievementCatalog<TDef> catalog, Action? onDirty = null, Func<long>? utcNowTicks = null)
+        /// InitialAvailability.</summary>
+        /// <param name="catalog">Achievement definition catalog.</param>
+        /// <param name="onDirty">Pass the Player's MarkDirty to flag the save sweep whenever state
+        /// actually changes.</param>
+        /// <param name="utcNowTicks">Completion time source (default UTC now) — an injection point
+        /// for tests.</param>
+        /// <param name="log">Session-wide action log (<see cref="Bun3.Server.Core.ActionLog"/>) —
+        /// when set, completion, claim, and availability changes are attached as structured
+        /// entries. Nothing is attached when unset.</param>
+        /// <param name="logLabel">Source label attached to entries this manager appends
+        /// (e.g. to distinguish multiple achievement managers in the same log).</param>
+        /// <param name="transaction">Session-wide transaction (<see cref="Transaction"/>) — when
+        /// set, changes made while it is open are reversible and dirty/completion notifications are
+        /// buffered until commit. Rollback storage is created only on the first active mutation,
+        /// then retained for reuse. No storage is created before that first mutation.</param>
+        public AchievementManager(
+            AchievementCatalog<TDef> catalog,
+            Action? onDirty = null,
+            Func<long>? utcNowTicks = null,
+            ActionLog? log = null,
+            string? logLabel = null,
+            Transaction? transaction = null)
         {
             _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
             _states = new AchievementState[catalog.Count];
             _onDirty = onDirty;
             _utcNowTicks = utcNowTicks ?? DefaultClock;
+            _log = log;
+            _logLabel = logLabel;
+            _transaction = transaction;
             for (var i = 0; i < _states.Length; i++)
             {
-                _states[i].Availability = catalog.GetDefinition(i).InitialAvailability;
+                _states[i].Availability = catalog.GetDefinition(new AchievementId(i)).InitialAvailability;
             }
+        }
+
+        private ref AchievementState StateOf(AchievementId id)
+        {
+            if (!_catalog.Contains(id))
+            {
+                throw new ArgumentOutOfRangeException(nameof(id), "Not an identifier of this catalog.");
+            }
+
+            return ref _states[id.Index];
         }
 
         // ── Progress ─────────────────────────────────────────────────────────
@@ -52,12 +97,12 @@ namespace Bun3.Server.Achievements
         /// <summary>Increases progress and returns the new completion count. No-op (0) unless
         /// Active. amount 0 re-evaluates completion without changing progress (for re-judging
         /// after Restore with a lowered target).</summary>
-        /// <exception cref="ArgumentOutOfRangeException">When amount is negative.</exception>
-        public int Increase(int index, long amount)
+        /// <exception cref="ArgumentOutOfRangeException">When amount is negative, or id is not an identifier of this catalog.</exception>
+        public int Increase(AchievementId id, long amount)
         {
             if (amount < 0) throw new ArgumentOutOfRangeException(nameof(amount), amount, "Progress increase cannot be negative.");
 
-            return IncreaseCore(index, _catalog.GetDefinition(index), amount);
+            return IncreaseCore(id, _catalog.GetDefinition(id), amount);
         }
 
         /// <summary>Increases progress on every Active achievement carrying the tag and returns the
@@ -67,15 +112,15 @@ namespace Bun3.Server.Achievements
         /// do not receive this batch and start accruing from the next event (new-accrual semantics).
         /// Achievements Locked mid-batch are skipped.</summary>
         /// <exception cref="ArgumentOutOfRangeException">When amount is negative.</exception>
-        public int IncreaseByTag(int tagIndex, long amount)
+        public int IncreaseByTag(AchievementTag tag, long amount)
         {
             if (amount < 0) throw new ArgumentOutOfRangeException(nameof(amount), amount, "Progress increase cannot be negative.");
 
-            var indices = _catalog.GetIndicesByTag(tagIndex);
+            ReadOnlySpan<AchievementId> indices = _catalog.GetIndicesByTag(tag);
             Span<ulong> eligible = stackalloc ulong[(indices.Length + 63) >> 6];   // Snapshot — stack memory, allocation-free and reentrancy-safe.
             for (var i = 0; i < indices.Length; i++)
             {
-                if (_states[indices[i]].Availability == AchievementStatus.Active)
+                if (_states[indices[i].Index].Availability == AchievementStatus.Active)
                 {
                     eligible[i >> 6] |= 1UL << (i & 63);
                 }
@@ -89,8 +134,8 @@ namespace Bun3.Server.Achievements
                     continue;
                 }
 
-                var index = indices[i];
-                total += IncreaseCore(index, _catalog.GetDefinition(index), amount);
+                var id = indices[i];
+                total += IncreaseCore(id, _catalog.GetDefinition(id), amount);
             }
 
             return total;
@@ -101,16 +146,16 @@ namespace Bun3.Server.Achievements
         /// allocation-free:
         /// <c>IncreaseByTag(tag, 1, level, static (def, lv) =&gt; def.MinLevel &lt;= lv)</c>.</summary>
         /// <exception cref="ArgumentOutOfRangeException">When amount is negative.</exception>
-        public int IncreaseByTag<TArg>(int tagIndex, long amount, TArg arg, Func<TDef, TArg, bool> filter)
+        public int IncreaseByTag<TArg>(AchievementTag tag, long amount, TArg arg, Func<TDef, TArg, bool> filter)
         {
             if (amount < 0) throw new ArgumentOutOfRangeException(nameof(amount), amount, "Progress increase cannot be negative.");
             if (filter == null) throw new ArgumentNullException(nameof(filter));
 
-            var indices = _catalog.GetIndicesByTag(tagIndex);
+            ReadOnlySpan<AchievementId> indices = _catalog.GetIndicesByTag(tag);
             Span<ulong> eligible = stackalloc ulong[(indices.Length + 63) >> 6];   // Same snapshot semantics as IncreaseByTag.
             for (var i = 0; i < indices.Length; i++)
             {
-                if (_states[indices[i]].Availability == AchievementStatus.Active && filter(_catalog.GetDefinition(indices[i]), arg))
+                if (_states[indices[i].Index].Availability == AchievementStatus.Active && filter(_catalog.GetDefinition(indices[i]), arg))
                 {
                     eligible[i >> 6] |= 1UL << (i & 63);
                 }
@@ -124,8 +169,8 @@ namespace Bun3.Server.Achievements
                     continue;
                 }
 
-                var index = indices[i];
-                total += IncreaseCore(index, _catalog.GetDefinition(index), amount);
+                var id = indices[i];
+                total += IncreaseCore(id, _catalog.GetDefinition(id), amount);
             }
 
             return total;
@@ -135,25 +180,25 @@ namespace Bun3.Server.Achievements
         /// Lowering progress never decreases the completion count (monotonic rule — the basis of
         /// duplicate-completion prevention). Uses: syncing derived values at login (level,
         /// collection counts), saturating conversion of huge currencies.</summary>
-        /// <exception cref="ArgumentOutOfRangeException">When value is negative.</exception>
-        public int SetProgress(int index, long value)
+        /// <exception cref="ArgumentOutOfRangeException">When value is negative, or id is not an identifier of this catalog.</exception>
+        public int SetProgress(AchievementId id, long value)
         {
             if (value < 0) throw new ArgumentOutOfRangeException(nameof(value), value, "Progress cannot be negative.");
 
-            var def = _catalog.GetDefinition(index);
-            ref var state = ref _states[index];
+            var def = _catalog.GetDefinition(id);
+            ref var state = ref StateOf(id);
             if (state.Availability != AchievementStatus.Active)
             {
                 return 0;
             }
 
             var newProgress = !def.Repeatable && value > def.Target ? def.Target : value;
-            return ApplyProgress(index, def, ref state, newProgress);
+            return ApplyProgress(id, def, ref state, newProgress);
         }
 
-        private int IncreaseCore(int index, TDef def, long amount)
+        private int IncreaseCore(AchievementId id, TDef def, long amount)
         {
-            ref var state = ref _states[index];
+            ref var state = ref StateOf(id);
             if (state.Availability != AchievementStatus.Active)
             {
                 return 0;
@@ -171,11 +216,12 @@ namespace Bun3.Server.Achievements
                 newProgress = amount >= def.Target - progress ? def.Target : progress + amount;
             }
 
-            return ApplyProgress(index, def, ref state, newProgress);
+            return ApplyProgress(id, def, ref state, newProgress);
         }
 
-        private int ApplyProgress(int index, TDef def, ref AchievementState state, long newProgress)
+        private int ApplyProgress(AchievementId id, TDef def, ref AchievementState state, long newProgress)
         {
+            Capture(id);
             var changed = state.Progress != newProgress;
             state.Progress = newProgress;
 
@@ -205,17 +251,11 @@ namespace Bun3.Server.Achievements
                 state.CompletedCount += newCompletions;
                 state.LastCompletedAtUtcTicks = _utcNowTicks();
                 changed = true;
+
             }
 
-            if (changed)
-            {
-                _onDirty?.Invoke();
-            }
-
-            if (newCompletions > 0)
-            {
-                OnCompleted?.Invoke(index, def, newCompletions);
-            }
+            NotifyMutation(id, newCompletions > 0 ? AchievementChangeKind.Completed : null,
+                changed, newCompletions);
 
             return newCompletions;
         }
@@ -226,31 +266,34 @@ namespace Bun3.Server.Achievements
         /// Repeatable achievements subtract one target from progress (starting the next cycle).
         /// Works regardless of availability — reward settlement must remain possible for
         /// rotated-out achievements. The game grants after a true return; claim all with
-        /// <c>while (TryClaim(i))</c>.</summary>
-        public bool TryClaim(int index)
+        /// <c>while (TryClaim(id))</c>.</summary>
+        /// <exception cref="ArgumentOutOfRangeException">When id is not an identifier of this catalog.</exception>
+        public bool TryClaim(AchievementId id)
         {
-            ref var state = ref _states[index];
+            ref var state = ref StateOf(id);
             if (state.ClaimedCount >= state.CompletedCount)
             {
                 return false;
             }
 
+            Capture(id);
             state.ClaimedCount++;
-            var def = _catalog.GetDefinition(index);
+            var def = _catalog.GetDefinition(id);
             if (def.Repeatable)
             {
                 var remaining = state.Progress - def.Target;
                 state.Progress = remaining > 0 ? remaining : 0;   // Floor at 0 to tolerate a lenient Restore.
             }
 
-            _onDirty?.Invoke();
+            NotifyMutation(id, AchievementChangeKind.Claimed, true);
             return true;
         }
 
         /// <summary>Claimable count (completions − claims).</summary>
-        public int GetClaimableCount(int index)
+        /// <exception cref="ArgumentOutOfRangeException">When id is not an identifier of this catalog.</exception>
+        public int GetClaimableCount(AchievementId id)
         {
-            ref readonly var state = ref _states[index];
+            ref readonly var state = ref StateOf(id);
             return state.CompletedCount - state.ClaimedCount;
         }
 
@@ -261,9 +304,10 @@ namespace Bun3.Server.Achievements
         /// claimed → Claimed (terminal), otherwise Active (repeatables return to Active after
         /// claiming). Stored-vs-derived mismatch is impossible by construction — Completed/Claimed
         /// are never stored.</summary>
-        public AchievementStatus GetStatus(int index)
+        /// <exception cref="ArgumentOutOfRangeException">When id is not an identifier of this catalog.</exception>
+        public AchievementStatus GetStatus(AchievementId id)
         {
-            ref readonly var state = ref _states[index];
+            ref readonly var state = ref StateOf(id);
             if (state.Availability != AchievementStatus.Active)
             {
                 return state.Availability;
@@ -272,7 +316,7 @@ namespace Bun3.Server.Achievements
             {
                 return AchievementStatus.Completed;
             }
-            if (state.CompletedCount > 0 && !_catalog.GetDefinition(index).Repeatable)
+            if (state.CompletedCount > 0 && !_catalog.GetDefinition(id).Repeatable)
             {
                 return AchievementStatus.Claimed;
             }
@@ -283,65 +327,77 @@ namespace Bun3.Server.Achievements
         /// <summary>Locked → Ready transition (opened — listed, but not progressing yet). False in
         /// any other state. "Open the child on completion/claim" is done by the game in OnCompleted
         /// or its claim handler.</summary>
-        public bool Unlock(int index)
+        /// <exception cref="ArgumentOutOfRangeException">When id is not an identifier of this catalog.</exception>
+        public bool Unlock(AchievementId id)
         {
-            ref var state = ref _states[index];
+            ref var state = ref StateOf(id);
             if (state.Availability != AchievementStatus.Locked)
             {
                 return false;
             }
 
+            Capture(id);
             state.Availability = AchievementStatus.Ready;
-            _onDirty?.Invoke();
+            NotifyMutation(id, AchievementChangeKind.AvailabilityChanged, true);
             return true;
         }
 
         /// <summary>Locked/Ready → Active transition (progress starts). False if already Active.</summary>
-        public bool Activate(int index)
+        /// <exception cref="ArgumentOutOfRangeException">When id is not an identifier of this catalog.</exception>
+        public bool Activate(AchievementId id)
         {
-            ref var state = ref _states[index];
+            ref var state = ref StateOf(id);
             if (state.Availability == AchievementStatus.Active)
             {
                 return false;
             }
 
+            Capture(id);
             state.Availability = AchievementStatus.Active;
-            _onDirty?.Invoke();
+            NotifyMutation(id, AchievementChangeKind.AvailabilityChanged, true);
             return true;
         }
 
         /// <summary>→ Locked transition (closed — rotated out, etc.). Counters are kept (rewinding
         /// is <see cref="Reset"/>). False if already Locked. Settling pending claims (mail, etc.)
         /// is the game's job.</summary>
-        public bool Lock(int index)
+        /// <exception cref="ArgumentOutOfRangeException">When id is not an identifier of this catalog.</exception>
+        public bool Lock(AchievementId id)
         {
-            ref var state = ref _states[index];
+            ref var state = ref StateOf(id);
             if (state.Availability == AchievementStatus.Locked)
             {
                 return false;
             }
 
+            Capture(id);
             state.Availability = AchievementStatus.Locked;
-            _onDirty?.Invoke();
+            NotifyMutation(id, AchievementChangeKind.AvailabilityChanged, true);
             return true;
         }
 
         // ── Persistence ──────────────────────────────────────────────────────
 
         /// <summary>Views the state without copying — the game iterates this for save serialization.</summary>
-        public ref readonly AchievementState GetState(int index) => ref _states[index];
+        /// <exception cref="ArgumentOutOfRangeException">When id is not an identifier of this catalog.</exception>
+        public ref readonly AchievementState GetState(AchievementId id) => ref StateOf(id);
 
         /// <summary>Load-time restore — fires neither hooks nor dirty. Invariant violations
         /// (negatives, claims &gt; completions, multiple completions on a non-repeatable, derived
         /// status stored in Availability) throw to surface save-data corruption; only excess
         /// progress on non-repeatables is clamped to the target (handles balance patches lowering
-        /// the target — re-judge with the next Increase(i, 0)).
+        /// the target — re-judge with the next Increase(id, 0)).
         /// Restoring a state whose completion count lags its progress fires the difference in bulk
         /// on the next Increase/SetProgress (at-least-once — the safe direction for crash recovery
-        /// mid-completion).</summary>
+        /// mid-completion).
+        /// Not available inside a transaction — the write is untracked and therefore not
+        /// rollback-safe, so load before the session's transactional lifecycle starts.</summary>
         /// <exception cref="ArgumentException">When the state violates an invariant.</exception>
-        public void Restore(int index, in AchievementState state)
+        /// <exception cref="ArgumentOutOfRangeException">When id is not an identifier of this catalog.</exception>
+        /// <exception cref="InvalidOperationException">When a transaction is active.</exception>
+        public void Restore(AchievementId id, in AchievementState state)
         {
+            ThrowIfTransactionActive();
             if (state.Progress < 0 || state.CompletedCount < 0 || state.ClaimedCount < 0 || state.LastCompletedAtUtcTicks < 0)
             {
                 throw new ArgumentException("Achievement state contains a negative value.", nameof(state));
@@ -355,16 +411,17 @@ namespace Bun3.Server.Achievements
                 throw new ArgumentException($"Only Locked/Ready/Active may be stored in Availability ({state.Availability}) — Completed/Claimed are derived.", nameof(state));
             }
 
-            var def = _catalog.GetDefinition(index);
+            var def = _catalog.GetDefinition(id);
             if (!def.Repeatable && state.CompletedCount > 1)
             {
                 throw new ArgumentException($"Non-repeatable achievement '{def.Id}' has a completion count above 1 ({state.CompletedCount}).", nameof(state));
             }
 
-            _states[index] = state;
-            if (!def.Repeatable && _states[index].Progress > def.Target)
+            ref var slot = ref StateOf(id);
+            slot = state;
+            if (!def.Repeatable && slot.Progress > def.Target)
             {
-                _states[index].Progress = def.Target;
+                slot.Progress = def.Target;
             }
         }
 
@@ -373,19 +430,21 @@ namespace Bun3.Server.Achievements
         /// Unlock/Activate/Lock separately). The completion count is monotonic, so SetProgress(0)
         /// cannot re-complete — this is the only place counters rewind together. Dirty fires once
         /// if anything changed; no hooks. Settle unclaimed rewards (mail, etc.) before Reset.</summary>
-        public void Reset(int index)
+        /// <exception cref="ArgumentOutOfRangeException">When id is not an identifier of this catalog.</exception>
+        public void Reset(AchievementId id)
         {
-            ref var state = ref _states[index];
+            ref var state = ref StateOf(id);
             if (state.Progress == 0 && state.CompletedCount == 0 && state.ClaimedCount == 0 && state.LastCompletedAtUtcTicks == 0)
             {
                 return;
             }
 
+            Capture(id);
             state.Progress = 0;
             state.CompletedCount = 0;
             state.ClaimedCount = 0;
             state.LastCompletedAtUtcTicks = 0;
-            _onDirty?.Invoke();
+            NotifyMutation(id, null, true);
         }
     }
 }

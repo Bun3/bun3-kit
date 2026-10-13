@@ -64,8 +64,13 @@ namespace Bun3.Server.Items
             }
 
             _txToken++;   // Invalidate the builder after commit.
-            var error = CommitOps(_txOps, out failedIndex, created);
+            var hadOperations = _txOps.Count != 0;
+            var error = CommitOps(_txOps, out failedIndex, created, deferNotifications: true);
             _txOps.Clear();
+            if (error == InventoryError.None && hadOperations)
+            {
+                FinishOperationNotifications();
+            }
             return error;
         }
 
@@ -158,16 +163,21 @@ namespace Bun3.Server.Items
         /// priority-consumption planning.</summary>
         public BigNum GetRemovableQuantity(ItemId item)
         {
-            if (_stackSingletons.TryGetValue(item, out var singletonId))
+            if (TryGetSingleton(item, out var singleton))
             {
-                var singleton = _instances[singletonId];
                 return (singleton.Flags & _removeBlockingFlags) != 0 ? BigNum.Zero : singleton.Quantity;
             }
 
-            long count = 0;
-            foreach (var entry in _instances)
+            var held = GetHeld(item);
+            if (held == null)
             {
-                if (entry.Value.Item == item && (entry.Value.Flags & _removeBlockingFlags) == 0)
+                return BigNum.Zero;
+            }
+
+            long count = 0;
+            for (var i = 0; i < held.Count; i++)
+            {
+                if ((held[i].Flags & _removeBlockingFlags) == 0)
                 {
                     count++;
                 }
@@ -271,9 +281,9 @@ namespace Bun3.Server.Items
         /// the apply pass runs. Unstackable instances targeted by instance-level consumes are
         /// excluded from the definition-level candidate pool for the whole batch (order-independent).
         /// The id issuer and state factory are called only after validation passes; on success
-        /// onChanged fires once per batch.
+        /// onDirty fires once per batch.
         /// </summary>
-        private InventoryError CommitOps(List<TxOp> ops, out int failedIndex, List<ItemInstance<TState>>? created)
+        private InventoryError CommitOps(List<TxOp> ops, out int failedIndex, List<ItemInstance<TState>>? created, bool deferNotifications = false)
         {
             failedIndex = -1;
             if (ops.Count == 0)
@@ -317,18 +327,20 @@ namespace Bun3.Server.Items
             }
 
             // Apply pass — applied in order, in a state where failure is impossible.
-            _appliedCount = 0;
+            if (!_txEnlisted)
+            {
+                _appliedCount = 0;
+            }
+
             for (var i = 0; i < ops.Count; i++)
             {
                 ApplyOp(ops[i], _txResolved[i], created);
             }
 
             _hasChanges = true;
-            _onChanged?.Invoke();
-            if (_appliedCount > 0)
+            if (!deferNotifications)
             {
-                _onApplied?.Invoke(new ReadOnlySpan<InventoryChange>(_applied, 0, _appliedCount));
-                LogAppliedChanges();
+                FinishOperationNotifications();
             }
 
             return InventoryError.None;
@@ -481,6 +493,7 @@ namespace Bun3.Server.Items
                     }
                     else
                     {
+                        Capture(target);
                         target.Quantity -= resolved;
                         MarkChangedNoNotify(target);
                     }
@@ -488,20 +501,6 @@ namespace Bun3.Server.Items
                     RecordApplied(item, -resolved);
                     return;
                 }
-            }
-        }
-
-        /// <summary>Attaches the applied-buffer changes to the action log — low-frequency audit path, boxing allowed.</summary>
-        private void LogAppliedChanges()
-        {
-            if (_log == null)
-            {
-                return;
-            }
-
-            for (var i = 0; i < _appliedCount; i++)
-            {
-                _log.Append(_applied[i], _logLabel);
             }
         }
 
@@ -535,31 +534,30 @@ namespace Bun3.Server.Items
                 return;
             }
 
-            if (_stackSingletons.TryGetValue(item, out var singletonId))
+            if (TryGetSingleton(item, out var singleton))
             {
-                var singleton = _instances[singletonId];
+                Capture(singleton);
                 singleton.Quantity += amount;
                 MarkChangedNoNotify(singleton);
             }
             else
             {
                 var instance = CreateInstance(item, amount);
-                _stackSingletons.Add(item, instance.InstanceId);
                 created?.Add(instance);
             }
         }
 
         private void ApplyConsume(ItemId item, BigNum amount)
         {
-            if (_stackSingletons.TryGetValue(item, out var singletonId))
+            if (TryGetSingleton(item, out var singleton))
             {
-                var singleton = _instances[singletonId];
                 if (singleton.Quantity.CompareTo(amount) == 0)
                 {
                     RemoveInstance(singleton);
                 }
                 else
                 {
+                    Capture(singleton);
                     singleton.Quantity -= amount;
                     MarkChangedNoNotify(singleton);
                 }
@@ -570,18 +568,15 @@ namespace Bun3.Server.Items
             // Unstackable — collect count instances that are neither locked nor batch-targeted, then remove.
             TryToInstanceCount(amount, out var count);   // Passed validation — cannot fail.
             _removeScratch.Clear();
-            foreach (var entry in _instances)
+            var held = GetHeld(item);
+            if (held != null)
             {
-                if (_removeScratch.Count >= count)
+                for (var i = 0; i < held.Count && _removeScratch.Count < count; i++)
                 {
-                    break;
-                }
-
-                if (entry.Value.Item == item
-                    && (entry.Value.Flags & _removeBlockingFlags) == 0
-                    && !IsUnstackableTarget(entry.Key))
-                {
-                    _removeScratch.Add(entry.Value);
+                    if ((held[i].Flags & _removeBlockingFlags) == 0 && !IsUnstackableTarget(held[i].InstanceId))
+                    {
+                        _removeScratch.Add(held[i]);
+                    }
                 }
             }
 
@@ -613,18 +608,21 @@ namespace Bun3.Server.Items
 
         private BigNum GetRemovablePoolBase(ItemId item)
         {
-            if (_stackSingletons.TryGetValue(item, out var singletonId))
+            if (TryGetSingleton(item, out var singleton))
             {
-                var singleton = _instances[singletonId];
                 return (singleton.Flags & _removeBlockingFlags) != 0 ? BigNum.Zero : singleton.Quantity;
             }
 
-            long count = 0;
-            foreach (var entry in _instances)
+            var held = GetHeld(item);
+            if (held == null)
             {
-                if (entry.Value.Item == item
-                    && (entry.Value.Flags & _removeBlockingFlags) == 0
-                    && !IsUnstackableTarget(entry.Key))
+                return BigNum.Zero;
+            }
+
+            long count = 0;
+            for (var i = 0; i < held.Count; i++)
+            {
+                if ((held[i].Flags & _removeBlockingFlags) == 0 && !IsUnstackableTarget(held[i].InstanceId))
                 {
                     count++;
                 }
@@ -653,17 +651,42 @@ namespace Bun3.Server.Items
             {
                 IsNew = true,
             };
+            if (_instances.ContainsKey(instance.InstanceId))
+            {
+                throw new InvalidOperationException("The instance id issuer returned an existing id.");
+            }
+            instance.InitializeStateTracking();
+            Capture(instance);   // Before the first container mutation — snapshots the membership.
             _instances.Add(instance.InstanceId, instance);
+            Index(instance);
             return instance;
+        }
+
+        private void Index(ItemInstance<TState> instance)
+        {
+            if (!_instancesByItem.TryGetValue(instance.Item, out var held))
+            {
+                held = new List<ItemInstance<TState>>();
+                _instancesByItem.Add(instance.Item, held);
+            }
+
+            held.Add(instance);
+        }
+
+        private void Unindex(ItemInstance<TState> instance)
+        {
+            if (_instancesByItem.TryGetValue(instance.Item, out var held))
+            {
+                held.Remove(instance);
+            }
         }
 
         private void RemoveInstance(ItemInstance<TState> instance)
         {
+            Capture(instance);
+            DetachStateTracking(instance);
             _instances.Remove(instance.InstanceId);
-            if (_stackSingletons.TryGetValue(instance.Item, out var singletonId) && singletonId == instance.InstanceId)
-            {
-                _stackSingletons.Remove(instance.Item);
-            }
+            Unindex(instance);
 
             if (!instance.IsNew)
             {

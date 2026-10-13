@@ -1,4 +1,5 @@
 using Bun3.Gameplay.Numerics;
+using Bun3.Server.Core;
 using Bun3.Server.Items;
 using NUnit.Framework;
 
@@ -124,5 +125,35 @@ public class ItemTransferTests
         Assert.That(log, Has.Count.EqualTo(2));
         Assert.That(log[0], Is.EqualTo(("src", -(BigNum)30, (BigNum)70)));
         Assert.That(log[1], Is.EqualTo(("dst", (BigNum)30, (BigNum)30)));
+    }
+
+    [Test]
+    public void Transferred_instance_does_not_inherit_stale_transaction_token()
+    {
+        var transactionA = new Transaction();
+        var transactionB = new Transaction();
+        var inventoryA = new ItemInventory<ItemState>(
+            _catalog, () => ++_nextId, _ => new ItemState(), transaction: transactionA);
+        var inventoryB = new ItemInventory<ItemState>(
+            _catalog, () => ++_nextId, _ => new ItemState(), transaction: transactionB);
+
+        var created = new List<ItemInstance<ItemState>>();
+        inventoryA.TryAdd(_sword, 1, created);
+        var x = created[0];
+
+        using (transactionA.Begin())
+        {
+            x.Flags = FlagLocked;
+        } // disposed without Commit — rolls back; x.TxToken is now 1 in A's numbering
+
+        Assert.That(inventoryA.TryTransferByInstance(inventoryB, x.InstanceId), Is.EqualTo(InventoryError.None));
+
+        using (transactionB.Begin())
+        {
+            x.Flags = 4;
+        } // disposed without Commit — should roll back too
+
+        Assert.That(x.Flags, Is.EqualTo(0u),
+            "a stale TxToken from inventory A must not collide with inventory B's independent counter");
     }
 }

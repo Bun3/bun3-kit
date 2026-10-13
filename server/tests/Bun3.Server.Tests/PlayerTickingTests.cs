@@ -23,7 +23,7 @@ public class PlayerTickingTests
         private int _concurrent;
         public readonly ConcurrentQueue<string> Violations = new();
 
-        protected override async ValueTask OnTickAsync(TimeSpan delta)
+        protected internal override async ValueTask OnTickAsync(TimeSpan delta)
         {
             Enter("tick");
             TickDeltas.Enqueue(delta);
@@ -31,7 +31,7 @@ public class PlayerTickingTests
             Exit();
         }
 
-        protected override ValueTask OnSaveAsync()
+        protected internal override ValueTask OnSaveAsync()
         {
             Interlocked.Increment(ref SaveCalls);
             if (FailNextSave)
@@ -213,7 +213,7 @@ public class PlayerTickingTests
     }
 
     [Test]
-    public async Task Failed_save_keeps_dirty_and_retries_next_period()
+    public async Task Failed_legacy_save_discards_player_without_retirement_save()
     {
         await using var h = await Harness.StartAsync(saveInterval: TimeSpan.FromMilliseconds(150));
         var client = await h.LoginAsync("t5");
@@ -223,8 +223,11 @@ public class PlayerTickingTests
         await client.RequestAsync<AddGoldResponse>(new AddGoldRequest { Amount = 5 }).AsTask().WaitAsync(Timeout);
         await Task.Delay(800);
 
-        Assert.That(player.SaveCalls, Is.GreaterThanOrEqualTo(2), "must retry — dirty is kept after failure");
-        Assert.That(player.IsDirty, Is.False, "clean after successful retry");
+        Assert.That(player.SaveCalls, Is.EqualTo(1), "discarded memory must never be retried");
+        Assert.That(h.Registry.TryGet("guest:t5"), Is.Null);
+        var reconnected = await h.LoginAsync("t5");
+        Assert.That(h.Registry.TryGet("guest:t5"), Is.Not.SameAs(player));
+        reconnected.Close();
         client.Close();
     }
 

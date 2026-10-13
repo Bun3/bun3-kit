@@ -17,7 +17,8 @@ namespace Bun3.Server.Items
         /// instances move whole, preserving id, state, flags, and expiry. On failure both sides are
         /// unchanged. The target must share the catalog (a mismatch is a configuration error and
         /// throws) and the target's maxCount is checked.
-        /// On success, onChanged and onApplied (source −, target +) fire once on each side.
+        /// Not available inside a transaction — a transfer cannot be rolled back.
+        /// On success, onDirty and onApplied (source −, target +) fire once on each side.
         /// </summary>
         public InventoryError TryTransfer(ItemInventory<TState> target, ItemId item, BigNum amount)
         {
@@ -25,6 +26,12 @@ namespace Bun3.Server.Items
             if (error != InventoryError.None)
             {
                 return error;
+            }
+
+            if (InTransaction || target.InTransaction)
+            {
+                throw new InvalidOperationException(
+                    "Transfer between inventories is not supported inside a transaction — it cannot be rolled back.");
             }
 
             if (!_catalog.Contains(item))
@@ -45,16 +52,15 @@ namespace Bun3.Server.Items
                 }
 
                 _removeScratch.Clear();
-                foreach (var entry in _instances)
+                var held = GetHeld(item);
+                if (held != null)
                 {
-                    if (_removeScratch.Count >= count)
+                    for (var i = 0; i < held.Count && _removeScratch.Count < count; i++)
                     {
-                        break;
-                    }
-
-                    if (entry.Value.Item == item && (entry.Value.Flags & _removeBlockingFlags) == 0)
-                    {
-                        _removeScratch.Add(entry.Value);
+                        if ((held[i].Flags & _removeBlockingFlags) == 0)
+                        {
+                            _removeScratch.Add(held[i]);
+                        }
                     }
                 }
 
@@ -115,6 +121,7 @@ namespace Bun3.Server.Items
         /// Full-instance transfer — unstackable instances move preserving id and state; a stack
         /// singleton moves its full amount at definition level. Locked instances return
         /// <see cref="InventoryError.Locked"/>.
+        /// Not available inside a transaction — a transfer cannot be rolled back.
         /// </summary>
         public InventoryError TryTransferByInstance(ItemInventory<TState> target, long instanceId)
         {
@@ -122,6 +129,12 @@ namespace Bun3.Server.Items
             if (error != InventoryError.None)
             {
                 return error;
+            }
+
+            if (InTransaction || target.InTransaction)
+            {
+                throw new InvalidOperationException(
+                    "Transfer between inventories is not supported inside a transaction — it cannot be rolled back.");
             }
 
             if (!_instances.TryGetValue(instanceId, out var instance))
@@ -210,6 +223,7 @@ namespace Bun3.Server.Items
         private void MoveInstance(ItemInventory<TState> target, ItemInstance<TState> instance)
         {
             _instances.Remove(instance.InstanceId);
+            Unindex(instance);
             if (!instance.IsNew)
             {
                 _removed.Add(instance.InstanceId);
@@ -218,30 +232,25 @@ namespace Bun3.Server.Items
             instance._owner = target;
             instance.IsNew = true;
             instance.Changed = false;
+            // Per-inventory token numbering must not travel across inventories.
+            instance.TxToken = 0;
+            instance.TxSnapshotIndex = -1;
             target._instances.Add(instance.InstanceId, instance);
+            target.Index(instance);
         }
 
         private void FinalizeTransfer(ItemInventory<TState> target, ItemId item, BigNum amount)
         {
             _hasChanges = true;
             target._hasChanges = true;
-            _onChanged?.Invoke();
-            target._onChanged?.Invoke();
-            EmitTransferSide(item, -amount);
-            target.EmitTransferSide(item, amount);
-        }
-
-        private void EmitTransferSide(ItemId item, BigNum delta)
-        {
-            if (_onApplied == null && _log == null)
-            {
-                return;
-            }
-
-            _appliedCount = 0;
-            RecordApplied(item, delta);
-            _onApplied?.Invoke(new ReadOnlySpan<InventoryChange>(_applied, 0, _appliedCount));
-            LogAppliedChanges();
+            RecordApplied(item, -amount);
+            target.RecordApplied(item, amount);
+            var sourceNotification = FreezeNotification(true);
+            var targetNotification = target.FreezeNotification(true);
+            List<Exception>? errors = null;
+            DeliverNotification(sourceNotification, ref errors);
+            target.DeliverNotification(targetNotification, ref errors);
+            ThrowNotificationErrors(errors);
         }
     }
 }

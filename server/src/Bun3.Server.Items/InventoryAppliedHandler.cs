@@ -28,7 +28,9 @@ namespace Bun3.Server.Items
     /// order plus post-change balances. Intended for machine consumers such as achievement
     /// and quest counting. Contextual audit logging (which action, why) belongs to the
     /// session-wide <see cref="Bun3.Server.Core.ActionLog"/>.
-    /// The span is valid only during the call — copy to retain.
+    /// The span is valid only during the call and remains unchanged through synchronous reentry —
+    /// copy to retain. Log rows precede reaction hooks. Callback failures leave changes committed;
+    /// independent notification channels are still attempted and this batch is never replayed.
     /// </summary>
     /// <param name="applied">The applied changes.</param>
     public delegate void InventoryAppliedHandler(ReadOnlySpan<InventoryChange> applied);

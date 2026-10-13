@@ -15,7 +15,7 @@ public static class PlayersServiceCollectionExtensions
 {
     /// <summary>
     /// Registers a Players + Rpc server (TCP). On start, the server begins accepting before the
-    /// tick loop starts; on stop, the order is tick loop → server drain → retire all players
+    /// tick loop starts; on stop, admission closes before tick loop → server drain → retire all players
     /// (RetireAllAsync — save flush). TSession needs a public constructor taking IConnection;
     /// remaining arguments are DI-injected. ticking takes TickLoop options (tick interval, etc.);
     /// jobs takes a callback to register game-wide jobs before TickLoop.Start (the player tick
@@ -37,6 +37,74 @@ public static class PlayersServiceCollectionExtensions
     {
         ArgumentNullException.ThrowIfNull(loader);
         ArgumentNullException.ThrowIfNull(configure);
+        return AddPlayerServerCore<TSession, TPlayer, TRequest, TResponse, TUpdate>(
+            services, sp => new PlayerRegistry<TPlayer>(
+                key => loader(sp, key),
+                sp.GetRequiredService<IOptions<PlayersOptions>>().Value,
+                ServerServiceCollectionExtensions.ResolveLogger(sp)),
+            configure, serverOptions, playersOptions, ticking, jobs);
+    }
+
+    /// <summary>Registers a Players + Rpc server backed by one DI-created player store.
+    /// The registry and ticker share that registry, and shutdown closes admission before draining work.</summary>
+    public static IServiceCollection AddPlayerServer<TSession, TPlayer, TRequest, TResponse, TUpdate>(
+        this IServiceCollection services,
+        Func<IServiceProvider, PlayerStore<TPlayer>> store,
+        Action<PlayersConfig<TSession>> configure,
+        Action<ServerOptions>? serverOptions = null,
+        Action<PlayersOptions>? playersOptions = null,
+        Action<TickingOptions>? ticking = null,
+        Action<TickLoop>? jobs = null)
+        where TSession : PlayerSession<TPlayer>
+        where TPlayer : Player
+        where TRequest : class, IMessage<TRequest>, new()
+        where TResponse : class, IMessage<TResponse>, new()
+        where TUpdate : class, IMessage<TUpdate>, new()
+    {
+        ArgumentNullException.ThrowIfNull(store);
+        return AddPlayerServer<TSession, TPlayer, TRequest, TResponse, TUpdate>(services,
+            new Func<IServiceProvider, PlayerPersistence<TPlayer>>(sp => store(sp)), configure, serverOptions, playersOptions, ticking, jobs);
+    }
+
+    /// <summary>Registers a server using versioned or authority-protected player persistence.</summary>
+    public static IServiceCollection AddPlayerServer<TSession, TPlayer, TRequest, TResponse, TUpdate>(
+        this IServiceCollection services,
+        Func<IServiceProvider, PlayerPersistence<TPlayer>> store,
+        Action<PlayersConfig<TSession>> configure,
+        Action<ServerOptions>? serverOptions = null,
+        Action<PlayersOptions>? playersOptions = null,
+        Action<TickingOptions>? ticking = null,
+        Action<TickLoop>? jobs = null)
+        where TSession : PlayerSession<TPlayer>
+        where TPlayer : Player
+        where TRequest : class, IMessage<TRequest>, new()
+        where TResponse : class, IMessage<TResponse>, new()
+        where TUpdate : class, IMessage<TUpdate>, new()
+    {
+        ArgumentNullException.ThrowIfNull(store);
+        ArgumentNullException.ThrowIfNull(configure);
+        return AddPlayerServerCore<TSession, TPlayer, TRequest, TResponse, TUpdate>(
+            services, sp => new PlayerRegistry<TPlayer>(
+                store(sp) ?? throw new InvalidOperationException("Player store factory returned null."),
+                sp.GetRequiredService<IOptions<PlayersOptions>>().Value,
+                ServerServiceCollectionExtensions.ResolveLogger(sp)),
+            configure, serverOptions, playersOptions, ticking, jobs);
+    }
+
+    private static IServiceCollection AddPlayerServerCore<TSession, TPlayer, TRequest, TResponse, TUpdate>(
+        IServiceCollection services,
+        Func<IServiceProvider, PlayerRegistry<TPlayer>> registry,
+        Action<PlayersConfig<TSession>> configure,
+        Action<ServerOptions>? serverOptions,
+        Action<PlayersOptions>? playersOptions,
+        Action<TickingOptions>? ticking,
+        Action<TickLoop>? jobs)
+        where TSession : PlayerSession<TPlayer>
+        where TPlayer : Player
+        where TRequest : class, IMessage<TRequest>, new()
+        where TResponse : class, IMessage<TResponse>, new()
+        where TUpdate : class, IMessage<TUpdate>, new()
+    {
 
         services.AddServerTransport(serverOptions);
 
@@ -48,10 +116,7 @@ public static class PlayersServiceCollectionExtensions
             playersOptionsBuilder.Configure(playersOptions);
         }
 
-        services.AddSingleton(sp => new PlayerRegistry<TPlayer>(
-            key => loader(sp, key),
-            sp.GetRequiredService<IOptions<PlayersOptions>>().Value,
-            ServerServiceCollectionExtensions.ResolveLogger(sp)));
+        services.AddSingleton(registry);
 
         services.AddSingleton(sp =>
         {
@@ -92,57 +157,9 @@ public static class PlayersServiceCollectionExtensions
             sp.GetRequiredService<RpcServer<TSession, TRequest, TResponse, TUpdate>>(),
             sp.GetRequiredService<PlayerRegistry<TPlayer>>(),
             sp.GetRequiredService<TickLoop>(),
-            sp.GetRequiredService<IOptions<ServerOptions>>()));
+            sp.GetRequiredService<IOptions<ServerOptions>>(),
+            sp.GetService<PlayerCommandWorker<TPlayer>>()));
 
         return services;
-    }
-}
-
-/// <summary>Server + tick-loop lifetime, plus retiring all players on stop. The closed generic
-/// differs per server, so duplicate registrations do not silently collapse into TryAddEnumerable.</summary>
-internal sealed class PlayersLifetimeService<TSession, TPlayer, TRequest, TResponse, TUpdate> : IHostedService
-    where TSession : PlayerSession<TPlayer>
-    where TPlayer : Player
-    where TRequest : class, IMessage<TRequest>, new()
-    where TResponse : class, IMessage<TResponse>, new()
-    where TUpdate : class, IMessage<TUpdate>, new()
-{
-    private readonly RpcServer<TSession, TRequest, TResponse, TUpdate> _server;
-    private readonly PlayerRegistry<TPlayer> _registry;
-    private readonly TickLoop _tickLoop;
-    private readonly IOptions<ServerOptions> _options;
-
-    public PlayersLifetimeService(
-        RpcServer<TSession, TRequest, TResponse, TUpdate> server,
-        PlayerRegistry<TPlayer> registry,
-        TickLoop tickLoop,
-        IOptions<ServerOptions> options)
-    {
-        _server = server;
-        _registry = registry;
-        _tickLoop = tickLoop;
-        _options = options;
-    }
-
-    public async Task StartAsync(CancellationToken cancellationToken)
-    {
-        await _server.StartAsync(cancellationToken).ConfigureAwait(false);
-        _tickLoop.Start();   // Start ticking after the server is accepting.
-    }
-
-    public async Task StopAsync(CancellationToken cancellationToken)
-    {
-        try
-        {
-            await _tickLoop.StopAsync(cancellationToken).ConfigureAwait(false);   // Stop ticking first — blocks new tick work during shutdown.
-            await _server.StopAsync(_options.Value.DrainTimeout, cancellationToken).ConfigureAwait(false);
-        }
-        finally
-        {
-            // The final save must be attempted even if earlier steps were canceled or failed —
-            // skipping it loses connected players' progress. Since this is the last chance to save
-            // even when the shutdown deadline (cancellationToken) is exhausted, no token is passed.
-            await _registry.RetireAllAsync(CancellationToken.None).ConfigureAwait(false);
-        }
     }
 }

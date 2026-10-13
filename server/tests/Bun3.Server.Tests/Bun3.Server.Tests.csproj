@@ -9,8 +9,12 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Npgsql" Version="[10.0.3]" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="[10.0.0]" PrivateAssets="all" />
+    <PackageReference Include="SQLitePCLRaw.lib.e_sqlite3" Version="[3.53.3]" PrivateAssets="all" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.10.0" />
     <PackageReference Include="Newtonsoft.Json" Version="[13.0.2]" />
+    <PackageReference Include="protobuf-net" Version="[2.4.6]" PrivateAssets="all" />
     <PackageReference Include="NUnit" Version="4.1.0" />
     <PackageReference Include="NUnit3TestAdapter" Version="4.5.0" />
   </ItemGroup>
@@ -21,10 +25,14 @@
 
   <ItemGroup>
     <Protobuf Include="Protos\game.proto" GrpcServices="None" />
+    <Protobuf Include="Protos\player_operations.proto" GrpcServices="None" />
     <Protobuf Include="Protos\players_game.proto" GrpcServices="None" />
+    <Protobuf Include="Protos\tracked_options.proto" GrpcServices="None" />
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\..\common\src\Bun3.State\Bun3.State.csproj" />
+    <ProjectReference Include="..\..\..\common\src\Bun3.State.Generator\Bun3.State.Generator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\..\src\Bun3.Server.Auth\Bun3.Server.Auth.csproj" />
     <ProjectReference Include="..\..\src\Bun3.Server.Auth.Steam\Bun3.Server.Auth.Steam.csproj" />
     <ProjectReference Include="..\..\src\Bun3.Server.Abstractions\Bun3.Server.Abstractions.csproj" />

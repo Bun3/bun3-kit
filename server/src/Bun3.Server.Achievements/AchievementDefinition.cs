@@ -11,9 +11,9 @@ namespace Bun3.Server.Achievements
     /// </summary>
     public class AchievementDefinition
     {
-        /// <summary>Achievement identifier. Interned into an int index at catalog startup; this
-        /// string never appears on runtime hot paths. Must be non-empty and unique within the
-        /// catalog (ordinal comparison).</summary>
+        /// <summary>Achievement identifier. Interned into an <see cref="AchievementId"/> at
+        /// catalog startup; this string never appears on runtime hot paths. Must be non-empty and
+        /// unique within the catalog (ordinal comparison).</summary>
         public string Id { get; }
 
         /// <summary>Completion target (&gt; 0). Repeatable achievements accrue a completion each
@@ -25,9 +25,10 @@ namespace Bun3.Server.Achievements
         /// target after the single completion.</summary>
         public bool Repeatable { get; }
 
-        /// <summary>Routing/grouping tags. Interned into tag indices at catalog startup, used by
-        /// <see cref="AchievementManager{TDef}.IncreaseByTag(int, long)"/> and group sweeps.
-        /// Games wanting enum-based management can fill these with nameof (the framework does not care).</summary>
+        /// <summary>Routing/grouping tags. Interned into <see cref="AchievementTag"/> identifiers at
+        /// catalog startup, used by <see cref="AchievementManager{TDef}.IncreaseByTag(AchievementTag, long)"/>
+        /// and group sweeps. Games wanting enum-based management can fill these with nameof (the
+        /// framework does not care).</summary>
         public IReadOnlyList<string> Tags { get; }
 
         /// <summary>Initial availability — only Locked/Ready/Active are valid (catalog-validated).

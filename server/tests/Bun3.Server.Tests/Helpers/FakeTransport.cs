@@ -54,8 +54,11 @@ public sealed class FakeConnection : IConnection
     public readonly ConcurrentQueue<byte[]> SentPackets = new();
     public readonly SemaphoreSlim SentSignal = new(0);
 
+    internal Func<ReadOnlyMemory<byte>, ValueTask>? SendOverride;
+
     public ValueTask SendAsync(ReadOnlyMemory<byte> packet, CancellationToken ct = default)
     {
+        if (SendOverride != null) return SendOverride(packet);
         if (IsOpen)
         {
             SentPackets.Enqueue(packet.ToArray());

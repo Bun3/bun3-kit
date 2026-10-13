@@ -30,5 +30,8 @@ namespace Bun3.Server.Players
 
         /// <summary>Periodic save interval for dirty players — upper bound on loss at crash.</summary>
         public TimeSpan SaveInterval { get; set; } = TimeSpan.FromSeconds(30);
+
+        /// <summary>Maximum number of distinct participants in a coordinated operation.</summary>
+        public int MaxOperationParticipants { get; set; } = 16;
     }
 }

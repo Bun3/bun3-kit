@@ -10,7 +10,7 @@ namespace Bun3.Server.Items
     {
         /// <summary>
         /// Lazily settles all regen definitions to the current time — refills are granted
-        /// atomically as one batch (onChanged and onApplied once each) and the number of refilled
+        /// atomically as one batch (onDirty and onApplied once each) and the number of refilled
         /// definitions is returned. Games call this at access points (login, tick, right before
         /// consuming) — no timer needed.
         /// Settling before consuming is the contract — resetting the basis while full prevents
@@ -39,6 +39,7 @@ namespace Bun3.Server.Items
                     // At or above the target (including holdings past it up to maxCount) —
                     // regen stops, accrual cleared. Compared without a long conversion
                     // (amounts past the target can exceed the long range).
+                    EnsureEnlisted();
                     _regenBasis[item] = nowTicksUtc;
                     continue;
                 }
@@ -56,6 +57,7 @@ namespace Bun3.Server.Items
                 }
                 else
                 {
+                    EnsureEnlisted();
                     _regenBasis[item] = basis;   // Also records initialization and full-state resets.
                 }
             }
@@ -65,17 +67,22 @@ namespace Bun3.Server.Items
                 return 0;
             }
 
-            if (CommitOps(_applyOps, out _, null) != InventoryError.None)
+            if (CommitOps(_applyOps, out _, null, deferNotifications: true) != InventoryError.None)
             {
                 return 0;   // Unreachable guard — basis not advanced, so nothing is lost.
             }
 
             for (var i = 0; i < _regenScratchItems.Count; i++)
             {
+                EnsureEnlisted();
                 _regenBasis[_regenScratchItems[i]] = _regenScratchBasis[i];
             }
 
-            return _regenScratchItems.Count;
+            var count = _regenScratchItems.Count;
+            _regenScratchItems.Clear();
+            _regenScratchBasis.Clear();
+            FinishOperationNotifications();
+            return count;
         }
 
         /// <summary>Regen basis timestamp for a definition (time of the last completed refill).
@@ -87,9 +94,18 @@ namespace Bun3.Server.Items
             return basis;
         }
 
-        /// <summary>For save loading — restores the regen basis (no tracking, no notification).</summary>
+        /// <summary>For save loading — restores the regen basis (no tracking, no notification).
+        /// Not available inside a transaction — the write is untracked and therefore not
+        /// rollback-safe, so load before the session's transactional lifecycle starts.</summary>
+        /// <exception cref="System.InvalidOperationException">When a transaction is active.</exception>
         public void LoadRegenBasis(ItemId item, long lastRegenTicksUtc)
         {
+            if (InTransaction)
+            {
+                throw new System.InvalidOperationException(
+                    "LoadRegenBasis is not available inside a transaction — load before the transaction begins.");
+            }
+
             if (!_catalog.Contains(item))
             {
                 throw new System.ArgumentOutOfRangeException(nameof(item), "Not an identifier of this catalog.");
