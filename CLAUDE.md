@@ -56,6 +56,6 @@
   Unity 계층은 ZString + TMP `SetText` 적극 사용(목표: Unity에서 `.text` 문자열 할당 제로).
   틱/패킷 핫패스 무할당 규율(클로저·LINQ·스냅샷 복사 금지)은 전 패키지 공통.
 - 퍼블리시: 내용이 바뀌면 반드시 버전을 올린다 — **같은 버전 재퍼블리시 금지**.
-- 커밋: gitmoji + `Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>` 트레일러.
-  서브에이전트 커밋은 `git commit -m "<제목>" -m "<트레일러>"` 이중 플래그로
+- 커밋: `writing-gitmoji-commits` 스킬을 따른다(커밋 경계·후보 검증·메시지 양식).
+  여러 문단 메시지는 `git commit -m "<제목>" -m "<본문>"`처럼 문단마다 `-m`으로 넘긴다
   (here-string을 bash로 돌리면 메시지가 깨진다).
