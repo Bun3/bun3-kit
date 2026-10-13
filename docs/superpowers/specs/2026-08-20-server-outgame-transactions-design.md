@@ -1,5 +1,8 @@
 # Bun3.Server 아웃게임 고도화 설계 (트랜잭션·ActionLog 검증·API 정합·인스턴스 색인)
 
+> 2026-09-29 amendment: participant completion, notification ownership and state snapshots follow the [transaction and notification contract repair](2026-09-29-outgame-transaction-notification-fixes-design.md).
+> 2026-09-29 follow-up: mutable state restoration and lazy rollback storage follow the [state rollback contract](2026-09-29-outgame-state-rollback-design.md). See the [rollback guide](../../outgame-rollback.md) for current behavior.
+
 - 날짜: 2026-08-20
 - 상태: 사용자와 문답으로 확정 (①~⑤ 전 섹션 승인)
 - 범위: `Bun3.Server.Core`(트랜잭션 신설) · `Bun3.Server.Items` · `Bun3.Server.Achievements`

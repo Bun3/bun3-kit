@@ -3,6 +3,7 @@
 // shared mutable objects present in both copies, keep a per-instance undo log.
 using System;
 using System.Collections.Generic;
+using System.Runtime.ExceptionServices;
 using Bun3.Gameplay.Numerics;
 using Bun3.Server.Core;
 
@@ -44,10 +45,22 @@ namespace Bun3.Server.Items
                 new InstanceSnapshot(Instance, Quantity, Flags, ExpiresAt, IsNew, Changed, state, true);
         }
 
-        private readonly List<InstanceSnapshot> _txSnapshots = new List<InstanceSnapshot>();
-        private readonly Dictionary<long, ItemInstance<TState>> _txInstances =
-            new Dictionary<long, ItemInstance<TState>>();
-        private readonly Dictionary<ItemId, long> _txRegenBasis = new Dictionary<ItemId, long>();
+        private sealed class RollbackStorage
+        {
+            internal readonly List<InstanceSnapshot> Snapshots = new List<InstanceSnapshot>();
+            internal readonly Dictionary<long, ItemInstance<TState>> Instances =
+                new Dictionary<long, ItemInstance<TState>>();
+            internal readonly Dictionary<ItemId, long> RegenBasis = new Dictionary<ItemId, long>();
+
+            internal void Clear()
+            {
+                Snapshots.Clear();
+                Instances.Clear();
+                RegenBasis.Clear();
+            }
+        }
+
+        private RollbackStorage? _txRollback;
 
         private int _txSnapshotToken;
         private int _txRemovedMark;
@@ -67,24 +80,23 @@ namespace Bun3.Server.Items
                 return;
             }
 
+            var rollback = _txRollback ??= new RollbackStorage();
             _transaction!.Enlist(this);
             _txEnlisted = true;
             _txSnapshotToken++;
-            _txSnapshots.Clear();
+            rollback.Clear();
             _txRemovedMark = _removed.Count;
             _txHasChangesMark = _hasChanges;
             _txDirtyPending = false;
 
-            _txInstances.Clear();
             foreach (var entry in _instances)
             {
-                _txInstances.Add(entry.Key, entry.Value);
+                rollback.Instances.Add(entry.Key, entry.Value);
             }
 
-            _txRegenBasis.Clear();
             foreach (var entry in _regenBasis)
             {
-                _txRegenBasis.Add(entry.Key, entry.Value);
+                rollback.RegenBasis.Add(entry.Key, entry.Value);
             }
         }
 
@@ -98,8 +110,10 @@ namespace Bun3.Server.Items
             }
 
             instance.TxToken = _txSnapshotToken;
-            instance.TxSnapshotIndex = _txSnapshots.Count;
-            _txSnapshots.Add(new InstanceSnapshot(
+            instance.StateTransactionOwner = this;
+            var rollback = _txRollback!;
+            instance.TxSnapshotIndex = rollback.Snapshots.Count;
+            rollback.Snapshots.Add(new InstanceSnapshot(
                 instance, instance.Quantity, instance.Flags, instance.ExpiresAtTicksUtc,
                 instance.IsNew, instance.Changed, instance.State, false));
         }
@@ -125,13 +139,11 @@ namespace Bun3.Server.Items
 
             Capture(instance);
 
-            // Promote only when the instance still holds the exact object the snapshot captured —
-            // value-equality (an overridden Equals) must not be mistaken for identity here.
-            var snapshot = _txSnapshots[instance.TxSnapshotIndex];
-            if (!snapshot.StateSnapshotted
-                && (typeof(TState).IsValueType || ReferenceEquals(snapshot.State, instance.State)))
+            var snapshots = _txRollback!.Snapshots;
+            var snapshot = snapshots[instance.TxSnapshotIndex];
+            if (!snapshot.StateSnapshotted)
             {
-                _txSnapshots[instance.TxSnapshotIndex] = snapshot.WithState(_snapshotState(instance.State));
+                snapshots[instance.TxSnapshotIndex] = snapshot.WithState(_snapshotState(snapshot.State));
             }
         }
 
@@ -161,32 +173,105 @@ namespace Bun3.Server.Items
         /// <inheritdoc />
         void ITransactionParticipant.OnCommit()
         {
-            _txEnlisted = false;
-            if (_txDirtyPending)
+            _stateJournal?.Commit();
+            foreach (var snapshot in _txRollback!.Snapshots)
             {
-                _txDirtyPending = false;
-                _onDirty?.Invoke();
+                snapshot.Instance.FinalizeStateTracking();
             }
-
-            FlushApplied();
+            _txEnlisted = false;
+            _committedNotification = FreezeNotification(_txDirtyPending);
+            _txDirtyPending = false;
             ClearSnapshots();
+        }
+
+        /// <inheritdoc />
+        void ITransactionParticipant.OnCommitted()
+        {
+            var notification = _committedNotification;
+            _committedNotification = default;
+            DeliverNotification(notification);
         }
 
         /// <inheritdoc />
         void ITransactionParticipant.OnRollback()
         {
+            List<Exception>? errors = null;
+            try
+            {
+                _stateJournal?.Rollback();
+            }
+            catch (Exception error)
+            {
+                // A failed journal rejects completion until a new record; framework-only
+                // transactions must not inherit that failure from a previous transaction.
+                _stateJournal = null;
+                (errors ??= new List<Exception>()).Add(error);
+            }
             _txEnlisted = false;
             _txDirtyPending = false;
             _appliedCount = 0;
 
+            var rollback = _txRollback!;
+            try
+            {
+                RestoreContainers(rollback);
+            }
+            catch (Exception error)
+            {
+                (errors ??= new List<Exception>()).Add(error);
+            }
+
+            try
+            {
+                for (var i = rollback.Snapshots.Count - 1; i >= 0; i--)
+                {
+                    var snapshot = rollback.Snapshots[i];
+                    var instance = snapshot.Instance;
+                    instance.RestoreForRollback(
+                        snapshot.Quantity, snapshot.Flags, snapshot.ExpiresAt,
+                        snapshot.IsNew, snapshot.Changed, snapshot.State);
+
+                    // The baseline determines ownership even if rebuilding a container failed.
+                    instance._owner = rollback.Instances.ContainsKey(instance.InstanceId) ? this : null;
+                    try
+                    {
+                        instance.FinalizeStateTracking();
+                    }
+                    catch (Exception error)
+                    {
+                        (errors ??= new List<Exception>()).Add(error);
+                    }
+                }
+
+                if (_removed.Count > _txRemovedMark)
+                {
+                    _removed.RemoveRange(_txRemovedMark, _removed.Count - _txRemovedMark);
+                }
+            }
+            catch (Exception error)
+            {
+                (errors ??= new List<Exception>()).Add(error);
+            }
+            finally
+            {
+                _hasChanges = _txHasChangesMark;
+                ClearSnapshots();
+            }
+
+            if (errors == null) return;
+            if (errors.Count == 1) ExceptionDispatchInfo.Capture(errors[0]).Throw();
+            throw new AggregateException("Inventory rollback encountered multiple failures.", errors);
+        }
+
+        private void RestoreContainers(RollbackStorage rollback)
+        {
             _instances.Clear();
-            foreach (var entry in _txInstances)
+            foreach (var entry in rollback.Instances)
             {
                 _instances.Add(entry.Key, entry.Value);
             }
 
-            // Rebuilt from the restored membership. The lists are reused rather than dropped —
-            // an empty list means "not held" — and order within a definition is unspecified.
+            // Reuse definition lists; their order is unspecified after rollback.
             foreach (var entry in _instancesByItem)
             {
                 entry.Value.Clear();
@@ -198,41 +283,17 @@ namespace Bun3.Server.Items
             }
 
             _regenBasis.Clear();
-            foreach (var entry in _txRegenBasis)
+            foreach (var entry in rollback.RegenBasis)
             {
                 _regenBasis.Add(entry.Key, entry.Value);
             }
-
-            for (var i = _txSnapshots.Count - 1; i >= 0; i--)
-            {
-                var snapshot = _txSnapshots[i];
-                var instance = snapshot.Instance;
-                instance.RestoreForRollback(
-                    snapshot.Quantity, snapshot.Flags, snapshot.ExpiresAt,
-                    snapshot.IsNew, snapshot.Changed, snapshot.State);
-                instance.TxSnapshotIndex = -1;
-
-                // Absent from the restored membership means the transaction created it — the
-                // phantom is detached, so a stray MarkChanged on it is ignored.
-                instance._owner = _instances.ContainsKey(instance.InstanceId) ? this : null;
-            }
-
-            if (_removed.Count > _txRemovedMark)
-            {
-                _removed.RemoveRange(_txRemovedMark, _removed.Count - _txRemovedMark);
-            }
-
-            _hasChanges = _txHasChangesMark;
-            ClearSnapshots();
         }
 
-        /// <summary>Releases the snapshot buffers — they hold removed instances and their state,
-        /// so both commit and rollback drop them rather than waiting for the next transaction.</summary>
+        /// <summary>Clears retained instance and state references after commit or rollback,
+        /// while keeping the buffer capacity for the next transaction.</summary>
         private void ClearSnapshots()
         {
-            _txSnapshots.Clear();
-            _txInstances.Clear();
-            _txRegenBasis.Clear();
+            _txRollback?.Clear();
         }
     }
 }

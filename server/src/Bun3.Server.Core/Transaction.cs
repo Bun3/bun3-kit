@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.ExceptionServices;
 
 namespace Bun3.Server.Core
 {
@@ -10,8 +11,13 @@ namespace Bun3.Server.Core
     /// </summary>
     public interface ITransactionParticipant
     {
-        /// <summary>Discards the snapshot and flushes any notifications buffered during the transaction.</summary>
+        /// <summary>Finalizes internal state and freezes pending notifications. Must not invoke
+        /// external callbacks; all participants finish this phase before notifications begin.</summary>
         void OnCommit();
+
+        /// <summary>Delivers the notifications frozen by <see cref="OnCommit"/> and releases them
+        /// even if a callback fails. Failures do not roll back committed state or replay notifications.</summary>
+        void OnCommitted();
 
         /// <summary>Restores the snapshot, discards it, and drops any buffered notifications.</summary>
         void OnRollback();
@@ -30,7 +36,9 @@ namespace Bun3.Server.Core
             _token = token;
         }
 
-        /// <summary>Commits — participants are notified in enlist order.</summary>
+        /// <summary>Finalizes all participants, then delivers notifications in enlist order.
+        /// A notification failure leaves state committed. One failure retains its original stack;
+        /// multiple failures are reported as an <see cref="AggregateException"/>.</summary>
         public void Commit() => _transaction?.Commit(_token);
 
         /// <summary>Rolls back unless <see cref="Commit"/> was called.</summary>
@@ -38,12 +46,12 @@ namespace Bun3.Server.Core
     }
 
     /// <summary>
-    /// Multi-operation transaction, one per session. Modules hold it as a constructor member and
+    /// Multi-operation memory transaction owned by one player execution lane. Modules hold it as a constructor member and
     /// enlist themselves the first time they change while it is active; changes apply immediately
     /// and a rollback restores the snapshot each participant took at that first touch.
     /// Notifications a participant would raise are buffered for the duration and fire on commit,
     /// so a rolled-back change never reaches an audit ledger or a hook.
-    /// Single level — a nested <see cref="Begin"/> throws. Use only inside a single session actor
+    /// Single level — a nested <see cref="Begin"/> throws. Use only while the owning player's serialized execution is held
     /// (no locks). When no transaction is active, participants skip snapshotting entirely, so a
     /// game that never rolls back pays nothing.
     /// </summary>
@@ -116,11 +124,19 @@ namespace Bun3.Server.Core
 
             _active = false;
             _notifying = true;
+            List<Exception>? errors = null;
             try
             {
                 for (var i = 0; i < _participants.Count; i++)
                 {
-                    _participants[i].OnCommit();
+                    try { _participants[i].OnCommit(); }
+                    catch (Exception error) { (errors ??= new List<Exception>()).Add(error); }
+                }
+
+                for (var i = 0; i < _participants.Count; i++)
+                {
+                    try { _participants[i].OnCommitted(); }
+                    catch (Exception error) { (errors ??= new List<Exception>()).Add(error); }
                 }
             }
             finally
@@ -128,6 +144,8 @@ namespace Bun3.Server.Core
                 _notifying = false;
                 _participants.Clear();
             }
+
+            ThrowErrors(errors);
         }
 
         internal void Rollback(int token)
@@ -139,12 +157,14 @@ namespace Bun3.Server.Core
 
             _active = false;
             _notifying = true;
+            List<Exception>? errors = null;
             try
             {
                 // Reverse enlist order.
                 for (var i = _participants.Count - 1; i >= 0; i--)
                 {
-                    _participants[i].OnRollback();
+                    try { _participants[i].OnRollback(); }
+                    catch (Exception error) { (errors ??= new List<Exception>()).Add(error); }
                 }
             }
             finally
@@ -152,6 +172,15 @@ namespace Bun3.Server.Core
                 _notifying = false;
                 _participants.Clear();
             }
+
+            ThrowErrors(errors);
+        }
+
+        private static void ThrowErrors(List<Exception>? errors)
+        {
+            if (errors == null) return;
+            if (errors.Count == 1) ExceptionDispatchInfo.Capture(errors[0]).Throw();
+            throw new AggregateException(errors);
         }
     }
 }

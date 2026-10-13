@@ -1,5 +1,7 @@
 // AchievementManager partial — transaction participation (snapshot, rollback) and notification buffering.
+using System;
 using System.Collections.Generic;
+using System.Runtime.ExceptionServices;
 using Bun3.Server.Core;
 
 namespace Bun3.Server.Achievements
@@ -9,14 +11,36 @@ namespace Bun3.Server.Achievements
     // on commit.
     public sealed partial class AchievementManager<TDef> : ITransactionParticipant
     {
-        private readonly bool[] _txCaptured;
-        private readonly List<AchievementId> _txIds = new List<AchievementId>();
-        private readonly List<AchievementState> _txStates = new List<AchievementState>();
-        private readonly List<AchievementId> _txCompletedIds = new List<AchievementId>();
-        private readonly List<int> _txCompletedCounts = new List<int>();
-        private readonly List<AchievementChange> _txChanges = new List<AchievementChange>();
+        private sealed class RollbackStorage
+        {
+            internal readonly bool[] Captured;
+            internal readonly List<AchievementId> Ids = new List<AchievementId>();
+            internal readonly List<AchievementState> States = new List<AchievementState>();
+            internal readonly List<AchievementId> CompletedIds = new List<AchievementId>();
+            internal readonly List<int> CompletedCounts = new List<int>();
+            internal readonly List<AchievementChange> Changes = new List<AchievementChange>();
+
+            internal RollbackStorage(int count) => Captured = new bool[count];
+
+            internal void ClearSnapshots()
+            {
+                for (var i = 0; i < Ids.Count; i++) Captured[Ids[i].Index] = false;
+                Ids.Clear();
+                States.Clear();
+            }
+
+            internal void ClearNotifications()
+            {
+                CompletedIds.Clear();
+                CompletedCounts.Clear();
+                Changes.Clear();
+            }
+        }
+
+        private RollbackStorage? _txRollback;
         private bool _txEnlisted;
         private bool _txDirtyPending;
+        private bool _committedDirty;
 
         private bool InTransaction => _transaction != null && _transaction.IsActive;
 
@@ -30,18 +54,20 @@ namespace Bun3.Server.Achievements
 
             if (!_txEnlisted)
             {
+                _txRollback ??= new RollbackStorage(_states.Length);
                 _transaction!.Enlist(this);
                 _txEnlisted = true;
             }
 
-            if (_txCaptured[id.Index])
+            var rollback = _txRollback!;
+            if (rollback.Captured[id.Index])
             {
                 return;
             }
 
-            _txCaptured[id.Index] = true;
-            _txIds.Add(id);
-            _txStates.Add(_states[id.Index]);
+            rollback.Captured[id.Index] = true;
+            rollback.Ids.Add(id);
+            rollback.States.Add(_states[id.Index]);
         }
 
         /// <summary>Guard for <see cref="AchievementManager{TDef}.Restore"/> — the load path writes
@@ -55,79 +81,93 @@ namespace Bun3.Server.Achievements
             }
         }
 
-        /// <summary>Raises onDirty, or buffers it until commit while a transaction is active.</summary>
-        private void NotifyDirty()
+        private void NotifyMutation(AchievementId id, AchievementChangeKind? kind, bool dirty, int completions = 0)
         {
+            var state = _states[id.Index];
+            var change = kind.HasValue
+                ? new AchievementChange(id, kind.Value, state.CompletedCount, state.ClaimedCount, state.Availability)
+                : default;
             if (_txEnlisted)
             {
-                _txDirtyPending = true;
+                var rollback = _txRollback!;
+                if (kind.HasValue && _log != null) rollback.Changes.Add(change);
+                _txDirtyPending |= dirty;
+                if (completions > 0)
+                {
+                    rollback.CompletedIds.Add(id);
+                    rollback.CompletedCounts.Add(completions);
+                }
                 return;
             }
 
-            _onDirty?.Invoke();
+            List<Exception>? errors = null;
+            if (kind.HasValue) DeliverChange(change, ref errors);
+            if (dirty) DeliverDirty(ref errors);
+            if (completions > 0) DeliverCompleted(id, completions, ref errors);
+            ThrowNotificationErrors(errors);
         }
 
-        /// <summary>Fires the completion hook, or buffers it until commit.</summary>
-        private void NotifyCompleted(AchievementId id, int newCompletions)
+        private void DeliverChange(AchievementChange change, ref List<Exception>? errors)
         {
-            if (_txEnlisted)
-            {
-                _txCompletedIds.Add(id);
-                _txCompletedCounts.Add(newCompletions);
-                return;
-            }
-
-            OnCompleted?.Invoke(id, _catalog.GetDefinition(id), newCompletions);
+            try { _log?.Append(change, _logLabel); }
+            catch (Exception error) { (errors ??= new List<Exception>()).Add(error); }
         }
 
-        /// <summary>Attaches a change to the action log, or buffers it until commit.
-        /// Low-frequency audit path, so boxing is acceptable.</summary>
-        private void NotifyChange(AchievementId id, AchievementChangeKind kind)
+        private void DeliverDirty(ref List<Exception>? errors)
         {
-            if (_log == null)
-            {
-                return;
-            }
+            try { _onDirty?.Invoke(); }
+            catch (Exception error) { (errors ??= new List<Exception>()).Add(error); }
+        }
 
-            ref readonly var state = ref _states[id.Index];
-            var change = new AchievementChange(
-                id, kind, state.CompletedCount, state.ClaimedCount, state.Availability);
-            if (_txEnlisted)
-            {
-                _txChanges.Add(change);
-                return;
-            }
+        private void DeliverCompleted(AchievementId id, int count, ref List<Exception>? errors)
+        {
+            try { OnCompleted?.Invoke(id, _catalog.GetDefinition(id), count); }
+            catch (Exception error) { (errors ??= new List<Exception>()).Add(error); }
+        }
 
-            _log.Append(change, _logLabel);
+        private static void ThrowNotificationErrors(List<Exception>? errors)
+        {
+            if (errors == null) return;
+            if (errors.Count == 1) ExceptionDispatchInfo.Capture(errors[0]).Throw();
+            throw new AggregateException(errors);
         }
 
         /// <inheritdoc />
         void ITransactionParticipant.OnCommit()
         {
             _txEnlisted = false;
-            ClearSnapshots();
+            _committedDirty = _txDirtyPending;
+            _txDirtyPending = false;
+            _txRollback?.ClearSnapshots();
+            // Begin is forbidden during notification; ordinary reactions do not write these lists.
+        }
 
-            for (var i = 0; i < _txChanges.Count; i++)
+        /// <inheritdoc />
+        void ITransactionParticipant.OnCommitted()
+        {
+            var dirty = _committedDirty;
+            _committedDirty = false;
+            var rollback = _txRollback!;
+            List<Exception>? errors = null;
+            try
             {
-                _log!.Append(_txChanges[i], _logLabel);
+                for (var i = 0; i < rollback.Changes.Count; i++)
+                {
+                    DeliverChange(rollback.Changes[i], ref errors);
+                }
+
+                if (dirty) DeliverDirty(ref errors);
+                for (var i = 0; i < rollback.CompletedIds.Count; i++)
+                {
+                    DeliverCompleted(rollback.CompletedIds[i], rollback.CompletedCounts[i], ref errors);
+                }
+            }
+            finally
+            {
+                rollback.ClearNotifications();
             }
 
-            _txChanges.Clear();
-
-            if (_txDirtyPending)
-            {
-                _txDirtyPending = false;
-                _onDirty?.Invoke();
-            }
-
-            for (var i = 0; i < _txCompletedIds.Count; i++)
-            {
-                var id = _txCompletedIds[i];
-                OnCompleted?.Invoke(id, _catalog.GetDefinition(id), _txCompletedCounts[i]);
-            }
-
-            _txCompletedIds.Clear();
-            _txCompletedCounts.Clear();
+            ThrowNotificationErrors(errors);
         }
 
         /// <inheritdoc />
@@ -135,27 +175,15 @@ namespace Bun3.Server.Achievements
         {
             _txEnlisted = false;
             _txDirtyPending = false;
-            _txCompletedIds.Clear();
-            _txCompletedCounts.Clear();
-            _txChanges.Clear();
+            var rollback = _txRollback!;
+            rollback.ClearNotifications();
 
-            for (var i = _txIds.Count - 1; i >= 0; i--)
+            for (var i = rollback.Ids.Count - 1; i >= 0; i--)
             {
-                _states[_txIds[i].Index] = _txStates[i];
+                _states[rollback.Ids[i].Index] = rollback.States[i];
             }
 
-            ClearSnapshots();
-        }
-
-        private void ClearSnapshots()
-        {
-            for (var i = 0; i < _txIds.Count; i++)
-            {
-                _txCaptured[_txIds[i].Index] = false;
-            }
-
-            _txIds.Clear();
-            _txStates.Clear();
+            rollback.ClearSnapshots();
         }
     }
 }

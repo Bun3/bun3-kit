@@ -19,6 +19,8 @@ public class TransactionTests
 
         public void OnCommit() => _trace.Add($"commit:{_name}");
 
+        public void OnCommitted() { }
+
         public void OnRollback() => _trace.Add($"rollback:{_name}");
     }
 
@@ -268,6 +270,57 @@ public class TransactionTests
 
         public void OnCommit() => _commit();
 
+        public void OnCommitted() { }
+
         public void OnRollback() => _rollback();
+    }
+
+    private sealed class PhasedParticipant : ITransactionParticipant
+    {
+        public Action Commit { get; init; } = () => { };
+        public Action Committed { get; init; } = () => { };
+        public Action Rollback { get; init; } = () => { };
+        public void OnCommit() => Commit();
+        public void OnCommitted() => Committed();
+        public void OnRollback() => Rollback();
+    }
+
+    [Test]
+    public void All_internal_commits_finish_before_notifications_despite_multiple_failures()
+    {
+        var tx = new Transaction();
+        var trace = new List<string>();
+        using var scope = tx.Begin();
+        tx.Enlist(new PhasedParticipant
+        {
+            Commit = () => { trace.Add("commit:a"); throw new ArgumentException("commit"); },
+            Committed = () => { trace.Add("notify:a"); throw new InvalidOperationException("notify"); },
+        });
+        tx.Enlist(new PhasedParticipant
+        {
+            Commit = () => trace.Add("commit:b"),
+            Committed = () => { Assert.Throws<InvalidOperationException>(() => tx.Begin()); trace.Add("notify:b"); },
+        });
+        var error = Assert.Catch<AggregateException>(scope.Commit);
+        Assert.That(error!.InnerExceptions.Count, Is.EqualTo(2));
+        Assert.That(trace, Is.EqualTo(new[] { "commit:a", "commit:b", "notify:a", "notify:b" }));
+    }
+
+    [Test]
+    public void Rollback_visits_remaining_participants_and_preserves_single_failure_stack()
+    {
+        var tx = new Transaction();
+        var trace = new List<string>();
+        var failure = new InvalidOperationException("rollback");
+        void ThrowRollback() { trace.Add("b"); throw failure; }
+        var scope = tx.Begin();
+        tx.Enlist(new PhasedParticipant { Rollback = () => trace.Add("a") });
+        tx.Enlist(new PhasedParticipant { Rollback = ThrowRollback });
+        var actual = Assert.Catch(scope.Dispose);
+        Assert.That(actual, Is.SameAs(failure));
+        Assert.That(actual!.StackTrace, Does.Contain("ThrowRollback"));
+        Assert.That(trace, Is.EqualTo(new[] { "b", "a" }));
+        using var next = tx.Begin();
+        next.Commit();
     }
 }

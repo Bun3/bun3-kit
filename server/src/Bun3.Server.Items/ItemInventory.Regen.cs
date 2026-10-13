@@ -67,7 +67,7 @@ namespace Bun3.Server.Items
                 return 0;
             }
 
-            if (CommitOps(_applyOps, out _, null) != InventoryError.None)
+            if (CommitOps(_applyOps, out _, null, deferNotifications: true) != InventoryError.None)
             {
                 return 0;   // Unreachable guard — basis not advanced, so nothing is lost.
             }
@@ -78,7 +78,11 @@ namespace Bun3.Server.Items
                 _regenBasis[_regenScratchItems[i]] = _regenScratchBasis[i];
             }
 
-            return _regenScratchItems.Count;
+            var count = _regenScratchItems.Count;
+            _regenScratchItems.Clear();
+            _regenScratchBasis.Clear();
+            FinishOperationNotifications();
+            return count;
         }
 
         /// <summary>Regen basis timestamp for a definition (time of the last completed refill).

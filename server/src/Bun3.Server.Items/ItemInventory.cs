@@ -11,16 +11,19 @@ namespace Bun3.Server.Items
     /// made exactly once internally from catalog metadata: stackables auto-merge into a
     /// singleton instance per definition, unstackables are N amount-1 instances. Amounts are
     /// <see cref="BigNum"/> (long converts implicitly).
-    /// All mutating operations are atomic; on failure the inventory is fully unchanged.
+    /// Mutating operations are atomic on validation failure. Notification exceptions leave the
+    /// applied state committed; independent channels are attempted and failed batches are not replayed.
     /// No locks (single-threaded session-actor contract).
     /// Query, enumeration, and consume paths are allocation-free; only instance creation
     /// allocates (low frequency).
     /// File layout: this file (construction, queries) / Operations (grant, consume, transactions) /
     /// Crafting / Rewards / Regen / Transfer / Tracking (change tracking, load) /
-    /// Transaction (session transaction participation, notification buffering).
+    /// Transaction (session transaction participation) / StateTracking (generated state journal) /
+    /// Notifications (stable batch delivery).
     /// Failure reporting follows one rule across the outgame packages: domain failures the caller
     /// must handle are returned (<see cref="InventoryError"/>), while programmer errors and save
     /// data corruption throw.
+    /// Rollback buffers are created on the first mutation in an active transaction and reused.
     /// The transaction is in-memory only, so a database commit cannot take part in it — claim
     /// idempotency across the in-memory and persisted boundaries is the game's responsibility.
     /// </summary>
@@ -67,10 +70,10 @@ namespace Bun3.Server.Items
         private readonly ActionLog? _log;
         private readonly string? _logLabel;
 
-        // Session-wide transaction — when unset, no snapshotting or notification buffering happens.
+        // Session-wide transaction — when unset, no rollback storage is created.
         private readonly Transaction? _transaction;
 
-        // Deep-copy delegate for mutable TState — used only by BeginStateChange inside a transaction.
+        // Independent-copy delegate for mutable TState — used only by BeginStateChange inside a transaction.
         private readonly Func<TState, TState>? _snapshotState;
 
         /// <summary>Creates the inventory.</summary>
@@ -85,7 +88,9 @@ namespace Bun3.Server.Items
         /// <param name="removeBlockingFlags">Instances with flags matching this mask are excluded
         /// as consume candidates (e.g. in use, user-locked). 0 = no locking.</param>
         /// <param name="onApplied">Called once per successful commit with the applied net deltas —
-        /// for achievement/quest/ranking counting. No recording cost when unset.</param>
+        /// for achievement/quest/ranking counting. Synchronous reentry is supported: the span
+        /// remains unchanged until the callback returns. Log rows are recorded before reaction
+        /// hooks. No recording cost when both this handler and the log are unset.</param>
         /// <param name="log">Session-wide action log (<see cref="ActionLog"/>) — when set, every
         /// change of this inventory (delta and balance) is auto-attached to the currently open scope.
         /// Multiple inventories may share one log to land in a single action tree.</param>
@@ -93,10 +98,14 @@ namespace Bun3.Server.Items
         /// (e.g. "bag"/"warehouse").</param>
         /// <param name="transaction">Session-wide transaction (<see cref="Transaction"/>) — when
         /// set, changes made while it is open are reversible and notifications are buffered until
-        /// commit. Nothing is snapshotted when no transaction is open.</param>
-        /// <param name="snapshotState">Deep-copy delegate for mutable state types — called when a
-        /// <see cref="ItemInstance{TState}.BeginStateChange"/> scope opens inside a transaction.
-        /// Leave null when state is treated as a value (assigned rather than mutated).</param>
+        /// commit. Rollback storage is created only on the first active mutation, then retained
+        /// for reuse. No storage is created before that first mutation.</param>
+        /// <param name="snapshotState">Creates an independent copy of the saved pre-transaction
+        /// state when the first <see cref="ItemInstance{TState}.BeginStateChange"/> scope opens in
+        /// that transaction. Copy all mutable data owned by the state, including nested data in
+        /// value types; immutable data may be shared. The delegate must not modify its input or
+        /// reenter the inventory. Leave null for setter-only or generated state changes.
+        /// Generated state tracks edits without this delegate and cannot use mutable change scopes.</param>
         public ItemInventory(
             ItemCatalog catalog,
             Func<long> instanceIdIssuer,

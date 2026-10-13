@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace Bun3.Server.Core
 {
@@ -47,7 +48,7 @@ namespace Bun3.Server.Core
 
     /// <summary>Ledger sink — receives the completed batch when the root scope closes (entries
     /// outside any scope are delivered immediately). The span is only valid during the call —
-    /// copy or serialize to retain.</summary>
+    /// copy or serialize to retain. It remains unchanged through synchronous reentry.</summary>
     /// <param name="entries">Completed log entries (in occurrence order, indented by Depth).</param>
     public delegate void ActionLogHandler(ReadOnlySpan<ActionLogEntry> entries);
 
@@ -68,19 +69,22 @@ namespace Bun3.Server.Core
     }
 
     /// <summary>
-    /// Action log (CS audit ledger) — a general-purpose context, one per session/player. When a
+    /// Action log (CS audit ledger) — a general-purpose context, one per player. When a
     /// handler opens a root scope, everything happening beneath it — structured entries from each
     /// module (inventory changes attached automatically, etc.) and free-form notes (achievement
     /// cleared, etc.) — lands in one ordered tree, and lower-level logic never needs to know what
     /// initiated it. Scopes nest freely; the completed batch goes to the sink when the root
     /// closes, and out-of-scope entries are delivered immediately so the ledger has no gaps.
     /// Low-frequency audit path, so string/boxing allocations are acceptable. Use only inside a
-    /// single session actor (no locks).
+    /// serialized player execution lane, including temporary or offline players (no locks).
+    /// Delivery owns its batch through synchronous sink reentry. A throwing sink releases its
+    /// batch without replay; later entries are delivered independently.
     /// </summary>
     public sealed class ActionLog
     {
         private readonly ActionLogHandler _sink;
         private ActionLogEntry[] _entries = Array.Empty<ActionLogEntry>();
+        private readonly List<ActionLogEntry[]> _buffers = new List<ActionLogEntry[]>();
         private int _count;
         private int _depth;
 
@@ -151,8 +155,25 @@ namespace Bun3.Server.Core
             }
 
             var count = _count;
+            var entries = _entries;
             _count = 0;
-            _sink(new ReadOnlySpan<ActionLogEntry>(_entries, 0, count));
+            var last = _buffers.Count - 1;
+            if (last < 0) _entries = Array.Empty<ActionLogEntry>();
+            else
+            {
+                _entries = _buffers[last];
+                _buffers.RemoveAt(last);
+            }
+
+            try
+            {
+                _sink(new ReadOnlySpan<ActionLogEntry>(entries, 0, count));
+            }
+            finally
+            {
+                Array.Clear(entries, 0, count);
+                _buffers.Add(entries);
+            }
         }
     }
 }

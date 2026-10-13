@@ -113,8 +113,9 @@ namespace Bun3.Server.Achievements
             }
         }
 
-        /// <summary>Returns the definition. Throws on an identifier from another catalog or None.</summary>
-        /// <exception cref="ArgumentOutOfRangeException">When the identifier is not valid here.</exception>
+        /// <summary>Returns the definition at the identifier's index.</summary>
+        /// <remarks>The caller must ensure that the identifier originated from this catalog.</remarks>
+        /// <exception cref="ArgumentOutOfRangeException">When the identifier is None or its index is out of range.</exception>
         public TDef GetDefinition(AchievementId id)
         {
             if (!Contains(id))

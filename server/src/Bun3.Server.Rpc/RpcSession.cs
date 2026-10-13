@@ -39,9 +39,16 @@ namespace Bun3.Server.Rpc
         /// </summary>
         protected internal virtual int OnGateRequest(Type requestType) => RpcStatus.Ok;
 
+        /// <summary>Invokes a registered request handler. Overrides may enclose its asynchronous work.</summary>
+        protected internal virtual ValueTask<(int Status, IMessage? Response)> InvokeRequestAsync(
+            IMessage request, RpcRequestHandler handler) => handler(this, request);
+
         /// <summary>Server push. update must be a case type of the game's Update oneof.</summary>
-        public ValueTask SendUpdateAsync(IMessage update) =>
+        public virtual ValueTask SendUpdateAsync(IMessage update) =>
             RequireRuntime().SendUpdateAsync(this, update);
+
+        /// <summary>Encodes a validated update as a complete packet for deferred delivery.</summary>
+        protected byte[] EncodeUpdate(IMessage update) => RequireRuntime().EncodeUpdate(update);
 
         /// <summary>Kicks with a reason code — best-effort sends Disconnect{code} (1-second cap,
         /// exceptions ignored, first call only), then closes the connection. Idempotent.</summary>

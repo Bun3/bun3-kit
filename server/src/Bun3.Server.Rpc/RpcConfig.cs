@@ -13,12 +13,12 @@ namespace Bun3.Server.Rpc
         {
             public Type RequestType { get; }
             public Type ResponseType { get; }
-            public Func<TSession, IMessage, ValueTask<(int Status, IMessage? Response)>> Invoke { get; }
+            public RpcRequestHandler Invoke { get; }
 
             public Registration(
                 Type requestType,
                 Type responseType,
-                Func<TSession, IMessage, ValueTask<(int Status, IMessage? Response)>> invoke)
+                RpcRequestHandler invoke)
             {
                 RequestType = requestType;
                 ResponseType = responseType;
@@ -48,7 +48,7 @@ namespace Bun3.Server.Rpc
                 typeof(TRes),
                 async (session, message) =>
                 {
-                    var reply = await handler(session, (TReq)message).ConfigureAwait(false);
+                    var reply = await handler((TSession)(object)session, (TReq)message).ConfigureAwait(false);
                     return (reply.Status, (IMessage?)reply.Value);
                 }));
         }

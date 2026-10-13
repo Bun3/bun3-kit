@@ -8,16 +8,11 @@ using Microsoft.Extensions.Logging;
 namespace Bun3.Server.Players
 {
     /// <summary>
-    /// One per accountKey; survives reconnects. State (currency, inventory, etc.) lives in the
-    /// derived class. Hooks run inside the registry's account-key stripe lock, so hooks must not
-    /// call SignInAsync/Kick reentrantly (deadlock).
-    /// On duplicate-login (NewWins) transfer the old session is de-authorized immediately
-    /// (Player=null) so its queued requests are blocked at the gate — but one handler already
-    /// executing at transfer time cannot be preempted, so PlayerTicker re-checks ownership right
-    /// before running tick/save. Save points are three: periodic sweep and detach (both only when
-    /// dirty), and retirement (OnRetiredAsync, regardless of dirty).
+    /// One per account key; survives reconnects. Requests, posted work, and lifecycle hooks
+    /// share exclusive execution ownership. Nested lifecycle entry is rejected. Saving failures
+    /// discard memory without calling the retirement save hook.
     /// </summary>
-    public abstract class Player
+    public abstract partial class Player
     {
         /// <summary>Opaque identity key (recommended convention "provider:subject"). Set at SignIn.</summary>
         public string AccountKey { get; internal set; } = "";
@@ -37,16 +32,25 @@ namespace Bun3.Server.Players
         /// <summary>Called on grace expiry or RetireAll — a save point. Removed from the registry afterward.</summary>
         protected internal virtual ValueTask OnRetiredAsync() => default;
 
+        /// <summary>Releases resources without saving. Called after retirement or invalidation.</summary>
+        protected internal virtual ValueTask OnReleasedAsync(PlayerReleaseReason reason) => default;
+
+        internal bool IsValid = true;
+
         /// <summary>Pushes to the current session and returns true while connected; false during grace.</summary>
-        public async ValueTask<bool> PushUpdateAsync(IMessage update)
+        /// <remarks>During operation Apply, true means a frozen packet was reserved for delivery after commit.
+        /// Encoding failures are synchronous. Raw connection sends and external I/O bypass this guarantee.</remarks>
+        public ValueTask<bool> PushUpdateAsync(IMessage update)
         {
             var session = CurrentSession;
-            if (session == null)
-            {
-                return false;
-            }
-
-            await session.SendUpdateAsync(update).ConfigureAwait(false);
+            if (session == null) return new ValueTask<bool>(false);
+            var send = session.SendUpdateAsync(update);
+            if (send.IsCompletedSuccessfully) { send.GetAwaiter().GetResult(); return new ValueTask<bool>(true); }
+            return AwaitUpdateAsync(send);
+        }
+        private static async ValueTask<bool> AwaitUpdateAsync(ValueTask send)
+        {
+            await send.ConfigureAwait(false);
             return true;
         }
 
@@ -78,18 +82,14 @@ namespace Bun3.Server.Players
         /// <summary>Whether changes are pending save.</summary>
         public bool IsDirty => Volatile.Read(ref _dirtyVersion) != Volatile.Read(ref _savedVersion);
 
+        internal int CaptureDirtyVersion() => Volatile.Read(ref _dirtyVersion);
+        internal void CompleteSave(int capturedVersion) => Volatile.Write(ref _savedVersion, capturedVersion);
+
         internal async ValueTask TrySaveAsync(ILogger logger)
         {
             var capturedVersion = Volatile.Read(ref _dirtyVersion);
-            try
-            {
-                await OnSaveAsync().ConfigureAwait(false);
-                Volatile.Write(ref _savedVersion, capturedVersion);   // MarkDirty during save keeps a higher version, so dirty persists
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "OnSaveAsync failed — kept dirty, retrying next cycle (Player {AccountKey})", AccountKey);
-            }
+            await OnSaveAsync().ConfigureAwait(false);
+            Volatile.Write(ref _savedVersion, capturedVersion);
         }
     }
 }

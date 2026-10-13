@@ -94,6 +94,20 @@ public class ItemStateRollbackTests
     }
 
     [Test]
+    public void Setter_only_rollback_restores_the_original_state_reference()
+    {
+        var inventory = Inventory<MutableState>(_ => new MutableState { Level = 1 });
+        inventory.TryAdd(_sword, 1);
+        var instance = Single(inventory, _sword);
+        var original = instance.State;
+
+        using (_transaction.Begin()) instance.State = new MutableState { Level = 5 };
+
+        Assert.That(instance.State, Is.SameAs(original));
+        Assert.That(instance.State.Level, Is.EqualTo(1));
+    }
+
+    [Test]
     public void Mutable_state_rolls_back_through_the_change_scope()
     {
         var inventory = Inventory<MutableState>(_ => new MutableState { Level = 1 }, s => s.Clone());
@@ -133,7 +147,7 @@ public class ItemStateRollbackTests
             }
         }
 
-        Assert.That(instance.State, Is.SameAs(original));
+        Assert.That(instance.State, Is.Not.SameAs(original));
         Assert.That(instance.State.Level, Is.EqualTo(1));
         Assert.That(instance.State.Options, Is.Empty);
     }
@@ -155,7 +169,7 @@ public class ItemStateRollbackTests
             }
         }
 
-        Assert.That(instance.State, Is.SameAs(original));
+        Assert.That(instance.State, Is.Not.SameAs(original));
         Assert.That(instance.State.Level, Is.EqualTo(1));
     }
 
@@ -185,6 +199,92 @@ public class ItemStateRollbackTests
         Assert.That(viaSetter.State.Level, Is.EqualTo(1));
         Assert.That(viaScope.State.Level, Is.EqualTo(1));
         Assert.That(viaScope.State.Options, Is.Empty);
+    }
+
+    [Test]
+    public void Replaced_state_sharing_mutable_data_restores_the_original_values()
+    {
+        var inventory = Inventory<MutableState>(_ => new MutableState
+        {
+            Level = 1, Options = new List<int> { 10 },
+        }, state => state.Clone());
+        inventory.TryAdd(_sword, 1);
+        var instance = Single(inventory, _sword);
+        var original = instance.State;
+
+        using (_transaction.Begin())
+        {
+            instance.State = new MutableState { Level = 5, Options = original.Options };
+            using (var scope = instance.BeginStateChange()) scope.State.Options.Add(30);
+        }
+
+        Assert.That(instance.State.Level, Is.EqualTo(1));
+        Assert.That(instance.State.Options, Is.EqualTo(new[] { 10 }));
+        Assert.That(instance.State, Is.Not.SameAs(original));
+    }
+
+    [Test]
+    public void Repeated_replacement_and_scopes_copy_the_original_only_once_per_transaction()
+    {
+        var copies = 0;
+        var inventory = Inventory<MutableState>(_ => new MutableState
+        {
+            Level = 1, Options = new List<int> { 10 },
+        }, state => { copies++; return state.Clone(); });
+        inventory.TryAdd(_sword, 1);
+        var instance = Single(inventory, _sword);
+        var original = instance.State;
+
+        using (_transaction.Begin())
+        {
+            instance.State = new MutableState { Level = 5, Options = original.Options };
+            using (var scope = instance.BeginStateChange()) scope.State.Options.Add(30);
+            instance.State = new MutableState { Level = 7, Options = original.Options };
+            using (var scope = instance.BeginStateChange()) scope.State.Options.Add(40);
+            Assert.That(copies, Is.EqualTo(1));
+        }
+        Assert.That(instance.State.Options, Is.EqualTo(new[] { 10 }));
+
+        using (_transaction.Begin())
+        {
+            using (var scope = instance.BeginStateChange()) scope.State.Options.Add(50);
+            Assert.That(copies, Is.EqualTo(2));
+        }
+        Assert.That(instance.State.Options, Is.EqualTo(new[] { 10 }));
+    }
+
+    [Test]
+    public void Failed_snapshot_can_be_retried_and_later_transactions_remain_usable()
+    {
+        var attempts = 0;
+        var inventory = Inventory<MutableState>(_ => new MutableState
+        {
+            Level = 1, Options = new List<int> { 10 },
+        }, state =>
+        {
+            if (++attempts == 1) throw new InvalidOperationException("copy failed");
+            return state.Clone();
+        });
+        inventory.TryAdd(_sword, 1);
+        var instance = Single(inventory, _sword);
+        var original = instance.State;
+
+        using (_transaction.Begin())
+        {
+            instance.State = new MutableState { Level = 5, Options = original.Options };
+            Assert.That(() => instance.BeginStateChange(), Throws.TypeOf<InvalidOperationException>());
+            using (var scope = instance.BeginStateChange()) scope.State.Options.Add(30);
+        }
+        Assert.That(attempts, Is.EqualTo(2));
+        Assert.That(instance.State.Level, Is.EqualTo(1));
+        Assert.That(instance.State.Options, Is.EqualTo(new[] { 10 }));
+
+        using (_transaction.Begin())
+        {
+            using (var scope = instance.BeginStateChange()) scope.State.Options.Add(40);
+        }
+        Assert.That(attempts, Is.EqualTo(3));
+        Assert.That(instance.State.Options, Is.EqualTo(new[] { 10 }));
     }
 
     [Test]

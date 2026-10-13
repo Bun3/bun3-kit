@@ -16,6 +16,11 @@ namespace Bun3.Server.Achievements
     /// Failure reporting follows one rule across the outgame packages: domain failures the caller
     /// must handle are returned (the claim bool, the completion count), while programmer errors and
     /// save data corruption throw.
+    /// Rollback buffers are created on the first mutation in an active transaction and reused.
+    /// Notification failures leave applied state committed. Log, dirty and completion delivery
+    /// are attempted independently, and failed notifications are not replayed. Ordinary mutations
+    /// may reenter synchronously without changing a pending committed notification.
+    /// File layout: this file (gameplay operations) / Transaction (rollback and notification phases).
     /// </summary>
     /// <typeparam name="TDef">Game achievement definition type.</typeparam>
     public sealed partial class AchievementManager<TDef> where TDef : AchievementDefinition
@@ -33,7 +38,8 @@ namespace Bun3.Server.Achievements
         /// <summary>Hook fired right after completion — (identifier, definition, new completion
         /// count). Called after state updates finish, so the hook may Increase/Activate other
         /// achievements (chain/tier setups). Auto-rewards: call <see cref="TryClaim"/> here, then
-        /// the game grants.</summary>
+        /// the game grants. Log rows are recorded before dirty and completion hooks; inside a
+        /// transaction the hook runs only after every participant has finalized its state.</summary>
         public Action<AchievementId, TDef, int>? OnCompleted { get; set; }
 
         /// <summary>Number of tracked achievements (= catalog definition count).</summary>
@@ -53,7 +59,8 @@ namespace Bun3.Server.Achievements
         /// (e.g. to distinguish multiple achievement managers in the same log).</param>
         /// <param name="transaction">Session-wide transaction (<see cref="Transaction"/>) — when
         /// set, changes made while it is open are reversible and dirty/completion notifications are
-        /// buffered until commit. Nothing is snapshotted when no transaction is open.</param>
+        /// buffered until commit. Rollback storage is created only on the first active mutation,
+        /// then retained for reuse. No storage is created before that first mutation.</param>
         public AchievementManager(
             AchievementCatalog<TDef> catalog,
             Action? onDirty = null,
@@ -69,7 +76,6 @@ namespace Bun3.Server.Achievements
             _log = log;
             _logLabel = logLabel;
             _transaction = transaction;
-            _txCaptured = new bool[catalog.Count];
             for (var i = 0; i < _states.Length; i++)
             {
                 _states[i].Availability = catalog.GetDefinition(new AchievementId(i)).InitialAvailability;
@@ -245,18 +251,11 @@ namespace Bun3.Server.Achievements
                 state.CompletedCount += newCompletions;
                 state.LastCompletedAtUtcTicks = _utcNowTicks();
                 changed = true;
-                NotifyChange(id, AchievementChangeKind.Completed);
+
             }
 
-            if (changed)
-            {
-                NotifyDirty();
-            }
-
-            if (newCompletions > 0)
-            {
-                NotifyCompleted(id, newCompletions);
-            }
+            NotifyMutation(id, newCompletions > 0 ? AchievementChangeKind.Completed : null,
+                changed, newCompletions);
 
             return newCompletions;
         }
@@ -286,8 +285,7 @@ namespace Bun3.Server.Achievements
                 state.Progress = remaining > 0 ? remaining : 0;   // Floor at 0 to tolerate a lenient Restore.
             }
 
-            NotifyChange(id, AchievementChangeKind.Claimed);
-            NotifyDirty();
+            NotifyMutation(id, AchievementChangeKind.Claimed, true);
             return true;
         }
 
@@ -340,8 +338,7 @@ namespace Bun3.Server.Achievements
 
             Capture(id);
             state.Availability = AchievementStatus.Ready;
-            NotifyChange(id, AchievementChangeKind.AvailabilityChanged);
-            NotifyDirty();
+            NotifyMutation(id, AchievementChangeKind.AvailabilityChanged, true);
             return true;
         }
 
@@ -357,8 +354,7 @@ namespace Bun3.Server.Achievements
 
             Capture(id);
             state.Availability = AchievementStatus.Active;
-            NotifyChange(id, AchievementChangeKind.AvailabilityChanged);
-            NotifyDirty();
+            NotifyMutation(id, AchievementChangeKind.AvailabilityChanged, true);
             return true;
         }
 
@@ -376,8 +372,7 @@ namespace Bun3.Server.Achievements
 
             Capture(id);
             state.Availability = AchievementStatus.Locked;
-            NotifyChange(id, AchievementChangeKind.AvailabilityChanged);
-            NotifyDirty();
+            NotifyMutation(id, AchievementChangeKind.AvailabilityChanged, true);
             return true;
         }
 
@@ -449,7 +444,7 @@ namespace Bun3.Server.Achievements
             state.CompletedCount = 0;
             state.ClaimedCount = 0;
             state.LastCompletedAtUtcTicks = 0;
-            NotifyDirty();
+            NotifyMutation(id, null, true);
         }
     }
 }

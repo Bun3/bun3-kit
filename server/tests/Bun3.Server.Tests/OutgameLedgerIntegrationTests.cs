@@ -154,7 +154,7 @@ public class OutgameLedgerIntegrationTests
             transaction: _transaction);   // Injected but never opened — the configuration a game ships.
         bare.TryAdd(_gold, 1_000_000);
 
-        for (var i = 0; i < 100; i++)
+        for (var i = 0; i < 1000; i++)
         {
             bare.TryAdd(_gold, 1);
             bare.TryRemove(_gold, 1);

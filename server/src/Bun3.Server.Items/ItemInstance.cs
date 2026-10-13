@@ -1,3 +1,4 @@
+// ItemInstance partial — item fields, state access, and change scopes.
 using System;
 using Bun3.Gameplay.Numerics;
 
@@ -9,12 +10,15 @@ namespace Bun3.Server.Items
     /// instance per definition. Amounts are <see cref="BigNum"/> — long converts implicitly,
     /// and BigNum addition is lossy, absorbing terms outside the significant digits
     /// (idle-game amount semantics; full consumption is exactly Zero).
-    /// <see cref="State"/> is game-owned opaque state (level, exp, options, etc.) — assign it as a
-    /// value, or use <see cref="BeginStateChange"/> for a mutable state type; <see cref="MarkChanged"/>
-    /// covers manual in-place mutation outside a transaction.
+    /// Generated state tracks nested edits automatically and preserves references on rollback.
+    /// Otherwise <see cref="State"/> is game-owned opaque state (level, exp, options, etc.) — assign it as a
+    /// value, or use <see cref="BeginStateChange"/> for mutable edits; <see cref="MarkChanged"/>
+    /// covers manual in-place mutation outside a transaction. Rollback preserves this instance,
+    /// but an opaque mutable state edit restores an independent state value rather than the old object.
+    /// File layout: this file (fields and scopes) / StateTracking (generated state ownership).
     /// </summary>
     /// <typeparam name="TState">Game-defined instance state type.</typeparam>
-    public sealed class ItemInstance<TState>
+    public sealed partial class ItemInstance<TState>
     {
         private uint _flags;
         private long _expiresAtTicksUtc;
@@ -89,29 +93,35 @@ namespace Bun3.Server.Items
             }
         }
 
-        /// <summary>Game-owned state — the framework does not interpret it. Assign a replacement
-        /// rather than mutating in place: the previous value is what a transaction restores on
-        /// rollback. For mutable state types use <see cref="BeginStateChange"/> instead.
-        /// The setter feeds change tracking automatically.</summary>
+        /// <summary>Game-owned state. Generated state supports automatic nested tracking and
+        /// reference-preserving rollback; assigning its current root is a no-op. For opaque state,
+        /// assign a replacement
+        /// rather than mutating in place: the previous value is what a setter-only transaction
+        /// restores on rollback. If a later change scope edits mutable data, rollback restores an
+        /// independent copy of the original value. Re-read this property after rollback instead
+        /// of retaining a reference to a previous state object. For mutable edits use
+        /// <see cref="BeginStateChange"/>.
+        /// The setter feeds change tracking automatically. An instance that has used a mutable
+        /// change scope cannot subsequently accept generated state; load a new instance instead.</summary>
         public TState State
         {
             get => _state;
-            set
-            {
-                _owner?.CaptureForRollback(this);
-                _state = value;
-                MarkChangedInternal();
-            }
+            set => SetState(value);
         }
 
         /// <summary>Opens a mutation scope for a mutable state type. Inside a transaction the
-        /// framework deep-copies the state through the inventory's snapshotState delegate here, so
-        /// the change is reversible.</summary>
+        /// framework copies the saved pre-transaction state through the inventory's snapshotState
+        /// delegate on the first scope for this instance. Close this scope before its transaction
+        /// scope. Edits through external references and mutable data shared between different item
+        /// instances are outside the rollback contract. Generated state and change scopes cannot
+        /// be mixed during the lifetime of one instance, including after null or opaque replacement.</summary>
         /// <exception cref="InvalidOperationException">Inside a transaction when the inventory was
-        /// created without a snapshotState delegate.</exception>
+        /// created without a snapshotState delegate, or when this instance has used generated state.</exception>
         public ItemStateScope<TState> BeginStateChange()
         {
+            ThrowIfGeneratedStateTracking();
             _owner?.CaptureStateForRollback(this);
+            _stateScopeUsed = true;
             return new ItemStateScope<TState>(this);
         }
 

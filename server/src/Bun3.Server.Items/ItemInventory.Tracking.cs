@@ -81,6 +81,7 @@ namespace Bun3.Server.Items
             }
 
             var instance = new ItemInstance<TState>(this, instanceId, item, quantity, flags, expiresAtTicksUtc, state);
+            instance.InitializeStateTracking();
             _instances.Add(instanceId, instance);
             Index(instance);
             return InventoryError.None;

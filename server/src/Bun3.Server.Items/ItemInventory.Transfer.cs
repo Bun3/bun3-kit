@@ -243,23 +243,14 @@ namespace Bun3.Server.Items
         {
             _hasChanges = true;
             target._hasChanges = true;
-            NotifyDirty();
-            target.NotifyDirty();
-            EmitTransferSide(item, -amount);
-            target.EmitTransferSide(item, amount);
-        }
-
-        private void EmitTransferSide(ItemId item, BigNum delta)
-        {
-            if (_onApplied == null && _log == null)
-            {
-                return;
-            }
-
-            _appliedCount = 0;
-            RecordApplied(item, delta);
-            _onApplied?.Invoke(new ReadOnlySpan<InventoryChange>(_applied, 0, _appliedCount));
-            LogAppliedChanges();
+            RecordApplied(item, -amount);
+            target.RecordApplied(item, amount);
+            var sourceNotification = FreezeNotification(true);
+            var targetNotification = target.FreezeNotification(true);
+            List<Exception>? errors = null;
+            DeliverNotification(sourceNotification, ref errors);
+            target.DeliverNotification(targetNotification, ref errors);
+            ThrowNotificationErrors(errors);
         }
     }
 }

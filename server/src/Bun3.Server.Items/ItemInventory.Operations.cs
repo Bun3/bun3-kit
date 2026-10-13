@@ -64,8 +64,13 @@ namespace Bun3.Server.Items
             }
 
             _txToken++;   // Invalidate the builder after commit.
-            var error = CommitOps(_txOps, out failedIndex, created);
+            var hadOperations = _txOps.Count != 0;
+            var error = CommitOps(_txOps, out failedIndex, created, deferNotifications: true);
             _txOps.Clear();
+            if (error == InventoryError.None && hadOperations)
+            {
+                FinishOperationNotifications();
+            }
             return error;
         }
 
@@ -278,7 +283,7 @@ namespace Bun3.Server.Items
         /// The id issuer and state factory are called only after validation passes; on success
         /// onDirty fires once per batch.
         /// </summary>
-        private InventoryError CommitOps(List<TxOp> ops, out int failedIndex, List<ItemInstance<TState>>? created)
+        private InventoryError CommitOps(List<TxOp> ops, out int failedIndex, List<ItemInstance<TState>>? created, bool deferNotifications = false)
         {
             failedIndex = -1;
             if (ops.Count == 0)
@@ -333,10 +338,9 @@ namespace Bun3.Server.Items
             }
 
             _hasChanges = true;
-            NotifyDirty();
-            if (!_txEnlisted)
+            if (!deferNotifications)
             {
-                FlushApplied();
+                FinishOperationNotifications();
             }
 
             return InventoryError.None;
@@ -500,34 +504,6 @@ namespace Bun3.Server.Items
             }
         }
 
-        /// <summary>Delivers the accumulated applied changes to onApplied and the action log,
-        /// then resets the buffer. Deferred to commit while a transaction is active.</summary>
-        private void FlushApplied()
-        {
-            if (_appliedCount == 0)
-            {
-                return;
-            }
-
-            _onApplied?.Invoke(new ReadOnlySpan<InventoryChange>(_applied, 0, _appliedCount));
-            LogAppliedChanges();
-            _appliedCount = 0;
-        }
-
-        /// <summary>Attaches the applied-buffer changes to the action log — low-frequency audit path, boxing allowed.</summary>
-        private void LogAppliedChanges()
-        {
-            if (_log == null)
-            {
-                return;
-            }
-
-            for (var i = 0; i < _appliedCount; i++)
-            {
-                _log.Append(_applied[i], _logLabel);
-            }
-        }
-
         private void RecordApplied(ItemId item, BigNum delta)
         {
             if (_onApplied == null && _log == null)
@@ -675,6 +651,11 @@ namespace Bun3.Server.Items
             {
                 IsNew = true,
             };
+            if (_instances.ContainsKey(instance.InstanceId))
+            {
+                throw new InvalidOperationException("The instance id issuer returned an existing id.");
+            }
+            instance.InitializeStateTracking();
             Capture(instance);   // Before the first container mutation — snapshots the membership.
             _instances.Add(instance.InstanceId, instance);
             Index(instance);
@@ -703,6 +684,7 @@ namespace Bun3.Server.Items
         private void RemoveInstance(ItemInstance<TState> instance)
         {
             Capture(instance);
+            DetachStateTracking(instance);
             _instances.Remove(instance.InstanceId);
             Unindex(instance);
 

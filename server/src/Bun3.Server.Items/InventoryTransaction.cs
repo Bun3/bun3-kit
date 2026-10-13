@@ -45,9 +45,10 @@ namespace Bun3.Server.Items
             _inventory.TxRecord(_token, new ItemInventory<TState>.TxOp(
                 ItemInventory<TState>.TxOpKind.RemoveInstanceAmount, ItemId.None, instanceId, amount));
 
-        /// <summary>Applies the batch all-or-nothing. On failure the inventory is fully unchanged
+        /// <summary>Applies the batch all-or-nothing. On validation failure the inventory is fully unchanged
         /// and <paramref name="failedIndex"/> points at the offending operation. Created instances
-        /// are collected into <paramref name="created"/>. The builder is invalid after commit.</summary>
+        /// are collected into <paramref name="created"/>. The builder is invalid after commit.
+        /// Notification exceptions leave the applied state committed and do not replay the batch.</summary>
         public InventoryError Commit(out int failedIndex, List<ItemInstance<TState>>? created = null) =>
             _inventory.TxCommit(_token, out failedIndex, created);
     }

@@ -19,7 +19,7 @@ public class LifecycleSealTests
         public volatile bool MarkDirtyDuringNextSave;
         public int RetireCalls;
 
-        protected override ValueTask OnSaveAsync()
+        protected internal override ValueTask OnSaveAsync()
         {
             Interlocked.Increment(ref SaveCalls);
             if (MarkDirtyDuringNextSave)
@@ -30,7 +30,7 @@ public class LifecycleSealTests
             return default;
         }
 
-        protected override ValueTask OnRetiredAsync()
+        protected internal override ValueTask OnRetiredAsync()
         {
             Interlocked.Increment(ref RetireCalls);
             return default;
@@ -143,10 +143,10 @@ public class LifecycleSealTests
 
         await h.Registry.RetireAllAsync();
 
-        // login attempt after retirement — the handler's SignInAsync throws, surfacing as status 2
+        // Closed admission rejects the request before invoking the login handler.
         var reply = await client.RequestAsync<LoginResponse>(new LoginRequest { DeviceId = "late" })
             .AsTask().WaitAsync(Timeout);
-        Assert.That(reply.Status, Is.EqualTo(RpcStatus.HandlerException));
+        Assert.That(reply.Status, Is.EqualTo(RpcStatus.InvalidOperation));
         Assert.That(h.Registry.TryGet("guest:late"), Is.Null, "a retired registry must not grow a new entry");
         client.Close();
     }
@@ -207,22 +207,28 @@ public class LifecycleSealTests
     [Test]
     public async Task Retire_during_slow_load_leaves_no_orphan_entry()
     {
+        var entered = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var gate = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         await using var h = await Harness.StartAsync(loader: async _ =>
         {
+            entered.TrySetResult(true);
             await gate.Task;
             return new SealPlayer();
         });
         var (client, _) = await h.ConnectAsync();
 
-        // fire the login — the loader blocks on the gate, so SignInAsync stalls holding the accountKey stripe
+        // Retirement must wait for an admitted load and then discard its result.
         var loginTask = client.RequestAsync<LoginResponse>(new LoginRequest { DeviceId = "slow" }).AsTask();
-        await Task.Delay(100);   // make sure the loader is blocked
+        Task retirement;
+        try
+        {
+            await entered.Task.WaitAsync(Timeout);
+            retirement = h.Registry.RetireAllAsync().AsTask();
+            Assert.That(retirement.IsCompleted, Is.False, "the active load still owns admission");
+        }
+        finally { gate.TrySetResult(true); }
 
-        // at RetireAll time there is no entry yet, so the snapshot misses it — completes without stripe contention
-        await h.Registry.RetireAllAsync();
-
-        gate.TrySetResult(true);   // release the loader — the pre-insert recheck must see _retired and block it
+        await retirement.WaitAsync(Timeout);
         var reply = await loginTask.WaitAsync(Timeout);
 
         Assert.That(reply.Status, Is.EqualTo(RpcStatus.HandlerException));
