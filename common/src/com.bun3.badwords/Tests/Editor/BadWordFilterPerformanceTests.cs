@@ -25,6 +25,8 @@ namespace Bun3.BadWords.Tests
             Assert.That(filter.ContainsBadWord(longText), Is.True);
             Assert.That(filter.ContainsBadWord(cleanText), Is.False);
             Assert.That(filter.ContainsBadWord(cleanLong), Is.False);
+            // Unity's Mono ArrayPool drops pooled arrays on every GC; long inputs must not depend on a pool surviving one.
+            GC.Collect();
 #if UNITY_5_3_OR_NEWER
             Assert.That(() =>
             {

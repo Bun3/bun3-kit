@@ -1,5 +1,4 @@
 using System;
-using System.Buffers;
 using System.Collections.Generic;
 
 namespace Bun3.BadWords
@@ -14,6 +13,9 @@ namespace Bun3.BadWords
     public sealed partial class BadWordFilter
     {
         const int StackLimit = 256;
+
+        // Unity's Mono ArrayPool drops pooled arrays on every GC, so long inputs reuse a per-thread buffer instead.
+        [ThreadStatic] static char[] scratch;
 
         readonly AhoCorasick korean;
         readonly AhoCorasick english;
@@ -55,22 +57,22 @@ namespace Bun3.BadWords
         }
 
         /// <summary>Returns true when <paramref name="text"/> contains a blocked word that no allow entry covers.</summary>
-        /// <remarks>Allocates no managed memory; inputs over 256 characters rent scratch space from <see cref="ArrayPool{T}.Shared"/>.</remarks>
+        /// <remarks>
+        /// Allocates no managed memory once warmed up. Inputs over 256 characters use a per-thread buffer that grows to twice
+        /// the longest input seen on that thread and is kept, so the first longer input on each thread allocates.
+        /// </remarks>
         public bool ContainsBadWord(ReadOnlySpan<char> text)
         {
             if (text.IsEmpty) return false;
-            char[] rented = null;
-            Span<char> buffer = text.Length <= StackLimit
-                ? stackalloc char[StackLimit * 2]
-                : (rented = ArrayPool<char>.Shared.Rent(text.Length * 2));
-            try
-            {
-                return Find(text, buffer.Slice(0, text.Length), buffer.Slice(text.Length, text.Length), out _) != StreamKind.None;
-            }
-            finally
-            {
-                if (rented != null) ArrayPool<char>.Shared.Return(rented);
-            }
+            Span<char> buffer = text.Length <= StackLimit ? stackalloc char[StackLimit * 2] : Scratch(text.Length * 2);
+            return Find(text, buffer.Slice(0, text.Length), buffer.Slice(text.Length, text.Length), out _) != StreamKind.None;
+        }
+
+        static char[] Scratch(int length)
+        {
+            char[] buffer = scratch;
+            if (buffer == null || buffer.Length < length) scratch = buffer = new char[length];
+            return buffer;
         }
 
         // Diagnostics for dictionary curation; allocates.

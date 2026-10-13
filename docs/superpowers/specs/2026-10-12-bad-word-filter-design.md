@@ -81,7 +81,7 @@ namespace Bun3.BadWords
         /// Throws ArgumentException for a malformed entry (see Entry grammar).
         public BadWordFilter(IEnumerable<string> entries);
 
-        /// No managed allocation for any input length (after ArrayPool warm-up above 256 chars).
+        /// No managed allocation for any input length (after per-thread scratch warm-up above 256 chars).
         public bool ContainsBadWord(ReadOnlySpan<char> text);
     }
 
@@ -170,7 +170,7 @@ Case is preserved here; stream B needs it.
 
 ## Buffers and allocation
 
-- `ContainsBadWord` holds no instance state. Scratch: `stackalloc char[256]` when `text.Length ≤ 256`, otherwise `ArrayPool<char>.Shared.Rent` returned in `finally`. Match buffers are `stackalloc` spans of an unmanaged struct.
+- `ContainsBadWord` holds no instance state. Scratch: `stackalloc char[256]` when `text.Length ≤ 256`, otherwise a `[ThreadStatic]` grow-only `char[]` (Unity's Mono `ArrayPool` drops pooled arrays on every GC). Match buffers are `stackalloc` spans of an unmanaged struct.
 - No strings, closures, LINQ, boxing or iterators on the call path.
 
 ## Default dictionary pipeline

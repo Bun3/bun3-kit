@@ -37,7 +37,7 @@ Not handled: initial-consonant projection of syllables, symbols imitating jamo, 
 
 More limits: a leet digit next to an end boundary is not folded (`ass1`); `!` is not read as `i`; a precomposed syllable followed by loose jamo is not recombined; more than 32 matches in one scan count as a bad word, so an allowed word repeated 33 or more times blocks; English entries containing symbols treat those symbols as word boundaries.
 
-Memory: inputs longer than the shared `ArrayPool`'s maximum array length (about 1M chars on some runtimes) may allocate. Cap input length in the consumer; nicknames and chat lines are far below it.
+Memory: inputs over 256 characters use a per-thread scratch buffer that grows to twice the longest input seen on that thread and is kept; the first longer input on each thread allocates. Cap input length in the consumer; nicknames and chat lines are far below it.
 
 ## Default dictionary
 
