@@ -29,8 +29,19 @@ namespace Bun3.State.Package.Tests
                     "<configuration><packageSources><clear/><add key=\"local\" value=\"" + SecurityElement.Escape(feed) + "\"/></packageSources></configuration>");
 
                 var project = Path.Combine(root, "common", "src", "Bun3.State", "Bun3.State.csproj");
-                var pack = Run(root, cache, "pack", project, "-c", "Release", "-o", feed);
+                var repositoryAssets = new[] { "Bun3.State", "Bun3.State.Generator" }
+                    .Select(name => Path.Combine(root, "common", "artifacts", "obj", name, "project.assets.json"))
+                    .ToArray();
+                var assetsBefore = repositoryAssets.Select(file => File.Exists(file) ? File.ReadAllText(file) : null).ToArray();
+                var pack = Run(root, cache, "pack", project, "-c", "Release", "-o", feed,
+                    "--artifacts-path", Path.Combine(temporary, "artifacts"));
                 Assert.That(pack.ExitCode, Is.Zero, pack.Output);
+                for (var i = 0; i < repositoryAssets.Length; i++)
+                {
+                    var assetsAfter = File.Exists(repositoryAssets[i]) ? File.ReadAllText(repositoryAssets[i]) : null;
+                    Assert.That(assetsAfter == assetsBefore[i], Is.True,
+                        $"Package consumption must preserve repository restore assets: {repositoryAssets[i]}");
+                }
                 var nupkg = Path.Combine(feed, "Bun3.State.0.1.0.nupkg");
                 Assert.That(File.Exists(nupkg), Is.True, pack.Output);
                 using (var zip = ZipFile.OpenRead(nupkg))
