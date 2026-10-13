@@ -1,0 +1,13 @@
+{
+  "name": "com.bun3.badwords",
+  "displayName": "Bun3 Bad Words",
+  "version": "0.1.0",
+  "unity": "2022.3",
+  "description": "Allocation-free Korean and English bad word detection with a bundled default dictionary. netstandard2.1; no UnityEngine dependency.",
+  "dependencies": {},
+  "author": {
+    "name": "Bun3",
+    "url": "https://github.com/Bun3",
+    "email": "bun3.dev@gmail.com"
+  }
+}

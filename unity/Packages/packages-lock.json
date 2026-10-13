@@ -1,5 +1,11 @@
 {
   "dependencies": {
+    "com.bun3.badwords": {
+      "version": "file:../../common/src/com.bun3.badwords",
+      "depth": 0,
+      "source": "local",
+      "dependencies": {}
+    },
     "com.bun3.common": {
       "version": "file:../../common/src/com.bun3.common",
       "depth": 0,

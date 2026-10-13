@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <LangVersion>9.0</LangVersion>
+    <RootNamespace>Bun3.BadWords</RootNamespace>
+    <AssemblyName>Bun3.BadWords</AssemblyName>
+    <PackageId>Bun3.BadWords</PackageId>
+    <Version>0.1.0</Version>
+    <Authors>Bun3</Authors>
+    <RepositoryUrl>https://github.com/Bun3/bun3-kit</RepositoryUrl>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="Editor/**/*.cs" />
+    <Compile Remove="Tests/**/*.cs" />
+    <None Include="Third Party Notices.md;README.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
+
+</Project>
