@@ -109,10 +109,20 @@ namespace Bun3.BadWords.Tests
         [TestCase("AV女子", "女子")]
         [TestCase("人々", "人々")]
         [TestCase("傻\uD840\uDC00逼", "傻逼")]
+        [TestCase("他媽的", "他妈的")]
+        [TestCase("操你媽", "操你妈")]
         [TestCase("hello", "")]
         [TestCase("시발", "")]
         public void CjkStreamFoldsKanaAndDropsSeparators(string text, string expected) =>
             Assert.That(RunCjk(text), Is.EqualTo(expected));
+
+        [TestCase('媽', '妈')]
+        [TestCase('雞', '鸡')]
+        [TestCase('歡', '欢')]
+        [TestCase('中', '中')]
+        [TestCase('A', 'A')]
+        public void SimplifiedMapsTraditionalHan(char input, char expected) =>
+            Assert.That(TextNormalizer.Simplified(input), Is.EqualTo(expected));
 
         [TestCase("hello", false)]
         [TestCase("시발", false)]

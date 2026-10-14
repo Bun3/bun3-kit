@@ -11,7 +11,7 @@ namespace Bun3.BadWords.Tests
             "시발", "!시발점", "!다시발", "ㅅㅂ", "병신", "좆",
             "fuck", "|ass|", "butt", "cum", "!accumulate", "cunt", "!scunthorpe",
             "хуй", "|бля", "пизд", "ебат", "!застрахуй",
-            "ちんこ", "フェラ", "!フェラーリ", "傻逼",
+            "ちんこ", "フェラ", "!フェラーリ", "傻逼", "鸡巴",
         });
 
         [TestCase("시발")]
@@ -65,6 +65,8 @@ namespace Bun3.BadWords.Tests
         [TestCase("傻逼")]
         [TestCase("你是傻逼吗")]
         [TestCase("傻\uD840\uDC00逼")]
+        [TestCase("雞巴")]
+        [TestCase("鸡巴")]
         public void BlocksEvasionForms(string text) =>
             Assert.That(filter.ContainsBadWord(text), Is.True, text);
 

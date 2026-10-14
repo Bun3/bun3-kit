@@ -7,7 +7,8 @@ namespace Bun3.BadWords
     /// Builds the normalized streams scanned by <see cref="BadWordFilter"/>.
     /// Every output is no longer than its input; work and destination buffers must not overlap.
     /// </summary>
-    internal static class TextNormalizer
+    /// <remarks>Partial: <c>TextNormalizer.cs</c> (streams) and the generated <c>TextNormalizer.Simplified.cs</c> (Traditional to Simplified pairs).</remarks>
+    internal static partial class TextNormalizer
     {
         internal const char Removed = '\0';
         internal const char Other = '\uFFFF';
@@ -122,9 +123,13 @@ namespace Bun3.BadWords
                 {
                     if (count > 0 && semiVoiceable.IndexOf(destination[count - 1]) >= 0) destination[count - 1] = (char)(destination[count - 1] + 2);
                 }
-                else if ((c >= '\u30A1' && c <= '\u30FA') || c == '\u3005' || IsHan(c))
+                else if ((c >= '\u30A1' && c <= '\u30FA') || c == '\u3005')
                 {
                     destination[count++] = c;
+                }
+                else if (IsHan(c))
+                {
+                    destination[count++] = Simplified(c);
                 }
             }
             return count;
@@ -145,6 +150,20 @@ namespace Bun3.BadWords
             foreach (char c in text)
                 if (IsCjk(c)) return true;
             return false;
+        }
+
+        internal static char Simplified(char c)
+        {
+            int low = 0, high = traditional.Length - 1;
+            while (low <= high)
+            {
+                int middle = (low + high) >> 1;
+                char key = traditional[middle];
+                if (key == c) return simplified[middle];
+                if (key < c) low = middle + 1;
+                else high = middle - 1;
+            }
+            return c;
         }
 
         static bool IsHan(char c) =>
