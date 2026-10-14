@@ -30,12 +30,18 @@ two girls one cup
 one cup two girls
 acrotomophilia
 acrotomophile
-black cock
-big cock
-huge cock
-giant cock
-massive cock
-throbbing cock
+black cock|
+black cocks|
+big cock|
+big cocks|
+huge cock|
+huge cocks|
+giant cock|
+giant cocks|
+massive cock|
+massive cocks|
+throbbing cock|
+throbbing cocks|
 alabama hot pocket
 alabama tuna melt
 alaskan pipeline
@@ -48,7 +54,7 @@ apotemnophilia
 apotemnophile
 arsehole
 asshole
-ass bandit
+|ass bandit
 arse bandit
 autoerotic
 auto erotic
@@ -56,19 +62,19 @@ babeland
 baby batter
 baby gravy
 baby juice
-ball batter
-ball gravy
-ball gag
+|ball batter
+|ball gravy
+|ball gag|
 ballgag
-ball kicking
-ball licking
-ball sack
-ball sucking
+|ball kicking
+|ball licking
+|ball sack
+|ball sucking
 ballcuzi
 bangbros
-bang bros
+|bang bros
 bangbus
-bang bus
+|bang bus
 barely legal
 bastinado
 batty boy
@@ -78,7 +84,7 @@ battyboi
 bdsm
 bean flicker
 beanflicker
-bean queen
+|bean queen
 beaner
 beaners
 beastiality
@@ -157,7 +163,7 @@ canadian porch swing
 carpet muncher
 carpetmuncher
 cheese eating surrender monkey
-chi chi man
+|chi chi man|
 chicken queen
 chink
 chinks
@@ -232,7 +238,7 @@ doggie style
 doggiestyle
 doggy style
 doggystyle
-dog style
+|dog style
 |dolcett|
 dominatrix
 dommes
@@ -250,7 +256,7 @@ dyke
 dystychiphilia
 dystychiphile
 edgeplay
-edge play
+|edge play|
 ejaculate
 ejaculation
 ejaculating
@@ -259,6 +265,7 @@ electroplay
 emetophilia
 emetophile
 eskimo trebuchet
+# Known limit: Irish fág (leave) folds to fag, so it stays blocked; an allow with that key would turn the entry off.
 |fag|
 |fags|
 fag bomb
@@ -304,8 +311,8 @@ fudge packer
 fudgepacker
 futanari
 gangbang
-gang bang
-gay sex
+|gang bang
+|gay sex
 gaysian
 genitorture
 gerontophilia
@@ -336,10 +343,10 @@ hippophilia
 hippophile
 homoerotic
 horny
-hot carl
-hot richard
+|hot carl
+|hot richard
 humping
-impact play
+impact play|
 incest
 jail bait
 jailbait
@@ -382,8 +389,8 @@ mdlb
 meat masseuse
 meatspin
 meat spin
-menage a trois
-menages a trois
+|menage a trois
+|menages a trois
 menophilia
 menophile
 mexican pancake
@@ -405,7 +412,7 @@ nigerian hurricane
 nigga
 niggs
 nignog
-nig nog
+|nig nog
 nigger
 nipple clamps
 nipple clamp
@@ -497,7 +504,7 @@ rhypophile
 rice queen
 rimjob
 |rimming
-ring raider
+|ring raider
 ringraider
 rusty trombone
 sand nigger
@@ -537,7 +544,7 @@ splooge
 splooge moose
 spooge
 spunk
-strap on
+strap on|
 strapon
 strappado
 swamp guinea
@@ -577,9 +584,9 @@ vorarephilia
 vorarephile
 voyeurweb
 wax play
-wet dream
+|wet dream
 wetback
-wet back
+|wet back|
 whitepower
 white power
 whore
@@ -1270,3 +1277,14 @@ zoophile
 # Sex and orgasm: |sex| and orgasm above already block them; orgasm also covers orgasmo, orgasme and Orgasmus.
 # masturb covers masturbation and its verbs in every Latin-script target language (masturbate, masturbar, masturber, masturbare, masturbieren, masturberen).
 masturb
+
+# == final review fixes (2026-10-14) ==
+# Multi-word entries above carry a boundary where an ordinary word can end in their first word or start with their last word
+# (Tagalog linker -ng: ibang bus, hanggang bangko; knowledge plays, meatball gravy, giant cockroach, strap onto).
+# Irish cuntas (account), cuntais (of an account) and cuntasóir (accountant). The end boundary keeps cuntass blocked.
+!cuntas|
+!cuntais
+!cuntasoir
+# The nickname Mr Handsome contains mr hands and mrhands.
+!mr handsome
+!mrhandsome

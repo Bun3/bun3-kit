@@ -41,3 +41,5 @@ neukt
 |seks|
 # English seeks collapses onto seks; the allow also lets stretched spellings of seks (seeeks) pass.
 !|seeks|
+# The native word for masturbation; masturberen is covered by en.txt masturb.
+zelfbevrediging

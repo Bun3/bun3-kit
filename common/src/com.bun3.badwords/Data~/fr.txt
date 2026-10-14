@@ -18,8 +18,8 @@ youpin
 
 # == LDNOOBW fr ==
 gouine
-nique ta mère
-nique ta race
+|nique ta mère
+|nique ta race
 pouffiasse
 
 # == false-positive sweep allows (FrequencyWords fr) ==

@@ -126,6 +126,18 @@ namespace Bun3.BadWords.Tests
         [TestCase("Selbstbefriedigung")]
         [TestCase("orgasmo")]
         [TestCase("pagtatalik")]
+        [TestCase("Onanie")]
+        [TestCase("onanismo")]
+        [TestCase("zelfbevrediging")]
+        // Word boundaries and allows added in the final review keep these blocked.
+        [TestCase("tang ina mo")]
+        [TestCase("gang bang")]
+        [TestCase("bang bus")]
+        [TestCase("dio cane")]
+        [TestCase("big cocks")]
+        [TestCase("tomar no cu")]
+        [TestCase("cuntass")]
+        [TestCase("MrHands")]
         public void BlocksStrongWordsInLatinScriptLanguages(string text) =>
             Assert.That(BadWordFilter.Default.ContainsBadWord(text), Is.True, text);
 
@@ -194,6 +206,29 @@ namespace Bun3.BadWords.Tests
         [TestCase("matatalik")]
         [TestCase("matatalik na kaibigan")]
         [TestCase("pinakamatatalik")]
+        // An ordinary word joined onto a multi-word entry (Tagalog linker -ng, a word ending or starting with an entry word).
+        [TestCase("batang ina")]
+        [TestCase("ibang bus")]
+        [TestCase("sumakay ka sa ibang bus")]
+        [TestCase("hanggang bangko")]
+        [TestCase("Claudio Canela")]
+        [TestCase("giant cockroach")]
+        [TestCase("knowledge plays a role")]
+        [TestCase("meatball gravy")]
+        [TestCase("strap onto")]
+        [TestCase("Monique ta mère")]
+        [TestCase("tomar no cuidado")]
+        [TestCase("sweet dreams")]
+        [TestCase("Mr Handsome")]
+        [TestCase("MrHandsome")]
+        [TestCase("cannon fodder")]
+        [TestCase("CannonFodder")]
+        [TestCase("putahe")]
+        [TestCase("putakti")]
+        [TestCase("putative")]
+        [TestCase("buonanima")]
+        [TestCase("cuntas")]
+        [TestCase("cuntasóir")]
         public void PassesEverydayWordsInLatinScriptLanguages(string text) =>
             Assert.That(BadWordFilter.Default.ContainsBadWord(text), Is.False, BadWordFilter.Default.Explain(text));
 
@@ -242,6 +277,12 @@ namespace Bun3.BadWords.Tests
         [TestCase("性交流群")]
         [TestCase("性交换")]
         [TestCase("第一次性交")]
+        [TestCase("日你妈的")]
+        [TestCase("日你妈逼")]
+        [TestCase("周日你妈死了")]
+        [TestCase("ウルトラマンコ")]
+        [TestCase("バカフェラ")]
+        [TestCase("キスかフェラ")]
         public void BlocksStrongWordsInOtherScripts(string text) =>
             Assert.That(BadWordFilter.Default.ContainsBadWord(text), Is.True, text);
 
@@ -306,6 +347,18 @@ namespace Bun3.BadWords.Tests
         [TestCase("一次性交易")]
         [TestCase("一次性交清")]
         [TestCase("一次性交付")]
+        [TestCase("一次性交通卡")]
+        [TestCase("国际性交流")]
+        [TestCase("个性交友")]
+        [TestCase("慢性交感神经")]
+        [TestCase("周日你妈妈来吗")]
+        [TestCase("星期日你妈妈在家吗")]
+        [TestCase("生日你妈妈送了什么")]
+        [TestCase("今日你媽媽好嗎")]
+        [TestCase("ヒューマンコメディ")]
+        [TestCase("アイアンマンコスプレ")]
+        [TestCase("ウルトラマンコレクション")]
+        [TestCase("カフェライブ")]
         public void PassesEverydayWordsInOtherScripts(string text) =>
             Assert.That(BadWordFilter.Default.ContainsBadWord(text), Is.False, BadWordFilter.Default.Explain(text));
 

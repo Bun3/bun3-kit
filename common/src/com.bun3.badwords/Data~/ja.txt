@@ -53,7 +53,7 @@
 !カチンコ
 !キッチンコーナー
 !キッチンコンロ
-!スパイダーマンコスプレ
+!マンコスプレ
 !アンパンマンこども
 !カフェラッテ
 !カフェラウンジ
@@ -79,3 +79,14 @@
 オーガズム
 # ユニセックス (unisex) passes. Place names (サセックス, エセックス) stay blocked: an allow starting with a one-kana particle or interjection (さ, え) would reopen あのさセックス.
 !ユニセックス
+
+# == final review fixes (2026-10-14): word junctions ==
+# A word ending in マン + a word starting with コ (ヒューマンコメディ, スーパーマンコスプレ, ウルトラマンコレクション). Hero-name prefixes such as ウルトラマンコ
+# are not allowed, because the hero name + まんこ pun would pass with them.
+!ヒューマンコ
+!ウルトラマンコレクション
+# カフェ + a word starting with ラ. A bare カフェラ allow would also pass the particle か + フェラ (キスかフェラ), so each word is listed.
+!カフェライブ
+!カフェライフ
+!カフェラバー
+# Known limit: ザ・メン… titles (ザ・メンバー) and ザメンホフ (Zamenhof) block. ー and ・ are dropped, so ザ・メン has the key of ザーメン and no allow can separate them.

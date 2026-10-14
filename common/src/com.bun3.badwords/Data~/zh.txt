@@ -67,16 +67,20 @@
 !做爱心活动
 !做爱心事业
 !做爱国者
-# A word ending in 性 + 交流, 交谈, 交际, 交遊, 交往, 交友 (理性交流, 女性交流群, 和女性交谈, 異性交際, 不純異性交遊, 和女性交往).
+# A word ending in 性 + 交流, 交谈, 交际, 交遊, 交往, 交友 (理性交流, 国际性交流, 女性交流群, 和女性交谈, 異性交際, 不純異性交遊, 和女性交往, 女性交友).
 !理性交流
 !两性交流
 !异性交流
 !女性交流
 !男性交流
+!国际性交流
+!建设性交流
+!实质性交流
 !女性交谈
 !男性交谈
 !异性交谈
 !异性交际
+!同性交际
 !异性交遊
 !异性交往
 !两性交往
@@ -84,10 +88,30 @@
 !男性交往
 !女性交往
 !异性交友
-# 一次性 (one-time) + 交易, 交清, 交付. 性交易 (sex trade) itself stays blocked, so only the one-time compounds are allowed.
+!同性交友
+!男性交友
+!女性交友
+!个性交友
+# 一次性 (one-time) + 交易, 交清, 交付, 交通 (一次性交通卡). 性交易 (sex trade) itself stays blocked, so only the one-time compounds are allowed.
 !一次性交易
 !一次性交清
 !一次性交付
+!一次性交通
+# 慢性 + 交感 (慢性交感神经, chronic sympathetic nerve).
+!慢性交感
 # 亲自 + 慰问 (visit in person) and the idiom 聊以自慰 (console oneself).
 !亲自慰问
 !聊以自慰
+
+# == final review fixes (2026-10-14): word junctions ==
+# A day word ending in 日 + 你妈妈 (周日你妈妈来吗, 今日你媽媽好嗎). Only the whole phrase is allowed, so 日你妈的, 日你妈逼 and 周日你妈死了 still block.
+!周日你妈妈
+!星期日你妈妈
+!礼拜日你妈妈
+!生日你妈妈
+!今日你妈妈
+!明日你妈妈
+!昨日你妈妈
+!节日你妈妈
+!假日你妈妈
+!平日你妈妈

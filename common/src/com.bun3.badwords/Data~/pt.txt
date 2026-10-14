@@ -19,10 +19,12 @@ xoxota
 # == cuss pt-pt (rating 2) ==
 foda-se
 foder|
+# English fodder (cannon fodder) collapses onto foder; the allow also lets stretched spellings of foder (fooder) pass, as !rapping does in en.txt.
+!fodder
 
 # == LDNOOBW pt ==
 paneleiro
-tomar no cu
+tomar no cu|
 
 # == false-positive sweep allows (FrequencyWords pt 50k, beyond the top 20,000) ==
 !arrombador|

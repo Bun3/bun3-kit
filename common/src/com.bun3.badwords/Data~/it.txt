@@ -6,7 +6,8 @@
 # == cuss it (rating 2) ==
 cazzo
 |coglion
-dio cane
+# Bounded at both ends: Claudio Canela, studio cane, addio cane and Spanish le dio canela pass.
+|dio cane|
 diocane
 fanculo
 figlio di troia

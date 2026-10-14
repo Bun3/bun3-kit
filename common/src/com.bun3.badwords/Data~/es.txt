@@ -44,6 +44,12 @@ jodete
 jodida
 jodido
 
+# == false-positive allows (final review 2026-10-14) ==
+# Tagalog putahe (dish) and putakti (wasp); English putative, Spanish and Portuguese putativo.
+!putahe
+!putakti
+!putativ
+
 # == owner ruling 2026-10-14: plain sexual words ==
 # The plain noun only: the plural (ambos sexos) and sexual pass, as en |sex| does not block sexes or sexual. Also covers Portuguese sexo.
 # Masturbation and orgasm: en.txt masturb and orgasm.

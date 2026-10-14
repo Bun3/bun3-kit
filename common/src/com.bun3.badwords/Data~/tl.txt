@@ -6,7 +6,8 @@
 
 # == LDNOOBW fil ==
 tangina
-tang ina
+# The start boundary keeps the linker -ng from joining an ordinary word onto the entry (batang ina, kitang ina).
+|tang ina
 kantot
 nognog
 
