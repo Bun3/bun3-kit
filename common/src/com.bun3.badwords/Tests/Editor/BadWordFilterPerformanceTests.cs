@@ -36,7 +36,9 @@ namespace Bun3.BadWords.Tests
                 foreach (string text in blocked) filter.ContainsBadWord(text);
                 foreach (string text in clean) filter.ContainsBadWord(text);
             }
-            Assert.That(GC.GetAllocatedBytesForCurrentThread() - before, Is.EqualTo(0));
+            long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+            // Optimized builds can box Is.EqualTo's expected value before the counter is read, so compare before NUnit allocates.
+            if (allocated != 0) Assert.Fail($"ContainsBadWord allocated {allocated} bytes.");
 #endif
         }
 
