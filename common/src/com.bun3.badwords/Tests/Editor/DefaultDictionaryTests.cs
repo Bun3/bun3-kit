@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics;
+using System.Text;
 using NUnit.Framework;
 
 namespace Bun3.BadWords.Tests
@@ -93,6 +94,23 @@ namespace Bun3.BadWords.Tests
             long retained = GC.GetTotalMemory(true) - before;
             GC.KeepAlive(filter);
             Assert.Pass("entries=" + BadWordFilter.DefaultEntries.Count + " buildMs=" + watch.Elapsed.TotalMilliseconds.ToString("F1") + " retainedBytes=" + retained);
+        }
+
+        [Test]
+        public void ReportsScanCost()
+        {
+            const int iterations = 100000;
+            string[] inputs = { "Player One", "탈출친구", "f.u.c.k you", "привет как дела", "こんにちは今日はいい天気", "你好世界朋友们" };
+            var report = new StringBuilder();
+            foreach (string input in inputs)
+            {
+                for (int i = 0; i < 1000; i++) BadWordFilter.Default.ContainsBadWord(input);
+                var watch = Stopwatch.StartNew();
+                for (int i = 0; i < iterations; i++) BadWordFilter.Default.ContainsBadWord(input);
+                watch.Stop();
+                report.Append(input).Append('=').Append((watch.Elapsed.TotalMilliseconds * 1000000 / iterations).ToString("F0")).Append("ns ");
+            }
+            Assert.Pass(report.ToString());
         }
     }
 }
