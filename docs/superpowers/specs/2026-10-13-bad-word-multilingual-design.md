@@ -40,6 +40,7 @@ Ship strong-expression entries for every language the first consumer plans to su
      - One filter per language. The Latin stream would be scanned eight times, and language sets could diverge between peers.
 4. **Strong expressions only**, the same bar as 0.1.0. Mild insults pass, as `바보` does in Korean.
    - **Owner ruling 2026-10-14:** words at the level of English `shit` and milder pass in every language (`mierda`, `merda`, `merde`, `Scheiße`, `クソ`). The `scheiße` example under "Step 0 and stream C" shows the `ß` mechanism only; it is not a default entry.
+   - **Owner ruling 2026-10-14:** plain sexual words (sex, masturbation, orgasm) are blocked in every language, matching the 0.1.0 Korean and English lists.
 5. **One release.** 0.2.0 contains every language. 0.1.0 merges first and is not extended.
 6. **No native review.** Frequency-list sweeps and an owner spot-check replace it.
 7. **Owner ruling 2026-10-14: Latin text is not read as Korean keyboard input.** Stream B of 0.1.0 is removed: Korean typed with the IME off (`tlqkf`) passes, and Latin words such as `sra`, `torri` and `rotor` no longer match Korean entries through it. The `Short` pattern flag existed only for stream B and is removed. The `en.txt` entries that spell a Korean word entirely in 2-beolsik keys (`tlqkf`, `wlfkf`) are removed with it; romanized forms (`sibal`) stay.
@@ -158,7 +159,7 @@ Latin transliterations of any language (ru `pizda`, `huy`) go through the Latin 
 
 **Rules**
 
-1. **Keep:** explicit sexual terms, slurs and harsh insults.
+1. **Keep:** explicit sexual terms, slurs and harsh insults, including plain sexual words (sex, masturbation, orgasm), which are blocked in every language (owner ruling 2026-10-14).
 2. **Drop:**
    - ordinary words and mild insults (ja `バカ` `アホ` `クソ` `デブ` `ブス`, zh `笨蛋` `白痴`);
    - drug, crime and political terms;

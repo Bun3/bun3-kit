@@ -1,6 +1,7 @@
 # com.bun3.badwords default Korean entries.
 # Grammar: one entry per line; '#' starts a comment; '!' allow; '|' word boundary (English). See README.md.
 # Sources: korcen (MIT) https://github.com/Tanat05/korcen @ eecd9763dbdccce3dc96ddb578ef0b6396058fa9; doublems/korean-bad-words (MIT) https://github.com/doublems/korean-bad-words @ 96d6ce489b64fcf258cd4c25b9a1b3a62b0f5558
+# Curation: strong expressions only; plain sexual words are blocked (owner ruling 2026-10-14). Record: docs/research/2026-10-13-bad-word-multilingual-sources.md.
 
 # == korcen general ==
 ㅗ

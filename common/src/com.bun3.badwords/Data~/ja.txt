@@ -1,7 +1,7 @@
 # com.bun3.badwords default Japanese entries.
 # Grammar: one entry per line; '#' starts a comment; '!' allow; '|' word boundary (Latin and Cyrillic). See README.md.
 # Sources: MosasoM/inappropriate-words-ja (MIT) https://github.com/MosasoM/inappropriate-words-ja @ e24de6e185135f92c3491ef61931c26905bd3b1f; Citrine (MIT) https://github.com/EbiseLutica/Citrine @ e6a37316bc8f3009febe0e0db77d9e29872e2d4d
-# Curation: strong expressions only; mild words pass (owner ruling 2026-10-14). Record: docs/research/2026-10-13-bad-word-multilingual-sources.md.
+# Curation: strong expressions only; mild words pass, and plain sexual words are blocked (owner ruling 2026-10-14). Record: docs/research/2026-10-13-bad-word-multilingual-sources.md.
 
 # == MosasoM Sexual ==
 おめこ

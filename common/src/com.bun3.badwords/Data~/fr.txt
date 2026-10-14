@@ -1,7 +1,7 @@
 # com.bun3.badwords default French entries.
 # Grammar: one entry per line; '#' starts a comment; '!' allow; '|' word boundary (Latin and Cyrillic). See README.md.
 # Sources: cuss (MIT) https://github.com/wooorm/cuss @ 6bab3fef250481e34ba55bc400fac5c6d25f1429; LDNOOBW (CC-BY-4.0, modified) https://github.com/LDNOOBW/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words @ 5faf2ba42d7b1c0977169ec3611df25a3c08eb13
-# Curation: strong expressions only; mild words pass (owner ruling 2026-10-14). Record: docs/research/2026-10-13-bad-word-multilingual-sources.md.
+# Curation: strong expressions only; mild words pass, and plain sexual words are blocked (owner ruling 2026-10-14). Record: docs/research/2026-10-13-bad-word-multilingual-sources.md.
 
 # == cuss fr (rating 2) ==
 bougnoul
