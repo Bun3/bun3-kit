@@ -138,7 +138,10 @@ if (hold.Completed) _charge.Complete(); else _charge.Cancel();
   `SoundHandle`의 stale 규칙과 같다. 루프를 잃은 차지에는 완료음도 없다.
 - 같은 차지 연타: 루프 def가 `MaxInstances = 1`이면 새 `PlayCharge`가 페이드아웃 중인 이전
   루프를 스틸하고, 이전 핸들은 stale이 된다.
-- 권장 루프 def 설정: `Loop` 켬, `Pitch` 1–1, `MaxInstances = 1`, `Cooldown = 0`.
+- 권장 루프 def 설정: `Loop` 켬, `Pitch` 1–1, `Cooldown = 0`, `MaxInstances` = 동시에 진행될 수
+  있는 차지 수. 플레이어 1명이 소유하는 차지면 1(연타 시 이전 루프 교체). 여러 적이 같은 def를
+  공유하면 동시 차지 수만큼 둔다 — 부족하면 새 차지가 기존 차지의 루프를 스틸해 그 차지는
+  완료음 없이 끝난다.
 
 ### 5.6 핫패스
 

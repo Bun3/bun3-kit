@@ -199,8 +199,12 @@ Authoring:
   with no build-up baked in, recorded as the state just before completion at pitch 1.
   The pitch curve's start sets the rise: 0.667 is a fifth below, 0.5 an octave,
   0.84 a minor third.
-- **Loop definition:** `Loop` on, `Pitch` 1–1, `MaxInstances = 1` so a re-press
-  replaces a fading charge, `Cooldown = 0`. Import from WAV with Decompress On Load.
+- **Loop definition:** `Loop` on, `Pitch` 1–1, `Cooldown = 0`, and `MaxInstances`
+  set to the number of charges that can run at once — 1 for a single player-owned
+  charge, so a re-press replaces a fading charge. A shared definition (several
+  enemies winding up) needs one instance per concurrent charger; otherwise a new
+  charge steals an older one's loop and that charge plays no completion sound.
+  Import from WAV with Decompress On Load.
 - **One-shots:** Start 0.1–0.3 s; Complete 0.3–1 s with an immediate attack in the
   loop's key; Cancel optional.
 
