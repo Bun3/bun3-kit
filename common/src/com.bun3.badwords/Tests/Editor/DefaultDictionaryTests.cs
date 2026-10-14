@@ -84,6 +84,83 @@ namespace Bun3.BadWords.Tests
         public void PassesOwnerAllowedWords(string text) =>
             Assert.That(BadWordFilter.Default.ContainsBadWord(text), Is.False, BadWordFilter.Default.Explain(text));
 
+        [TestCase("hijo de puta")]
+        [TestCase("pendejo")]
+        [TestCase("gilipollas")]
+        [TestCase("chinga tu madre")]
+        [TestCase("caralho")]
+        [TestCase("filho da puta")]
+        [TestCase("arrombado")]
+        [TestCase("vai se foder")]
+        [TestCase("salope")]
+        [TestCase("connard")]
+        [TestCase("enculé")]
+        [TestCase("nique ta mère")]
+        [TestCase("vaffanculo")]
+        [TestCase("puttana")]
+        [TestCase("coglione")]
+        [TestCase("figlio di puttana")]
+        [TestCase("Hurensohn")]
+        [TestCase("Fotze")]
+        [TestCase("Wichser")]
+        [TestCase("fick dich")]
+        [TestCase("klootzak")]
+        [TestCase("kutwijf")]
+        [TestCase("putang ina")]
+        [TestCase("tangina")]
+        [TestCase("kantot")]
+        public void BlocksStrongWordsInLatinScriptLanguages(string text) =>
+            Assert.That(BadWordFilter.Default.ContainsBadWord(text), Is.True, text);
+
+        [TestCase("con")]
+        [TestCase("del")]
+        [TestCase("mama")]
+        [TestCase("año")]
+        [TestCase("negro")]
+        [TestCase("comer")]
+        [TestCase("bitte")]
+        [TestCase("nicht")]
+        [TestCase("Straße")]
+        [TestCase("computadora")]
+        [TestCase("disputa")]
+        [TestCase("economía")]
+        [TestCase("economy")]
+        [TestCase("computation")]
+        [TestCase("computer")]
+        [TestCase("député")]
+        [TestCase("réputation")]
+        [TestCase("cuidado")]
+        [TestCase("fica")]
+        [TestCase("anno")]
+        [TestCase("ano")]
+        [TestCase("bobo")]
+        [TestCase("tanga")]
+        [TestCase("salamat")]
+        [TestCase("bedankt")]
+        [TestCase("lekker")]
+        [TestCase("certificate")]
+        [TestCase("difficulty")]
+        [TestCase("brochure")]
+        [TestCase("Monaco")]
+        [TestCase("Moses")]
+        [TestCase("alcohol")]
+        [TestCase("connect")]
+        public void PassesEverydayWordsInLatinScriptLanguages(string text) =>
+            Assert.That(BadWordFilter.Default.ContainsBadWord(text), Is.False, BadWordFilter.Default.Explain(text));
+
+        // Owner ruling (2026-10-14): mild words pass in every language.
+        [TestCase("mierda")]
+        [TestCase("merda")]
+        [TestCase("merde")]
+        [TestCase("Scheiße")]
+        [TestCase("scheisse")]
+        [TestCase("kacke")]
+        [TestCase("culo")]
+        [TestCase("bastardo")]
+        [TestCase("idiota")]
+        public void PassesMildWords(string text) =>
+            Assert.That(BadWordFilter.Default.ContainsBadWord(text), Is.False, BadWordFilter.Default.Explain(text));
+
         [Test]
         public void ReportsDefaultBuildCost()
         {
