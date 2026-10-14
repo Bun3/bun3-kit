@@ -26,7 +26,20 @@ hijaputa
 hijoputa
 
 # == false-positive sweep allows (FrequencyWords es 50k, beyond the top 20,000) ==
-!pendejad
-!putada
-!rapear
-!rapero
+!pendejada|
+!pendejadas|
+!putada|
+!putadas|
+!rapear|
+!rapero|
+!raperos|
+
+# == project additions (joined forms and inflections, review 2026-10-14) ==
+chingatumadre
+conchadetumadre
+hijadeputa
+hijodeputa
+hijueputa
+jodete
+jodida
+jodido

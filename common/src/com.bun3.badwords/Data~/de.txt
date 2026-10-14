@@ -5,7 +5,7 @@
 
 # == LDNOOBW de ==
 arschloch
-|fick|
+|fick
 ficken
 ficker
 fotze
@@ -13,7 +13,6 @@ fotze
 hurensohn
 kampflesbe
 kanake
-muschi
 |nutte|
 schlampe
 schwanzlutscher
@@ -28,3 +27,10 @@ wichser
 !gespickt
 !kikeriki
 !schlamperei
+
+# == project additions (joined forms and inflections, review 2026-10-14) ==
+fickdich
+fickt
+
+# == false-positive allows (review 2026-10-14) ==
+!fickle|

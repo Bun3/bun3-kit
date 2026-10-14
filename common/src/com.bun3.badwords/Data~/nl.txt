@@ -5,7 +5,7 @@
 
 # == LDNOOBW nl ==
 |flikker|
-|hoer|
+|hoer
 klootzak
 neuken
 |teef
@@ -15,13 +15,23 @@ teringlijer
 kutwijf
 
 # == false-positive sweep allows (FrequencyWords nl) ==
-!benutten
-!ietwat
+!|benutten
+!|ietwat
 !kikker
-!rapen
+!rapen|
 
 # == false-positive sweep allows (FrequencyWords nl 50k, beyond the top 20,000) ==
-!icoon
+!|icoon
 !nietsnutten
 !twater
 !twinkel
+
+# == project additions (joined forms and inflections, review 2026-10-14) ==
+|flikkers|
+hoerenzoon
+|neuk|
+neuker
+neukt
+
+# == false-positive allows (review 2026-10-14) ==
+!hoera|

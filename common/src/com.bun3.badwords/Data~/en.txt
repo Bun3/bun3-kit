@@ -735,7 +735,7 @@ zoophile
 !diathermies
 !endothermies
 !homeothermies
-!lesbos
+!lesbos|
 !blesbok
 !blesboks
 !bunglesome
@@ -907,7 +907,7 @@ zoophile
 !spiculum
 !spicy
 !aspic
-!aspics
+!|aspics
 !allspice
 !allspices
 !aruspices
@@ -1076,7 +1076,6 @@ zoophile
 !spickiness
 !spickinesses
 !spicking
-!spickks
 !spickula
 !spickulae
 !spickular
@@ -1087,8 +1086,8 @@ zoophile
 !spickules
 !spickulum
 !spicky
-!aspick
-!aspicks
+!|aspick
+!|aspicks
 !allspicke
 !allspickes
 !aruspickes
@@ -1256,22 +1255,20 @@ zoophile
 !cocoons
 
 # == false-positive sweep allows (FrequencyWords en) ==
-!cummings
+!cummings|
 !pussycat
 !rapper
 !rapping
-!thumping
+!|thumping
 
 # == false-positive sweep allows (FrequencyWords en 50k, beyond the top 20,000) ==
 !batgirl
-!bonner
 !cooney
-!fodder
 !poonam
-!racoon
+!|racoon
 !rubicon
-!snigger
+!|snigger
 !spunky
 !sweetback
-!thorny
+!|thorny
 !trafficker

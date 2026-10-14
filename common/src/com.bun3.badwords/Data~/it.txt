@@ -32,9 +32,15 @@ culattone
 
 # == false-positive sweep allows (FrequencyWords it 50k, beyond the top 20,000) ==
 !cazzott
-!fagott
-!incazzo
-!lesso
-!muschio
-!puttanat
+!fagotti
+!fagotto
+!|incazzo
+!puttanata|
+!puttanate|
 !raperonzol
+
+# == project additions (joined forms and inflections, review 2026-10-14) ==
+figliodiputtana
+figlioditroia
+stronze|
+stronzi

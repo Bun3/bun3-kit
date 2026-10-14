@@ -25,5 +25,16 @@ paneleiro
 tomar no cu
 
 # == false-positive sweep allows (FrequencyWords pt 50k, beyond the top 20,000) ==
-!arrombador
-!rapel
+!arrombador|
+!arrombadores|
+!rapel|
+
+# == project additions (joined forms and inflections, review 2026-10-14) ==
+filhadaputa
+filhodaputa
+fodase
+fodend
+fodeu
+fudend
+fudeu
+tomarnocu

@@ -112,6 +112,22 @@ namespace Bun3.BadWords.Tests
         public void BlocksStrongWordsInLatinScriptLanguages(string text) =>
             Assert.That(BadWordFilter.Default.ContainsBadWord(text), Is.True, text);
 
+        // Nicknames glue words, so word-boundary roots miss joined phrases.
+        [TestCase("HijoDePuta")]
+        [TestCase("Hijueputa")]
+        [TestCase("ChingaTuMadre")]
+        [TestCase("ConchaDeTuMadre")]
+        [TestCase("FilhoDaPuta")]
+        [TestCase("TomarNoCu")]
+        [TestCase("FilsDePute")]
+        [TestCase("NiqueTaMere")]
+        [TestCase("NiqueTaRace")]
+        [TestCase("FigliodiPuttana")]
+        [TestCase("FiglioDiTroia")]
+        [TestCase("FickDich")]
+        public void BlocksJoinedFormsOfLatinScriptPhrases(string text) =>
+            Assert.That(BadWordFilter.Default.ContainsBadWord(text), Is.True, text);
+
         [TestCase("con")]
         [TestCase("del")]
         [TestCase("mama")]
