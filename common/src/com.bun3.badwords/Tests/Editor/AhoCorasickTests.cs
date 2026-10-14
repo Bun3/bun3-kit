@@ -42,19 +42,16 @@ namespace Bun3.BadWords.Tests
         public void AllowSpanSuppressesOnlyFullyCoveredBlocks()
         {
             var automaton = new AhoCorasick(new[] { "ab", "abc" }, new[] { PatternFlags.None, PatternFlags.Allow });
-            Assert.That(automaton.ContainsBlocked("abc", false), Is.False);
-            Assert.That(automaton.ContainsBlocked("ababc", false), Is.True);
+            Assert.That(automaton.ContainsBlocked("abc"), Is.False);
+            Assert.That(automaton.ContainsBlocked("ababc"), Is.True);
         }
 
         [Test]
-        public void BoundaryAndShortFlagsRestrictValidMatches()
+        public void BoundaryFlagsRestrictValidMatches()
         {
-            var automaton = new AhoCorasick(new[] { "ass", "tq" }, new[] { PatternFlags.BoundaryStart | PatternFlags.BoundaryEnd, PatternFlags.Short });
-            Assert.That(automaton.ContainsBlocked("my ass", false), Is.True);
-            Assert.That(automaton.ContainsBlocked("class", false), Is.False);
-            Assert.That(automaton.ContainsBlocked("tq", true), Is.True);
-            Assert.That(automaton.ContainsBlocked("tqx", true), Is.False);
-            Assert.That(automaton.ContainsBlocked("tqx", false), Is.True);
+            var automaton = new AhoCorasick(new[] { "ass" }, new[] { PatternFlags.BoundaryStart | PatternFlags.BoundaryEnd });
+            Assert.That(automaton.ContainsBlocked("my ass"), Is.True);
+            Assert.That(automaton.ContainsBlocked("class"), Is.False);
         }
 
         [Test]
@@ -64,9 +61,9 @@ namespace Bun3.BadWords.Tests
             set.Add("ab", PatternFlags.BoundaryStart | PatternFlags.BoundaryEnd);
             set.Add("ab", PatternFlags.BoundaryStart);
             var automaton = set.Build();
-            Assert.That(automaton.ContainsBlocked("ab x", false), Is.True);
-            Assert.That(automaton.ContainsBlocked("abx", false), Is.True);
-            Assert.That(automaton.ContainsBlocked("xab", false), Is.False);
+            Assert.That(automaton.ContainsBlocked("ab x"), Is.True);
+            Assert.That(automaton.ContainsBlocked("abx"), Is.True);
+            Assert.That(automaton.ContainsBlocked("xab"), Is.False);
         }
 
         [Test]

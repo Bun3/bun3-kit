@@ -390,3 +390,118 @@ it 168줄은 LDNOOBW `it`와 같은 내용이다. MIT 라벨이 붙어 있어도
 
 - `common/src/com.bun3.badwords/Runtime/TextNormalizer.cs`, `Runtime/BadWordFilter.cs`, `README.md` (커밋 `1333a868994eaa2253abdce8ff584755d6a3d85d`)
 - 이전 조사: `docs/research/2026-10-10-bad-word-filter-research.md`, 스펙: `docs/superpowers/specs/2026-10-12-bad-word-filter-design.md`
+
+## 0.2.0 큐레이션 기록
+
+0.2.0 데이터 작업의 최종 기록이다. 항목 수는 `Data~/` 파일을 직접 센 값이고(차단 = `!`가 없는 항목, 허용 = `!` 항목), 나머지 수치는 작업별 보고서(SDD 폴더)에서 옮겼다. 조사 단계의 후보와 평가는 위 1~9절이 원본이다.
+
+### 1. 파일별 항목 수 (차단 / 허용)
+
+| 파일 | 차단 | 허용 | 비고 |
+|---|---|---|---|
+| ko | 994 | 416 | 0.1.0과 동일 |
+| en | 600 | 662 | 0.1.0은 606 / 645 |
+| es | 27 | 10 | |
+| pt | 22 | 4 | |
+| fr | 21 | 7 | |
+| it | 25 | 8 | |
+| de | 18 | 6 | |
+| nl | 14 | 10 | |
+| tl | 6 | 0 | |
+| ru | 68 | 38 | 차단은 키릴 55 + 라틴 음역 13 |
+| ja | 22 | 44 | |
+| zh | 35 | 58 | |
+| 합계 | 1,852 | 1,263 | 기본 항목 3,115개 (`BadWordFilter.DefaultEntries`), 0.1.0은 2,661개. 최종 리뷰 반영 전은 1,844 / 1,229 (3,073개) |
+
+`zh-simplified.txt`는 항목이 아니라 번체 → 간체 쌍 2,813개다(Unicode 17.0.0 `Unihan_Variants.txt`의 `kSimplifiedVariant`; BMP 쌍만, 첫 번째 대상만, 자기 자신으로의 매핑 제외). `Runtime/TextNormalizer.Simplified.cs`로 생성된다.
+
+### 2. 추출에서 건너뛴 후보
+
+- 라틴 언어(Task 5): 후보 2,336개, 건너뜀 87개. 문법 위반 4개(프랑스어 곡선 아포스트로피 `nulach’` `s’archifoutre`, 네덜란드어 쉼표 `reet trappen, voor zijn`, 숫자 `standje-69`)와 DROP 집합 83개(es 17, pt 14, fr 13, it 17, de 7, nl 13, tl 2). 예: es `mierda` `culo` `bastardo` `idiota`, pt `merda` `cu` `burro`, fr `con` `merde` `bitte`, it `ano` `fica` `negro`, de `kacke` `scheiße` `penis`, nl `del` `nicht` `gat`, tl `bobo` `tanga`.
+- 러시아어·일본어·중국어(Task 6): 후보 ru 142 / ja 319(차단 후보 293 + Citrine 허용 후보 26) / zh 268, 건너뜀 94개. ru 9(DROP `секс` `хрен` `фига` 등, 백틱이 든 `piz`dyulina`), ja 35(라틴 단독 `3P` `SM`, 혼합 `AV女優` `Gスポット`, 한자 한 글자 `唖`, DROP `バカ` `アホ` `クソ` `デブ` `ハゲ`), zh 50(한자 한 글자 `乳` `奸` `逼` 등, BMP 밖 `𨳒` `𨳊`, 혼합 `卖B` `妈B` `干x娘`, DROP `笨蛋` `白痴` `色情`).
+
+### 3. 소유자 판정과 삭제 규칙이 제거한 것
+
+- 약한 욕 규칙(소유자 2026-10-14): `shit` 수준 이하는 모든 언어에서 통과한다. es `mierda` `cagar` `cabrón` `boludo`, pt `merda` `babaca` `porra`, fr `merde` `chiant` `salaud`, it `cazzata` `stronzata` `scemo`, de `kacke` `scheiße` `arsch`, nl `hufter` `rotzak` `godverdomme`, tl `ulol`, ru `говно` `дерьмо` `срать` `жопа`, ja `えっち` `スケベ` `クソガキ` `畜生`, zh `狗屁` `吃屎` `王八蛋` `白癡`.
+- 다른 대상 언어의 일상어(규칙 3): es `coño` `concha` `polla` `puto` `coger`, pt `cona` `pinto` `veado` `bicha`, fr `baiser` `bite` `chatte` `pédé`, it `troia` `scopare` `figa` `negri` `finocchio`, de `vögeln` `möse` `poppen`, nl `eikel` `naaien` `kut`, tl `bobo` `tanga` `paki` `bayag`, ru `хохол` `petuh` `huy` `suka`, ja `めくら` `びっこ` `かたわ` `アスペ` `土方`, zh `他妈` `妈的` `你妈` `日你` `干你` `十三点`.
+- 자위·정액급(wank 수준) 속어: pt `punheta`, tl `jakol`, ru `дрочить`, ja `センズリ` `オナホ`, zh `打飞机`.
+- 범죄·정치·장르 용어: zh `卖淫` `嫖娼` `三级片`, ja `ロリコン` `スカトロ` `支那`, es `asesinato` `drogas`.
+- 두 언어 이상에서 같은 철자로 접히는 중복은 한 파일에만 둔다(`|puta`는 es.txt, `强奸` `轮奸`은 일본어 `強姦` `輪姦`까지 덮는 zh.txt).
+- 후보 → 최종 차단(최종 수치는 이후 리뷰 보정과 소유자 반영을 포함): 라틴 7개 언어 2,336 → 131 (큐레이션 직후 93), ru 142 → 68, ja 293 → 22, zh 268 → 35.
+
+### 4. 스윕별로 추가한 경계와 허용
+
+- 라틴(Task 5, 1~4차 스윕 + 5만 목록): 경계 `|puta` `|pute|` `|viado` `|fick` `|hure|` `|hoer` `|flikker|` `|nutte|` `foder|` `stronza|` `|niquer` `|incula` `|fott` `|puttan` `|coglion` `|teef`. en 0.1.0 항목 수정: 삭제 `kunt` `domme` `paki` `finocchio`(다른 언어 일상어), 경계 `|quim|` `|cialis|` `|spic|` `|fag|` `|fags|` `|dolcett|` `|giral|` `|rimming` `|felch`, 허용 17개 추가 후 정리. 대표 허용: de `!schinken` `!kikeriki`, fr `!rappel` `!salopette` `!pique-nique`, nl `!benutten` `!ietwat` `!hoera`, es `!putada` `!pendejada` `!rapero`, it `!puttanesca` `!puttanata`, en `!cummings` `!rapper` `!thumping`.
+- 허용 범위 점검(Task 5 리뷰 보정): 허용이 차단어를 다시 여는 경우를 잡아 `!snigger` `!thorny` `!thumping` `!racoon` `!bonner` `!fodder` `!fagott` `!lesso`를 경계 추가·축소·삭제했다. 접힌 키가 차단 키와 같아지는 충돌은 `!rapping`만 남겼다(판단 9: `rapping`은 상위 2만 일반어, 정확한 `raping`은 계속 차단, 늘인 `raaaping`만 통과).
+- 붙여 쓴 형태 15개 추가(`hijodeputa` `filhodaputa` `niquetamere` `fickdich` 등), 활용형 추가(de `fickt`, nl `neukt`, pt `fodeu`, es `jodido`, it `stronzi`, fr `nique`).
+- 러시아어(Task 6 보정): 초안의 `ебат ебан ебуч ебло`는 일상어 990형을 막아(скребание, хлеб-, колеб-, шебутной 등 29개 군) 단어 첫머리 또는 접두 모음·ъ·ь 뒤의 `еб`만 막는 방식으로 교체했다(`|еба |ебу |ебл ... аеб оеб уеб ъеб ьеб`). 일상어 허용은 `!колебал !хлебал !гребан !хребет !эстебан !педикюр !скипидар !психуй ... !|бляшк !|сучков` 등. 결과: 153만 형태 목록에서 오탐 990개 → 60개(모두 욕설 또는 сука/сучок 동형).
+- 일본어: Citrine 허용 26개 중 15개 유지(차단어가 삭제된 죽은 허용 11개 삭제), 결합 허용 `!カチンコ !キッチンコーナー !カフェラッテ !ペリフェラル !ロックフェラー !背中出し !グレイプ !あけおめこ !おめことし` 및 〜き違い 7개. `クンニ` `ガイジ` `スペルマ`는 허용으로 구분이 불가능해 삭제했다.
+- 중국어: 초안의 `傻比`(装傻比较好) 삭제. `机掰` 결합 허용 6개와 `鸡掰` 추가. 성 단어(Task 6b 보정)의 짧은 허용 8개를 삭제하고 전체 구절 허용 24개로 교체했다(`!当做爱好 !理性交流 !一次性交易 !异性交往 !亲自慰问 !聊以自慰` 등).
+- 타갈로그어(Task 6b 보정): `tatalik|` → `gtatalik|`(matatalik, pinakamatatalik 보호).
+
+### 5. 스윕 적중 수 (서로 다른 사유 / 적중 합계)
+
+2만 위 목록(`SweepCorpus`). 0.1.0 데이터만 → 큐레이션 직후 → 최종(5b1061f). ru·ja·zh의 "큐레이션 직후"는 Task 6 첫 스윕 값이다.
+
+| 코퍼스 | 0.1.0 항목만 | 큐레이션 직후 | 최종 |
+|---|---|---|---|
+| en | 36/67 | 37/68 | 33/61 |
+| ko | 27/51 | 27/51 | 27/51 |
+| es | 6/12 | 12/22 | 13/21 |
+| pt | 6/12 | 12/22 | 12/16 |
+| pt_br | 8/17 | 18/30 | 17/23 |
+| fr | 9/26 | 17/45 | 17/25 |
+| it | 11/16 | 22/50 | 17/38 |
+| de | 12/14 | 25/34 | 22/37 |
+| nl | 19/28 | 29/45 | 19/29 |
+| tl | 12/68 | 15/73 | 12/24 |
+| ru | 0/0 | 17/30 | 22/35 |
+| ja | 0/0 | 2/2 | 5/5 |
+| zh_cn | 5/9 | 12/18 | 16/22 |
+| zh_tw | 3/5 | 10/13 | 14/17 |
+| en-common | 5/5 | 5/5 | 4/4 |
+| NSMC | 203/2543 | 203/2543 | 202/2542 |
+
+- 손질 전 원본 후보를 그대로 넣었을 때: en 155/483, es 160/732, pt 190/732, fr 185/680, it 228/886, de 130/677, nl 173/645, tl 69/358, ru 13/20, ja 36/45, zh_cn 50/60, zh_tw 40/48.
+- 5만 목록(참고, 저장소 밖) 최종: de 36/70, en 71/134, es 27/56, fr 37/60, it 40/94, ja 6/6, nl 34/63, pt 31/48, pt_br 38/62, ru 32/80, zh_cn 22/37, zh_tw 21/30.
+- 말뭉치 출처: FrequencyWords 커밋 `525f9b560de45753a5ea01069454e72e9aa541c6`(CC-BY-SA, 저장소에 넣지 않음).
+
+### 6. 의도적으로 남긴 적중
+
+- 새 항목이 자기 자신이나 활용형에 걸린 것: es `puta` `joder` `gilipollas` `follar`, pt `foda-se` `foder` `caralho` `buceta`, fr `connard` `salope` `pute` `encul-`, it `cazzo` `stronzo` `puttana` `fanculo`, de `arschloch` `schlampe` `hurensohn` `fick`, nl `klootzak` `hoer` `neuken` `flikker`, tl `tangina`, ru `хуй` `пизда` `ебать` `сука` `мудак` `шлюха`, zh `他妈的` `傻逼` `婊子` `鸡巴` `贱人`, ja `中出し`.
+- `|puta`가 프랑스어 `putain`(순위 344)을 막는다: 프랑스어의 핵심 욕이라 유지하고 소유자 확인 사항으로 올렸다.
+- 강간 계열(`强奸` `轮奸` `レイプ`, 일본어 `強姦` `輪姦`)은 뉴스에서도 쓰이지만 영어 `|rape`와 한국어 `강간`과 같은 기준이라 유지했다.
+- 수용한 한계: `neuken` → `verneuken`, `|puta` → `putaria`, fr `râpe`/`rappe`(영어 `rape`로 접힘), `!rapping`·`!|seeks|`의 늘인 철자 통과, 경계 어근에 붙여 쓴 닉네임(`sexogratis`, `seksfilm`).
+- 0.1.0 영어 항목이 같은 뜻의 외래어에 걸리는 것: `sex` `viagra` `orgasm` `incest` `pedophile` `clit` `vibrator` `pansy` `nudity` 등은 0.1.0에서 소유자가 승인한 기준이라 유지했다.
+
+### 7. 소유자 확인 결과 (2026-10-14, Task 6 이후)
+
+- 모든 언어의 평범한 성 단어(섹스·자위, 모호하지 않은 오르가슴)를 차단한다. 새 항목: en `masturb`, es `|sexo|`, fr `|sexe|`, it `|sesso|`, de `selbstbefriedigung`, nl `|seks|`, tl `gtatalik|` `gtalik|`, ru `|секс|`+격변화 4개 `мастурб` `|онани` `оргазм`, ja `セックス` `オナニー` `オーガズム`, zh `做爱` `性交` `自慰` `手淫`. 슬랭(`дрочить` `jakol` `punheta` `センズリ` `打飞机`)과 격식어(de `Geschlechtsverkehr`, en `intercourse`)와 zh `高潮`는 통과한다.
+- 영어 `pissing` `shithead`(`shit head`)는 약한 욕 규칙에 따라 삭제했다(`piss pig`는 페티시 용어라 유지).
+- 언어별 유지/제외 목록은 제시된 대로 승인됐다(제외한 `ビッチ` `獣姦` `近親相姦` `ポコチン` `ちんちん` `支那` 등은 되살리지 않음).
+- 영어 자판 읽기(2벌식 스트림 B)를 제거한다(스펙 결정 7): `tlqkf` `qudtls` `tq` `sra` `torri` `rotor`가 통과하고 한글 `ㄴㄱㅁ`는 계속 막는다. en의 자판 철자 항목 `tlqkf tlqkd wlfkf rotorl rotprl |tlqk|`도 함께 삭제했다(`sibal`류 로마자 표기와 혼합 철자 `tlbal`, `|siqk|`는 유지). 이로 사라진 한국어 자판 오탐: es·pt `sra`, it `torri` `tutorgirl`, en-common `qt`, 5만 목록의 `rotor` `rosmarin` `rosnar` `rothond` 등. NSMC에서는 영문 자판으로 쓴 한국어 리뷰 2건이 통과로 바뀌었다(203/2543 → 201/2541).
+- 이 결정의 항목 수 증감(715b577): 새 차단 23개, 새 허용 18개, 삭제 3개(3,019 → 3,057). 그 커밋 메시지의 "RED 26개 / 차단 25·허용 16 추가"는 오기이며 정확한 값은 RED 25개(새 차단 23 + 약한 욕 2), 차단 23·허용 18 추가다.
+- 이후 리뷰 보정(5b1061f)으로 항목은 3,073개가 되었다(허용 +24 −8, 차단 1 교체). 네 가지 판단은 유지했다: 영어 `!rapping`, 중국어 `这叫做爱` 차단(그 대가로 `叫做爱丽丝`도 차단), `性交易` 차단, 러시아어 `!страхуй`·`!страхуе`의 끝 경계 없음.
+
+### 8. 비용
+
+- 스캔 비용(`ReportsScanCost`, Release, 입력당 10만 회, 3회 중앙값, ns), 0.1.0 기준선 → 0.2.0: Player One 1316 → 977, 탈출친구 391 → 383, f.u.c.k you 781 → 417, привет как дела 826 → 1882, こんにちは今日はいい天気 459 → 290, 你好世界朋友们 306 → 215. 한국어·영어·라틴 입력은 모두 기준선 이하(2벌식 스트림 제거 덕분)이고, 키릴 입력은 새 스트림 비용으로 늘었지만 5,000 ns 안이다. 원시 값(키릴/가나/한자): 1회 2271/964/198, 2회 1882/290/244, 3회 1736/264/215.
+- 기본 필터 빌드 비용(`ReportsDefaultBuildCost`): 항목 3,073개, `buildMs=18.4`, `retainedBytes=419088`(기준 50 ms 이하).
+
+### 9. 최종 리뷰 반영 (2026-10-14)
+
+브랜치 전체 최종 리뷰의 지적(중요 1, 경미 9)을 한 번에 반영했다. 항목은 3,073 → 3,115개(차단 +8, 허용 +34)이고, 빌드 비용은 `buildMs=19.2`(3회 중앙값), `retainedBytes=424296`이다.
+
+- **띄어 쓴 라틴 항목의 결합 오탐(중요 1)**: 타갈로그어 연결사 `-ng`가 앞 단어에 붙으면 `batang ina`(어린 엄마), `ibang bus`(다른 버스), `hanggang bangko`(은행까지)가 `tang ina`·`bang bus`·`gang bang`을 포함한다. 같은 부류로 `Claudio Canela`·`addio cane`가 `dio cane`에 걸렸다. 띄어 쓴 라틴 차단 항목 231개 전부에 대해 첫 단어로 끝나거나 마지막 단어로 시작하는 일반어를 붙인 구절 17,515개(라틴 9개 언어 2만·5만 목록, 타갈로그어 `-ng`/`-g` 합성형)를 스윕하고, 같은 언어의 일반어끼리 실제 문장이 되는 37개 항목에 경계를 줬다.
+  - 앞 경계 23개: `|tang ina` `|bang bus` `|bang bros` `|gang bang` `|gay sex` `|nig nog`(네덜란드어 `weinig nog`) `|hot carl` `|hot richard`(`I shot Carl`) `|dog style`(`hotdog style`) `|ass bandit`(`Bass Bandit`) `|ring raider`(`Daring Raider`) `|bean queen`(`Caribbean Queen`) `|wet dream`(`sweet dreams`) `|menage a trois` `|menages a trois`(`on déménage à trois`) `|nique ta mère` `|nique ta race`(`Monique, ta mère`) `|ball batter` `|ball gravy` `|ball kicking` `|ball licking` `|ball sack` `|ball sucking`(`baseball batter`, `meatball gravy`, `football kicking`).
+  - 양쪽 경계 5개: `|dio cane|`(스페인어 `le dio canela`), `|ball gag|`(타글리시 `ball gagamitin`), `|edge play|`(`knowledge plays`, `cutting edge player`), `|wet back|`(`sweet back`, `wet backpack`), `|chi chi man|`.
+  - 뒤 경계 9개: `black/big/huge/giant/massive/throbbing cock|`(`giant cockroach`, `big cocktail`, `black cockatoo`. 복수형 `… cocks|` 6개를 함께 추가), `impact play|`(`impact player`), `strap on|`(`strap onto`), `tomar no cu|`(`tomar no cuidado`, 스페인어 `tomar no cuesta`).
+  - `|tang ina`·`|gang bang`·`|dio cane|` 뒤에도 `tang ina mo`, `putang ina`(`|puta`), `tangina`, `gangbang`, `diocane`은 계속 막는다. 붙여 쓴 항목은 장식 닉네임(`xXgangbangXx`)을 막아야 해서 경계를 주지 않았고, `Mr Handsome`·`MrHandsome`만 허용 `!mr handsome` `!mrhandsome`로 통과시켰다.
+  - 리뷰 지적의 `!sweet dream` 대신 같은 결합 부류의 경계 `|wet dream`을 썼다. `sweet dreams`와 늘인 `sweeeet dreams`가 통과하고 `wet dream(s)`는 막는다.
+- **중국어 결합(경미 1·2)**: `日你妈`가 요일·날 단어 + `你妈妈`(`周日你妈妈来吗`, `今日你媽媽好嗎`)를 막았다. 전체 구절 허용 10개(`!周日你妈妈 !星期日你妈妈 !礼拜日你妈妈 !生日你妈妈 !今日你妈妈 !明日你妈妈 !昨日你妈妈 !节日你妈妈 !假日你妈妈 !平日你妈妈`)를 더했고 `日你妈的`·`日你妈逼`·`周日你妈死了`는 계속 막는다. `性交` 결합은 전체 구절 허용 10개(`!国际性交流 !建设性交流 !实质性交流 !同性交际 !同性交友 !男性交友 !女性交友 !个性交友 !一次性交通 !慢性交感`)를 더했다.
+- **일본어 결합(경미 3)**: `!ヒューマンコ` `!ウルトラマンコレクション`을 더하고 `!スパイダーマンコスプレ`를 `!マンコスプレ`로 넓혔다(スーパーマン·バットマン·アイアンマン 코스프레). 영웅 이름 접두 허용(`!ウルトラマンコ`)은 `ウルトラ` + `まんこ` 말장난을 다시 열어 쓰지 않았다. 카페 결합은 리뷰 제안 `!カフェラ` 대신 단어별 허용 `!カフェライブ !カフェライフ !カフェラバー`를 썼다. `!カフェラ`는 조사 `か` + `フェラ`(`キスかフェラ`)와 `バカフェラ`를 통과시킨다.
+- **경미 4~7**: es `!putahe !putakti !putativ`(타갈로그어 요리·말벌, `putative`/`putativo`). pt `!fodder` 복원(`cannon fodder`. 정확한 `foder`와 `vai se foder`는 막고 늘인 `fooder`만 통과하는, `!rapping`과 같은 교환). nl `zelfbevrediging`, de `|onani`(`Onanie` `onanieren` `onanismo` `onanisme`. 라틴 빈도 목록 전체에 `onani`로 시작하는 단어가 없고 `buonanima`는 통과). en `!cuntas|` `!cuntais` `!cuntasoir`(아일랜드어 계좌·회계사. 끝 경계로 `cuntass`는 계속 막는다).
+- **문서(경미 8·9)**: 스펙의 ru 행을 단어 첫머리·접두 모음·`ъ`·`ь` 뒤의 `еб` 방식으로 고쳤고, README 한계에 가나/한자 스트림은 단어 경계가 없어 두 단어의 결합과 삭제된 공백·구두점을 넘어 맞는다는 점을 적었다.
+- **새 한계**: 아일랜드어 `fág`(떠나라)는 악센트 접기 후 `fag`와 같은 키라 막힌다(en.txt `|fag|` 주석). `ザ・メン…`(`ザ・メンバー`)과 `ザメンホフ`는 `ー`·`・`가 삭제돼 `ザーメン`과 같은 키가 되어 막힌다(ja.txt 주석). 타갈로그어 `bang`(ba + -ng)은 단독 단어라 `… bang bus`처럼 띄어 쓴 문장은 `|bang bus`가 여전히 막는다.
+- **스윕**: 2만 위 16개 코퍼스는 반영 전과 같다(5절 "최종" 열). 5만 목록은 en 71/134 → 70/133(`fodder`) 외에 변화가 없다. 단어쌍 스윕(각 언어 상위 1,000개 중 단독으로 통과하는 단어끼리 결합): 띄어 쓴 결합 16/43 → 9/11(남은 적중은 항목 자체가 두 단어로 나온 `hand job` `lady boy` `dio cane` 등과 타갈로그어 `bang busan`), 붙여 쓴 결합 166/2,623 → 169/2,626(새 `|onani`가 한 글자 단어와 붙인 `oNaninirahan`·`onAnniversaire`에 걸림).
+- **권고**: 띄어 쓴 단어쌍 스윕이 타갈로그어 `-ng` 결합 부류를 찾았다. 띄어 쓴 항목을 더하거나 고칠 때는 이 단어쌍 스윕과 위의 첫/끝 단어 결합 스윕을 함께 돌린다.

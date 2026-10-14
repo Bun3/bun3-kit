@@ -1,0 +1,42 @@
+# com.bun3.badwords default German entries.
+# Grammar: one entry per line; '#' starts a comment; '!' allow; '|' word boundary (Latin and Cyrillic). See README.md.
+# Sources: LDNOOBW (CC-BY-4.0, modified) https://github.com/LDNOOBW/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words @ 5faf2ba42d7b1c0977169ec3611df25a3c08eb13
+# Curation: strong expressions only; mild words pass, and plain sexual words are blocked (owner ruling 2026-10-14). Record: docs/research/2026-10-13-bad-word-multilingual-sources.md.
+
+# == LDNOOBW de ==
+arschloch
+|fick
+ficken
+ficker
+fotze
+|hure|
+hurensohn
+kampflesbe
+kanake
+|nutte|
+schlampe
+schwanzlutscher
+schwuchtel
+wichser
+
+# == false-positive sweep allows (FrequencyWords de) ==
+!schinken
+!spunkt
+
+# == false-positive sweep allows (FrequencyWords de 50k, beyond the top 20,000) ==
+!gespickt
+!kikeriki
+!schlamperei
+
+# == project additions (joined forms and inflections, review 2026-10-14) ==
+fickdich
+fickt
+
+# == false-positive allows (review 2026-10-14) ==
+!fickle|
+
+# == owner ruling 2026-10-14: plain sexual words ==
+# en.txt |sex| covers Sex, en.txt masturb and orgasm cover Masturbation, masturbieren and Orgasmus.
+selbstbefriedigung
+# Onanie and onanieren; also covers onanismo, onanisme and onanism. Word start only: buonanima contains onani.
+|onani

@@ -16,6 +16,8 @@ namespace Bun3.BadWords.Tests
         [TestCase('\u0430', 'a')]
         [TestCase('\uD83D', '\uFFFF')]
         [TestCase('\uAC00', '\uAC00')]
+        [TestCase('\u00DF', 's')]
+        [TestCase('\u1E9E', 's')]
         public void CleansCharacters(char input, char expected) =>
             Assert.That(TextNormalizer.Clean(input), Is.EqualTo(expected));
 
@@ -32,15 +34,6 @@ namespace Bun3.BadWords.Tests
         public void HangulStreamKeepsComposedHangulOnly(string text, string expected) =>
             Assert.That(Run(TextNormalizer.Hangul, text), Is.EqualTo(expected));
 
-        [TestCase("tlqkf", "시발")]
-        [TestCase("t l q k f", "시발")]
-        [TestCase("qudtls", "병신")]
-        [TestCase("TLQKF", "씨빨")]
-        [TestCase("tq", "ㅅㅂ")]
-        [TestCase("123 시발", "")]
-        public void KeyboardStreamFollowsTwoBeolsikLayout(string text, string expected) =>
-            Assert.That(Run(TextNormalizer.Keyboard, text), Is.EqualTo(expected));
-
         [TestCase("Sh1t", "shit")]
         [TestCase("f.u.c.k", "fuck")]
         [TestCase("f u c k", "fuck")]
@@ -52,8 +45,35 @@ namespace Bun3.BadWords.Tests
         [TestCase("f\u00FCck", "fuck")]
         [TestCase("fu\u0441k", "fuck")]
         [TestCase("시발", "")]
+        [TestCase("Straße", "strase")]
+        [TestCase("STRAẞE", "strase")]
         public void LatinStreamNormalizesLettersAndBoundaries(string text, string expected) =>
             Assert.That(Run(TextNormalizer.Latin, text), Is.EqualTo(expected));
+
+        [TestCase("ХУЙ", "хуи")]
+        [TestCase("Ёж", "еж")]
+        [TestCase("xуй", "хуи")]
+        [TestCase("XУЙ", "хуи")]
+        [TestCase("ｘуй", "хуи")]
+        [TestCase("хуй", "хуи")]
+        [TestCase("aceopxy", "асеорху")]
+        [TestCase("ACEOPXY", "асеорху")]
+        [TestCase("BHKMT", "внкмт")]
+        [TestCase("bhkmt", "")]
+        [TestCase("х у й", "хуи")]
+        [TestCase("  где   батарея! ", "где батарея")]
+        [TestCase("хуй123", "хуи")]
+        [TestCase("시발хуй", "хуи")]
+        public void CyrillicStreamFoldsCaseAndLookalikes(string text, string expected) =>
+            Assert.That(Run(TextNormalizer.Cyrillic, text), Is.EqualTo(expected));
+
+        [TestCase("hello", false)]
+        [TestCase("cop", false)]
+        [TestCase("시발", false)]
+        [TestCase("xуй", true)]
+        [TestCase("҃", true)]
+        public void DetectsCyrillic(string text, bool expected) =>
+            Assert.That(TextNormalizer.HasCyrillic(text), Is.EqualTo(expected));
 
         [TestCase("fuuuck", "fuck")]
         [TestCase("aa bb", "a b")]
@@ -62,6 +82,52 @@ namespace Bun3.BadWords.Tests
             var destination = new char[text.Length];
             int length = TextNormalizer.Collapse(text, destination);
             Assert.That(new string(destination, 0, length), Is.EqualTo(expected));
+        }
+
+        [TestCase("ちんこ", "チンコ")]
+        [TestCase("\uFF81\uFF9D\uFF7A", "チンコ")]
+        [TestCase("ち ん こ", "チンコ")]
+        [TestCase("ちーんこ", "チンコ")]
+        [TestCase("チ・ン・コ", "チンコ")]
+        [TestCase("ち\u200Bんこ", "チンコ")]
+        [TestCase("か\u3099", "ガ")]
+        [TestCase("か\u309B", "ガ")]
+        [TestCase("\uFF76\uFF9E", "ガ")]
+        [TestCase("\uFF8A\uFF9F", "パ")]
+        [TestCase("う\u3099", "ヴ")]
+        [TestCase("ア\u3099", "ア")]
+        [TestCase("\u3099ア", "ア")]
+        [TestCase("AV女子", "女子")]
+        [TestCase("人々", "人々")]
+        [TestCase("傻\uD840\uDC00逼", "傻逼")]
+        [TestCase("他媽的", "他妈的")]
+        [TestCase("操你媽", "操你妈")]
+        [TestCase("hello", "")]
+        [TestCase("시발", "")]
+        public void CjkStreamFoldsKanaAndDropsSeparators(string text, string expected) =>
+            Assert.That(RunCjk(text), Is.EqualTo(expected));
+
+        [TestCase('媽', '妈')]
+        [TestCase('雞', '鸡')]
+        [TestCase('歡', '欢')]
+        [TestCase('中', '中')]
+        [TestCase('A', 'A')]
+        public void SimplifiedMapsTraditionalHan(char input, char expected) =>
+            Assert.That(TextNormalizer.Simplified(input), Is.EqualTo(expected));
+
+        [TestCase("hello", false)]
+        [TestCase("시발", false)]
+        [TestCase("хуй", false)]
+        [TestCase("ちんこ", true)]
+        [TestCase("\uFF81", true)]
+        [TestCase("中", true)]
+        public void DetectsKanaAndHan(string text, bool expected) =>
+            Assert.That(TextNormalizer.HasCjk(text), Is.EqualTo(expected));
+
+        static string RunCjk(string text)
+        {
+            var destination = new char[text.Length];
+            return new string(destination, 0, TextNormalizer.Cjk(text, destination));
         }
 
         static string Run(Builder builder, string text)

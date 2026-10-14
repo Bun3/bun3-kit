@@ -1,0 +1,117 @@
+# com.bun3.badwords default Chinese entries.
+# Grammar: one entry per line; '#' starts a comment; '!' allow; '|' word boundary (Latin and Cyrillic). See README.md.
+# Sources: LDNOOBW (CC-BY-4.0, modified) https://github.com/LDNOOBW/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words @ 5faf2ba42d7b1c0977169ec3611df25a3c08eb13
+# Curation: strong expressions only; mild words pass, and plain sexual words are blocked (owner ruling 2026-10-14). Record: docs/research/2026-10-13-bad-word-multilingual-sources.md.
+
+# == LDNOOBW zh ==
+他妈的
+他马的
+她妈的
+它妈的
+傻逼
+塞你娘
+妈个比
+婊子
+干你妈
+干你娘
+干你老母
+干妳妈
+干妳娘
+干您娘
+强奸
+操你
+操妳
+操逼
+日你妈
+烂逼
+贱人
+贱货
+轮奸
+驶你娘
+骚货
+骚逼
+鸡巴
+咸家鏟
+冚家鏟
+
+# == project additions (root of LDNOOBW 干机掰 and 操机掰, Task 6) ==
+机掰
+
+# == review fixes (fix round 1): common spelling and word junctions ==
+鸡掰
+!机掰开
+!机掰弯
+!机掰断
+!机掰成
+!鸡掰开
+!鸡掰成
+
+# == owner ruling 2026-10-14: plain sexual words ==
+# Orgasm: 高潮 also means climax and high tide, and 性高潮 forms from ordinary junctions (戏剧性 + 高潮), so neither is an entry.
+做爱
+性交
+自慰
+手淫
+# Word junctions are allowed only as the whole ordinary phrase: a shorter allow such as 做爱心 or 性交流 would also pass 做爱心情 or 性交流群.
+# 叫做 + 爱情 passes. 这叫做爱 stays blocked because it also reads as "this is having sex"; names after 叫做 (叫做爱丽丝) block with it,
+# which speech avoids by saying 叫 without 做. 做 + 爱情, 爱人, 爱你 (做爱你的人) also block: no allow separates them from 做爱情景 or 做爱人家.
+!叫做爱情
+# 当做, 看做 + 爱好, 爱人, 爱情 (treat as a hobby, lover, love); 做 + 爱好的事, 爱吃的 (cook a favorite dish), 爱心公益, 爱心活动, 爱心事业 (charity), 爱国者 (patriot).
+!当做爱好
+!当做爱人
+!当做爱情
+!看做爱好
+!做爱好的事
+!做爱吃的
+!做爱心公益
+!做爱心活动
+!做爱心事业
+!做爱国者
+# A word ending in 性 + 交流, 交谈, 交际, 交遊, 交往, 交友 (理性交流, 国际性交流, 女性交流群, 和女性交谈, 異性交際, 不純異性交遊, 和女性交往, 女性交友).
+!理性交流
+!两性交流
+!异性交流
+!女性交流
+!男性交流
+!国际性交流
+!建设性交流
+!实质性交流
+!女性交谈
+!男性交谈
+!异性交谈
+!异性交际
+!同性交际
+!异性交遊
+!异性交往
+!两性交往
+!同性交往
+!男性交往
+!女性交往
+!异性交友
+!同性交友
+!男性交友
+!女性交友
+!个性交友
+# 一次性 (one-time) + 交易, 交清, 交付, 交通 (一次性交通卡). 性交易 (sex trade) itself stays blocked, so only the one-time compounds are allowed.
+!一次性交易
+!一次性交清
+!一次性交付
+!一次性交通
+# 慢性 + 交感 (慢性交感神经, chronic sympathetic nerve).
+!慢性交感
+# 亲自 + 慰问 (visit in person) and the idiom 聊以自慰 (console oneself).
+!亲自慰问
+!聊以自慰
+
+# == final review fixes (2026-10-14): word junctions ==
+# A day word ending in 日 + 你妈妈 (周日你妈妈来吗, 今日你媽媽好嗎). Only the whole phrase is allowed, so 日你妈的, 日你妈逼 and 周日你妈死了 still block.
+!周日你妈妈
+!星期日你妈妈
+!礼拜日你妈妈
+!生日你妈妈
+!今日你妈妈
+!明日你妈妈
+!昨日你妈妈
+!节日你妈妈
+!假日你妈妈
+!平日你妈妈

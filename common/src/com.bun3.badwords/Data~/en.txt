@@ -1,8 +1,10 @@
 # com.bun3.badwords default English entries.
 # Grammar: one entry per line; '#' starts a comment; '!' allow; '|' word boundary (English). See README.md.
 # Sources: dsojevic/profanity-list (MIT) https://github.com/dsojevic/profanity-list @ c27924319aa9bd6f917e3782b4f4b6604a50b652; korcen (MIT) https://github.com/Tanat05/korcen @ eecd9763dbdccce3dc96ddb578ef0b6396058fa9
+# Curation: strong expressions only; plain sexual words are blocked (owner ruling 2026-10-14). Record: docs/research/2026-10-13-bad-word-multilingual-sources.md.
 
-# == korcen latin forms (romanized and 2-beolsik) ==
+# == korcen latin forms (romanized) ==
+# Owner ruling 2026-10-14: Latin text is not read as Korean keyboard input, so Korean typed entirely with the IME off (tlqkf, wlfkf) is not an entry.
 sibal
 sival
 sibar
@@ -14,16 +16,10 @@ tlval
 tlbar
 tlbak
 tlpal
-|tlqk|
 |siba|
 |tlba|
 |tlva|
-tlqkf
-tlqkd
-wlfkf
-giral
-rotorl
-rotprl
+|giral|
 |bozi|
 |sex|
 
@@ -34,12 +30,18 @@ two girls one cup
 one cup two girls
 acrotomophilia
 acrotomophile
-black cock
-big cock
-huge cock
-giant cock
-massive cock
-throbbing cock
+black cock|
+black cocks|
+big cock|
+big cocks|
+huge cock|
+huge cocks|
+giant cock|
+giant cocks|
+massive cock|
+massive cocks|
+throbbing cock|
+throbbing cocks|
 alabama hot pocket
 alabama tuna melt
 alaskan pipeline
@@ -52,7 +54,7 @@ apotemnophilia
 apotemnophile
 arsehole
 asshole
-ass bandit
+|ass bandit
 arse bandit
 autoerotic
 auto erotic
@@ -60,19 +62,19 @@ babeland
 baby batter
 baby gravy
 baby juice
-ball batter
-ball gravy
-ball gag
+|ball batter
+|ball gravy
+|ball gag|
 ballgag
-ball kicking
-ball licking
-ball sack
-ball sucking
+|ball kicking
+|ball licking
+|ball sack
+|ball sucking
 ballcuzi
 bangbros
-bang bros
+|bang bros
 bangbus
-bang bus
+|bang bus
 barely legal
 bastinado
 batty boy
@@ -82,7 +84,7 @@ battyboi
 bdsm
 bean flicker
 beanflicker
-bean queen
+|bean queen
 beaner
 beaners
 beastiality
@@ -161,7 +163,7 @@ canadian porch swing
 carpet muncher
 carpetmuncher
 cheese eating surrender monkey
-chi chi man
+|chi chi man|
 chicken queen
 chink
 chinks
@@ -170,7 +172,7 @@ chocolate rosebud
 chocolate rosebuds
 cholerophilia
 cholerophile
-cialis
+|cialis|
 circlejerk
 cissy
 cissie
@@ -206,7 +208,6 @@ cum shot
 cum shots
 cunnilingus
 cunt
-kunt
 cunts
 kunts
 cuntboy
@@ -237,10 +238,9 @@ doggie style
 doggiestyle
 doggy style
 doggystyle
-dog style
-dolcett
+|dog style
+|dolcett|
 dominatrix
-domme
 dommes
 donkey punch
 donut muncher
@@ -256,7 +256,7 @@ dyke
 dystychiphilia
 dystychiphile
 edgeplay
-edge play
+|edge play|
 ejaculate
 ejaculation
 ejaculating
@@ -265,12 +265,14 @@ electroplay
 emetophilia
 emetophile
 eskimo trebuchet
-fag
+# Known limit: Irish fág (leave) folds to fag, so it stays blocked; an allow with that key would turn the entry off.
+|fag|
+|fags|
 fag bomb
 fagbomb
 faggot
 fagot
-felch
+|felch
 felching
 fellatio
 fellating
@@ -279,8 +281,6 @@ figging
 fingerbang
 finger bang
 fingerbanging
-finocchio
-finochio
 finoccio
 fisting
 fisted
@@ -311,8 +311,8 @@ fudge packer
 fudgepacker
 futanari
 gangbang
-gang bang
-gay sex
+|gang bang
+|gay sex
 gaysian
 genitorture
 gerontophilia
@@ -343,10 +343,10 @@ hippophilia
 hippophile
 homoerotic
 horny
-hot carl
-hot richard
+|hot carl
+|hot richard
 humping
-impact play
+impact play|
 incest
 jail bait
 jailbait
@@ -389,8 +389,8 @@ mdlb
 meat masseuse
 meatspin
 meat spin
-menage a trois
-menages a trois
+|menage a trois
+|menages a trois
 menophilia
 menophile
 mexican pancake
@@ -412,7 +412,7 @@ nigerian hurricane
 nigga
 niggs
 nignog
-nig nog
+|nig nog
 nigger
 nipple clamps
 nipple clamp
@@ -438,7 +438,6 @@ paedophile
 pedophile
 painslut
 pain slut
-paki
 panamanian petting zoo
 pansy
 parthenophilia
@@ -458,7 +457,6 @@ pikey
 pikeys
 piss pig
 pisspig
-pissing
 pleasure chest
 pnigerophilia
 pnigophilia
@@ -489,7 +487,7 @@ pussy puncher
 pussypuncher
 queef
 queaf
-quim
+|quim|
 raghead
 rag head
 ragheads
@@ -505,8 +503,8 @@ rhypophilia
 rhypophile
 rice queen
 rimjob
-rimming
-ring raider
+|rimming
+|ring raider
 ringraider
 rusty trombone
 sand nigger
@@ -524,8 +522,6 @@ shaved beaver
 shemale
 she male
 shibari
-shithead
-shit head
 shota
 shrimping
 sissy
@@ -539,7 +535,7 @@ sodomise
 sodomist
 sodomy
 spearchucker
-spic
+|spic|
 spics
 spick
 spicks
@@ -548,7 +544,7 @@ splooge
 splooge moose
 spooge
 spunk
-strap on
+strap on|
 strapon
 strappado
 swamp guinea
@@ -588,9 +584,9 @@ vorarephilia
 vorarephile
 voyeurweb
 wax play
-wet dream
+|wet dream
 wetback
-wet back
+|wet back|
 whitepower
 white power
 whore
@@ -739,7 +735,7 @@ zoophile
 !diathermies
 !endothermies
 !homeothermies
-!lesbos
+!lesbos|
 !blesbok
 !blesboks
 !bunglesome
@@ -763,7 +759,6 @@ zoophile
 !wholesomely
 !wholesomeness
 !wholesomenesses
-!pakihi
 !poofs
 !pooftah
 !pooftahs
@@ -912,7 +907,7 @@ zoophile
 !spiculum
 !spicy
 !aspic
-!aspics
+!|aspics
 !allspice
 !allspices
 !aruspices
@@ -1081,7 +1076,6 @@ zoophile
 !spickiness
 !spickinesses
 !spicking
-!spickks
 !spickula
 !spickulae
 !spickular
@@ -1092,8 +1086,8 @@ zoophile
 !spickules
 !spickulum
 !spicky
-!aspick
-!aspicks
+!|aspick
+!|aspicks
 !allspicke
 !allspickes
 !aruspickes
@@ -1256,7 +1250,41 @@ zoophile
 
 # == false-positive sweep allows (google-10000-english no-swears) ==
 !specialist
-!pakistan
 !expansys
 !cocoon
 !cocoons
+
+# == false-positive sweep allows (FrequencyWords en) ==
+!cummings|
+!pussycat
+!rapper
+!rapping
+!|thumping
+
+# == false-positive sweep allows (FrequencyWords en 50k, beyond the top 20,000) ==
+!batgirl
+!cooney
+!poonam
+!|racoon
+!rubicon
+!|snigger
+!spunky
+!sweetback
+!|thorny
+!trafficker
+
+# == owner ruling 2026-10-14: plain sexual words ==
+# Sex and orgasm: |sex| and orgasm above already block them; orgasm also covers orgasmo, orgasme and Orgasmus.
+# masturb covers masturbation and its verbs in every Latin-script target language (masturbate, masturbar, masturber, masturbare, masturbieren, masturberen).
+masturb
+
+# == final review fixes (2026-10-14) ==
+# Multi-word entries above carry a boundary where an ordinary word can end in their first word or start with their last word
+# (Tagalog linker -ng: ibang bus, hanggang bangko; knowledge plays, meatball gravy, giant cockroach, strap onto).
+# Irish cuntas (account), cuntais (of an account) and cuntasóir (accountant). The end boundary keeps cuntass blocked.
+!cuntas|
+!cuntais
+!cuntasoir
+# The nickname Mr Handsome contains mr hands and mrhands.
+!mr handsome
+!mrhandsome

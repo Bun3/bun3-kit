@@ -1,0 +1,131 @@
+# com.bun3.badwords default Russian entries.
+# Grammar: one entry per line; '#' starts a comment; '!' allow; '|' word boundary (Latin and Cyrillic). See README.md.
+# Sources: LDNOOBW (CC-BY-4.0, modified) https://github.com/LDNOOBW/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words @ 5faf2ba42d7b1c0977169ec3611df25a3c08eb13
+# Curation: strong expressions only; mild words pass, and plain sexual words are blocked (owner ruling 2026-10-14). Record: docs/research/2026-10-13-bad-word-multilingual-sources.md.
+
+# == LDNOOBW ru (Cyrillic) ==
+|манда|
+мандавош
+малофь
+ёб твою мать
+
+# == LDNOOBW ru (Latin transliterations) ==
+dolboeb
+mudack
+|pidar
+pizd
+zaebis
+zalup
+
+# == project additions (mat roots) ==
+хуй
+хуе
+хуя
+пизд
+бляд
+|бля
+мудак
+мудил
+залуп
+пидор
+пидар
+шлюх
+гандон
+|сука
+!страхуй
+!страхуе
+!страхуя
+
+# == project additions (the ебать family, fix round 1) ==
+# Everyday Russian has 'еб' after a consonant (хлеб, скребать, колебание, дебаты, щебет, икебана) and after a vowel only
+# before 'о' or 'р' (двоеборье, сваебой). Mat puts it at the start of a word or after a prefix vowel, 'ъ' or 'ь'
+# (ебать, заебал, проебать, выебываться, отъебись), so the family is matched there instead of by bare roots.
+|еба
+|ебем
+|ебен
+|ебет
+|ебеш
+|еби
+|ебл
+|ебн
+|ебу
+|ебы
+аеб
+ееб
+иеб
+оеб
+уеб
+ыеб
+ъеб
+ьеб
+!двоеб
+!змееб
+!клееб
+!сваеб
+!троеб
+ёбтвоюмать
+
+# == project additions (inflections, derived words and slurs, Task 6) ==
+|хую
+|суки|
+|суке|
+|суку|
+|сукой|
+|сучк
+шлюш
+гондон
+педик
+черножоп
+!педикул
+!педикюр
+!|блях
+!|бляшк
+
+# == project additions (Latin transliterations) ==
+blyad
+blyat
+dolbaeb
+mudak
+nahui
+nahuy
+|pidor
+
+# == false-positive allows (Russian word forms, fix round 1) ==
+!|блямб
+!|бляшеч
+!|бляшек
+!лапидар
+!педикеб
+!плохуем
+!плохует
+!плохуеш
+!психуй|
+!психуйся
+!психуйт
+!психуем
+!психует
+!психуеш
+!психуя
+!скипидар
+!|сучкаст
+!|сучков
+!|сучком|
+!|сучкор
+!штрихуй|
+!штрихуйт
+!штрихуем
+!штрихует
+!штрихуеш
+!штрихуя
+
+# == owner ruling 2026-10-14: plain sexual words ==
+# The noun and its case forms (заниматься сексом); сексуальный, секси, сексот and Эссекс pass.
+|секс|
+|секса|
+|сексе|
+|сексу|
+|сексом|
+мастурб
+# Word start only: квартиронаниматель and сонаниматель contain онани.
+|онани
+оргазм

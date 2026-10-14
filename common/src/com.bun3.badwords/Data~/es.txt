@@ -1,0 +1,56 @@
+# com.bun3.badwords default Spanish entries.
+# Grammar: one entry per line; '#' starts a comment; '!' allow; '|' word boundary (Latin and Cyrillic). See README.md.
+# Sources: cuss (MIT) https://github.com/wooorm/cuss @ 6bab3fef250481e34ba55bc400fac5c6d25f1429; LDNOOBW (CC-BY-4.0, modified) https://github.com/LDNOOBW/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words @ 5faf2ba42d7b1c0977169ec3611df25a3c08eb13
+# Curation: strong expressions only; mild words pass, and plain sexual words are blocked (owner ruling 2026-10-14). Record: docs/research/2026-10-13-bad-word-multilingual-sources.md.
+
+# == cuss es (rating 2) ==
+chinga tu madre
+chingad
+chingar
+culero
+follar
+gilipollas
+jilipollas
+joder
+malparido
+maricon
+pendej
+|puta
+soplapollas
+
+# == LDNOOBW es ==
+bollera
+chupapollas
+concha de tu madre
+hijaputa
+hijoputa
+
+# == false-positive sweep allows (FrequencyWords es 50k, beyond the top 20,000) ==
+!pendejada|
+!pendejadas|
+!putada|
+!putadas|
+!rapear|
+!rapero|
+!raperos|
+
+# == project additions (joined forms and inflections, review 2026-10-14) ==
+chingatumadre
+conchadetumadre
+hijadeputa
+hijodeputa
+hijueputa
+jodete
+jodida
+jodido
+
+# == false-positive allows (final review 2026-10-14) ==
+# Tagalog putahe (dish) and putakti (wasp); English putative, Spanish and Portuguese putativo.
+!putahe
+!putakti
+!putativ
+
+# == owner ruling 2026-10-14: plain sexual words ==
+# The plain noun only: the plural (ambos sexos) and sexual pass, as en |sex| does not block sexes or sexual. Also covers Portuguese sexo.
+# Masturbation and orgasm: en.txt masturb and orgasm.
+|sexo|
