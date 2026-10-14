@@ -22,7 +22,7 @@ static readonly BadWordFilter Filter = new BadWordFilter(BadWordFilter.DefaultEn
 
 ## Entry grammar
 
-`[!][|]word[|]` - `!` allow entry (suppresses block matches it fully covers), `|` word boundary before/after (Latin and Cyrillic entries only). The first character of the word picks the stage:
+`[!][|]word[|]` - `!` allow entry (suppresses block matches it fully covers), `|` word boundary before/after (Latin and Cyrillic entries only). The scripts the entry contains pick the stage (any Hangul, any Cyrillic letter, any kana or Han character); an entry that mixes stages is rejected:
 
 | Entry contains | Stage | Allowed characters | Boundaries |
 |---|---|---|---|

@@ -3,7 +3,7 @@
 # Sources: dsojevic/profanity-list (MIT) https://github.com/dsojevic/profanity-list @ c27924319aa9bd6f917e3782b4f4b6604a50b652; korcen (MIT) https://github.com/Tanat05/korcen @ eecd9763dbdccce3dc96ddb578ef0b6396058fa9
 # Curation: strong expressions only; plain sexual words are blocked (owner ruling 2026-10-14). Record: docs/research/2026-10-13-bad-word-multilingual-sources.md.
 
-# == korcen latin forms (romanized and 2-beolsik) ==
+# == korcen latin forms (romanized) ==
 # Owner ruling 2026-10-14: Latin text is not read as Korean keyboard input, so Korean typed entirely with the IME off (tlqkf, wlfkf) is not an entry.
 sibal
 sival
