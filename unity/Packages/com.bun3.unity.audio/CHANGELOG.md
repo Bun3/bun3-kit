@@ -1,7 +1,60 @@
 # Changelog
 
+## [0.5.0] - 2026-10-14
+
+### Added
+
+- `ChargeSoundDef` and `SoundSystem.PlayCharge` (2D, fixed position, transform
+  follow) returning `ChargeSoundHandle`: a looping layer whose volume and pitch
+  follow `SetProgress(0..1)` through `VolumeByProgress`/`PitchByProgress` curves,
+  with optional start, complete and cancel one-shots. `Complete`/`Cancel` fade the
+  loop out once and return the one-shot's handle; stolen, ended or disposed charges
+  do nothing. Progress updates do not allocate.
+
+## [0.4.0] - 2026-09-20
+
+Covers 0.3.1 through 0.4.0.
+
+### Added
+
+- `SoundAcousticSettings`, the shareable `SoundAcousticProfile` asset and
+  `SoundAcousticSelection` (shared profile or local settings) as
+  `SoundDef.Acoustics` and `SoundSpatialProfile.Acoustics`;
+  `SoundDef.EffectiveAcoustics` resolves the active settings. Inspector drawers for
+  acoustic selections. `IResolvedSoundAcousticSettings` exposes live resolved
+  settings to native playback adapters.
+- `SoundSystem.Prepare(SoundDef)` / `Prepare(SoundCatalog)` prewarm cooldown
+  bookkeeping so the first cooldown playback does not allocate.
+- `SoundDef.PlaybackClips` exposes the clips playback uses (preloaded clips first).
+
+### Changed
+
+- `DistanceAttenuationProfile.CreateLegacyCurve` is now `CreateInverseDistanceCurve`.
+- Basic AudioSource playback honors the resolved distance-attenuation setting
+  (flat rolloff when disabled).
+
+### Removed
+
+- **Breaking:** per-field acoustic members on `SoundDef` and `SoundSpatialProfile`
+  (`MinDistance`, `MaxDistance`, `DistanceAttenuation`, `AttenuationProfile`,
+  `InheritSpatialBlend`, `SpatialBlendProfile`, `MonoDistance`,
+  `FullSpatialDistance`) and their `Effective*` accessors. Use `Acoustics` /
+  `EffectiveAcoustics`.
+- **Breaking:** `DistanceAttenuationProfile.MinimumDistance`, `MaximumDistance`
+  and `FadeFraction`.
+
 ## [0.3.0] - 2026-09-13
 
+### Added
+
+- `SoundCatalog`: ordinal string keys mapped to `SoundDef` assets, with validation
+  and allocation-free warm lookup.
+- Shared definition profiles referenced from `SoundDef`: `SoundPlaybackProfile`,
+  `SoundRoutingProfile`, `SoundConcurrencyProfile` and `SoundSpatialProfile`, plus
+  `DistanceAttenuationProfile` and `SpatialBlendProfile` for native adapters.
+- Request-local `Play(def, position, spatial, volumeScale)` and
+  `ISpatialSoundVoiceOutput` for owners that receive the effective request mode.
+- `SoundDef.VolumeGroup` with live `SoundSystemConfig.GroupGain`.
 - Add SDK-independent Editor setup commands to explicitly synchronize installed optional adapters or disable them before SDK removal on Standalone, Android, iOS and WebGL.
 
 

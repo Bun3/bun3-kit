@@ -16,6 +16,7 @@ namespace Bun3.Unity.Audio
     /// <item><description>SoundSystem.Music.cs: intro+loop music channels, crossfade, pause/resume.</description></item>
     /// <item><description>SoundSystem.Occlusion.cs: round-robin occlusion evaluation and low-pass/volume application.</description></item>
     /// <item><description>SoundSystem.Async.cs: UniTask entry points built on voice completion sources.</description></item>
+    /// <item><description>SoundSystem.Charge.cs: progress-driven charge sounds composed over voice playback.</description></item>
     /// <item><description>SoundSystem.Addressables.cs: Addressable clip preload/release (compiled under BUN3_ADDRESSABLES).</description></item>
     /// </list>
     /// </summary>
