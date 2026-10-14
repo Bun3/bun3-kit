@@ -39,6 +39,7 @@ Ship strong-expression entries for every language the first consumer plans to su
      - One merged non-Hangul stage. Cyrillic↔Latin look-alike folding can only go one way, so it loses either Cyrillic entries or Latin evasions. Kana/Han also have no word boundaries.
      - One filter per language. The Latin stream would be scanned eight times, and language sets could diverge between peers.
 4. **Strong expressions only**, the same bar as 0.1.0. Mild insults pass, as `바보` does in Korean.
+   - **Owner ruling 2026-10-14:** words at the level of English `shit` and milder pass in every language (`mierda`, `merda`, `merde`, `Scheiße`, `クソ`). The `scheiße` example under "Step 0 and stream C" shows the `ß` mechanism only; it is not a default entry.
 5. **One release.** 0.2.0 contains every language. 0.1.0 merges first and is not extended.
 6. **No native review.** Frequency-list sweeps and an owner spot-check replace it.
 
