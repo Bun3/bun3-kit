@@ -1,0 +1,54 @@
+# com.bun3.badwords default Japanese entries.
+# Grammar: one entry per line; '#' starts a comment; '!' allow; '|' word boundary (Latin and Cyrillic). See README.md.
+# Sources: MosasoM/inappropriate-words-ja (MIT) https://github.com/MosasoM/inappropriate-words-ja @ e24de6e185135f92c3491ef61931c26905bd3b1f; Citrine (MIT) https://github.com/EbiseLutica/Citrine @ e6a37316bc8f3009febe0e0db77d9e29872e2d4d
+# Curation: strong expressions only; mild words pass (owner ruling 2026-10-14). Record: docs/research/2026-10-13-bad-word-multilingual-sources.md.
+
+# == MosasoM Sexual ==
+おめこ
+ちんこ
+ちんぽ
+まんこ
+イラマチオ
+クンニ
+ザーメン
+スペルマ
+デカチン
+パイズリ
+フェラ
+ヤリチン
+ヤリマン
+レイプ
+中出し
+手コキ
+手マン
+肉便器
+顔射
+ハメ撮り
+
+# == MosasoM Offensive ==
+ガイジ
+キチガイ
+
+# == Citrine exceptions ==
+!ぱちんこ
+!がちんこ
+!喉ちんこ
+!のどちんこ
+!ビックリマンコラボ
+!ウルトラマンコスモス
+!フェラーリ
+!カフェラテ
+!フェライト
+!フェラガモ
+!フェラーラ
+!フェライニ
+!フェラーズ
+!フェラリア
+!スレイプニル
+
+# == project additions (false-positive allows, Task 6) ==
+!おめこぼし
+!ガイジン
+
+# == false-positive sweep allows (FrequencyWords ja 50k, beyond the top 20,000) ==
+!フェラン

@@ -1,0 +1,87 @@
+# com.bun3.badwords default Russian entries.
+# Grammar: one entry per line; '#' starts a comment; '!' allow; '|' word boundary (Latin and Cyrillic). See README.md.
+# Sources: LDNOOBW (CC-BY-4.0, modified) https://github.com/LDNOOBW/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words @ 5faf2ba42d7b1c0977169ec3611df25a3c08eb13
+# Curation: strong expressions only; mild words pass (owner ruling 2026-10-14). Record: docs/research/2026-10-13-bad-word-multilingual-sources.md.
+
+# == LDNOOBW ru (Cyrillic) ==
+|манда|
+выёбыва
+ёб твою мать
+
+# == LDNOOBW ru (Latin transliterations) ==
+dolboeb
+mudack
+pidar
+pizd
+zaebis
+zalup
+
+# == project additions (mat roots) ==
+хуй
+хуе
+хуя
+пизд
+ебат
+ебан
+ебуч
+ебло
+бляд
+|бля
+мудак
+мудил
+залуп
+пидор
+пидар
+шлюх
+гандон
+|сука
+!колебан
+!колебат
+!страхуй
+!страхуе
+!страхуя
+
+# == project additions (inflections, derived words and slurs, Task 6) ==
+|хую
+ебал
+!колебал
+!хлебал
+ебет
+ебис
+ебнул
+ебнут
+!хлебат
+!хлебнул
+!хлебнут
+уебок
+долбоеб
+долбаеб
+ёбтвоюмать
+|суки|
+|суке|
+|суку|
+|сукой|
+|сучк
+педик
+!педикюр
+черножоп
+!|блях
+!|бляшк
+!гребан
+
+# == project additions (Latin transliterations) ==
+blyad
+blyat
+dolbaeb
+mudak
+nahui
+nahuy
+|pidor
+
+# == false-positive sweep allows (FrequencyWords ru) ==
+!|дебат
+
+# == false-positive sweep allows (FrequencyWords ru 50k, beyond the top 20,000) ==
+!гребат
+!хребет
+!эстебан

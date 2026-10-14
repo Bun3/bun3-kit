@@ -164,6 +164,51 @@ namespace Bun3.BadWords.Tests
         public void PassesEverydayWordsInLatinScriptLanguages(string text) =>
             Assert.That(BadWordFilter.Default.ContainsBadWord(text), Is.False, BadWordFilter.Default.Explain(text));
 
+        [TestCase("хуй")]
+        [TestCase("x\u0443\u0439")]
+        [TestCase("х у й")]
+        [TestCase("пизда")]
+        [TestCase("блядь")]
+        [TestCase("иди нахуй")]
+        [TestCase("pizda")]
+        [TestCase("ちんこ")]
+        [TestCase("チンコ")]
+        [TestCase("\uFF81\uFF9D\uFF7A")]
+        [TestCase("ち ん こ")]
+        [TestCase("まんこ")]
+        [TestCase("操你妈")]
+        [TestCase("操你媽")]
+        [TestCase("傻逼")]
+        [TestCase("他媽的")]
+        public void BlocksStrongWordsInOtherScripts(string text) =>
+            Assert.That(BadWordFilter.Default.ContainsBadWord(text), Is.True, text);
+
+        [TestCase("тебе")]
+        [TestCase("хлеб")]
+        [TestCase("рубля")]
+        [TestCase("где батарея")]
+        [TestCase("застрахуйте")]
+        [TestCase("употреблять")]
+        [TestCase("оскорблять")]
+        [TestCase("колебание")]
+        [TestCase("сукно")]
+        [TestCase("привет")]
+        [TestCase("男性")]
+        [TestCase("奶茶")]
+        [TestCase("操作")]
+        [TestCase("体操")]
+        [TestCase("妈妈")]
+        [TestCase("媽媽")]
+        [TestCase("鸡肉")]
+        [TestCase("日本")]
+        [TestCase("フェラーリ")]
+        [TestCase("カフェラテ")]
+        [TestCase("ちんちん電車")]
+        [TestCase("ガチンコ")]
+        [TestCase("こんにちは")]
+        public void PassesEverydayWordsInOtherScripts(string text) =>
+            Assert.That(BadWordFilter.Default.ContainsBadWord(text), Is.False, BadWordFilter.Default.Explain(text));
+
         // Owner ruling (2026-10-14): mild words pass in every language.
         [TestCase("mierda")]
         [TestCase("merda")]
@@ -174,6 +219,11 @@ namespace Bun3.BadWords.Tests
         [TestCase("culo")]
         [TestCase("bastardo")]
         [TestCase("idiota")]
+        [TestCase("クソ")]
+        [TestCase("バカ")]
+        [TestCase("アホ")]
+        [TestCase("笨蛋")]
+        [TestCase("白痴")]
         public void PassesMildWords(string text) =>
             Assert.That(BadWordFilter.Default.ContainsBadWord(text), Is.False, BadWordFilter.Default.Explain(text));
 

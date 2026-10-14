@@ -1,0 +1,38 @@
+# com.bun3.badwords default Chinese entries.
+# Grammar: one entry per line; '#' starts a comment; '!' allow; '|' word boundary (Latin and Cyrillic). See README.md.
+# Sources: LDNOOBW (CC-BY-4.0, modified) https://github.com/LDNOOBW/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words @ 5faf2ba42d7b1c0977169ec3611df25a3c08eb13
+# Curation: strong expressions only; mild words pass (owner ruling 2026-10-14). Record: docs/research/2026-10-13-bad-word-multilingual-sources.md.
+
+# == LDNOOBW zh ==
+他妈的
+他马的
+她妈的
+它妈的
+傻逼
+塞你娘
+妈个比
+婊子
+干你妈
+干你娘
+干你老母
+干妳妈
+干妳娘
+干您娘
+强奸
+操你
+操妳
+操逼
+日你妈
+烂逼
+贱人
+贱货
+轮奸
+驶你娘
+骚货
+骚逼
+鸡巴
+咸家鏟
+冚家鏟
+
+# == project additions (root of LDNOOBW 干机掰 and 操机掰, Task 6) ==
+机掰
