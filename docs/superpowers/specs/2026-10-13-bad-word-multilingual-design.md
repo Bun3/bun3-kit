@@ -151,7 +151,7 @@ Matching rules are unchanged. Scan order: A, C1, C2, D1, D2, E. The first unsupp
 | de | LDNOOBW `de` | written with `ß` |
 | nl | LDNOOBW `nl` | idioms and ordinary words removed in bulk |
 | tl | LDNOOBW `fil` | `bobo` and `tanga` dropped (es, pt everyday words) |
-| ru | LDNOOBW `ru` Cyrillic and Latin transliterations, plus hand-written mat roots | roots long enough to pass the sweep: `ебат`/`ебан`, never `еб` (`тебе`, `хлеб`) |
+| ru | LDNOOBW `ru` Cyrillic and Latin transliterations, plus hand-written mat roots | the `ебать` family matches `еб` only at word start or after a prefix vowel, `ъ` or `ь` (`\|еба`, `заебал`, `отъебись`), never after a consonant (`тебе`, `хлеб`, `колебание`); mat written without `ъ` (`отебись`) passes |
 | ja | MosasoM `Sexual.txt` and `Offensive.txt` (`e24de6e`), Citrine exceptions as `!` entries (`e6a3731`) | derived `*_with_mask` files unused; political slurs dropped |
 | zh | LDNOOBW `zh` | single-Han and mixed-script entries dropped or rewritten |
 

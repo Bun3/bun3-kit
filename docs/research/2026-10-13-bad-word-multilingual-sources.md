@@ -400,18 +400,18 @@ it 168줄은 LDNOOBW `it`와 같은 내용이다. MIT 라벨이 붙어 있어도
 | 파일 | 차단 | 허용 | 비고 |
 |---|---|---|---|
 | ko | 994 | 416 | 0.1.0과 동일 |
-| en | 594 | 657 | 0.1.0은 606 / 645 |
-| es | 27 | 7 | |
-| pt | 22 | 3 | |
+| en | 600 | 662 | 0.1.0은 606 / 645 |
+| es | 27 | 10 | |
+| pt | 22 | 4 | |
 | fr | 21 | 7 | |
 | it | 25 | 8 | |
-| de | 17 | 6 | |
-| nl | 13 | 10 | |
+| de | 18 | 6 | |
+| nl | 14 | 10 | |
 | tl | 6 | 0 | |
 | ru | 68 | 38 | 차단은 키릴 55 + 라틴 음역 13 |
-| ja | 22 | 39 | |
-| zh | 35 | 38 | |
-| 합계 | 1,844 | 1,229 | 기본 항목 3,073개 (`BadWordFilter.DefaultEntries`), 0.1.0은 2,661개 |
+| ja | 22 | 44 | |
+| zh | 35 | 58 | |
+| 합계 | 1,852 | 1,263 | 기본 항목 3,115개 (`BadWordFilter.DefaultEntries`), 0.1.0은 2,661개. 최종 리뷰 반영 전은 1,844 / 1,229 (3,073개) |
 
 `zh-simplified.txt`는 항목이 아니라 번체 → 간체 쌍 2,813개다(Unicode 17.0.0 `Unihan_Variants.txt`의 `kSimplifiedVariant`; BMP 쌍만, 첫 번째 대상만, 자기 자신으로의 매핑 제외). `Runtime/TextNormalizer.Simplified.cs`로 생성된다.
 
@@ -487,3 +487,21 @@ it 168줄은 LDNOOBW `it`와 같은 내용이다. MIT 라벨이 붙어 있어도
 
 - 스캔 비용(`ReportsScanCost`, Release, 입력당 10만 회, 3회 중앙값, ns), 0.1.0 기준선 → 0.2.0: Player One 1316 → 977, 탈출친구 391 → 383, f.u.c.k you 781 → 417, привет как дела 826 → 1882, こんにちは今日はいい天気 459 → 290, 你好世界朋友们 306 → 215. 한국어·영어·라틴 입력은 모두 기준선 이하(2벌식 스트림 제거 덕분)이고, 키릴 입력은 새 스트림 비용으로 늘었지만 5,000 ns 안이다. 원시 값(키릴/가나/한자): 1회 2271/964/198, 2회 1882/290/244, 3회 1736/264/215.
 - 기본 필터 빌드 비용(`ReportsDefaultBuildCost`): 항목 3,073개, `buildMs=18.4`, `retainedBytes=419088`(기준 50 ms 이하).
+
+### 9. 최종 리뷰 반영 (2026-10-14)
+
+브랜치 전체 최종 리뷰의 지적(중요 1, 경미 9)을 한 번에 반영했다. 항목은 3,073 → 3,115개(차단 +8, 허용 +34)이고, 빌드 비용은 `buildMs=19.2`(3회 중앙값), `retainedBytes=424296`이다.
+
+- **띄어 쓴 라틴 항목의 결합 오탐(중요 1)**: 타갈로그어 연결사 `-ng`가 앞 단어에 붙으면 `batang ina`(어린 엄마), `ibang bus`(다른 버스), `hanggang bangko`(은행까지)가 `tang ina`·`bang bus`·`gang bang`을 포함한다. 같은 부류로 `Claudio Canela`·`addio cane`가 `dio cane`에 걸렸다. 띄어 쓴 라틴 차단 항목 231개 전부에 대해 첫 단어로 끝나거나 마지막 단어로 시작하는 일반어를 붙인 구절 17,515개(라틴 9개 언어 2만·5만 목록, 타갈로그어 `-ng`/`-g` 합성형)를 스윕하고, 같은 언어의 일반어끼리 실제 문장이 되는 37개 항목에 경계를 줬다.
+  - 앞 경계 23개: `|tang ina` `|bang bus` `|bang bros` `|gang bang` `|gay sex` `|nig nog`(네덜란드어 `weinig nog`) `|hot carl` `|hot richard`(`I shot Carl`) `|dog style`(`hotdog style`) `|ass bandit`(`Bass Bandit`) `|ring raider`(`Daring Raider`) `|bean queen`(`Caribbean Queen`) `|wet dream`(`sweet dreams`) `|menage a trois` `|menages a trois`(`on déménage à trois`) `|nique ta mère` `|nique ta race`(`Monique, ta mère`) `|ball batter` `|ball gravy` `|ball kicking` `|ball licking` `|ball sack` `|ball sucking`(`baseball batter`, `meatball gravy`, `football kicking`).
+  - 양쪽 경계 5개: `|dio cane|`(스페인어 `le dio canela`), `|ball gag|`(타글리시 `ball gagamitin`), `|edge play|`(`knowledge plays`, `cutting edge player`), `|wet back|`(`sweet back`, `wet backpack`), `|chi chi man|`.
+  - 뒤 경계 9개: `black/big/huge/giant/massive/throbbing cock|`(`giant cockroach`, `big cocktail`, `black cockatoo`. 복수형 `… cocks|` 6개를 함께 추가), `impact play|`(`impact player`), `strap on|`(`strap onto`), `tomar no cu|`(`tomar no cuidado`, 스페인어 `tomar no cuesta`).
+  - `|tang ina`·`|gang bang`·`|dio cane|` 뒤에도 `tang ina mo`, `putang ina`(`|puta`), `tangina`, `gangbang`, `diocane`은 계속 막는다. 붙여 쓴 항목은 장식 닉네임(`xXgangbangXx`)을 막아야 해서 경계를 주지 않았고, `Mr Handsome`·`MrHandsome`만 허용 `!mr handsome` `!mrhandsome`로 통과시켰다.
+  - 리뷰 지적의 `!sweet dream` 대신 같은 결합 부류의 경계 `|wet dream`을 썼다. `sweet dreams`와 늘인 `sweeeet dreams`가 통과하고 `wet dream(s)`는 막는다.
+- **중국어 결합(경미 1·2)**: `日你妈`가 요일·날 단어 + `你妈妈`(`周日你妈妈来吗`, `今日你媽媽好嗎`)를 막았다. 전체 구절 허용 10개(`!周日你妈妈 !星期日你妈妈 !礼拜日你妈妈 !生日你妈妈 !今日你妈妈 !明日你妈妈 !昨日你妈妈 !节日你妈妈 !假日你妈妈 !平日你妈妈`)를 더했고 `日你妈的`·`日你妈逼`·`周日你妈死了`는 계속 막는다. `性交` 결합은 전체 구절 허용 10개(`!国际性交流 !建设性交流 !实质性交流 !同性交际 !同性交友 !男性交友 !女性交友 !个性交友 !一次性交通 !慢性交感`)를 더했다.
+- **일본어 결합(경미 3)**: `!ヒューマンコ` `!ウルトラマンコレクション`을 더하고 `!スパイダーマンコスプレ`를 `!マンコスプレ`로 넓혔다(スーパーマン·バットマン·アイアンマン 코스프레). 영웅 이름 접두 허용(`!ウルトラマンコ`)은 `ウルトラ` + `まんこ` 말장난을 다시 열어 쓰지 않았다. 카페 결합은 리뷰 제안 `!カフェラ` 대신 단어별 허용 `!カフェライブ !カフェライフ !カフェラバー`를 썼다. `!カフェラ`는 조사 `か` + `フェラ`(`キスかフェラ`)와 `バカフェラ`를 통과시킨다.
+- **경미 4~7**: es `!putahe !putakti !putativ`(타갈로그어 요리·말벌, `putative`/`putativo`). pt `!fodder` 복원(`cannon fodder`. 정확한 `foder`와 `vai se foder`는 막고 늘인 `fooder`만 통과하는, `!rapping`과 같은 교환). nl `zelfbevrediging`, de `|onani`(`Onanie` `onanieren` `onanismo` `onanisme`. 라틴 빈도 목록 전체에 `onani`로 시작하는 단어가 없고 `buonanima`는 통과). en `!cuntas|` `!cuntais` `!cuntasoir`(아일랜드어 계좌·회계사. 끝 경계로 `cuntass`는 계속 막는다).
+- **문서(경미 8·9)**: 스펙의 ru 행을 단어 첫머리·접두 모음·`ъ`·`ь` 뒤의 `еб` 방식으로 고쳤고, README 한계에 가나/한자 스트림은 단어 경계가 없어 두 단어의 결합과 삭제된 공백·구두점을 넘어 맞는다는 점을 적었다.
+- **새 한계**: 아일랜드어 `fág`(떠나라)는 악센트 접기 후 `fag`와 같은 키라 막힌다(en.txt `|fag|` 주석). `ザ・メン…`(`ザ・メンバー`)과 `ザメンホフ`는 `ー`·`・`가 삭제돼 `ザーメン`과 같은 키가 되어 막힌다(ja.txt 주석). 타갈로그어 `bang`(ba + -ng)은 단독 단어라 `… bang bus`처럼 띄어 쓴 문장은 `|bang bus`가 여전히 막는다.
+- **스윕**: 2만 위 16개 코퍼스는 반영 전과 같다(5절 "최종" 열). 5만 목록은 en 71/134 → 70/133(`fodder`) 외에 변화가 없다. 단어쌍 스윕(각 언어 상위 1,000개 중 단독으로 통과하는 단어끼리 결합): 띄어 쓴 결합 16/43 → 9/11(남은 적중은 항목 자체가 두 단어로 나온 `hand job` `lady boy` `dio cane` 등과 타갈로그어 `bang busan`), 붙여 쓴 결합 166/2,623 → 169/2,626(새 `|onani`가 한 글자 단어와 붙인 `oNaninirahan`·`onAnniversaire`에 걸림).
+- **권고**: 띄어 쓴 단어쌍 스윕이 타갈로그어 `-ng` 결합 부류를 찾았다. 띄어 쓴 항목을 더하거나 고칠 때는 이 단어쌍 스윕과 위의 첫/끝 단어 결합 스윕을 함께 돌린다.
