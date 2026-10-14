@@ -114,6 +114,18 @@ namespace Bun3.BadWords.Tests
         [TestCase("putang ina")]
         [TestCase("tangina")]
         [TestCase("kantot")]
+        // Owner ruling (2026-10-14): plain sexual words block in every language.
+        [TestCase("sexo")]
+        [TestCase("sexe")]
+        [TestCase("sesso")]
+        [TestCase("seks")]
+        [TestCase("Sex")]
+        [TestCase("masturbate")]
+        [TestCase("masturbación")]
+        [TestCase("masturbieren")]
+        [TestCase("Selbstbefriedigung")]
+        [TestCase("orgasmo")]
+        [TestCase("pagtatalik")]
         public void BlocksStrongWordsInLatinScriptLanguages(string text) =>
             Assert.That(BadWordFilter.Default.ContainsBadWord(text), Is.True, text);
 
@@ -166,6 +178,19 @@ namespace Bun3.BadWords.Tests
         [TestCase("Moses")]
         [TestCase("alcohol")]
         [TestCase("connect")]
+        [TestCase("sexual")]
+        [TestCase("sexy")]
+        [TestCase("ambos sexos")]
+        [TestCase("sexuel")]
+        [TestCase("sessuale")]
+        [TestCase("possesso")]
+        [TestCase("assessore")]
+        [TestCase("seksueel")]
+        [TestCase("sekse")]
+        [TestCase("seeks")]
+        [TestCase("Sussex")]
+        [TestCase("matalik")]
+        [TestCase("pagtalikod")]
         public void PassesEverydayWordsInLatinScriptLanguages(string text) =>
             Assert.That(BadWordFilter.Default.ContainsBadWord(text), Is.False, BadWordFilter.Default.Explain(text));
 
@@ -191,6 +216,21 @@ namespace Bun3.BadWords.Tests
         [TestCase("шлюшка")]
         [TestCase("гондон")]
         [TestCase("мандавошка")]
+        // Owner ruling (2026-10-14): plain sexual words block in every language.
+        [TestCase("секс")]
+        [TestCase("заниматься сексом")]
+        [TestCase("мастурбация")]
+        [TestCase("онанизм")]
+        [TestCase("оргазм")]
+        [TestCase("セックス")]
+        [TestCase("せっくす")]
+        [TestCase("オナニー")]
+        [TestCase("オーガズム")]
+        [TestCase("做爱")]
+        [TestCase("做愛")]
+        [TestCase("性交")]
+        [TestCase("自慰")]
+        [TestCase("手淫")]
         public void BlocksStrongWordsInOtherScripts(string text) =>
             Assert.That(BadWordFilter.Default.ContainsBadWord(text), Is.True, text);
 
@@ -233,6 +273,20 @@ namespace Bun3.BadWords.Tests
         [TestCase("あけおめことよろ")]
         [TestCase("たなかくんにきいて")]
         [TestCase("キッチンコーナー")]
+        [TestCase("сексуальный")]
+        [TestCase("секси")]
+        [TestCase("Эссекс")]
+        [TestCase("квартиронаниматель")]
+        [TestCase("性別")]
+        [TestCase("性别")]
+        [TestCase("ユニセックス")]
+        [TestCase("理性交流")]
+        [TestCase("和女性交谈")]
+        [TestCase("和女性交往")]
+        [TestCase("不純異性交遊")]
+        [TestCase("亲自慰问")]
+        [TestCase("这就叫做爱情")]
+        [TestCase("做爱心公益")]
         public void PassesEverydayWordsInOtherScripts(string text) =>
             Assert.That(BadWordFilter.Default.ContainsBadWord(text), Is.False, BadWordFilter.Default.Explain(text));
 
@@ -251,6 +305,8 @@ namespace Bun3.BadWords.Tests
         [TestCase("アホ")]
         [TestCase("笨蛋")]
         [TestCase("白痴")]
+        [TestCase("shithead")]
+        [TestCase("pissing")]
         public void PassesMildWords(string text) =>
             Assert.That(BadWordFilter.Default.ContainsBadWord(text), Is.False, BadWordFilter.Default.Explain(text));
 

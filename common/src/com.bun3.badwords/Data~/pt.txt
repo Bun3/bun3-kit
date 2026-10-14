@@ -38,3 +38,6 @@ fodeu
 fudend
 fudeu
 tomarnocu
+
+# == owner ruling 2026-10-14: plain sexual words ==
+# es.txt |sexo| covers Portuguese sexo; en.txt masturb and orgasm cover masturbar, masturbação and orgasmo.

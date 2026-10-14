@@ -41,3 +41,7 @@ filsdepute
 |nique|
 niquetamere
 niquetarace
+
+# == owner ruling 2026-10-14: plain sexual words ==
+# The plain noun only: sexes and sexuel pass. Masturbation and orgasm: en.txt masturb and orgasm.
+|sexe|

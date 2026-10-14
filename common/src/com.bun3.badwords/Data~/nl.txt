@@ -35,3 +35,9 @@ neukt
 
 # == false-positive allows (review 2026-10-14) ==
 !hoera|
+
+# == owner ruling 2026-10-14: plain sexual words ==
+# The plain noun only: sekse (gender), seksueel and seksen pass. Also covers Tagalog seks. Masturbation and orgasm: en.txt masturb and orgasm.
+|seks|
+# English seeks collapses onto seks; the allow also lets stretched spellings of seks (seeeks) pass.
+!|seeks|

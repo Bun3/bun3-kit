@@ -71,3 +71,11 @@
 !ひきちがい
 !ゆきちがい
 !グレイプ
+
+# == owner ruling 2026-10-14: plain sexual words ==
+# 性交 and 自慰 are shared with Chinese and live in zh.txt.
+セックス
+オナニー
+オーガズム
+# ユニセックス (unisex) passes. Place names (サセックス, エセックス) stay blocked: an allow starting with a one-kana particle or interjection (さ, え) would reopen あのさセックス.
+!ユニセックス

@@ -44,3 +44,7 @@ figliodiputtana
 figlioditroia
 stronze|
 stronzi
+
+# == owner ruling 2026-10-14: plain sexual words ==
+# The plain noun only, bounded because possesso, ossesso and assessore contain it. Masturbation and orgasm: en.txt masturb and orgasm.
+|sesso|

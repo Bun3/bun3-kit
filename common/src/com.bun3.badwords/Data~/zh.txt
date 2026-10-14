@@ -45,3 +45,30 @@
 !机掰成
 !鸡掰开
 !鸡掰成
+
+# == owner ruling 2026-10-14: plain sexual words ==
+# Orgasm: 高潮 also means climax and high tide, and 性高潮 forms from ordinary junctions (戏剧性 + 高潮), so neither is an entry.
+做爱
+性交
+自慰
+手淫
+# Word junctions: 叫做 + 爱情, 做 + 爱心 (charity), 做 + 爱国者.
+!叫做爱
+!做爱心
+!做爱国
+# Word junctions of a word ending in 性 with 交流, 交谈, 交换, 交际, 交遊 and 交往 (理性交流, 和女性交谈, 異性交際, 不純異性交遊, 和女性交往).
+# 交往 and 交友 also follow 性 in sexual phrases (性交往), so only the ordinary compounds are allowed.
+!性交流
+!性交谈
+!性交换
+!性交际
+!性交遊
+!异性交往
+!两性交往
+!同性交往
+!男性交往
+!女性交往
+!异性交友
+# 亲自 + 慰问 (visit in person) and the idiom 聊以自慰 (console oneself).
+!亲自慰问
+!聊以自慰

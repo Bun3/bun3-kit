@@ -9,3 +9,9 @@ tangina
 tang ina
 kantot
 nognog
+
+# == owner ruling 2026-10-14: plain sexual words ==
+# nl.txt |seks| covers seks; en.txt masturb and orgasm cover masturbasyon and orgasmo.
+# pagtatalik, nagtatalik, magtatalik (tatalik) and nagtalik, magtalik, makipagtalik (gtalik). The end boundary keeps talikod (turn one's back: pagtalikod, pagtatalikod) passing.
+tatalik|
+gtalik|

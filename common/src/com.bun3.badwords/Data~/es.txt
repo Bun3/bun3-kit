@@ -43,3 +43,8 @@ hijueputa
 jodete
 jodida
 jodido
+
+# == owner ruling 2026-10-14: plain sexual words ==
+# The plain noun only: the plural (ambos sexos) and sexual pass, as en |sex| does not block sexes or sexual. Also covers Portuguese sexo.
+# Masturbation and orgasm: en.txt masturb and orgasm.
+|sexo|

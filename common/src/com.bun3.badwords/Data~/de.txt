@@ -34,3 +34,7 @@ fickt
 
 # == false-positive allows (review 2026-10-14) ==
 !fickle|
+
+# == owner ruling 2026-10-14: plain sexual words ==
+# en.txt |sex| covers Sex, en.txt masturb and orgasm cover Masturbation, masturbieren and Orgasmus.
+selbstbefriedigung

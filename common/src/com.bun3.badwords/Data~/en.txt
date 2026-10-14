@@ -449,7 +449,6 @@ pikey
 pikeys
 piss pig
 pisspig
-pissing
 pleasure chest
 pnigerophilia
 pnigophilia
@@ -515,8 +514,6 @@ shaved beaver
 shemale
 she male
 shibari
-shithead
-shit head
 shota
 shrimping
 sissy
@@ -1267,3 +1264,8 @@ zoophile
 !sweetback
 !|thorny
 !trafficker
+
+# == owner ruling 2026-10-14: plain sexual words ==
+# Sex and orgasm: |sex| and orgasm above already block them; orgasm also covers orgasmo, orgasme and Orgasmus.
+# masturb covers masturbation and its verbs in every Latin-script target language (masturbate, masturbar, masturber, masturbare, masturbieren, masturberen).
+masturb
