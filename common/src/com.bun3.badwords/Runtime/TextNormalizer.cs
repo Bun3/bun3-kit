@@ -13,7 +13,7 @@ namespace Bun3.BadWords
         internal const char Other = '\uFFFF';
 
         // U+00C0..U+00FF folded to lowercase ASCII; '?' marks letters without an ASCII base.
-        const string latin1 = "aaaaaa?ceeeeiiii?nooooo?ouuuuy??aaaaaa?ceeeeiiii?nooooo?ouuuuy?y";
+        const string latin1 = "aaaaaa?ceeeeiiii?nooooo?ouuuuy?saaaaaa?ceeeeiiii?nooooo?ouuuuy?y";
 
         // KS X 5002 2-beolsik layout indexed by (lowercase letter - 'a').
         const string keyboard = "\u3141\u3160\u314A\u3147\u3137\u3139\u314E\u3157\u3151\u3153\u314F\u3163\u3161\u315C\u3150\u3154\u3142\u3131\u3134\u3145\u3155\u314D\u3148\u314C\u315B\u314B";
@@ -27,6 +27,7 @@ namespace Bun3.BadWords
                 return folded == '?' ? Other : folded;
             }
             if (c >= '\uFF01' && c <= '\uFF5E') return (char)(c - 0xFEE0);
+            if (c == '\u1E9E') return 's';
             if (c == '\u115F' || c == '\u1160' || c == '\u3164' || c == '\uFFA0') return Removed;
             char lookalike = Lookalike(c);
             if (lookalike != Removed) return lookalike;

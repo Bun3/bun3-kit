@@ -113,9 +113,18 @@ namespace Bun3.BadWords.Tests
         [TestCase("\u0445\u0443\u0439")]
         [TestCase("fu\u0441k")]
         [TestCase("\u03B1\u03B2\u03B3")]
-        [TestCase("stra\u00DFe")]
+        [TestCase("\u00FEorn")]
         public void MalformedEntryThrows(string entry) =>
             Assert.Throws<ArgumentException>(() => new BadWordFilter(new[] { entry }));
+
+        [Test]
+        public void SharpSMatchesBothSpellings()
+        {
+            var german = new BadWordFilter(new[] { "stra\u00DFe" });
+            Assert.That(german.ContainsBadWord("Stra\u00DFe"), Is.True);
+            Assert.That(german.ContainsBadWord("strasse"), Is.True);
+            Assert.That(german.ContainsBadWord("STRA\u1E9EE"), Is.True);
+        }
 
         [Test]
         public void NullEntryThrowsArgumentException() =>

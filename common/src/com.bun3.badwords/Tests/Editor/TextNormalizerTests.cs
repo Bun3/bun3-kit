@@ -16,6 +16,8 @@ namespace Bun3.BadWords.Tests
         [TestCase('\u0430', 'a')]
         [TestCase('\uD83D', '\uFFFF')]
         [TestCase('\uAC00', '\uAC00')]
+        [TestCase('\u00DF', 's')]
+        [TestCase('\u1E9E', 's')]
         public void CleansCharacters(char input, char expected) =>
             Assert.That(TextNormalizer.Clean(input), Is.EqualTo(expected));
 
@@ -52,6 +54,8 @@ namespace Bun3.BadWords.Tests
         [TestCase("f\u00FCck", "fuck")]
         [TestCase("fu\u0441k", "fuck")]
         [TestCase("시발", "")]
+        [TestCase("Straße", "strase")]
+        [TestCase("STRAẞE", "strase")]
         public void LatinStreamNormalizesLettersAndBoundaries(string text, string expected) =>
             Assert.That(Run(TextNormalizer.Latin, text), Is.EqualTo(expected));
 
