@@ -169,6 +169,41 @@ sound.SetCompletionCallback(handle, h => Debug.Log("voice ended"));
 sound.Dispose();
 ```
 
+### Charge sounds
+
+A charge sound follows a progress value the game owns — hold-to-charge attacks,
+reloads, crafting gauges. It plays a looping layer whose volume and pitch track
+progress, plus optional start, complete and cancel one-shots.
+
+```csharp
+ChargeSoundHandle charge = sound.PlayCharge(myChargeDef, playerTransform); // start one-shot + loop
+charge.SetProgress(heldSeconds / requiredSeconds);  // every frame, 0..1; may decrease
+charge.Complete();  // loop fades out over CompleteFadeOut; Complete one-shot plays where the loop is
+charge.Cancel();    // loop fades out over CancelFadeOut; Cancel one-shot plays if assigned
+```
+
+`ChargeSoundDef` references up to four `SoundDef`s — `Loop` (required), `Start`,
+`Complete`, `Cancel` — so each part keeps its own clips, variation, routing,
+spatial mode and profiles. `VolumeByProgress` scales the loop's rolled volume and
+`PitchByProgress` scales its rolled pitch; X is progress 0..1 and a null or empty
+curve is a constant 1. Defaults ramp volume 0 → 1 and pitch 0.667 → 1.
+
+Progress applies immediately, without smoothing. `Complete` and `Cancel` end the
+charge once: a second call plays nothing. If voice limits steal the loop, the loop
+ends, or the system is disposed, every call does nothing and no completion sound
+plays — keep `SfxVoices` headroom for long charges.
+
+Authoring:
+
+- **Loop clip:** a seamless 1–2 s loop (2–3 s if its texture has distinct events)
+  with no build-up baked in, recorded as the state just before completion at pitch 1.
+  The pitch curve's start sets the rise: 0.667 is a fifth below, 0.5 an octave,
+  0.84 a minor third.
+- **Loop definition:** `Loop` on, `Pitch` 1–1, `MaxInstances = 1` so a re-press
+  replaces a fading charge, `Cooldown = 0`. Import from WAV with Decompress On Load.
+- **One-shots:** Start 0.1–0.3 s; Complete 0.3–1 s with an immediate attack in the
+  loop's key; Cancel optional.
+
 ### Music
 
 ```csharp
@@ -481,6 +516,7 @@ must not introduce per-frame closures or collection allocations.
 | `Prepare(SoundDef)` / `Prepare(SoundCatalog)` | Prewarm cooldown bookkeeping. Catalog preparation also validates mappings. |
 | `SoundHandle` | Generation-checked stop, fade, pitch, volume, follow and await controls. Stale handles do nothing. |
 | `SetCompletionCallback` | One callback per voice, invoked after retirement. A later registration replaces the previous one. |
+| `PlayCharge` / `ChargeSoundDef` / `ChargeSoundHandle` | Progress-driven loop with optional start/complete/cancel one-shots. `SetProgress` applies the definition's curves; `Complete`/`Cancel` end the charge once. Stolen, ended or disposed charges do nothing. |
 | `PreloadAsync` / `ReleasePreloaded` | Own an Addressables batch until release or system disposal. Stop users of a clip before release. |
 | `PlayMusic` / `StopMusic` | Two-channel intro/loop crossfade subsystem; music does not consume SFX slots. |
 | `SfxVoices` | Fixed pool capacity. Per-definition limits steal the oldest matching voice; a full global pool steals its oldest voice. |

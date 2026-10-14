@@ -1,10 +1,10 @@
 {
   "name": "com.bun3.unity.audio",
   "displayName": "Bun3 Unity Audio",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "unity": "6000.3",
   "unityRelease": "14f1",
-  "description": "Sound manager for Unity: pooled AudioSources, generation-validated handles, coroutine-free fades, voice limits, cooldowns, pitch/volume variation, and UniTask-based playback awaiting.",
+  "description": "Sound manager for Unity: pooled AudioSources, generation-validated handles, coroutine-free fades, voice limits, cooldowns, pitch/volume variation, progress-driven charge sounds, and UniTask-based playback awaiting.",
   "author": {
     "name": "Bun3",
     "url": "https://github.com/Bun3",
