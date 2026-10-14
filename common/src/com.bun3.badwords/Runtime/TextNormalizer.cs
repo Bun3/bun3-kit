@@ -15,6 +15,17 @@ namespace Bun3.BadWords
         // U+00C0..U+00FF folded to lowercase ASCII; '?' marks letters without an ASCII base.
         const string latin1 = "aaaaaa?ceeeeiiii?nooooo?ouuuuy?saaaaaa?ceeeeiiii?nooooo?ouuuuy?y";
 
+        // U+FF66..U+FF9D halfwidth katakana to fullwidth, from their Unicode <narrow> decompositions.
+        const string halfwidthKatakana =
+            "\u30F2\u30A1\u30A3\u30A5\u30A7\u30A9\u30E3\u30E5\u30E7\u30C3\u30FC\u30A2\u30A4\u30A6\u30A8\u30AA" +
+            "\u30AB\u30AD\u30AF\u30B1\u30B3\u30B5\u30B7\u30B9\u30BB\u30BD\u30BF\u30C1\u30C4\u30C6\u30C8\u30CA" +
+            "\u30CB\u30CC\u30CD\u30CE\u30CF\u30D2\u30D5\u30D8\u30DB\u30DE\u30DF\u30E0\u30E1\u30E2\u30E4\u30E6" +
+            "\u30E8\u30E9\u30EA\u30EB\u30EC\u30ED\u30EF\u30F3";
+
+        // Katakana that a voiced mark turns into the next code point, and the subset a semi-voiced mark turns into the one after.
+        const string voiceable = "\u30AB\u30AD\u30AF\u30B1\u30B3\u30B5\u30B7\u30B9\u30BB\u30BD\u30BF\u30C1\u30C4\u30C6\u30C8\u30CF\u30D2\u30D5\u30D8\u30DB";
+        const string semiVoiceable = "\u30CF\u30D2\u30D5\u30D8\u30DB";
+
         // KS X 5002 2-beolsik layout indexed by (lowercase letter - 'a').
         const string keyboard = "\u3141\u3160\u314A\u3147\u3137\u3139\u314E\u3157\u3151\u3153\u314F\u3163\u3161\u315C\u3150\u3154\u3142\u3131\u3134\u3145\u3155\u314D\u3148\u314C\u315B\u314B";
 
@@ -94,6 +105,55 @@ namespace Bun3.BadWords
             }
             if (count > 0 && work[count - 1] == ' ') count--;
             return JoinSingleLetters(work.Slice(0, count), destination);
+        }
+
+        // Neither Japanese nor Chinese separates words with spaces, so separators are dropped rather than kept as boundaries.
+        internal static int Cjk(ReadOnlySpan<char> text, Span<char> destination)
+        {
+            int count = 0;
+            foreach (char raw in text)
+            {
+                char c = Kana(raw);
+                if (c == '\u3099' || c == '\u309B' || c == '\uFF9E')
+                {
+                    if (count > 0) destination[count - 1] = Voiced(destination[count - 1]);
+                }
+                else if (c == '\u309A' || c == '\u309C' || c == '\uFF9F')
+                {
+                    if (count > 0 && semiVoiceable.IndexOf(destination[count - 1]) >= 0) destination[count - 1] = (char)(destination[count - 1] + 2);
+                }
+                else if ((c >= '\u30A1' && c <= '\u30FA') || c == '\u3005' || IsHan(c))
+                {
+                    destination[count++] = c;
+                }
+            }
+            return count;
+        }
+
+        internal static char Kana(char c)
+        {
+            if (c >= '\u3041' && c <= '\u3096') return (char)(c + 0x60);
+            if (c >= '\uFF66' && c <= '\uFF9D') return halfwidthKatakana[c - '\uFF66'];
+            return c;
+        }
+
+        internal static bool IsCjk(char c) =>
+            (c >= '\u3041' && c <= '\u30FF') || (c >= '\uFF66' && c <= '\uFF9F') || c == '\u3005' || IsHan(c);
+
+        internal static bool HasCjk(ReadOnlySpan<char> text)
+        {
+            foreach (char c in text)
+                if (IsCjk(c)) return true;
+            return false;
+        }
+
+        static bool IsHan(char c) =>
+            (c >= '\u3400' && c <= '\u4DBF') || (c >= '\u4E00' && c <= '\u9FFF') || (c >= '\uF900' && c <= '\uFAFF');
+
+        static char Voiced(char c)
+        {
+            if (c == '\u30A6') return '\u30F4';
+            return voiceable.IndexOf(c) >= 0 ? (char)(c + 1) : c;
         }
 
         internal static bool IsCyrillic(char c) => c >= '\u0400' && c <= '\u04FF';

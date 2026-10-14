@@ -93,6 +93,42 @@ namespace Bun3.BadWords.Tests
             Assert.That(new string(destination, 0, length), Is.EqualTo(expected));
         }
 
+        [TestCase("ちんこ", "チンコ")]
+        [TestCase("\uFF81\uFF9D\uFF7A", "チンコ")]
+        [TestCase("ち ん こ", "チンコ")]
+        [TestCase("ちーんこ", "チンコ")]
+        [TestCase("チ・ン・コ", "チンコ")]
+        [TestCase("ち\u200Bんこ", "チンコ")]
+        [TestCase("か\u3099", "ガ")]
+        [TestCase("か\u309B", "ガ")]
+        [TestCase("\uFF76\uFF9E", "ガ")]
+        [TestCase("\uFF8A\uFF9F", "パ")]
+        [TestCase("う\u3099", "ヴ")]
+        [TestCase("ア\u3099", "ア")]
+        [TestCase("\u3099ア", "ア")]
+        [TestCase("AV女子", "女子")]
+        [TestCase("人々", "人々")]
+        [TestCase("傻\uD840\uDC00逼", "傻逼")]
+        [TestCase("hello", "")]
+        [TestCase("시발", "")]
+        public void CjkStreamFoldsKanaAndDropsSeparators(string text, string expected) =>
+            Assert.That(RunCjk(text), Is.EqualTo(expected));
+
+        [TestCase("hello", false)]
+        [TestCase("시발", false)]
+        [TestCase("хуй", false)]
+        [TestCase("ちんこ", true)]
+        [TestCase("\uFF81", true)]
+        [TestCase("中", true)]
+        public void DetectsKanaAndHan(string text, bool expected) =>
+            Assert.That(TextNormalizer.HasCjk(text), Is.EqualTo(expected));
+
+        static string RunCjk(string text)
+        {
+            var destination = new char[text.Length];
+            return new string(destination, 0, TextNormalizer.Cjk(text, destination));
+        }
+
         static string Run(Builder builder, string text)
         {
             var work = new char[text.Length];

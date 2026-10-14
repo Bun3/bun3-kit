@@ -11,6 +11,7 @@ namespace Bun3.BadWords.Tests
             "시발", "!시발점", "!다시발", "ㅅㅂ", "병신", "좆",
             "fuck", "|ass|", "butt", "cum", "!accumulate", "cunt", "!scunthorpe",
             "хуй", "|бля", "пизд", "ебат", "!застрахуй",
+            "ちんこ", "フェラ", "!フェラーリ", "傻逼",
         });
 
         [TestCase("시발")]
@@ -53,6 +54,17 @@ namespace Bun3.BadWords.Tests
         [TestCase("бля")]
         [TestCase("ну бля")]
         [TestCase("пиздец")]
+        [TestCase("ちんこ")]
+        [TestCase("チンコ")]
+        [TestCase("\uFF81\uFF9D\uFF7A")]
+        [TestCase("ち ん こ")]
+        [TestCase("ちーんこ")]
+        [TestCase("お前のちんこ")]
+        [TestCase("Player ちんこ")]
+        [TestCase("フェラ")]
+        [TestCase("傻逼")]
+        [TestCase("你是傻逼吗")]
+        [TestCase("傻\uD840\uDC00逼")]
         public void BlocksEvasionForms(string text) =>
             Assert.That(filter.ContainsBadWord(text), Is.True, text);
 
@@ -78,6 +90,11 @@ namespace Bun3.BadWords.Tests
         [TestCase("тебе")]
         [TestCase("хлеб")]
         [TestCase("\u0483")]
+        [TestCase("フェラーリ")]
+        [TestCase("こんにちは")]
+        [TestCase("中文")]
+        [TestCase("\u3099\u309A")]
+        [TestCase("\u30FC\u30FB")]
         public void PassesOrdinaryText(string text) =>
             Assert.That(filter.ContainsBadWord(text), Is.False, filter.Explain(text));
 
@@ -117,6 +134,7 @@ namespace Bun3.BadWords.Tests
             Assert.That(filter.Explain("fuuuck"), Is.EqualTo("Collapsed:fuck"));
             Assert.That(filter.Explain("x\u0443\u0439"), Is.EqualTo("Cyrillic:хуи"));
             Assert.That(filter.Explain("хууууй"), Is.EqualTo("CyrillicCollapsed:хуи"));
+            Assert.That(filter.Explain("\uFF81\uFF9D\uFF7A"), Is.EqualTo("Cjk:チンコ"));
             Assert.That(filter.Explain("시발점"), Is.Null);
         }
 
@@ -129,7 +147,14 @@ namespace Bun3.BadWords.Tests
         [TestCase("시발bal")]
         [TestCase("18놈")]
         [TestCase("|시발")]
-        [TestCase("\u4E2D\u56FD")]
+        [TestCase("\u6027")]
+        [TestCase("\u3061")]
+        [TestCase("\u30FC\u30FB")]
+        [TestCase("\u5356B")]
+        [TestCase("\u5356\u0445")]
+        [TestCase("\u3061\u3093\u3053\uAC00")]
+        [TestCase("|\u3061\u3093\u3053")]
+        [TestCase("\u3061\u3093\u3053\uD840\uDC00")]
         [TestCase("\uC2DC\u0445")]
         [TestCase("\u0445\u0443\u04391")]
         [TestCase("\u0445-\u0443\u0439")]
@@ -140,6 +165,10 @@ namespace Bun3.BadWords.Tests
         [TestCase("\u00FEorn")]
         public void MalformedEntryThrows(string entry) =>
             Assert.Throws<ArgumentException>(() => new BadWordFilter(new[] { entry }));
+
+        [Test]
+        public void TwoHanEntryMatchesInsideText() =>
+            Assert.That(new BadWordFilter(new[] { "\u4E2D\u56FD" }).ContainsBadWord("\u4E2D\u56FD\u4EBA"), Is.True);
 
         [Test]
         public void CyrillicStreamRunsOnlyOnCyrillicInput()

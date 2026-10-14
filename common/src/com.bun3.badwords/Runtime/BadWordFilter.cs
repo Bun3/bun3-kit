@@ -23,6 +23,7 @@ namespace Bun3.BadWords
         readonly AhoCorasick latinCollapsed;
         readonly AhoCorasick cyrillic;
         readonly AhoCorasick cyrillicCollapsed;
+        readonly AhoCorasick cjk;
 
         /// <summary>The filter built from <see cref="DefaultEntries"/> on first access. Touch it during boot to prewarm.</summary>
         public static BadWordFilter Default => DefaultFilter.Instance;
@@ -34,12 +35,13 @@ namespace Bun3.BadWords
         /// <param name="entries">
         /// Words to block. A leading <c>!</c> marks an allow entry that suppresses block matches it fully covers.
         /// A leading or trailing <c>|</c> requires a word boundary there (Latin and Cyrillic entries only).
-        /// Entries containing Hangul are Korean, entries containing Cyrillic are Cyrillic, and the rest are Latin.
+        /// Entries containing Hangul are Korean, entries containing Cyrillic are Cyrillic, entries containing kana or Han are kana/Han, and the rest are Latin.
         /// </param>
         /// <exception cref="ArgumentNullException"><paramref name="entries"/> is null.</exception>
         /// <exception cref="ArgumentException">
         /// An entry is null, has no letters, has letters of an unsupported script or a character outside the Basic Multilingual Plane,
-        /// mixes scripts, mixes a script with characters its stream would drop, or puts a boundary on a Korean entry.
+        /// mixes scripts, mixes a script with characters its stream would drop, is a kana or Han entry shorter than two characters,
+        /// or puts a boundary on a Korean or kana/Han entry.
         /// </exception>
         public BadWordFilter(IEnumerable<string> entries)
         {
@@ -49,6 +51,7 @@ namespace Bun3.BadWords
             var latinCollapsedSet = new PatternSet();
             var cyrillicSet = new PatternSet();
             var cyrillicCollapsedSet = new PatternSet();
+            var cjkSet = new PatternSet();
             foreach (string entry in entries)
             {
                 switch (Parse(entry, out string key, out PatternFlags flags))
@@ -58,6 +61,9 @@ namespace Bun3.BadWords
                         break;
                     case Stage.Cyrillic:
                         AddCollapsible(key, flags, cyrillicSet, cyrillicCollapsedSet);
+                        break;
+                    case Stage.Cjk:
+                        cjkSet.Add(key, flags);
                         break;
                     default:
                         AddCollapsible(key, flags, latinSet, latinCollapsedSet);
@@ -69,6 +75,7 @@ namespace Bun3.BadWords
             latinCollapsed = latinCollapsedSet.Build();
             cyrillic = cyrillicSet.Build();
             cyrillicCollapsed = cyrillicCollapsedSet.Build();
+            cjk = cjkSet.Build();
         }
 
         enum Stage
@@ -76,6 +83,7 @@ namespace Bun3.BadWords
             Latin,
             Korean,
             Cyrillic,
+            Cjk,
         }
 
         enum StreamKind
@@ -87,6 +95,7 @@ namespace Bun3.BadWords
             Collapsed,
             Cyrillic,
             CyrillicCollapsed,
+            Cjk,
         }
 
         /// <summary>Returns true when <paramref name="text"/> contains a blocked word that no allow entry covers.</summary>
@@ -140,6 +149,11 @@ namespace Bun3.BadWords
                 length = TextNormalizer.Collapse(stream.Slice(0, length), work);
                 if (cyrillicCollapsed.TryFindBlocked(work.Slice(0, length), false, out match)) return StreamKind.CyrillicCollapsed;
             }
+            if (TextNormalizer.HasCjk(text))
+            {
+                length = TextNormalizer.Cjk(text, stream);
+                if (cjk.TryFindBlocked(stream.Slice(0, length), false, out match)) return StreamKind.Cjk;
+            }
             match = default;
             return StreamKind.None;
         }
@@ -166,13 +180,18 @@ namespace Bun3.BadWords
                 body = body.Substring(0, body.Length - 1);
             }
 
-            bool hangul = false, cyrillic = false, latinLetter = false, other = false;
+            bool hangul = false, cyrillic = false, cjk = false, latinLetter = false, other = false;
             foreach (char c in body)
             {
                 if (char.IsSurrogate(c)) throw Malformed(entry, "has a character outside the Basic Multilingual Plane");
                 if (TextNormalizer.IsCyrillic(c))
                 {
                     cyrillic = true;
+                    continue;
+                }
+                if (TextNormalizer.IsCjk(c))
+                {
+                    cjk = true;
                     continue;
                 }
                 char clean = TextNormalizer.Clean(c);
@@ -183,7 +202,7 @@ namespace Bun3.BadWords
                 else if (char.IsLetter(c)) throw Malformed(entry, "has letters of an unsupported script");
                 else other = true;
             }
-            if (hangul && cyrillic) throw Malformed(entry, "mixes scripts");
+            if ((hangul ? 1 : 0) + (cyrillic ? 1 : 0) + (cjk ? 1 : 0) > 1) throw Malformed(entry, "mixes scripts");
 
             var work = new char[body.Length];
             var normalized = new char[body.Length];
@@ -205,6 +224,17 @@ namespace Bun3.BadWords
                 key = new string(normalized, 0, TextNormalizer.Cyrillic(body, work, normalized));
                 if (key.Length == 0) throw Malformed(entry, "has no letters");
                 return Stage.Cyrillic;
+            }
+            if (cjk)
+            {
+                // Stream E drops every other character, which would silently shrink the entry.
+                if (latinLetter || other) throw Malformed(entry, "mixes kana or Han with other characters");
+                if ((flags & Boundaries) != 0) throw Malformed(entry, "uses a word boundary on a kana or Han entry");
+                int length = TextNormalizer.Cjk(body, normalized);
+                // A single kana or Han character sits inside too many ordinary words.
+                if (length < 2) throw Malformed(entry, "has fewer than two kana or Han characters");
+                key = new string(normalized, 0, length);
+                return Stage.Cjk;
             }
             if (!latinLetter) throw Malformed(entry, "has no letters");
             key = new string(normalized, 0, TextNormalizer.Latin(body, work, normalized));
