@@ -180,6 +180,12 @@ namespace Bun3.BadWords.Tests
         [TestCase("操你媽")]
         [TestCase("傻逼")]
         [TestCase("他媽的")]
+        [TestCase("ебут")]
+        [TestCase("заебал")]
+        [TestCase("ёбарь")]
+        [TestCase("шлюшка")]
+        [TestCase("гондон")]
+        [TestCase("мандавошка")]
         public void BlocksStrongWordsInOtherScripts(string text) =>
             Assert.That(BadWordFilter.Default.ContainsBadWord(text), Is.True, text);
 
@@ -206,6 +212,22 @@ namespace Bun3.BadWords.Tests
         [TestCase("ちんちん電車")]
         [TestCase("ガチンコ")]
         [TestCase("こんにちは")]
+        [TestCase("плохую")]
+        [TestCase("команда")]
+        [TestCase("дебаты")]
+        [TestCase("хребет")]
+        [TestCase("погребальный")]
+        [TestCase("щебетать")]
+        [TestCase("небанальный")]
+        [TestCase("скипидар")]
+        [TestCase("escupidor")]
+        [TestCase("lapidar")]
+        [TestCase("おめこぼし")]
+        [TestCase("ガイジン")]
+        [TestCase("まちがいじゃない")]
+        [TestCase("あけおめことよろ")]
+        [TestCase("たなかくんにきいて")]
+        [TestCase("キッチンコーナー")]
         public void PassesEverydayWordsInOtherScripts(string text) =>
             Assert.That(BadWordFilter.Default.ContainsBadWord(text), Is.False, BadWordFilter.Default.Explain(text));
 

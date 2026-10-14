@@ -36,3 +36,12 @@
 
 # == project additions (root of LDNOOBW 干机掰 and 操机掰, Task 6) ==
 机掰
+
+# == review fixes (fix round 1): common spelling and word junctions ==
+鸡掰
+!机掰开
+!机掰弯
+!机掰断
+!机掰成
+!鸡掰开
+!鸡掰成

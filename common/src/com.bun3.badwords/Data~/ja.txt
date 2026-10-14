@@ -9,9 +9,7 @@
 ちんぽ
 まんこ
 イラマチオ
-クンニ
 ザーメン
-スペルマ
 デカチン
 パイズリ
 フェラ
@@ -26,7 +24,6 @@
 ハメ撮り
 
 # == MosasoM Offensive ==
-ガイジ
 キチガイ
 
 # == Citrine exceptions ==
@@ -40,15 +37,37 @@
 !カフェラテ
 !フェライト
 !フェラガモ
-!フェラーラ
 !フェライニ
-!フェラーズ
 !フェラリア
 !スレイプニル
 
 # == project additions (false-positive allows, Task 6) ==
 !おめこぼし
-!ガイジン
 
 # == false-positive sweep allows (FrequencyWords ja 50k, beyond the top 20,000) ==
 !フェラン
+
+# == review fixes (fix round 1): ordinary words and word junctions in kana-only text ==
+!あけおめこ
+!おめことし
+!カチンコ
+!キッチンコーナー
+!キッチンコンロ
+!スパイダーマンコスプレ
+!アンパンマンこども
+!カフェラッテ
+!カフェラウンジ
+!カフェラボ
+!カフェランチ
+!ペリフェラル
+!ノスフェラトゥ
+!ロックフェラー
+!背中出し
+!いきちがい
+!かきちがい
+!ききちがい
+!しきちがい
+!はきちがい
+!ひきちがい
+!ゆきちがい
+!グレイプ

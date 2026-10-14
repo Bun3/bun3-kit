@@ -5,13 +5,14 @@
 
 # == LDNOOBW ru (Cyrillic) ==
 |манда|
-выёбыва
+мандавош
+малофь
 ёб твою мать
 
 # == LDNOOBW ru (Latin transliterations) ==
 dolboeb
 mudack
-pidar
+|pidar
 pizd
 zaebis
 zalup
@@ -21,10 +22,6 @@ zalup
 хуе
 хуя
 пизд
-ебат
-ебан
-ебуч
-ебло
 бляд
 |бля
 мудак
@@ -35,39 +32,54 @@ zalup
 шлюх
 гандон
 |сука
-!колебан
-!колебат
 !страхуй
 !страхуе
 !страхуя
 
+# == project additions (the ебать family, fix round 1) ==
+# Everyday Russian has 'еб' after a consonant (хлеб, скребать, колебание, дебаты, щебет, икебана) and after a vowel only
+# before 'о' or 'р' (двоеборье, сваебой). Mat puts it at the start of a word or after a prefix vowel, 'ъ' or 'ь'
+# (ебать, заебал, проебать, выебываться, отъебись), so the family is matched there instead of by bare roots.
+|еба
+|ебем
+|ебен
+|ебет
+|ебеш
+|еби
+|ебл
+|ебн
+|ебу
+|ебы
+аеб
+ееб
+иеб
+оеб
+уеб
+ыеб
+ъеб
+ьеб
+!двоеб
+!змееб
+!клееб
+!сваеб
+!троеб
+ёбтвоюмать
+
 # == project additions (inflections, derived words and slurs, Task 6) ==
 |хую
-ебал
-!колебал
-!хлебал
-ебет
-ебис
-ебнул
-ебнут
-!хлебат
-!хлебнул
-!хлебнут
-уебок
-долбоеб
-долбаеб
-ёбтвоюмать
 |суки|
 |суке|
 |суку|
 |сукой|
 |сучк
+шлюш
+гондон
 педик
-!педикюр
 черножоп
+!педикул
+!педикюр
 !|блях
 !|бляшк
-!гребан
 
 # == project additions (Latin transliterations) ==
 blyad
@@ -78,10 +90,30 @@ nahui
 nahuy
 |pidor
 
-# == false-positive sweep allows (FrequencyWords ru) ==
-!|дебат
-
-# == false-positive sweep allows (FrequencyWords ru 50k, beyond the top 20,000) ==
-!гребат
-!хребет
-!эстебан
+# == false-positive allows (Russian word forms, fix round 1) ==
+!|блямб
+!|бляшеч
+!|бляшек
+!лапидар
+!педикеб
+!плохуем
+!плохует
+!плохуеш
+!психуй|
+!психуйся
+!психуйт
+!психуем
+!психует
+!психуеш
+!психуя
+!скипидар
+!|сучкаст
+!|сучков
+!|сучком|
+!|сучкор
+!штрихуй|
+!штрихуйт
+!штрихуем
+!штрихует
+!штрихуеш
+!штрихуя
