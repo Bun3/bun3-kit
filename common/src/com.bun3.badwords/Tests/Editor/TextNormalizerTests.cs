@@ -59,6 +59,31 @@ namespace Bun3.BadWords.Tests
         public void LatinStreamNormalizesLettersAndBoundaries(string text, string expected) =>
             Assert.That(Run(TextNormalizer.Latin, text), Is.EqualTo(expected));
 
+        [TestCase("ХУЙ", "хуи")]
+        [TestCase("Ёж", "еж")]
+        [TestCase("xуй", "хуи")]
+        [TestCase("XУЙ", "хуи")]
+        [TestCase("ｘуй", "хуи")]
+        [TestCase("хуй", "хуи")]
+        [TestCase("aceopxy", "асеорху")]
+        [TestCase("ACEOPXY", "асеорху")]
+        [TestCase("BHKMT", "внкмт")]
+        [TestCase("bhkmt", "")]
+        [TestCase("х у й", "хуи")]
+        [TestCase("  где   батарея! ", "где батарея")]
+        [TestCase("хуй123", "хуи")]
+        [TestCase("시발хуй", "хуи")]
+        public void CyrillicStreamFoldsCaseAndLookalikes(string text, string expected) =>
+            Assert.That(Run(TextNormalizer.Cyrillic, text), Is.EqualTo(expected));
+
+        [TestCase("hello", false)]
+        [TestCase("cop", false)]
+        [TestCase("시발", false)]
+        [TestCase("xуй", true)]
+        [TestCase("҃", true)]
+        public void DetectsCyrillic(string text, bool expected) =>
+            Assert.That(TextNormalizer.HasCyrillic(text), Is.EqualTo(expected));
+
         [TestCase("fuuuck", "fuck")]
         [TestCase("aa bb", "a b")]
         public void CollapseKeepsOneLetterPerRun(string text, string expected)

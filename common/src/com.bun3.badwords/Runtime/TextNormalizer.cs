@@ -82,6 +82,59 @@ namespace Bun3.BadWords
             return JoinSingleLetters(work.Slice(0, count), destination);
         }
 
+        internal static int Cyrillic(ReadOnlySpan<char> text, Span<char> work, Span<char> destination)
+        {
+            int count = 0;
+            foreach (char raw in text)
+            {
+                char letter = CyrillicLetter(raw);
+                if (letter == Removed) continue;
+                if (letter != ' ') work[count++] = letter;
+                else if (count > 0 && work[count - 1] != ' ') work[count++] = ' ';
+            }
+            if (count > 0 && work[count - 1] == ' ') count--;
+            return JoinSingleLetters(work.Slice(0, count), destination);
+        }
+
+        internal static bool IsCyrillic(char c) => c >= '\u0400' && c <= '\u04FF';
+
+        internal static bool HasCyrillic(ReadOnlySpan<char> text)
+        {
+            foreach (char c in text)
+                if (IsCyrillic(c)) return true;
+            return false;
+        }
+
+        // Stream D folds the other way from Lookalike: Latin letters drawn like Cyrillic ones become Cyrillic.
+        internal static char CyrillicLetter(char c)
+        {
+            if (c >= '\uFF01' && c <= '\uFF5E') c = (char)(c - 0xFEE0);
+            if (IsCyrillic(c) && char.IsLetter(c))
+            {
+                char lower = char.ToLowerInvariant(c);
+                if (lower == '\u0451') return '\u0435';
+                return lower == '\u0439' ? '\u0438' : lower;
+            }
+            char lookalike = c switch
+            {
+                'a' or 'A' => '\u0430',
+                'c' or 'C' => '\u0441',
+                'e' or 'E' => '\u0435',
+                'o' or 'O' => '\u043E',
+                'p' or 'P' => '\u0440',
+                'x' or 'X' => '\u0445',
+                'y' or 'Y' => '\u0443',
+                'B' => '\u0432',
+                'H' => '\u043D',
+                'K' => '\u043A',
+                'M' => '\u043C',
+                'T' => '\u0442',
+                _ => Removed,
+            };
+            if (lookalike != Removed) return lookalike;
+            return Clean(c) == Removed ? Removed : ' ';
+        }
+
         internal static int Collapse(ReadOnlySpan<char> text, Span<char> destination)
         {
             int count = 0;

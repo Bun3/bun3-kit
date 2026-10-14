@@ -10,6 +10,7 @@ namespace Bun3.BadWords.Tests
         {
             "시발", "!시발점", "!다시발", "ㅅㅂ", "병신", "좆",
             "fuck", "|ass|", "butt", "cum", "!accumulate", "cunt", "!scunthorpe",
+            "хуй", "|бля", "пизд", "ебат", "!застрахуй",
         });
 
         [TestCase("시발")]
@@ -41,6 +42,17 @@ namespace Bun3.BadWords.Tests
         [TestCase("fu\u0441k")]
         [TestCase("my ass")]
         [TestCase("you fuck off")]
+        [TestCase("хуй")]
+        [TestCase("ХУЙ")]
+        [TestCase("x\u0443\u0439")]
+        [TestCase("X\u0423\u0419")]
+        [TestCase("х у й")]
+        [TestCase("хууууй")]
+        [TestCase("\u0445\u0443\u0438\u0306")]
+        [TestCase("иди нахуй")]
+        [TestCase("бля")]
+        [TestCase("ну бля")]
+        [TestCase("пиздец")]
         public void BlocksEvasionForms(string text) =>
             Assert.That(filter.ContainsBadWord(text), Is.True, text);
 
@@ -60,6 +72,12 @@ namespace Bun3.BadWords.Tests
         [TestCase("whw")]
         [TestCase("Player One")]
         [TestCase("가")]
+        [TestCase("рубля")]
+        [TestCase("застрахуйте")]
+        [TestCase("где батарея")]
+        [TestCase("тебе")]
+        [TestCase("хлеб")]
+        [TestCase("\u0483")]
         public void PassesOrdinaryText(string text) =>
             Assert.That(filter.ContainsBadWord(text), Is.False, filter.Explain(text));
 
@@ -97,6 +115,8 @@ namespace Bun3.BadWords.Tests
             Assert.That(filter.Explain("tlqkf"), Is.EqualTo("Keyboard:시발"));
             Assert.That(filter.Explain("f.u.c.k"), Is.EqualTo("Latin:fuck"));
             Assert.That(filter.Explain("fuuuck"), Is.EqualTo("Collapsed:fuck"));
+            Assert.That(filter.Explain("x\u0443\u0439"), Is.EqualTo("Cyrillic:хуи"));
+            Assert.That(filter.Explain("хууууй"), Is.EqualTo("CyrillicCollapsed:хуи"));
             Assert.That(filter.Explain("시발점"), Is.Null);
         }
 
@@ -110,12 +130,27 @@ namespace Bun3.BadWords.Tests
         [TestCase("18놈")]
         [TestCase("|시발")]
         [TestCase("\u4E2D\u56FD")]
-        [TestCase("\u0445\u0443\u0439")]
+        [TestCase("\uC2DC\u0445")]
+        [TestCase("\u0445\u0443\u04391")]
+        [TestCase("\u0445-\u0443\u0439")]
+        [TestCase("\u0483")]
+        [TestCase("fuck\uD83D\uDE00")]
         [TestCase("fu\u0441k")]
         [TestCase("\u03B1\u03B2\u03B3")]
         [TestCase("\u00FEorn")]
         public void MalformedEntryThrows(string entry) =>
             Assert.Throws<ArgumentException>(() => new BadWordFilter(new[] { entry }));
+
+        [Test]
+        public void CyrillicStreamRunsOnlyOnCyrillicInput()
+        {
+            // Every letter of this Cyrillic entry has a Latin look-alike; the middle one is written in Latin.
+            var lookalikes = new BadWordFilter(new[] { "\u0441o\u0440" });
+            Assert.That(lookalikes.ContainsBadWord("\u0441\u043E\u0440"), Is.True);
+            Assert.That(lookalikes.ContainsBadWord("co\u0440"), Is.True);
+            Assert.That(lookalikes.ContainsBadWord("cop"), Is.False);
+            Assert.That(lookalikes.ContainsBadWord("COP"), Is.False);
+        }
 
         [Test]
         public void SharpSMatchesBothSpellings()
