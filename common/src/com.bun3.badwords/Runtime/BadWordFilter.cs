@@ -4,7 +4,7 @@ using System.Collections.Generic;
 namespace Bun3.BadWords
 {
     /// <summary>
-    /// Detects bad words in short user text such as nicknames and chat lines.
+    /// Detects bad words in short user text such as nicknames and chat lines, in every bundled language at once.
     /// Immutable after construction and safe to share across threads.
     /// </summary>
     /// <remarks>
@@ -28,7 +28,7 @@ namespace Bun3.BadWords
         /// <summary>The filter built from <see cref="DefaultEntries"/> on first access. Touch it during boot to prewarm.</summary>
         public static BadWordFilter Default => DefaultFilter.Instance;
 
-        /// <summary>The bundled Korean and English entries, for composing consumer-specific filters.</summary>
+        /// <summary>The bundled entries for every supported language, for composing consumer-specific filters.</summary>
         public static IReadOnlyList<string> DefaultEntries => DefaultEntryList.Instance;
 
         /// <summary>Builds a filter from entries in the form <c>[!][|]word[|]</c>.</summary>
