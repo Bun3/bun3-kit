@@ -30,5 +30,21 @@ namespace Bun3.Unity.Audio
         /// Takes effect immediately without smoothing; progress may decrease.
         /// </summary>
         public void SetProgress(float progress) => Loop.Owner?.SetChargeProgress(this, progress);
+
+        /// <summary>
+        /// Fades the loop out over <see cref="ChargeSoundDef.CompleteFadeOut"/> and plays the
+        /// Complete sound where the loop is (tracking its transform while that is alive). Returns
+        /// the Complete sound's handle, or an invalid handle when the definition has none or the
+        /// charge is no longer valid. Ends the charge; later calls do nothing.
+        /// </summary>
+        public SoundHandle Complete() => Loop.Owner != null ? Loop.Owner.EndCharge(this, completed: true) : SoundHandle.Invalid;
+
+        /// <summary>
+        /// Fades the loop out over <see cref="ChargeSoundDef.CancelFadeOut"/> and plays the
+        /// Cancel sound where the loop is (tracking its transform while that is alive). Returns
+        /// the Cancel sound's handle, or an invalid handle when the definition has none or the
+        /// charge is no longer valid. Ends the charge; later calls do nothing.
+        /// </summary>
+        public SoundHandle Cancel() => Loop.Owner != null ? Loop.Owner.EndCharge(this, completed: false) : SoundHandle.Invalid;
     }
 }

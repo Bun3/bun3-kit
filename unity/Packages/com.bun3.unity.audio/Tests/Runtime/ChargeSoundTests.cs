@@ -210,6 +210,177 @@ namespace Bun3.Unity.Audio.Tests
             Assert.That(charge.IsValid, Is.False);
             Assert.That(ChargeSoundHandle.Invalid.IsValid, Is.False);
             Assert.DoesNotThrow(() => charge.SetProgress(1f));
+            Assert.That(charge.Complete().IsValid, Is.False);
+            Assert.That(charge.Cancel().IsValid, Is.False);
+        }
+
+        [Test]
+        public void Complete_FadesLoopAndPlaysCompleteAtLoopPosition()
+        {
+            using var sys = new SoundSystem(new SoundSystemConfig { SfxVoices = 4 });
+            var complete = OneShotDef("charge-complete", SpatialMode.Positional);
+            var def = Charge(LoopDef(), complete: complete);
+            var at = new Vector3(3f, 0f, 4f);
+            var charge = sys.PlayCharge(def, at);
+            var loopSlot = charge.Loop.SlotIndex;
+
+            var done = charge.Complete();
+
+            Assert.That(done.IsValid, Is.True);
+            Assert.That(charge.IsValid, Is.False);
+            Assert.That(sys.Table.Slots[loopSlot].State, Is.EqualTo(VoiceState.FadingOut));
+            Assert.That(sys.SourceForTest(done.SlotIndex).transform.position, Is.EqualTo(at));
+            sys.Tick(def.CompleteFadeOut + 0.01f);
+            Assert.That(charge.Loop.IsValid, Is.False, "Loop must be released when its CompleteFadeOut finishes.");
+        }
+
+        [Test]
+        public void Cancel_FollowingCharge_PlaysCancelTrackingSameTransform()
+        {
+            using var sys = new SoundSystem(new SoundSystemConfig { SfxVoices = 4 });
+            var cancel = OneShotDef("charge-cancel", SpatialMode.Follow);
+            var target = new GameObject("charge-target").transform;
+            try
+            {
+                target.position = new Vector3(1f, 2f, 3f);
+                var charge = sys.PlayCharge(Charge(LoopDef(), cancel: cancel), target);
+
+                var cancelled = charge.Cancel();
+
+                Assert.That(cancelled.IsValid, Is.True);
+                Assert.That(sys.Table.Slots[cancelled.SlotIndex].Follow, Is.SameAs(target));
+                target.position = new Vector3(5f, 5f, 5f);
+                sys.Tick(0.01f);
+                Assert.That(sys.SourceForTest(cancelled.SlotIndex).transform.position, Is.EqualTo(new Vector3(5f, 5f, 5f)));
+            }
+            finally
+            {
+                Object.DestroyImmediate(target.gameObject);
+            }
+        }
+
+        [Test]
+        public void Complete_FollowDestroyed_PlaysAtLastTrackedPosition()
+        {
+            using var sys = new SoundSystem(new SoundSystemConfig { SfxVoices = 4 });
+            var complete = OneShotDef("charge-complete", SpatialMode.Positional);
+            var target = new GameObject("charge-target").transform;
+            target.position = new Vector3(1f, 2f, 3f);
+            var charge = sys.PlayCharge(Charge(LoopDef(), complete: complete), target);
+            sys.Tick(0.01f);
+            Object.DestroyImmediate(target.gameObject);
+
+            var done = charge.Complete();
+
+            Assert.That(done.IsValid, Is.True);
+            Assert.That(sys.Table.Slots[done.SlotIndex].Follow == null, Is.True);
+            Assert.That(sys.SourceForTest(done.SlotIndex).transform.position, Is.EqualTo(new Vector3(1f, 2f, 3f)));
+        }
+
+        [Test]
+        public void EndTwice_PlaysOneStingerAndKeepsFirstFade()
+        {
+            using var sys = new SoundSystem(new SoundSystemConfig { SfxVoices = 8 });
+            var complete = OneShotDef("charge-complete");
+            var cancel = OneShotDef("charge-cancel");
+            var def = Charge(LoopDef(), complete: complete, cancel: cancel);
+            var charge = sys.PlayCharge(def);
+            var loopSlot = charge.Loop.SlotIndex;
+            charge.SetProgress(0.5f);
+
+            Assert.That(charge.Complete().IsValid, Is.True);
+            Assert.That(charge.Complete().IsValid, Is.False);
+            Assert.That(charge.Cancel().IsValid, Is.False);
+            charge.SetProgress(1f);
+
+            Assert.That(CountVoices(sys, complete), Is.EqualTo(1));
+            Assert.That(CountVoices(sys, cancel), Is.EqualTo(0));
+            Assert.That(sys.Table.Slots[loopSlot].VolumeScale, Is.EqualTo(0.5f).Within(1e-4f), "SetProgress after Complete must not touch the fading loop.");
+            sys.Tick(def.CompleteFadeOut + 0.01f);
+            Assert.That(charge.Loop.IsValid, Is.False, "A second end call must not restart the loop fade with CancelFadeOut.");
+        }
+
+        [Test]
+        public void Cancel_WithoutCancelSound_StopsLoopAndReturnsInvalid()
+        {
+            using var sys = new SoundSystem(new SoundSystemConfig { SfxVoices = 4 });
+            var def = Charge(LoopDef());
+            var charge = sys.PlayCharge(def);
+            var loopSlot = charge.Loop.SlotIndex;
+
+            Assert.That(charge.Cancel().IsValid, Is.False);
+            Assert.That(sys.Table.Slots[loopSlot].State, Is.EqualTo(VoiceState.FadingOut));
+            sys.Tick(def.CancelFadeOut + 0.01f);
+            Assert.That(charge.Loop.IsValid, Is.False);
+        }
+
+        [Test]
+        public void Replay_StealsPreviousLoop_OldHandleNoOps()
+        {
+            using var sys = new SoundSystem(new SoundSystemConfig { SfxVoices = 8 });
+            var loop = LoopDef();
+            var complete = OneShotDef("charge-complete");
+            var def = Charge(loop, complete: complete);
+            var first = sys.PlayCharge(def);
+            first.Cancel();
+
+            var second = sys.PlayCharge(def);
+
+            Assert.That(first.IsValid, Is.False);
+            Assert.That(second.IsValid, Is.True);
+            Assert.That(first.Complete().IsValid, Is.False);
+            first.SetProgress(1f);
+            Assert.That(sys.Table.Slots[second.Loop.SlotIndex].VolumeScale, Is.EqualTo(0f));
+            Assert.That(CountVoices(sys, loop), Is.EqualTo(1));
+            Assert.That(CountVoices(sys, complete), Is.EqualTo(0));
+        }
+
+        [Test]
+        public void LoopStolenByPoolPressure_CompletePlaysNothing()
+        {
+            using var sys = new SoundSystem(new SoundSystemConfig { SfxVoices = 1 });
+            var complete = OneShotDef("charge-complete");
+            var charge = sys.PlayCharge(Charge(LoopDef(), complete: complete));
+
+            sys.Play(OneShotDef("other")); // full pool: steals the loop
+
+            Assert.That(charge.IsValid, Is.False);
+            Assert.That(charge.Complete().IsValid, Is.False);
+            Assert.That(CountVoices(sys, complete), Is.EqualTo(0));
+        }
+
+        [Test]
+        public void DisposedSystem_ChargeCallsAreNoOps()
+        {
+            var sys = new SoundSystem(new SoundSystemConfig { SfxVoices = 4 });
+            var charge = sys.PlayCharge(Charge(LoopDef(), complete: OneShotDef("charge-complete")));
+            sys.Dispose();
+
+            Assert.That(charge.IsValid, Is.False);
+            Assert.DoesNotThrow(() => charge.SetProgress(1f));
+            Assert.That(charge.Complete().IsValid, Is.False);
+            Assert.That(charge.Cancel().IsValid, Is.False);
+        }
+
+        [Test]
+        public void ChargeCycle_DoesNotAllocate()
+        {
+            using var sys = new SoundSystem(new SoundSystemConfig { SfxVoices = 8 });
+            var def = Charge(LoopDef(), OneShotDef("charge-start"), OneShotDef("charge-complete"));
+            sys.PlayCharge(def).Complete(); // warm every lazy path once
+            sys.Tick(0.2f);
+
+            Assert.That(() => GC.KeepAlive(new byte[1024]), Is.AllocatingGCMemory(),
+                "GC allocation recorder must detect a known allocation before measuring this path.");
+            Assert.That(() =>
+            {
+                var charge = sys.PlayCharge(def);
+                charge.SetProgress(0.5f);
+                sys.Tick(0.02f);
+                charge.SetProgress(1f);
+                charge.Complete();
+                sys.Tick(0.2f);
+            }, Is.Not.AllocatingGCMemory());
         }
     }
 }

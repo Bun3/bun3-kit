@@ -68,6 +68,27 @@ namespace Bun3.Unity.Audio
             ApplyChargePitch(slot, charge, progress);
         }
 
+        internal SoundHandle EndCharge(in ChargeSoundHandle charge, bool completed)
+        {
+            if (!IsChargeActive(charge, out var slot))
+            {
+                return SoundHandle.Invalid;
+            }
+            var def = charge.Def;
+            var follow = Table.Slots[slot].Follow;
+            var position = _sources[slot].transform.position;
+            // FadingOut is what makes IsChargeActive false; Stop's fade restart never runs twice.
+            Table.BeginFadeOut(slot, completed ? def.CompleteFadeOut : def.CancelFadeOut);
+            var stinger = completed ? def.Complete : def.Cancel;
+            if (stinger == null)
+            {
+                return SoundHandle.Invalid;
+            }
+            return follow != null
+                ? PlayCore(stinger, follow.position, follow, 0f)
+                : PlayCore(stinger, position, null, 0f);
+        }
+
         private void ApplyChargePitch(int slot, in ChargeSoundHandle charge, float progress)
         {
             var pitch = Mathf.Max(0f, charge.BasePitch * charge.Def.PitchScaleAt(progress));
