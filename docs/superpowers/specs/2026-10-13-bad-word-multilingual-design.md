@@ -42,6 +42,7 @@ Ship strong-expression entries for every language the first consumer plans to su
    - **Owner ruling 2026-10-14:** words at the level of English `shit` and milder pass in every language (`mierda`, `merda`, `merde`, `Scheiße`, `クソ`). The `scheiße` example under "Step 0 and stream C" shows the `ß` mechanism only; it is not a default entry.
 5. **One release.** 0.2.0 contains every language. 0.1.0 merges first and is not extended.
 6. **No native review.** Frequency-list sweeps and an owner spot-check replace it.
+7. **Owner ruling 2026-10-14: Latin text is not read as Korean keyboard input.** Stream B of 0.1.0 is removed: Korean typed with the IME off (`tlqkf`) passes, and Latin words such as `sra`, `torri` and `rotor` no longer match Korean entries through it. The `Short` pattern flag existed only for stream B and is removed. The `en.txt` entries that spell a Korean word entirely in 2-beolsik keys (`tlqkf`, `wlfkf`) are removed with it; romanized forms (`sibal`) stay.
 
 ## Layout changes
 
@@ -86,7 +87,6 @@ Look-alike folding during classification follows each stream. A Cyrillic entry c
 ```
 text
  ├─ A. Hangul stream      → KO   (unchanged)
- ├─ B. 2-beolsik stream   → KO   (unchanged)
  ├─ C. Latin stream       → EN, ENc   (ß added)
  ├─ D. Cyrillic stream    → RU, RUc   (new; only if the text has Cyrillic)
  └─ E. kana/Han stream    → CJK       (new; only if the text has kana or Han)
@@ -137,7 +137,7 @@ Every stream output remains no longer than its input, so the existing scratch bu
 
 ### Matching and scan order
 
-Matching rules are unchanged. Scan order: A, B, C1, C2, D1, D2, E. The first unsuppressed block span wins. `Explain` adds the stream kinds `Cyrillic`, `CyrillicCollapsed` and `Cjk`. The `Short` flag stays Korean-only.
+Matching rules are unchanged. Scan order: A, C1, C2, D1, D2, E. The first unsuppressed block span wins. `Explain` adds the stream kinds `Cyrillic`, `CyrillicCollapsed` and `Cjk`, and no longer reports `Keyboard`. The `Short` flag is removed with stream B (Decision 7).
 
 ## Curation (one-time for 0.2.0)
 
@@ -215,6 +215,7 @@ Additions to the 0.1.0 suites, in both runners unless noted:
 - **Behavior changes:**
   - `DefaultEntries` grows.
   - Entries that 0.1.0 accepted but silently shrank are now rejected. These are entries with letters of another script.
+  - Latin text is no longer read as Korean keyboard input (Decision 7), so `tlqkf` passes.
 - **Consumer obligations:**
   - Reproduce the LDNOOBW attribution with the other notices.
   - Keep CC-BY-4.0 data out of DRM-wrapped builds.

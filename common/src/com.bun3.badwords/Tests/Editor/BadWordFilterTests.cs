@@ -29,10 +29,6 @@ namespace Bun3.BadWords.Tests
         [TestCase("ㅅㅂ야")]
         [TestCase("닉네임시발")]
         [TestCase("시발시발점")]
-        [TestCase("tlqkf")]
-        [TestCase("t l q k f")]
-        [TestCase("qudtls")]
-        [TestCase("tq")]
         [TestCase("fuck")]
         [TestCase("FUCK")]
         [TestCase("f u c k")]
@@ -100,16 +96,15 @@ namespace Bun3.BadWords.Tests
         public void PassesOrdinaryText(string text) =>
             Assert.That(filter.ContainsBadWord(text), Is.False, filter.Explain(text));
 
+        // Owner ruling (2026-10-14): Latin text is never read as Korean 2-beolsik keyboard input.
         [Test]
-        public void KeyboardStreamIgnoresSingleLettersAndMixedInput()
+        public void LatinTextIsNotReadAsKoreanKeyboardInput()
         {
-            var shortFilter = new BadWordFilter(new[] { "ㅗ", "ㅂㅅ", "시발" });
-            Assert.That(shortFilter.ContainsBadWord("h"), Is.False);
-            Assert.That(shortFilter.ContainsBadWord("H"), Is.False);
-            Assert.That(shortFilter.ContainsBadWord("공룡h"), Is.False);
-            Assert.That(shortFilter.ContainsBadWord("가qt"), Is.False);
-            Assert.That(shortFilter.ContainsBadWord("qt"), Is.True);
-            Assert.That(shortFilter.ContainsBadWord("가tlqkf"), Is.True);
+            var korean = new BadWordFilter(new[] { "시발", "병신", "ㅅㅂ", "ㄴㄱㅁ", "색갸", "개색" });
+            foreach (string text in new[] { "tlqkf", "qudtls", "tq", "sra", "torri", "rotor" })
+                Assert.That(korean.ContainsBadWord(text), Is.False, text);
+            foreach (string text in new[] { "시발", "ㅅㅂ", "ㄴㄱㅁ" })
+                Assert.That(korean.ContainsBadWord(text), Is.True, text);
         }
 
         [Test]
@@ -131,7 +126,6 @@ namespace Bun3.BadWords.Tests
         public void ExplainNamesTheStreamAndNormalizedSpan()
         {
             Assert.That(filter.Explain("시1발"), Is.EqualTo("Hangul:시발"));
-            Assert.That(filter.Explain("tlqkf"), Is.EqualTo("Keyboard:시발"));
             Assert.That(filter.Explain("f.u.c.k"), Is.EqualTo("Latin:fuck"));
             Assert.That(filter.Explain("fuuuck"), Is.EqualTo("Collapsed:fuck"));
             Assert.That(filter.Explain("x\u0443\u0439"), Is.EqualTo("Cyrillic:хуи"));

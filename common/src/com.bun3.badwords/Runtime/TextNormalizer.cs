@@ -27,9 +27,6 @@ namespace Bun3.BadWords
         const string voiceable = "\u30AB\u30AD\u30AF\u30B1\u30B3\u30B5\u30B7\u30B9\u30BB\u30BD\u30BF\u30C1\u30C4\u30C6\u30C8\u30CF\u30D2\u30D5\u30D8\u30DB";
         const string semiVoiceable = "\u30CF\u30D2\u30D5\u30D8\u30DB";
 
-        // KS X 5002 2-beolsik layout indexed by (lowercase letter - 'a').
-        const string keyboard = "\u3141\u3160\u314A\u3147\u3137\u3139\u314E\u3157\u3151\u3153\u314F\u3163\u3161\u315C\u3150\u3154\u3142\u3131\u3134\u3145\u3155\u314D\u3148\u314C\u315B\u314B";
-
         internal static char Clean(char c)
         {
             if (c < '\u0080') return c;
@@ -65,18 +62,6 @@ namespace Bun3.BadWords
                 if (IsHangul(c)) work[count++] = c;
             }
             return HangulComposer.Compose(work.Slice(0, count), destination);
-        }
-
-        internal static int Keyboard(ReadOnlySpan<char> text, Span<char> work, Span<char> destination)
-        {
-            int count = 0;
-            foreach (char raw in text)
-            {
-                char c = Clean(raw);
-                if (c >= 'a' && c <= 'z') work[count++] = keyboard[c - 'a'];
-                else if (c >= 'A' && c <= 'Z') work[count++] = Shifted(c);
-            }
-            return count == 0 ? 0 : HangulComposer.Compose(work.Slice(0, count), destination);
         }
 
         internal static int Latin(ReadOnlySpan<char> text, Span<char> work, Span<char> destination)
@@ -228,13 +213,6 @@ namespace Bun3.BadWords
 
         internal static bool IsLatinLetter(char c) => (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
 
-        internal static bool ContainsJamo(string text)
-        {
-            foreach (char c in text)
-                if (c >= HangulComposer.FirstConsonant && c <= HangulComposer.LastVowel) return true;
-            return false;
-        }
-
         internal static bool HasDoubledLetter(string text)
         {
             for (int i = 1; i < text.Length; i++)
@@ -291,18 +269,6 @@ namespace Bun3.BadWords
                     return ' ';
             }
         }
-
-        static char Shifted(char c) => c switch
-        {
-            'Q' => '\u3143',
-            'W' => '\u3149',
-            'E' => '\u3138',
-            'R' => '\u3132',
-            'T' => '\u3146',
-            'O' => '\u3152',
-            'P' => '\u3156',
-            _ => keyboard[c - 'A'],
-        };
 
         // Subset of Unicode UTS #39 confusables: Cyrillic and Greek letters drawn like Latin letters.
         internal static char Lookalike(char c) => c switch

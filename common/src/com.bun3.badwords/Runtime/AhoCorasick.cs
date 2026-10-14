@@ -10,7 +10,6 @@ namespace Bun3.BadWords
         Allow = 1,
         BoundaryStart = 2,
         BoundaryEnd = 4,
-        Short = 8,
     }
 
     internal readonly struct Match
@@ -114,10 +113,10 @@ namespace Bun3.BadWords
 
         internal MatchEnumerator Matches(ReadOnlySpan<char> text) => new MatchEnumerator(this, text);
 
-        internal bool ContainsBlocked(ReadOnlySpan<char> text, bool shortNeedsWholeText) => TryFindBlocked(text, shortNeedsWholeText, out _);
+        internal bool ContainsBlocked(ReadOnlySpan<char> text) => TryFindBlocked(text, out _);
 
         // A block span is suppressed when an allow span of the same scan covers it; more than SpanCapacity blocks is a hit.
-        internal bool TryFindBlocked(ReadOnlySpan<char> text, bool shortNeedsWholeText, out Match blocked, bool shortNever = false)
+        internal bool TryFindBlocked(ReadOnlySpan<char> text, out Match blocked)
         {
             Span<Match> blocks = stackalloc Match[SpanCapacity];
             Span<Match> allows = stackalloc Match[SpanCapacity];
@@ -125,7 +124,7 @@ namespace Bun3.BadWords
             foreach (Match match in Matches(text))
             {
                 PatternFlags flags = patternFlags[match.Pattern];
-                if (!IsValid(flags, text, match, shortNeedsWholeText, shortNever)) continue;
+                if (!IsValid(flags, text, match)) continue;
                 if ((flags & PatternFlags.Allow) != 0)
                 {
                     if (allowCount < SpanCapacity) allows[allowCount++] = match;
@@ -155,12 +154,11 @@ namespace Bun3.BadWords
             return false;
         }
 
-        static bool IsValid(PatternFlags flags, ReadOnlySpan<char> text, Match match, bool shortNeedsWholeText, bool shortNever)
+        static bool IsValid(PatternFlags flags, ReadOnlySpan<char> text, Match match)
         {
             if ((flags & PatternFlags.BoundaryStart) != 0 && match.Start > 0 && text[match.Start - 1] != ' ') return false;
             if ((flags & PatternFlags.BoundaryEnd) != 0 && match.End < text.Length && text[match.End] != ' ') return false;
-            if (shortNever && (flags & PatternFlags.Short) != 0) return false;
-            return !shortNeedsWholeText || (flags & PatternFlags.Short) == 0 || (match.Start == 0 && match.End == text.Length);
+            return true;
         }
 
         int Next(int state, char c)

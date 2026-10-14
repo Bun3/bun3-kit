@@ -9,7 +9,6 @@ namespace Bun3.BadWords.Tests
     {
         [TestCase("시발")]
         [TestCase("ㅅㅂ")]
-        [TestCase("tlqkf")]
         [TestCase("병신")]
         [TestCase("fuck")]
         [TestCase("b1tch")]
@@ -51,6 +50,12 @@ namespace Bun3.BadWords.Tests
         [TestCase("H")]
         [TestCase("Cocoon")]
         [TestCase("세끼")]
+        // Owner ruling (2026-10-14): Latin text is never read as Korean keyboard input.
+        [TestCase("sra")]
+        [TestCase("torri")]
+        [TestCase("rotor")]
+        [TestCase("rosmarin")]
+        [TestCase("tlqkf")]
         public void PassesOrdinaryText(string text) =>
             Assert.That(BadWordFilter.Default.ContainsBadWord(text), Is.False, BadWordFilter.Default.Explain(text));
 

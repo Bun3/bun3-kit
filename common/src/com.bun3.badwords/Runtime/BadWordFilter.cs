@@ -90,7 +90,6 @@ namespace Bun3.BadWords
         {
             None,
             Hangul,
-            Keyboard,
             Latin,
             Collapsed,
             Cyrillic,
@@ -130,29 +129,26 @@ namespace Bun3.BadWords
 
         StreamKind Find(ReadOnlySpan<char> text, Span<char> work, Span<char> stream, out Match match)
         {
-            int hangulLength = TextNormalizer.Hangul(text, work, stream);
-            if (korean.TryFindBlocked(stream.Slice(0, hangulLength), false, out match)) return StreamKind.Hangul;
-            // Stream B drops Hangul: a one-letter stream is not readable as Korean, and short patterns only count for Hangul-free input.
-            int length = TextNormalizer.Keyboard(text, work, stream);
-            if (length > 1 && korean.TryFindBlocked(stream.Slice(0, length), true, out match, hangulLength > 0)) return StreamKind.Keyboard;
+            int length = TextNormalizer.Hangul(text, work, stream);
+            if (korean.TryFindBlocked(stream.Slice(0, length), out match)) return StreamKind.Hangul;
             length = TextNormalizer.Latin(text, work, stream);
             if (length > 0)
             {
-                if (latin.TryFindBlocked(stream.Slice(0, length), false, out match)) return StreamKind.Latin;
+                if (latin.TryFindBlocked(stream.Slice(0, length), out match)) return StreamKind.Latin;
                 length = TextNormalizer.Collapse(stream.Slice(0, length), work);
-                if (latinCollapsed.TryFindBlocked(work.Slice(0, length), false, out match)) return StreamKind.Collapsed;
+                if (latinCollapsed.TryFindBlocked(work.Slice(0, length), out match)) return StreamKind.Collapsed;
             }
             if (TextNormalizer.HasCyrillic(text))
             {
                 length = TextNormalizer.Cyrillic(text, work, stream);
-                if (cyrillic.TryFindBlocked(stream.Slice(0, length), false, out match)) return StreamKind.Cyrillic;
+                if (cyrillic.TryFindBlocked(stream.Slice(0, length), out match)) return StreamKind.Cyrillic;
                 length = TextNormalizer.Collapse(stream.Slice(0, length), work);
-                if (cyrillicCollapsed.TryFindBlocked(work.Slice(0, length), false, out match)) return StreamKind.CyrillicCollapsed;
+                if (cyrillicCollapsed.TryFindBlocked(work.Slice(0, length), out match)) return StreamKind.CyrillicCollapsed;
             }
             if (TextNormalizer.HasCjk(text))
             {
                 length = TextNormalizer.Cjk(text, stream);
-                if (cjk.TryFindBlocked(stream.Slice(0, length), false, out match)) return StreamKind.Cjk;
+                if (cjk.TryFindBlocked(stream.Slice(0, length), out match)) return StreamKind.Cjk;
             }
             match = default;
             return StreamKind.None;
@@ -211,9 +207,7 @@ namespace Bun3.BadWords
                 // Stream A drops non-Hangul characters, so a Korean entry with digits or symbols would silently shrink.
                 if (latinLetter || other) throw Malformed(entry, "mixes Hangul with other characters");
                 if ((flags & Boundaries) != 0) throw Malformed(entry, "uses a word boundary on a Korean entry");
-                int length = TextNormalizer.Hangul(body, work, normalized);
-                key = new string(normalized, 0, length);
-                if (length < 2 || TextNormalizer.ContainsJamo(key)) flags |= PatternFlags.Short;
+                key = new string(normalized, 0, TextNormalizer.Hangul(body, work, normalized));
                 return Stage.Korean;
             }
             if (cyrillic)

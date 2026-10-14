@@ -34,15 +34,6 @@ namespace Bun3.BadWords.Tests
         public void HangulStreamKeepsComposedHangulOnly(string text, string expected) =>
             Assert.That(Run(TextNormalizer.Hangul, text), Is.EqualTo(expected));
 
-        [TestCase("tlqkf", "시발")]
-        [TestCase("t l q k f", "시발")]
-        [TestCase("qudtls", "병신")]
-        [TestCase("TLQKF", "씨빨")]
-        [TestCase("tq", "ㅅㅂ")]
-        [TestCase("123 시발", "")]
-        public void KeyboardStreamFollowsTwoBeolsikLayout(string text, string expected) =>
-            Assert.That(Run(TextNormalizer.Keyboard, text), Is.EqualTo(expected));
-
         [TestCase("Sh1t", "shit")]
         [TestCase("f.u.c.k", "fuck")]
         [TestCase("f u c k", "fuck")]

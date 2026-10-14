@@ -28,7 +28,7 @@ static readonly BadWordFilter Filter = new BadWordFilter(BadWordFilter.DefaultEn
 
 - Removed: zero-width/format characters, combining marks, Hangul fillers.
 - Mapped: fullwidth ASCII, Latin-1 accents, Cyrillic/Greek look-alikes.
-- Korean: digits, spaces and symbols between Hangul are dropped, and loose compatibility jamo are composed into syllables. Latin letters are also read as 2-beolsik keyboard input (`tlqkf`). Single Latin letters and short initial-consonant forms typed among Hangul are not treated as keyboard input.
+- Korean: digits, spaces and symbols between Hangul are dropped, and loose compatibility jamo are composed into syllables. Latin text is never read as Korean keyboard input, so Korean typed with the IME off (`tlqkf`) passes.
 - English: leetspeak digits, separators as word boundaries, spaced single letters joined (`f u c k`), stretched letters (`fuuuck`).
 
 ## Limits
