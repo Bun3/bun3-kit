@@ -12,6 +12,7 @@ nognog
 
 # == owner ruling 2026-10-14: plain sexual words ==
 # nl.txt |seks| covers seks; en.txt masturb and orgasm cover masturbasyon and orgasmo.
-# pagtatalik, nagtatalik, magtatalik (tatalik) and nagtalik, magtalik, makipagtalik (gtalik). The end boundary keeps talikod (turn one's back: pagtalikod, pagtatalikod) passing.
-tatalik|
+# pagtatalik, nagtatalik, magtatalik (gtatalik) and nagtalik, magtalik, makipagtalik (gtalik). The g keeps matatalik (plural of matalik, close) passing,
+# and the end boundary keeps talikod (turn one's back: pagtalikod, pagtatalikod) passing.
+gtatalik|
 gtalik|

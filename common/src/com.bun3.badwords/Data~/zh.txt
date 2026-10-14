@@ -52,23 +52,42 @@
 性交
 自慰
 手淫
-# Word junctions: 叫做 + 爱情, 做 + 爱心 (charity), 做 + 爱国者.
-!叫做爱
-!做爱心
-!做爱国
-# Word junctions of a word ending in 性 with 交流, 交谈, 交换, 交际, 交遊 and 交往 (理性交流, 和女性交谈, 異性交際, 不純異性交遊, 和女性交往).
-# 交往 and 交友 also follow 性 in sexual phrases (性交往), so only the ordinary compounds are allowed.
-!性交流
-!性交谈
-!性交换
-!性交际
-!性交遊
+# Word junctions are allowed only as the whole ordinary phrase: a shorter allow such as 做爱心 or 性交流 would also pass 做爱心情 or 性交流群.
+# 叫做 + 爱情 passes. 这叫做爱 stays blocked because it also reads as "this is having sex"; names after 叫做 (叫做爱丽丝) block with it,
+# which speech avoids by saying 叫 without 做. 做 + 爱情, 爱人, 爱你 (做爱你的人) also block: no allow separates them from 做爱情景 or 做爱人家.
+!叫做爱情
+# 当做, 看做 + 爱好, 爱人, 爱情 (treat as a hobby, lover, love); 做 + 爱好的事, 爱吃的 (cook a favorite dish), 爱心公益, 爱心活动, 爱心事业 (charity), 爱国者 (patriot).
+!当做爱好
+!当做爱人
+!当做爱情
+!看做爱好
+!做爱好的事
+!做爱吃的
+!做爱心公益
+!做爱心活动
+!做爱心事业
+!做爱国者
+# A word ending in 性 + 交流, 交谈, 交际, 交遊, 交往, 交友 (理性交流, 女性交流群, 和女性交谈, 異性交際, 不純異性交遊, 和女性交往).
+!理性交流
+!两性交流
+!异性交流
+!女性交流
+!男性交流
+!女性交谈
+!男性交谈
+!异性交谈
+!异性交际
+!异性交遊
 !异性交往
 !两性交往
 !同性交往
 !男性交往
 !女性交往
 !异性交友
+# 一次性 (one-time) + 交易, 交清, 交付. 性交易 (sex trade) itself stays blocked, so only the one-time compounds are allowed.
+!一次性交易
+!一次性交清
+!一次性交付
 # 亲自 + 慰问 (visit in person) and the idiom 聊以自慰 (console oneself).
 !亲自慰问
 !聊以自慰

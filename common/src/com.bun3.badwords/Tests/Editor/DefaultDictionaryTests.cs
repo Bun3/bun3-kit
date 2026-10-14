@@ -191,6 +191,9 @@ namespace Bun3.BadWords.Tests
         [TestCase("Sussex")]
         [TestCase("matalik")]
         [TestCase("pagtalikod")]
+        [TestCase("matatalik")]
+        [TestCase("matatalik na kaibigan")]
+        [TestCase("pinakamatatalik")]
         public void PassesEverydayWordsInLatinScriptLanguages(string text) =>
             Assert.That(BadWordFilter.Default.ContainsBadWord(text), Is.False, BadWordFilter.Default.Explain(text));
 
@@ -231,6 +234,14 @@ namespace Bun3.BadWords.Tests
         [TestCase("性交")]
         [TestCase("自慰")]
         [TestCase("手淫")]
+        // Junction allows cover only the ordinary compound, so these sexual sentences still block.
+        [TestCase("做爱心情")]
+        [TestCase("做爱国产视频")]
+        [TestCase("做爱好爽")]
+        [TestCase("这叫做爱")]
+        [TestCase("性交流群")]
+        [TestCase("性交换")]
+        [TestCase("第一次性交")]
         public void BlocksStrongWordsInOtherScripts(string text) =>
             Assert.That(BadWordFilter.Default.ContainsBadWord(text), Is.True, text);
 
@@ -281,12 +292,20 @@ namespace Bun3.BadWords.Tests
         [TestCase("性别")]
         [TestCase("ユニセックス")]
         [TestCase("理性交流")]
+        [TestCase("女性交流群")]
         [TestCase("和女性交谈")]
         [TestCase("和女性交往")]
         [TestCase("不純異性交遊")]
         [TestCase("亲自慰问")]
         [TestCase("这就叫做爱情")]
         [TestCase("做爱心公益")]
+        [TestCase("做爱国者")]
+        [TestCase("他把读书当做爱好")]
+        [TestCase("给你做爱吃的菜")]
+        [TestCase("異性交際")]
+        [TestCase("一次性交易")]
+        [TestCase("一次性交清")]
+        [TestCase("一次性交付")]
         public void PassesEverydayWordsInOtherScripts(string text) =>
             Assert.That(BadWordFilter.Default.ContainsBadWord(text), Is.False, BadWordFilter.Default.Explain(text));
 
