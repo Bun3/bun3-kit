@@ -356,10 +356,11 @@ UniTask<IReadOnlyList<RoomListing>> ListPublicAsync(RoomListOptions options, Can
 | `bun3.members` | 로비 | 방장 | 현재 인원 |
 | `bun3.max` | 로비 | 방장 | 정원 |
 
-- 생성 때 `bun3.public = 0`, `bun3.open = 1`, `bun3.max`, `bun3.members = 1`을 함께 기록한다. 목록 검색이 `bun3.open = 1`로 거르기 때문에 열림을 명시한다.
+- 생성 때 `bun3.public = 0`, `bun3.max`, `bun3.members = 1`을 함께 기록한다.
 - 로비 종류는 `k_ELobbyTypeInvisible` 그대로다. 비공개 방도 코드 검색으로 찾힌다.
 - 인원·정원을 로비 데이터로 두는 이유: 참가하지 않은 로비에서 `GetNumLobbyMembers`가 값을 주는지 공식 문서로 확인되지 않는다. 방장은 `MembersChanged`와 방장이 되었을 때 `bun3.members`를 다시 쓴다.
-- 목록: `bun3.public = 1`, `bun3.ver = Version`, `bun3.open = 1` 문자열 필터, 빈자리 1, 전 세계, 결과 수 `MaxResults` → `RequestLobbyList` → 결과마다 `bun3.name`, `bun3.members`, `bun3.max`, 요청한 키를 읽는다. 인원이 숫자가 아니거나 코드가 올바르지 않은 로비는 건너뛴다.
+- 목록: `bun3.public = 1`, `bun3.ver = Version` 문자열 필터, 빈자리 1, 전 세계, 결과 수 `MaxResults` → `RequestLobbyList` → 결과마다 `bun3.name`, `bun3.members`, `bun3.max`, 요청한 키를 읽는다. 인원이 숫자가 아니거나 코드가 올바르지 않은 로비는 건너뛴다.
+- 닫힌 로비(`SetLobbyJoinable(false)`)는 Steam 검색에 나오지 않으므로(코드 참가와 같은 성질) 열림은 따로 거르지 않는다.
 - 가짜 seam: `ISteamLobbyApi`의 검색을 여러 문자열 필터와 결과 수를 받는 형태로 일반화한다(코드 검색도 같은 함수를 쓴다).
 
 ### 루프백
