@@ -291,5 +291,121 @@ namespace Bun3.Unity.Rooms.Steam.Tests
             {
             }
         });
+
+        private ulong AddPublicLobby(string code, string version, int members, int max, string map)
+        {
+            ulong lobby = api.AddLobby(Friend, code, version, "900", max);
+            var entry = api.Lobbies[lobby];
+            for (int i = 1; i < members; i++) entry.Members.Add(76561198000000100UL + (ulong)i);
+            entry.Data[SteamLobbyBackend.PublicKey] = "1";
+            entry.Data[SteamLobbyBackend.MembersKey] = members.ToString();
+            entry.Data[SteamLobbyBackend.MaxKey] = max.ToString();
+            entry.Data["jp.map"] = map;
+            return lobby;
+        }
+
+        [UnityTest]
+        public IEnumerator CreatedLobbyStartsPrivateWithListingData() => UniTask.ToCoroutine(async () =>
+        {
+            var room = await backend.CreateAsync(Create);
+            var lobby = api.Lobbies[ulong.Parse(room.Id)];
+            Assert.That(lobby.Data[SteamLobbyBackend.PublicKey], Is.EqualTo("0"));
+            Assert.That(lobby.Data[SteamLobbyBackend.MaxKey], Is.EqualTo("8"));
+            Assert.That(lobby.Data[SteamLobbyBackend.MembersKey], Is.EqualTo("1"));
+            Assert.That(((SteamLobbyRoom)room).IsPublic, Is.False);
+        });
+
+        [UnityTest]
+        public IEnumerator OnlyTheOwnerSwitchesPublicAndMembersSeeIt() => UniTask.ToCoroutine(async () =>
+        {
+            var owned = (SteamLobbyRoom)await backend.CreateAsync(Create);
+            await owned.SetPublicAsync(true);
+            Assert.That(api.Lobbies[owned.Lobby].Data[SteamLobbyBackend.PublicKey], Is.EqualTo("1"));
+            Assert.That(owned.IsPublic, Is.True);
+            await owned.SetPublicAsync(false);
+            Assert.That(owned.IsPublic, Is.False);
+            await owned.LeaveAsync();
+
+            ulong lobby = api.AddLobby(Friend, "ABC234", "0.1", "900");
+            var joined = (SteamLobbyRoom)await backend.JoinByIdAsync(lobby.ToString(), Join());
+            Assert.Throws<InvalidOperationException>(() => joined.SetPublicAsync(true));
+            int dataChanges = 0;
+            joined.DataChanged += () => dataChanges++;
+            api.Lobbies[lobby].Data[SteamLobbyBackend.PublicKey] = "1";
+            api.RaiseDataUpdated(lobby, lobby);
+            Assert.That(joined.IsPublic, Is.True);
+            Assert.That(dataChanges, Is.EqualTo(1));
+        });
+
+        [UnityTest]
+        public IEnumerator OwnerKeepsTheListedMemberCountCurrent() => UniTask.ToCoroutine(async () =>
+        {
+            var room = (SteamLobbyRoom)await backend.CreateAsync(Create);
+            var lobby = api.Lobbies[room.Lobby];
+            lobby.Members.Add(Friend);
+            api.RaiseChatUpdated(room.Lobby, Friend, (uint)EChatMemberStateChange.k_EChatMemberStateChangeEntered);
+            Assert.That(lobby.Data[SteamLobbyBackend.MembersKey], Is.EqualTo("2"));
+            await room.LeaveAsync();
+
+            ulong friendLobby = api.AddLobby(Friend, "ABC234", "0.1", "900");
+            api.Lobbies[friendLobby].Data[SteamLobbyBackend.MembersKey] = "1";
+            await backend.JoinByIdAsync(friendLobby.ToString(), Join());
+            Assert.That(api.Lobbies[friendLobby].Data[SteamLobbyBackend.MembersKey], Is.EqualTo("1"), "Members do not write the count.");
+            api.Lobbies[friendLobby].Owner = Me;
+            api.RaiseDataUpdated(friendLobby, friendLobby);
+            Assert.That(api.Lobbies[friendLobby].Data[SteamLobbyBackend.MembersKey], Is.EqualTo("2"), "A new owner republishes the count.");
+        });
+
+        [UnityTest]
+        public IEnumerator ListingReturnsPublicSameVersionRoomsWithAFreeSlot() => UniTask.ToCoroutine(async () =>
+        {
+            ulong listed = AddPublicLobby("ABC234", "0.1", 2, 8, "Map_PoC");
+            ulong hidden = api.AddLobby(Friend, "BCD345", "0.1", "900");
+            AddPublicLobby("CDE456", "0.2", 1, 8, "Map_PoC");
+            AddPublicLobby("DEF567", "0.1", 4, 4, "Map_PoC");
+            ulong closed = AddPublicLobby("EFG678", "0.1", 1, 8, "Map_PoC");
+            api.Lobbies[closed].Joinable = false;
+            ulong garbled = AddPublicLobby("FGH789", "0.1", 1, 8, "Map_PoC");
+            api.Lobbies[garbled].Data[SteamLobbyBackend.MembersKey] = "many";
+            ulong badCode = AddPublicLobby("GHJ892", "0.1", 1, 8, "Map_PoC");
+            api.Lobbies[badCode].Data[SteamLobbyBackend.CodeKey] = "0O1I";
+
+            var rooms = await backend.ListPublicAsync(new RoomListOptions { Version = "0.1", MaxResults = 10, DataKeys = new[] { "jp.map" } });
+
+            Assert.That(rooms.Count, Is.EqualTo(1));
+            Assert.That(rooms[0].Id, Is.EqualTo(listed.ToString()));
+            Assert.That(rooms[0].Name, Is.EqualTo("Friend"));
+            Assert.That(rooms[0].MemberCount, Is.EqualTo(2));
+            Assert.That(rooms[0].MaxMembers, Is.EqualTo(8));
+            Assert.That(rooms[0].GetData("jp.map"), Is.EqualTo("Map_PoC"));
+            Assert.That(api.LastSearchRequiredSlot, Is.True);
+            Assert.That(api.LastMaxResults, Is.EqualTo(10));
+            Assert.That(api.LastFilters, Does.Contain(new KeyValuePair<string, string>(SteamLobbyBackend.PublicKey, "1")));
+            Assert.That(api.LastFilters, Does.Contain(new KeyValuePair<string, string>(SteamLobbyBackend.VersionKey, "0.1")));
+            Assert.That(hidden, Is.Not.EqualTo(listed));
+        });
+
+        [UnityTest]
+        public IEnumerator ListingFailsWhenSteamIsDownAndWorksInsideARoom() => UniTask.ToCoroutine(async () =>
+        {
+            async UniTask<RoomFailure> ListFailure()
+            {
+                try { await backend.ListPublicAsync(new RoomListOptions { Version = "0.1" }); }
+                catch (RoomException error) { return error.Failure; }
+                Assert.Fail("Expected a RoomException.");
+                return default;
+            }
+            api.IsAvailable = false;
+            Assert.That(await ListFailure(), Is.EqualTo(RoomFailure.ServiceUnavailable));
+            api.IsAvailable = true;
+            api.FailSearch = true;
+            Assert.That(await ListFailure(), Is.EqualTo(RoomFailure.ServiceUnavailable));
+            api.FailSearch = false;
+            var room = (SteamLobbyRoom)await backend.CreateAsync(Create);
+            await room.SetPublicAsync(true);
+            var rooms = await backend.ListPublicAsync(new RoomListOptions { Version = "0.1" });
+            Assert.That(rooms.Count, Is.EqualTo(1), "The owner's own room may appear; filtering it is the game's job.");
+            Assert.That(api.LastMaxResults, Is.EqualTo(RoomListOptions.Limit));
+        });
     }
 }

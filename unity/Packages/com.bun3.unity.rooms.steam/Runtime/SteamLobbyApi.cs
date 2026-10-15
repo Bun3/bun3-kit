@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using Bun3.Unity.Steam;
 using Cysharp.Threading.Tasks;
@@ -47,12 +48,14 @@ namespace Bun3.Unity.Rooms.Steam
             CallAsync<LobbyCreated_t, ulong>(SteamMatchmaking.CreateLobby(ELobbyType.k_ELobbyTypeInvisible, maxMembers),
                 (data, ioFailure) => ioFailure || data.m_eResult != EResult.k_EResultOK ? 0 : data.m_ulSteamIDLobby, cancellationToken);
 
-        public UniTask<int> FindLobbiesAsync(string key, string value, bool requireOpenSlot, CancellationToken cancellationToken)
+        public UniTask<int> FindLobbiesAsync(IReadOnlyList<KeyValuePair<string, string>> filters, bool requireOpenSlot, int maxResults,
+            CancellationToken cancellationToken)
         {
-            SteamMatchmaking.AddRequestLobbyListStringFilter(key, value, ELobbyComparison.k_ELobbyComparisonEqual);
+            for (int i = 0; i < filters.Count; i++)
+                SteamMatchmaking.AddRequestLobbyListStringFilter(filters[i].Key, filters[i].Value, ELobbyComparison.k_ELobbyComparisonEqual);
             SteamMatchmaking.AddRequestLobbyListDistanceFilter(ELobbyDistanceFilter.k_ELobbyDistanceFilterWorldwide);
             if (requireOpenSlot) SteamMatchmaking.AddRequestLobbyListFilterSlotsAvailable(1);
-            SteamMatchmaking.AddRequestLobbyListResultCountFilter(1);
+            SteamMatchmaking.AddRequestLobbyListResultCountFilter(maxResults);
             return CallAsync<LobbyMatchList_t, int>(SteamMatchmaking.RequestLobbyList(),
                 (data, ioFailure) => ioFailure ? -1 : (int)data.m_nLobbiesMatching, cancellationToken);
         }

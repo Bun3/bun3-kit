@@ -47,6 +47,7 @@ namespace Bun3.Unity.Rooms.Steam
         public string OwnerId { get; private set; }
         public bool IsOwner => OwnerId == LocalMemberId;
         public bool IsJoinable { get; private set; } = true;
+        public bool IsPublic => GetData(SteamLobbyBackend.PublicKey) == "1";
         public event Action MembersChanged;
         public event Action OwnerChanged;
         public event Action DataChanged;
@@ -76,6 +77,13 @@ namespace Bun3.Unity.Rooms.Steam
                 IsJoinable = joinable;
                 PublishInvite();
             }
+            return UniTask.CompletedTask;
+        }
+
+        public UniTask SetPublicAsync(bool isPublic)
+        {
+            RequireOwner();
+            if (!api.SetLobbyData(Lobby, SteamLobbyBackend.PublicKey, isPublic ? "1" : "0")) throw new RoomException(RoomFailure.ServiceUnavailable);
             return UniTask.CompletedTask;
         }
 
@@ -149,6 +157,7 @@ namespace Bun3.Unity.Rooms.Steam
                 owner = latestOwner;
                 OwnerId = latestOwner.ToString(CultureInfo.InvariantCulture);
             }
+            if ((membersChanged || ownerChanged) && IsOwner) PublishMemberCount();
             if (membersChanged) MembersChanged?.Invoke();
             if (ownerChanged) OwnerChanged?.Invoke();
         }
@@ -180,6 +189,13 @@ namespace Bun3.Unity.Rooms.Steam
 
         // Friends see "Join Game" only while the room is open.
         private void PublishInvite() => api.SetRichPresence(SteamLobbyBackend.ConnectKey, IsJoinable ? connectValue : null);
+
+        // Lobby lists read the count from lobby data: the docs do not promise GetNumLobbyMembers for lobbies the client is not in.
+        private void PublishMemberCount()
+        {
+            string count = members.Count.ToString(CultureInfo.InvariantCulture);
+            if (GetData(SteamLobbyBackend.MembersKey) != count) api.SetLobbyData(Lobby, SteamLobbyBackend.MembersKey, count);
+        }
 
         private void RequireOwner()
         {

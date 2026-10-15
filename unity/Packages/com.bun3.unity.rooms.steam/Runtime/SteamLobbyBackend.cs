@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Threading;
 using Cysharp.Threading.Tasks;
@@ -28,6 +29,15 @@ namespace Bun3.Unity.Rooms.Steam
 
         /// <summary>Member data key holding each member's join time (Steam server time).</summary>
         public const string JoinedKey = "bun3.joined";
+
+        /// <summary>Lobby data key the owner sets to <c>"1"</c> while the room is public.</summary>
+        public const string PublicKey = "bun3.public";
+
+        /// <summary>Lobby data key holding the member count; the owner keeps it current for lobby lists.</summary>
+        public const string MembersKey = "bun3.members";
+
+        /// <summary>Lobby data key holding the capacity, for lobby lists.</summary>
+        public const string MaxKey = "bun3.max";
 
         internal const string ConnectKey = "connect";
         internal const string ConnectCommand = "+connect_lobby";
@@ -67,7 +77,7 @@ namespace Bun3.Unity.Rooms.Steam
                 for (int attempt = 0; attempt < MaxCodeAttempts && !unique; attempt++)
                 {
                     code = RoomCode.Generate();
-                    int found = await api.FindLobbiesAsync(CodeKey, code.ToString(), false, cancellationToken);
+                    int found = await api.FindLobbiesAsync(CodeFilter(code), false, 1, cancellationToken);
                     if (found < 0) throw new RoomException(RoomFailure.ServiceUnavailable);
                     unique = found == 0;
                 }
@@ -77,6 +87,9 @@ namespace Bun3.Unity.Rooms.Steam
                 api.SetLobbyData(lobby, CodeKey, code.ToString());
                 api.SetLobbyData(lobby, VersionKey, options.Version ?? string.Empty);
                 api.SetLobbyData(lobby, NameKey, options.Name ?? string.Empty);
+                api.SetLobbyData(lobby, PublicKey, "0");
+                api.SetLobbyData(lobby, MaxKey, options.MaxMembers.ToString(CultureInfo.InvariantCulture));
+                api.SetLobbyData(lobby, MembersKey, "1");
                 return Enter(lobby, code);
             }
             finally
@@ -92,7 +105,7 @@ namespace Bun3.Unity.Rooms.Steam
             inFlight = true;
             try
             {
-                int found = await api.FindLobbiesAsync(CodeKey, code.ToString(), true, cancellationToken);
+                int found = await api.FindLobbiesAsync(CodeFilter(code), true, 1, cancellationToken);
                 if (found < 0) throw new RoomException(RoomFailure.ServiceUnavailable);
                 if (found == 0) throw new RoomException(RoomFailure.NotFound);
                 return await JoinAsync(api.GetLobbyByIndex(0), options, cancellationToken);
@@ -113,6 +126,49 @@ namespace Bun3.Unity.Rooms.Steam
             try
             {
                 return await JoinAsync(lobby, options, cancellationToken);
+            }
+            finally
+            {
+                inFlight = false;
+            }
+        }
+
+        /// <summary>
+        /// Lists public, open lobbies with the same version and a free slot, worldwide. Allowed while in a room.
+        /// Lobbies with an unreadable code or member count are skipped.
+        /// </summary>
+        public async UniTask<IReadOnlyList<RoomListing>> ListPublicAsync(RoomListOptions options, CancellationToken cancellationToken = default)
+        {
+            if (!api.IsAvailable) throw new RoomException(RoomFailure.ServiceUnavailable);
+            if (inFlight) throw new InvalidOperationException("Another room operation is still running.");
+            inFlight = true;
+            try
+            {
+                var filters = new[]
+                {
+                    new KeyValuePair<string, string>(PublicKey, "1"),
+                    new KeyValuePair<string, string>(VersionKey, options.Version ?? string.Empty),
+                };
+                int found = await api.FindLobbiesAsync(filters, true, options.Count, cancellationToken);
+                if (found < 0) throw new RoomException(RoomFailure.ServiceUnavailable);
+                var rooms = new List<RoomListing>(found);
+                for (int i = 0; i < found; i++)
+                {
+                    ulong lobby = api.GetLobbyByIndex(i);
+                    if (!RoomCode.TryNormalize(api.GetLobbyData(lobby, CodeKey), out _) ||
+                        !int.TryParse(api.GetLobbyData(lobby, MembersKey), NumberStyles.None, CultureInfo.InvariantCulture, out int members))
+                        continue;
+                    int max = int.TryParse(api.GetLobbyData(lobby, MaxKey), NumberStyles.None, CultureInfo.InvariantCulture, out int limit) ? limit : 0;
+                    Dictionary<string, string> data = null;
+                    if (options.DataKeys != null)
+                    {
+                        data = new Dictionary<string, string>(options.DataKeys.Count, StringComparer.Ordinal);
+                        for (int k = 0; k < options.DataKeys.Count; k++) data[options.DataKeys[k]] = api.GetLobbyData(lobby, options.DataKeys[k]);
+                    }
+                    string name = api.GetLobbyData(lobby, NameKey);
+                    rooms.Add(new RoomListing(lobby.ToString(CultureInfo.InvariantCulture), string.IsNullOrEmpty(name) ? null : name, members, max, data));
+                }
+                return rooms;
             }
             finally
             {
@@ -211,5 +267,8 @@ namespace Bun3.Unity.Rooms.Steam
         {
             if (TryParseConnect(connect, out string lobby)) JoinRequested?.Invoke(lobby);
         }
+
+        private static KeyValuePair<string, string>[] CodeFilter(RoomCode code) =>
+            new[] { new KeyValuePair<string, string>(CodeKey, code.ToString()) };
     }
 }

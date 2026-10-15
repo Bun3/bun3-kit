@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 
@@ -12,8 +13,9 @@ namespace Bun3.Unity.Rooms.Steam
         uint ServerRealTime { get; }
         string CommandLine { get; }
         UniTask<ulong> CreateLobbyAsync(int maxMembers, CancellationToken cancellationToken);
-        // Returns the match count (at most one), or a negative number when the request failed.
-        UniTask<int> FindLobbiesAsync(string key, string value, bool requireOpenSlot, CancellationToken cancellationToken);
+        // Returns the match count (at most maxResults), or a negative number when the request failed.
+        UniTask<int> FindLobbiesAsync(IReadOnlyList<KeyValuePair<string, string>> filters, bool requireOpenSlot, int maxResults,
+            CancellationToken cancellationToken);
         ulong GetLobbyByIndex(int index);
         UniTask<uint> JoinLobbyAsync(ulong lobby, CancellationToken cancellationToken);
         void LeaveLobby(ulong lobby);

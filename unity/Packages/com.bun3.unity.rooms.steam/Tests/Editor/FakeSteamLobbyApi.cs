@@ -67,11 +67,19 @@ namespace Bun3.Unity.Rooms.Steam.Tests
             return UniTask.FromResult(id);
         }
 
-        public UniTask<int> FindLobbiesAsync(string key, string value, bool requireOpenSlot, CancellationToken cancellationToken)
+        public IReadOnlyList<KeyValuePair<string, string>> LastFilters;
+        public int LastMaxResults;
+        public bool FailSearch;
+
+        public UniTask<int> FindLobbiesAsync(IReadOnlyList<KeyValuePair<string, string>> filters, bool requireOpenSlot, int maxResults,
+            CancellationToken cancellationToken)
         {
             Searches++;
             LastSearchRequiredSlot = requireOpenSlot;
+            LastFilters = filters;
+            LastMaxResults = maxResults;
             results.Clear();
+            if (FailSearch) return UniTask.FromResult(-1);
             if (CollisionsRemaining > 0)
             {
                 CollisionsRemaining--;
@@ -80,13 +88,13 @@ namespace Bun3.Unity.Rooms.Steam.Tests
             }
             foreach (var pair in Lobbies)
             {
+                if (results.Count >= maxResults) break;
                 var lobby = pair.Value;
-                if (lobby.Joinable && lobby.Data.TryGetValue(key, out string found) && found == value &&
-                    (!requireOpenSlot || lobby.Members.Count < lobby.MaxMembers))
-                {
-                    results.Add(pair.Key);
-                    break;
-                }
+                if (!lobby.Joinable || (requireOpenSlot && lobby.Members.Count >= lobby.MaxMembers)) continue;
+                bool match = true;
+                for (int i = 0; i < filters.Count && match; i++)
+                    match = lobby.Data.TryGetValue(filters[i].Key, out string found) && found == filters[i].Value;
+                if (match) results.Add(pair.Key);
             }
             return UniTask.FromResult(results.Count);
         }
