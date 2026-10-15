@@ -327,9 +327,60 @@ static void SteamRuntime.Shutdown();
 - 키트 Unity 프로젝트(`unity/`) manifest에 NGO 2.13.1, Unity Transport, Steamworks.NET을 추가하고
   `BUN3_STEAMWORKS`를 켜서 패키지 테스트를 돌린다. 가짜 seam 테스트는 Steam 클라이언트 없이 실행된다.
 
+## 공개 여부와 공개 방 목록 (2026-10-15 추가)
+
+첫 소비자(jurassic-paradise)가 방을 공개/비공개로 나눈다. 두 종류 모두 코드로 들어갈 수 있고, 공개 방은 목록에서도 고를 수 있다. 방은 비공개로 만들어지고 방장만 바꾼다. 결정 배경과 화면 규칙은 소비 게임 스펙(`jurassic-paradise/docs/superpowers/specs/2026-10-15-room-access-level-design.md`)에 있다.
+
+### 코어 API 추가
+
+```csharp
+// IRoom
+bool IsPublic { get; }                     // 생성 시 false
+UniTask SetPublicAsync(bool isPublic);     // 방장 전용. 바뀌면 DataChanged
+// IRoomBackend
+UniTask<IReadOnlyList<RoomListing>> ListPublicAsync(RoomListOptions options, CancellationToken cancellationToken = default);
+```
+
+- `RoomListOptions`(struct): `Version`(생성 버전과 서수 비교), `MaxResults`(1~50, 0 이하는 50, 50 초과는 50), `DataKeys`(목록과 함께 읽을 방 데이터 키, null이면 없음).
+- `RoomListing`(sealed class): `Id`(`JoinByIdAsync`에 넘김), `Name`, `MemberCount`, `MaxMembers`(모르면 0), `GetData(string key)`(요청한 키만, 없으면 null).
+- 돌려주는 방: 공개, 열림(`IsJoinable`), 버전 일치, 빈자리 있음(정원을 모르면 포함). 정렬은 백엔드 순서다.
+- 방에 있는 동안에도 부를 수 있다. 자기 방이 목록에 들어갈 수 있으며 거르는 것은 게임 몫이다.
+- 목록을 받은 뒤 방이 차거나 닫히면 `JoinByIdAsync`가 기존대로 `Full`·`NotFound`로 실패한다.
+- 서비스가 없거나 응답하지 않으면 `RoomException(ServiceUnavailable)`.
+
+### Steam
+
+| 키 | 종류 | 작성자 | 의미 |
+|---|---|---|---|
+| `bun3.public` | 로비 | 방장 | `1`이면 공개. 없거나 `0`이면 비공개 → `IRoom.IsPublic` |
+| `bun3.members` | 로비 | 방장 | 현재 인원 |
+| `bun3.max` | 로비 | 방장 | 정원 |
+
+- 생성 때 `bun3.public = 0`, `bun3.open = 1`, `bun3.max`, `bun3.members = 1`을 함께 기록한다. 목록 검색이 `bun3.open = 1`로 거르기 때문에 열림을 명시한다.
+- 로비 종류는 `k_ELobbyTypeInvisible` 그대로다. 비공개 방도 코드 검색으로 찾힌다.
+- 인원·정원을 로비 데이터로 두는 이유: 참가하지 않은 로비에서 `GetNumLobbyMembers`가 값을 주는지 공식 문서로 확인되지 않는다. 방장은 `MembersChanged`와 방장이 되었을 때 `bun3.members`를 다시 쓴다.
+- 목록: `bun3.public = 1`, `bun3.ver = Version`, `bun3.open = 1` 문자열 필터, 빈자리 1, 전 세계, 결과 수 `MaxResults` → `RequestLobbyList` → 결과마다 `bun3.name`, `bun3.members`, `bun3.max`, 요청한 키를 읽는다. 인원이 숫자가 아니거나 코드가 올바르지 않은 로비는 건너뛴다.
+- 가짜 seam: `ISteamLobbyApi`의 검색을 여러 문자열 필터와 결과 수를 받는 형태로 일반화한다(코드 검색도 같은 함수를 쓴다).
+
+### 루프백
+
+같은 PC의 여러 프로세스(에디터, Multiplayer Play Mode)가 서로의 공개 방을 보도록 파일 등록부를 둔다.
+
+- 위치: `Application.temporaryCachePath/bun3-rooms` (회사·제품별 경로라 같은 프로젝트의 프로세스끼리 공유된다). 생성자에서 다른 경로를 받을 수 있다(테스트용).
+- 공개 방의 호스트는 `<포트>.json`(코드, 이름, 버전, 인원, 정원, 열림, 방 데이터)을 임시 파일에 쓴 뒤 옮겨 바꾼다. 공개가 된 순간과 인원·데이터·열림이 바뀔 때, 그리고 2초마다 쓴다.
+- 비공개로 바꾸거나, 방을 떠나거나, 방이 닫히면 파일을 지운다.
+- 목록은 등록부를 읽어 6초 넘게 갱신되지 않은 파일(꺼진 프로세스)과 읽을 수 없는 파일을 건너뛰고 Steam과 같은 조건으로 거른다.
+- 클라이언트의 방은 호스트 데이터를 모르므로, 자기 코드의 등록 파일이 살아 있는지를 2초마다 확인해 `IsPublic`을 정하고 바뀌면 `DataChanged`를 낸다. 비공개 전환이 클라이언트에 반영되기까지 최대 2초 걸린다.
+- 같은 PC 안에서만 보인다.
+
+### 테스트 추가
+
+- `rooms.steam` EditMode(가짜 로비): 생성 때 기록하는 키, 공개 전환과 `DataChanged`, 목록 검색 필터와 결과 수, 목록 결과의 이름·인원·정원·요청 키, 깨진 로비 건너뛰기, 인원 변경·방장 변경 때 `bun3.members` 갱신, 방장이 아닐 때 `SetPublicAsync` 거부.
+- `rooms.ngo` PlayMode(루프백, 임시 등록부): 공개 → 목록에 보임 → 비공개 → 사라짐, 오래된 파일·버전 다른 방·꽉 찬 방·닫힌 방 제외, 클라이언트 `IsPublic` 반영, 방 이탈 시 파일 삭제.
+
 ## 범위 밖
 
-- 공개방 목록, 빠른 매칭, 지역 선택.
+- 빠른 매칭, 지역 선택, 공개 방 목록의 걸러보기·정렬.
 - 승계 데이터 전달 채널 (첫 소비자는 스냅샷 캐시로 해결).
 - 매치 중 재접속, 전용 서버(SDR 호스팅 서버 인증서).
 - Netcode for Entities·Mirror 등 다른 넷코드 어댑터.
