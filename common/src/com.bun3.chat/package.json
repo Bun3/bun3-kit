@@ -1,7 +1,7 @@
 {
   "name": "com.bun3.chat",
   "displayName": "Bun3 Chat",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "unity": "2022.3",
   "description": "Transport-agnostic text chat core: text normalization, rate limiting, policy-driven relay, and message logs. netstandard2.1; no UnityEngine dependency.",
   "dependencies": {},

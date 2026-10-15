@@ -46,6 +46,29 @@ namespace Bun3.Chat.Tests
         }
 
         [Test]
+        public void TextFilterRewritesNormalizedTextBeforeStampingAndHistory()
+        {
+            string? seen = null;
+            var options = History(5, 5);
+            options.TextFilter = text => { seen = text; return text.Replace("bad", "***"); };
+            var relay = new ChatRelay(policy, options);
+            Assert.That(relay.Submit(1, "  a bad word\n", 1, out var message), Is.EqualTo(ChatRejectReason.None));
+            Assert.That(seen, Is.EqualTo("a bad word"));
+            Assert.That(message.Text, Is.EqualTo("a *** word"));
+            Assert.That(Texts(relay.History!), Is.EqualTo(new[] { "a *** word" }));
+        }
+
+        [Test]
+        public void TextFilterResultThatFailsNormalizationRejectsWithoutSpendingBurst()
+        {
+            var relay = new ChatRelay(policy, new ChatRelayOptions { Burst = 1, HistoryCapacity = 5, TextFilter = text => text == "x" ? " " : text });
+            Assert.That(relay.Submit(1, "x", 1, out var message), Is.EqualTo(ChatRejectReason.InvalidText));
+            Assert.That(message.Text, Is.Null);
+            Assert.That(relay.History!.Count, Is.Zero);
+            Assert.That(relay.Submit(1, "ok", 2, out message), Is.EqualTo(ChatRejectReason.None));
+        }
+
+        [Test]
         public void SuccessStampsPolicyIdentityChannelAndTime()
         {
             var relay = new ChatRelay(policy);

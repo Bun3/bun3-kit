@@ -10,7 +10,7 @@ namespace Bun3.Chat
     {
         /// <summary>Accepted.</summary>
         None,
-        /// <summary>The text failed <see cref="ChatText.TryNormalize"/>.</summary>
+        /// <summary>The text, or the <see cref="ChatRelayOptions.TextFilter"/> result, failed <see cref="ChatText.TryNormalize"/>.</summary>
         InvalidText,
         /// <summary>The policy has no usable identity for the sender.</summary>
         UnknownSender,
@@ -37,16 +37,23 @@ namespace Bun3.Chat
 
         /// <summary>History messages replayed to a newly connected peer; 0 replays none. At most <see cref="HistoryCapacity"/>.</summary>
         public int HistoryReplayCount { get; set; }
+
+        /// <summary>
+        /// Rewrites normalized text once the policy allows the sender, before the burst limit, for example to mask bad words; null keeps the text.
+        /// The result is normalized again, and a result that fails normalization rejects the message as <see cref="ChatRejectReason.InvalidText"/>.
+        /// </summary>
+        public Func<string, string>? TextFilter { get; set; }
     }
 
     /// <summary>
     /// Host-side chat pipeline: identifies the sender, normalizes the text, asks the policy for a channel,
-    /// applies the burst limit, and optionally records accepted messages for replay.
+    /// optionally rewrites the text, applies the burst limit, and optionally records accepted messages for replay.
     /// </summary>
     public sealed class ChatRelay
     {
         readonly IChatPolicy policy;
         readonly ChatRateLimiter limiter;
+        readonly Func<string, string>? textFilter;
 
         /// <summary>Creates a relay. Invalid <paramref name="options"/> throw <see cref="ArgumentOutOfRangeException"/>.</summary>
         public ChatRelay(IChatPolicy policy, ChatRelayOptions? options = null)
@@ -62,6 +69,7 @@ namespace Bun3.Chat
             MaxLength = options.MaxLength;
             HistoryReplayCount = options.HistoryReplayCount;
             limiter = new ChatRateLimiter(options.Burst, options.BurstWindowMs);
+            textFilter = options.TextFilter;
             History = options.HistoryCapacity > 0 ? new ChatLog(options.HistoryCapacity) : null;
         }
 
@@ -83,6 +91,7 @@ namespace Bun3.Chat
                 return ChatRejectReason.UnknownSender;
             if (!ChatText.TryNormalize(text, MaxLength, out var normalized)) return ChatRejectReason.InvalidText;
             if (!policy.TryGetChannel(senderId, out var channel)) return ChatRejectReason.NotAllowed;
+            if (textFilter != null && !ChatText.TryNormalize(textFilter(normalized), MaxLength, out normalized)) return ChatRejectReason.InvalidText;
             if (!limiter.TryAcquire(senderId, nowMs)) return ChatRejectReason.RateLimited;
             message = new ChatMessage(senderId, playerId, name, normalized, channel, nowMs);
             History?.Add(message);

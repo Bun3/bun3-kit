@@ -148,10 +148,11 @@ public sealed class ChatLog
 1. `policy.TryGetSender` 실패, 빈 플레이어 ID, 또는 플레이어 ID와 이름의 UTF-8 바이트 합이 `ChatMessage.MaxIdentityBytes`(448)를 넘음 → `UnknownSender`. 어댑터의 메시지 크기 계산(§4)이 이 상한에 기댄다
 2. `ChatText.TryNormalize(text, MaxLength)` 실패 → `InvalidText`
 3. `policy.TryGetChannel` 실패 → `NotAllowed` (지금 채팅할 수 없는 상태)
-4. `ChatRateLimiter.TryAcquire` 실패 → `RateLimited`
-5. 성공 → `message = new ChatMessage(senderId, playerId, name, normalized, channel, nowMs)`. `History`가 있으면 추가한다.
+4. `ChatRelayOptions.TextFilter`가 있으면 정규화한 본문을 넘겨 바꾼 본문을 받는다(예: 비속어 가리기). 결과를 다시 `ChatText.TryNormalize`하고 실패하면 `InvalidText`. 0.2.0(2026-10-15)에 추가했다
+5. `ChatRateLimiter.TryAcquire` 실패 → `RateLimited`
+6. 성공 → `message = new ChatMessage(senderId, playerId, name, normalized, channel, nowMs)`. `History`가 있으면 추가한다.
 
-순서 근거: 거부된 메시지는 도배 제한 예산을 소모하지 않는다. 송신자 이름과 플레이어 ID는 정책에서만 온다. `Submit` 페이로드에는 둘 다 없다.
+순서 근거: 거부된 메시지는 도배 제한 예산을 소모하지 않는다. 그래서 본문 바꾸기도 도배 제한 앞에 둔다. 비속어 사전은 게임마다 다르므로 코어는 `com.bun3.badwords`에 의존하지 않고 델리게이트만 받는다. 송신자 이름과 플레이어 ID는 정책에서만 온다. `Submit` 페이로드에는 둘 다 없다.
 
 `CollectRecipients`는 `result`를 비우고, `peers` 중 `policy.CanReceive(peer, message.SenderId, message.Channel)`가 참인 것만 담는다. 호출자가 소유한 리스트를 재사용하므로 할당이 없다. 송신자 자신을 받게 할지도 정책이 정한다(보통 참).
 
@@ -241,7 +242,6 @@ scope.Send(input.text);
 ## 7. 비범위 (v1)
 
 - 거부 사유를 송신자에게 회신. 필요해지면 `Bun3.Chat.Reject` 메시지를 추가한다.
-- 비속어 필터와 마스킹(`com.bun3.badwords` 도입 시 `Submit`의 4번과 5번 사이 단계로).
 - 서버 쪽 채널 레지스트리, 멤버/구독자 집합, 채널별 기록 상한, 영속화, 읽음 커서, 귓속말. `Bun3.Server.Chat`을 만들 때 다룬다.
 - 채팅 UI 컴포넌트. 범용 가변 높이 목록은 `com.bun3.unity.ui`의 `VirtualList`(스펙 `2026-10-12-unity-virtual-list-design.md`)로 제공한다.
 
