@@ -25,6 +25,7 @@ namespace Bun3.Unity.Rooms.Steam.Ngo.Tests
             public string OwnerId => members[0].Id;
             public bool IsOwner => true;
             public bool IsJoinable => true;
+            public bool IsPublic => false;
             public event Action MembersChanged { add { } remove { } }
             public event Action OwnerChanged { add { } remove { } }
             public event Action DataChanged { add { } remove { } }
@@ -32,6 +33,7 @@ namespace Bun3.Unity.Rooms.Steam.Ngo.Tests
             public string GetData(string key) => null;
             public UniTask SetDataAsync(string key, string value) => UniTask.CompletedTask;
             public UniTask SetJoinableAsync(bool joinable) => UniTask.CompletedTask;
+            public UniTask SetPublicAsync(bool isPublic) => UniTask.CompletedTask;
             public UniTask TransferOwnershipAsync(string memberId) => UniTask.CompletedTask;
             public UniTask LeaveAsync() => UniTask.CompletedTask;
         }

@@ -1,5 +1,7 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
+using System.IO;
 using Cysharp.Threading.Tasks;
 using NUnit.Framework;
 using UnityEngine.TestTools;
@@ -112,6 +114,138 @@ namespace Bun3.Unity.Rooms.Ngo.Tests
             finally
             {
                 Object.Destroy(manager.gameObject);
+            }
+        }
+
+        private static string NewRegistry() => Path.Combine(Path.GetTempPath(), "bun3-rooms-test-" + Guid.NewGuid().ToString("N"));
+
+        private static void DeleteRegistry(string registry)
+        {
+            if (Directory.Exists(registry)) Directory.Delete(registry, true);
+        }
+
+        private static RoomListOptions List(string version = "0.1") =>
+            new RoomListOptions { Version = version, DataKeys = new[] { "jp.map" } };
+
+        [UnityTest]
+        public IEnumerator PublicRoomIsListedUntilItIsPrivateOrClosed() => UniTask.ToCoroutine(async () =>
+        {
+            string registry = NewRegistry();
+            var host = NgoTestPeers.Create("Host");
+            try
+            {
+                var transport = NgoTestPeers.Transport(host);
+                var backend = new LoopbackRoomBackend(host, transport, registry);
+                IRoom room = await backend.CreateAsync(new RoomCreateOptions { MaxMembers = 4, Name = "Host", Version = "0.1" });
+                await new NgoRoomSession(host, room, transport).StartAsync();
+                Assert.That(room.IsPublic, Is.False);
+                Assert.That((await backend.ListPublicAsync(List())).Count, Is.EqualTo(0));
+
+                int dataChanges = 0;
+                room.DataChanged += () => dataChanges++;
+                await room.SetPublicAsync(true);
+                await room.SetDataAsync("jp.map", "Map_PoC");
+                Assert.That(room.IsPublic, Is.True);
+                Assert.That(dataChanges, Is.EqualTo(2));
+                var rooms = await backend.ListPublicAsync(List());
+                Assert.That(rooms.Count, Is.EqualTo(1));
+                Assert.That(rooms[0].Id, Is.EqualTo(room.Code.ToString()));
+                Assert.That(rooms[0].Name, Is.EqualTo("Host"));
+                Assert.That(rooms[0].MemberCount, Is.EqualTo(1));
+                Assert.That(rooms[0].MaxMembers, Is.EqualTo(4));
+                Assert.That(rooms[0].GetData("jp.map"), Is.EqualTo("Map_PoC"));
+                Assert.That((await backend.ListPublicAsync(List("0.2"))).Count, Is.EqualTo(0));
+
+                await room.SetJoinableAsync(false);
+                Assert.That((await backend.ListPublicAsync(List())).Count, Is.EqualTo(0), "Closed rooms are not listed.");
+                await room.SetJoinableAsync(true);
+                await room.SetPublicAsync(false);
+                Assert.That((await backend.ListPublicAsync(List())).Count, Is.EqualTo(0));
+                Assert.That(Directory.GetFiles(registry), Is.Empty);
+            }
+            finally
+            {
+                await NgoTestPeers.DestroyAsync(host);
+                DeleteRegistry(registry);
+            }
+        });
+
+        [UnityTest]
+        public IEnumerator ClientFollowsVisibilityAndTheHostEntryTracksMembers() => UniTask.ToCoroutine(async () =>
+        {
+            string registry = NewRegistry();
+            var host = NgoTestPeers.Create("Host");
+            var client = NgoTestPeers.Create("Client");
+            try
+            {
+                var hostTransport = NgoTestPeers.Transport(host);
+                var hostBackend = new LoopbackRoomBackend(host, hostTransport, registry);
+                IRoom hostRoom = await hostBackend.CreateAsync(new RoomCreateOptions { MaxMembers = 4, Name = "Host", Version = "0.1" });
+                var hostSession = new NgoRoomSession(host, hostRoom, hostTransport);
+                await hostSession.StartAsync();
+                await hostRoom.SetPublicAsync(true);
+
+                var clientTransport = NgoTestPeers.Transport(client);
+                IRoom clientRoom = await new LoopbackRoomBackend(client, clientTransport, registry).JoinByCodeAsync(hostRoom.Code, default);
+                int clientChanges = 0;
+                clientRoom.DataChanged += () => clientChanges++;
+                await new NgoRoomSession(client, clientRoom, clientTransport).StartAsync().Timeout(TimeSpan.FromSeconds(10));
+                await UniTask.WaitUntil(() => clientRoom.IsPublic).Timeout(TimeSpan.FromSeconds(5));
+                Assert.That(clientChanges, Is.GreaterThanOrEqualTo(1));
+                await UniTask.WaitUntil(() => hostRoom.Members.Count == 2).Timeout(TimeSpan.FromSeconds(5));
+                Assert.That((await hostBackend.ListPublicAsync(List()))[0].MemberCount, Is.EqualTo(2));
+
+                await hostRoom.SetPublicAsync(false);
+                await UniTask.WaitUntil(() => !clientRoom.IsPublic).Timeout(TimeSpan.FromSeconds(5));
+
+                await hostRoom.SetPublicAsync(true);
+                await hostSession.LeaveAsync();
+                Assert.That(Directory.GetFiles(registry), Is.Empty, "Leaving removes the entry.");
+            }
+            finally
+            {
+                await NgoTestPeers.DestroyAsync(host, client);
+                DeleteRegistry(registry);
+            }
+        });
+
+        [Test]
+        public void ExpiredUnreadableFullAndForeignEntriesAreSkipped()
+        {
+            string registry = NewRegistry();
+            var manager = NgoTestPeers.Create("Lister");
+            try
+            {
+                Directory.CreateDirectory(registry);
+                void Write(string code, string json, double ageSeconds = 0)
+                {
+                    string path = Path.Combine(registry, code + ".json");
+                    File.WriteAllText(path, json);
+                    File.SetLastWriteTimeUtc(path, DateTime.UtcNow.AddSeconds(-ageSeconds));
+                }
+                string Json(string code, string version, int members, int max, bool open) =>
+                    "{\"code\":\"" + code + "\",\"name\":\"N\",\"version\":\"" + version + "\",\"members\":" + members +
+                    ",\"max\":" + max + ",\"open\":" + (open ? "true" : "false") + ",\"keys\":[],\"values\":[]}";
+                Write("ABC234", Json("ABC234", "0.1", 1, 4, true));
+                Write("BCD345", Json("BCD345", "0.1", 1, 4, true), 10);
+                Write("CDE456", "{");
+                Write("DEF567", Json("DEF567", "0.1", 4, 4, true));
+                Write("EFG678", Json("EFG678", "0.1", 1, 4, false));
+                Write("FGH789", Json("FGH789", "0.2", 1, 4, true));
+                Write("GHJ892", Json("GHJ892", "0.1", 1, 0, true));
+
+                var backend = new LoopbackRoomBackend(manager, NgoTestPeers.Transport(manager), registry);
+                var rooms = backend.ListPublicAsync(new RoomListOptions { Version = "0.1" }).GetAwaiter().GetResult();
+                var ids = new List<string>();
+                foreach (var listing in rooms) ids.Add(listing.Id);
+                ids.Sort(StringComparer.Ordinal);
+                Assert.That(ids, Is.EqualTo(new[] { "ABC234", "GHJ892" }), "Unknown capacity (0) is listed.");
+                Assert.That(backend.ListPublicAsync(new RoomListOptions { Version = "0.1", MaxResults = 1 }).GetAwaiter().GetResult().Count, Is.EqualTo(1));
+            }
+            finally
+            {
+                Object.Destroy(manager.gameObject);
+                DeleteRegistry(registry);
             }
         }
     }

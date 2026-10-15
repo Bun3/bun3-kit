@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 
@@ -39,6 +40,12 @@ namespace Bun3.Unity.Rooms
 
         /// <summary>Joins a room by backend id, as delivered by <see cref="JoinRequested"/>.</summary>
         UniTask<IRoom> JoinByIdAsync(string roomId, RoomJoinOptions options, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Lists public, open rooms with the same version and a free slot, in backend order. Allowed while in a room;
+        /// the result may include it. Fails with <see cref="RoomFailure.ServiceUnavailable"/> when the platform is unreachable.
+        /// </summary>
+        UniTask<IReadOnlyList<RoomListing>> ListPublicAsync(RoomListOptions options, CancellationToken cancellationToken = default);
 
         /// <summary>Raised with a room id when the player accepts an invite or joins a friend from the platform.</summary>
         event Action<string> JoinRequested;

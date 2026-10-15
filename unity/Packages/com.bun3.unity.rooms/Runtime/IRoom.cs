@@ -53,6 +53,9 @@ namespace Bun3.Unity.Rooms
         /// <summary>Whether the room accepts new members: the owner's latest <see cref="SetJoinableAsync"/>, true when created.</summary>
         bool IsJoinable { get; }
 
+        /// <summary>Whether the room appears in <see cref="IRoomBackend.ListPublicAsync"/>; false when created.</summary>
+        bool IsPublic { get; }
+
         /// <summary>Room data for <paramref name="key"/>; null when absent.</summary>
         string GetData(string key);
 
@@ -61,6 +64,9 @@ namespace Bun3.Unity.Rooms
 
         /// <summary>Opens or closes the room to new members. Closed rooms are not found by code. Owner only.</summary>
         UniTask SetJoinableAsync(bool joinable);
+
+        /// <summary>Shows or hides the room in public lists. Code and invite joins work either way. Owner only.</summary>
+        UniTask SetPublicAsync(bool isPublic);
 
         /// <summary>Makes <paramref name="memberId"/> the owner. Owner only.</summary>
         UniTask TransferOwnershipAsync(string memberId);

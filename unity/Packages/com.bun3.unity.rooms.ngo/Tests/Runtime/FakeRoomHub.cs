@@ -72,6 +72,7 @@ namespace Bun3.Unity.Rooms.Ngo.Tests
         public bool IsOwner => hub.OwnerId == LocalMemberId;
         public int MaxMembers => 0;
         public bool IsJoinable => true;
+        public bool IsPublic => false;
         public event Action MembersChanged;
         public event Action OwnerChanged;
         public event Action DataChanged { add { } remove { } }
@@ -87,6 +88,7 @@ namespace Bun3.Unity.Rooms.Ngo.Tests
         }
 
         public UniTask SetJoinableAsync(bool joinable) => UniTask.CompletedTask;
+        public UniTask SetPublicAsync(bool isPublic) => UniTask.CompletedTask;
 
         public UniTask TransferOwnershipAsync(string memberId)
         {
