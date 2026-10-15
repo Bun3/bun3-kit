@@ -17,11 +17,12 @@ The runtime assembly is `Bun3.Unity.Rooms.Steam` (Editor and Standalone, `BUN3_S
 ## Behaviour
 
 - Construct `SteamLobbyBackend` after `SteamRuntime.Initialize` returns `Ready`, and dispose it on shutdown. While Steam is not initialized every operation fails with `ServiceUnavailable`.
-- Lobby data: `bun3.code`, `bun3.ver`, `bun3.name`, `bun3.open` (owner; `"0"` while locked); member data `bun3.joined` (each member's Steam server time, used as `RoomMember.JoinedAt`). Room and member ids are decimal SteamIDs. `MaxMembers` is the lobby member limit.
+- Lobby data: `bun3.code`, `bun3.ver`, `bun3.name`, `bun3.open` (owner; `"0"` while locked), `bun3.public` (owner; `"1"` while public), `bun3.members` and `bun3.max` (owner; member count and capacity for lobby lists, because the docs do not promise member counts for lobbies the client is not in); member data `bun3.joined` (each member's Steam server time, used as `RoomMember.JoinedAt`). Room and member ids are decimal SteamIDs. `MaxMembers` is the lobby member limit.
 - Create: a new code is checked against existing joinable lobbies (up to five attempts), then an invisible lobby is created.
 - Join by code: worldwide search on `bun3.code` with a free slot. No match → `NotFound`; enter response Full → `Full`, Error → `ServiceUnavailable`, others → `NotFound`. A different `bun3.ver` leaves the lobby and reports `VersionMismatch`. Steam requests time out after 15 seconds (`ServiceUnavailable`).
 - `SetJoinableAsync(false)` hides the lobby from search and stores `bun3.open = "0"`. Every member reads it into `IsJoinable` and clears its own `connect` rich presence, so no friend sees "Join Game" during a match. Locked rooms report `NotFound`.
 - `DataChanged` fires on each lobby data update (not on member data updates); re-read the keys you need.
+- Public list: worldwide search on `bun3.public = 1` and `bun3.ver` with a free slot; lobbies with an unreadable code or member count are skipped. Locked lobbies never appear because Steam leaves non-joinable lobbies out of searches.
 - Invites: while in an open room each member publishes rich presence `connect = "+connect_lobby <lobby id>"`. Overlay invites (`GameLobbyJoinRequested_t`), "Join Game" (`GameRichPresenceJoinRequested_t`) and a `+connect_lobby <id>` launch argument raise `JoinRequested` with the lobby id; the launch argument is raised on the next frame. `TryOpenInviteOverlay` opens the Steam invite dialog.
 - A member joining, leaving or disconnecting refreshes the member list and raises `MembersChanged`; `OwnerChanged` fires when Steam hands lobby ownership to another member (the room's owner is the Steam lobby owner). Kicks and the local member's own leave notification raise `Closed`.
 

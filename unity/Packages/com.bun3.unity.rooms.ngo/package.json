@@ -1,7 +1,7 @@
 {
   "name": "com.bun3.unity.rooms.ngo",
   "displayName": "Bun3 Rooms NGO Adapter",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "unity": "6000.3",
   "description": "Runs Netcode for GameObjects for a room: owner hosts, members connect, host migration and a same-machine loopback backend.",
   "author": {
@@ -10,7 +10,7 @@
     "email": "bun3.dev@gmail.com"
   },
   "dependencies": {
-    "com.bun3.unity.rooms": "0.1.0",
+    "com.bun3.unity.rooms": "0.2.0",
     "com.unity.netcode.gameobjects": "2.13.1",
     "com.cysharp.unitask": "https://github.com/Cysharp/UniTask.git?path=src/UniTask/Assets/Plugins/UniTask"
   }

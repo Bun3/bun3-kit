@@ -1,7 +1,7 @@
 {
   "name": "com.bun3.unity.rooms",
   "displayName": "Bun3 Rooms",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "unity": "6000.3",
   "description": "Netcode- and platform-agnostic multiplayer rooms: short room codes, members, ownership and host election.",
   "author": {
