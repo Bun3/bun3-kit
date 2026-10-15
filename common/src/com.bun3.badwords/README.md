@@ -1,6 +1,6 @@
 # Bun3 Bad Words
 
-Allocation-free multilingual bad word detection for short user text (nicknames, chat lines). Twelve languages are bundled: Korean, English, Spanish, Portuguese, French, Italian, German, Dutch, Tagalog, Russian, Japanese and Chinese. Every language applies to every input, whatever the UI language. netstandard2.1, no dependencies, no UnityEngine reference.
+Allocation-free multilingual bad word detection, and masking, for short user text (nicknames, chat lines). Twelve languages are bundled: Korean, English, Spanish, Portuguese, French, Italian, German, Dutch, Tagalog, Russian, Japanese and Chinese. Every language applies to every input, whatever the UI language. netstandard2.1, no dependencies, no UnityEngine reference.
 
 ## Usage
 
@@ -8,6 +8,9 @@ Allocation-free multilingual bad word detection for short user text (nicknames, 
 using Bun3.BadWords;
 
 bool rejected = BadWordFilter.Default.ContainsBadWord(nickname);
+
+// "you f.u.c.k off" -> "you ******* off"; returns the same instance when nothing is blocked.
+string shown = BadWordFilter.Default.Mask(chatLine);
 
 // Consumer-specific additions on top of the bundled dictionary; the attribute lists the field in the editor tester.
 [BadWordTesterSource]
@@ -18,7 +21,11 @@ static readonly BadWordFilter Filter = new BadWordFilter(BadWordFilter.DefaultEn
 
 `Window > Bun3 > Bad Word Tester` checks text line by line against `Default` or any static field marked `[BadWordTesterSource]`, and shows the stream and normalized span that blocked each line. Fields are re-read after every script reload.
 
-`BadWordFilter.Default` builds on first access; touch it during boot to prewarm. Instances are immutable and thread-safe. `ContainsBadWord` allocates no managed memory.
+`BadWordFilter.Default` builds on first access; touch it during boot to prewarm. Instances are immutable and thread-safe. `ContainsBadWord` allocates no managed memory; `MarkBadWords` and `Mask` allocate.
+
+## Masking
+
+`MarkBadWords(text, marks)` flags every character of each blocked word that no allow entry covers, and returns true exactly when `ContainsBadWord` does. A word's mark runs from the first to the last character that formed it, so separators inside it are marked too (`f.u.c.k` is marked whole, `시 발` from `시` to `발`). Use it to mask text that carries markup the filter should not see, such as rich-text tags: scan the text with the tags removed and map the flags back. `Mask(text)` replaces marked characters with `*` and keeps whitespace.
 
 ## Entry grammar
 
@@ -46,7 +53,7 @@ Rejected: mixed stages, letters of any other script (Greek, Arabic; Cyrillic loo
 
 Not handled: initial-consonant projection of syllables, symbols imitating jamo, digit puns mixed into Korean words, two-letter splits (`fu ck`), self-censoring (`f*ck`), mathematical alphanumerics, conjoining jamo (pass NFC text). Korean entries may contain only Hangul and spaces.
 
-More limits: a leet digit next to an end boundary is not folded (`ass1`); `!` is not read as `i`; a precomposed syllable followed by loose jamo is not recombined; more than 32 matches in one scan count as a bad word, so an allowed word repeated 33 or more times blocks; Latin entries containing symbols treat those symbols as word boundaries. Latin Extended-A letters are not folded, romanized Japanese and Chinese are not covered, leet digits are not folded in Cyrillic, Han outside the Basic Multilingual Plane is dropped, Russian inflections outside the bundled roots may pass, and there are no Cebuano- or Irish-specific words. The kana/Han stream has no word boundaries, so its entries also match across a junction of two words and across dropped spaces and punctuation: two ordinary words can join into an entry. Such cases are handled with allow entries as they are found.
+More limits: a leet digit next to an end boundary is not folded (`ass1`); `!` is not read as `i`; a precomposed syllable followed by loose jamo is not recombined; more than 32 matches in one scan count as a bad word, so an allowed word repeated 33 or more times blocks; Latin entries containing symbols treat those symbols as word boundaries. Latin Extended-A letters are not folded, romanized Japanese and Chinese are not covered, leet digits are not folded in Cyrillic, Han outside the Basic Multilingual Plane is dropped, masking can only cover whole characters that formed a word (a final consonant typed as a loose jamo is masked with the syllable that took it), Russian inflections outside the bundled roots may pass, and there are no Cebuano- or Irish-specific words. The kana/Han stream has no word boundaries, so its entries also match across a junction of two words and across dropped spaces and punctuation: two ordinary words can join into an entry. Such cases are handled with allow entries as they are found.
 
 Memory: inputs over 256 characters use a per-thread scratch buffer that grows to twice the longest input seen on that thread and is kept; the first longer input on each thread allocates. Cap input length in the consumer; nicknames and chat lines are far below it.
 

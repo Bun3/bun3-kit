@@ -27,15 +27,26 @@ namespace Bun3.BadWords
         const string initialJamo = "\u3131\u3132\u3134\u3137\u3138\u3139\u3141\u3142\u3143\u3145\u3146\u3147\u3148\u3149\u314A\u314B\u314C\u314D\u314E";
 
         /// <summary>Writes the composed text and returns its length (never more than <paramref name="source"/>.Length).</summary>
-        internal static int Compose(ReadOnlySpan<char> source, Span<char> destination)
+        internal static int Compose(ReadOnlySpan<char> source, Span<char> destination) =>
+            Compose(source, destination, default, default, default);
+
+        /// <summary>
+        /// Like <see cref="Compose(ReadOnlySpan{char}, Span{char})"/>; when <paramref name="first"/> is not empty, also writes the
+        /// first and last <paramref name="index"/> value of the source characters behind each destination character.
+        /// </summary>
+        internal static int Compose(ReadOnlySpan<char> source, Span<char> destination, ReadOnlySpan<int> index, Span<int> first, Span<int> last)
         {
+            bool map = !first.IsEmpty;
             int written = 0, initial = -1, vowel = -1, final = 0;
-            foreach (char c in source)
+            int from = 0, to = 0, vowelTo = 0, finalFrom = 0;
+            for (int k = 0; k < source.Length; k++)
             {
+                char c = source[k];
+                int at = map ? index[k] : 0;
                 if (c >= FirstSyllable && c <= LastSyllable)
                 {
-                    Flush(destination, ref written, ref initial, ref vowel, ref final);
-                    destination[written++] = c;
+                    Flush(destination, ref written, ref initial, ref vowel, ref final, first, last, from, to);
+                    TextNormalizer.Put(destination, ref written, c, first, last, at);
                 }
                 else if (c >= FirstConsonant && c < FirstVowel)
                 {
@@ -45,13 +56,22 @@ namespace Bun3.BadWords
                         int next = final == 0 ? finalOf[consonant] : CombineFinal(final, finalOf[consonant]);
                         if (next > 0)
                         {
+                            if (final == 0) finalFrom = at;
                             final = next;
+                            to = at;
                             continue;
                         }
                     }
-                    Flush(destination, ref written, ref initial, ref vowel, ref final);
-                    if (initialOf[consonant] >= 0) initial = initialOf[consonant];
-                    else destination[written++] = c;
+                    Flush(destination, ref written, ref initial, ref vowel, ref final, first, last, from, to);
+                    if (initialOf[consonant] >= 0)
+                    {
+                        initial = initialOf[consonant];
+                        from = to = at;
+                    }
+                    else
+                    {
+                        TextNormalizer.Put(destination, ref written, c, first, last, at);
+                    }
                 }
                 else if (c >= FirstVowel && c <= LastVowel)
                 {
@@ -59,6 +79,7 @@ namespace Bun3.BadWords
                     if (initial >= 0 && vowel < 0)
                     {
                         vowel = v;
+                        to = vowelTo = at;
                         continue;
                     }
                     if (vowel >= 0 && final == 0)
@@ -67,35 +88,49 @@ namespace Bun3.BadWords
                         if (combined >= 0)
                         {
                             vowel = combined;
+                            to = vowelTo = at;
                             continue;
                         }
                     }
                     if (initial >= 0 && vowel >= 0 && final > 0)
                     {
+                        // The last final consonant moves to the next syllable.
+                        int moved = to;
                         int nextInitial = SplitFinal(final, out final);
-                        Flush(destination, ref written, ref initial, ref vowel, ref final);
+                        Flush(destination, ref written, ref initial, ref vowel, ref final, first, last, from, final > 0 ? finalFrom : vowelTo);
                         initial = nextInitial;
                         vowel = v;
+                        from = moved;
+                        to = vowelTo = at;
                         continue;
                     }
-                    Flush(destination, ref written, ref initial, ref vowel, ref final);
+                    Flush(destination, ref written, ref initial, ref vowel, ref final, first, last, from, to);
                     vowel = v;
+                    from = to = vowelTo = at;
                 }
                 else
                 {
-                    Flush(destination, ref written, ref initial, ref vowel, ref final);
-                    destination[written++] = c;
+                    Flush(destination, ref written, ref initial, ref vowel, ref final, first, last, from, to);
+                    TextNormalizer.Put(destination, ref written, c, first, last, at);
                 }
             }
-            Flush(destination, ref written, ref initial, ref vowel, ref final);
+            Flush(destination, ref written, ref initial, ref vowel, ref final, first, last, from, to);
             return written;
         }
 
-        static void Flush(Span<char> destination, ref int written, ref int initial, ref int vowel, ref int final)
+        static void Flush(Span<char> destination, ref int written, ref int initial, ref int vowel, ref int final, Span<int> first, Span<int> last, int from, int to)
         {
-            if (initial >= 0 && vowel >= 0) destination[written++] = (char)(FirstSyllable + (initial * 21 + vowel) * 28 + final);
-            else if (initial >= 0) destination[written++] = initialJamo[initial];
-            else if (vowel >= 0) destination[written++] = (char)(FirstVowel + vowel);
+            if (initial >= 0 || vowel >= 0)
+            {
+                if (!first.IsEmpty)
+                {
+                    first[written] = from;
+                    last[written] = to;
+                }
+                if (initial >= 0 && vowel >= 0) destination[written++] = (char)(FirstSyllable + (initial * 21 + vowel) * 28 + final);
+                else if (initial >= 0) destination[written++] = initialJamo[initial];
+                else destination[written++] = (char)(FirstVowel + vowel);
+            }
             initial = -1;
             vowel = -1;
             final = 0;

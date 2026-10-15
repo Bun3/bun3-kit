@@ -115,12 +115,21 @@ namespace Bun3.BadWords
 
         internal bool ContainsBlocked(ReadOnlySpan<char> text) => TryFindBlocked(text, out _);
 
-        // A block span is suppressed when an allow span of the same scan covers it; more than SpanCapacity blocks is a hit.
         internal bool TryFindBlocked(ReadOnlySpan<char> text, out Match blocked)
+        {
+            Span<Match> first = stackalloc Match[1];
+            bool found = FindBlocked(text, first) > 0;
+            blocked = found ? first[0] : default;
+            return found;
+        }
+
+        // A block span is suppressed when an allow span of the same scan covers it; blocks past SpanCapacity are always hits.
+        // Writes hits to output until it is full and returns the total number of hits.
+        internal int FindBlocked(ReadOnlySpan<char> text, Span<Match> output)
         {
             Span<Match> blocks = stackalloc Match[SpanCapacity];
             Span<Match> allows = stackalloc Match[SpanCapacity];
-            int blockCount = 0, allowCount = 0;
+            int blockCount = 0, allowCount = 0, found = 0;
             foreach (Match match in Matches(text))
             {
                 PatternFlags flags = patternFlags[match.Pattern];
@@ -131,8 +140,8 @@ namespace Bun3.BadWords
                 }
                 else if (blockCount == SpanCapacity)
                 {
-                    blocked = match;
-                    return true;
+                    if (found < output.Length) output[found] = match;
+                    found++;
                 }
                 else
                 {
@@ -144,14 +153,11 @@ namespace Bun3.BadWords
                 bool covered = false;
                 for (int a = 0; a < allowCount && !covered; a++)
                     covered = allows[a].Start <= blocks[b].Start && blocks[b].End <= allows[a].End;
-                if (!covered)
-                {
-                    blocked = blocks[b];
-                    return true;
-                }
+                if (covered) continue;
+                if (found < output.Length) output[found] = blocks[b];
+                found++;
             }
-            blocked = default;
-            return false;
+            return found;
         }
 
         static bool IsValid(PatternFlags flags, ReadOnlySpan<char> text, Match match)

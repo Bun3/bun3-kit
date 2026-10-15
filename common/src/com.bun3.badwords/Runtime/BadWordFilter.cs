@@ -109,6 +109,83 @@ namespace Bun3.BadWords
             return Find(text, buffer.Slice(0, text.Length), buffer.Slice(text.Length, text.Length), out _) != StreamKind.None;
         }
 
+        /// <summary>
+        /// Sets <paramref name="marks"/> to true for every character of <paramref name="text"/> inside a blocked word that no allow entry covers.
+        /// A word's mark runs from the first to the last character that formed it, separators between them included.
+        /// </summary>
+        /// <param name="text">The text to scan.</param>
+        /// <param name="marks">One flag per character of <paramref name="text"/>; flags outside blocked words are left unchanged.</param>
+        /// <returns>True when anything was marked, which is exactly when <see cref="ContainsBadWord"/> returns true.</returns>
+        /// <exception cref="ArgumentException"><paramref name="marks"/> is not as long as <paramref name="text"/>.</exception>
+        /// <remarks>Allocates working buffers on every call.</remarks>
+        public bool MarkBadWords(ReadOnlySpan<char> text, Span<bool> marks)
+        {
+            if (marks.Length != text.Length) throw new ArgumentException("marks must be as long as text.", nameof(marks));
+            if (text.IsEmpty) return false;
+            int n = text.Length;
+            var work = new char[n];
+            var stream = new char[n];
+            var index = new int[n];
+            var first = new int[n];
+            var last = new int[n];
+            var collapsedFirst = new int[n];
+            var collapsedLast = new int[n];
+
+            int length = TextNormalizer.Hangul(text, work, stream, index, first, last);
+            bool found = Mark(korean, stream.AsSpan(0, length), first, last, marks);
+            length = TextNormalizer.Latin(text, work, stream, index, first, last);
+            if (length > 0)
+            {
+                found |= Mark(latin, stream.AsSpan(0, length), first, last, marks);
+                length = TextNormalizer.Collapse(stream.AsSpan(0, length), work, first, last, collapsedFirst, collapsedLast);
+                found |= Mark(latinCollapsed, work.AsSpan(0, length), collapsedFirst, collapsedLast, marks);
+            }
+            if (TextNormalizer.HasCyrillic(text))
+            {
+                length = TextNormalizer.Cyrillic(text, work, stream, index, first, last);
+                found |= Mark(cyrillic, stream.AsSpan(0, length), first, last, marks);
+                length = TextNormalizer.Collapse(stream.AsSpan(0, length), work, first, last, collapsedFirst, collapsedLast);
+                found |= Mark(cyrillicCollapsed, work.AsSpan(0, length), collapsedFirst, collapsedLast, marks);
+            }
+            if (TextNormalizer.HasCjk(text))
+            {
+                length = TextNormalizer.Cjk(text, stream, first, last);
+                found |= Mark(cjk, stream.AsSpan(0, length), first, last, marks);
+            }
+            return found;
+        }
+
+        /// <summary>
+        /// Returns <paramref name="text"/> with every character <see cref="MarkBadWords"/> marks replaced by <c>*</c>, whitespace excepted,
+        /// or <paramref name="text"/> itself when it has no blocked word.
+        /// </summary>
+        /// <exception cref="ArgumentNullException"><paramref name="text"/> is null.</exception>
+        /// <remarks>Allocates on every call.</remarks>
+        public string Mask(string text)
+        {
+            if (text == null) throw new ArgumentNullException(nameof(text));
+            var marks = new bool[text.Length];
+            if (!MarkBadWords(text, marks)) return text;
+            char[] masked = text.ToCharArray();
+            for (int i = 0; i < masked.Length; i++)
+                if (marks[i] && !char.IsWhiteSpace(masked[i])) masked[i] = '*';
+            return new string(masked);
+        }
+
+        static bool Mark(AhoCorasick automaton, ReadOnlySpan<char> stream, int[] first, int[] last, Span<bool> marks)
+        {
+            int count = automaton.FindBlocked(stream, Span<Match>.Empty);
+            if (count == 0) return false;
+            var matches = new Match[count];
+            automaton.FindBlocked(stream, matches);
+            foreach (Match match in matches)
+            {
+                int start = first[match.Start];
+                marks.Slice(start, last[match.End - 1] - start + 1).Fill(true);
+            }
+            return true;
+        }
+
         static char[] Scratch(int length)
         {
             char[] buffer = scratch;

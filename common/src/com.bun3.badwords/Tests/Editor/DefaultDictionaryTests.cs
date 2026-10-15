@@ -20,7 +20,7 @@ namespace Bun3.BadWords.Tests
         [TestCase("장애새끼")]
         [TestCase("개세끼")]
         public void BlocksStrongWords(string text) =>
-            Assert.That(BadWordFilter.Default.ContainsBadWord(text), Is.True, text);
+            AssertBlocked(text);
 
         [TestCase("시발점")]
         [TestCase("다시 발견")]
@@ -57,7 +57,7 @@ namespace Bun3.BadWords.Tests
         [TestCase("rosmarin")]
         [TestCase("tlqkf")]
         public void PassesOrdinaryText(string text) =>
-            Assert.That(BadWordFilter.Default.ContainsBadWord(text), Is.False, BadWordFilter.Default.Explain(text));
+            AssertPasses(text);
 
         // Owner decision (2026-10-13): arguable words pass; compounds such as 개새끼 stay blocked.
         [TestCase("개드립")]
@@ -87,7 +87,7 @@ namespace Bun3.BadWords.Tests
         [TestCase("enby")]
         [TestCase("cishet")]
         public void PassesOwnerAllowedWords(string text) =>
-            Assert.That(BadWordFilter.Default.ContainsBadWord(text), Is.False, BadWordFilter.Default.Explain(text));
+            AssertPasses(text);
 
         [TestCase("hijo de puta")]
         [TestCase("pendejo")]
@@ -139,7 +139,7 @@ namespace Bun3.BadWords.Tests
         [TestCase("cuntass")]
         [TestCase("MrHands")]
         public void BlocksStrongWordsInLatinScriptLanguages(string text) =>
-            Assert.That(BadWordFilter.Default.ContainsBadWord(text), Is.True, text);
+            AssertBlocked(text);
 
         // Nicknames glue words, so word-boundary roots miss joined phrases.
         [TestCase("HijoDePuta")]
@@ -155,7 +155,7 @@ namespace Bun3.BadWords.Tests
         [TestCase("FiglioDiTroia")]
         [TestCase("FickDich")]
         public void BlocksJoinedFormsOfLatinScriptPhrases(string text) =>
-            Assert.That(BadWordFilter.Default.ContainsBadWord(text), Is.True, text);
+            AssertBlocked(text);
 
         [TestCase("con")]
         [TestCase("del")]
@@ -230,7 +230,7 @@ namespace Bun3.BadWords.Tests
         [TestCase("cuntas")]
         [TestCase("cuntasóir")]
         public void PassesEverydayWordsInLatinScriptLanguages(string text) =>
-            Assert.That(BadWordFilter.Default.ContainsBadWord(text), Is.False, BadWordFilter.Default.Explain(text));
+            AssertPasses(text);
 
         [TestCase("хуй")]
         [TestCase("x\u0443\u0439")]
@@ -284,7 +284,7 @@ namespace Bun3.BadWords.Tests
         [TestCase("バカフェラ")]
         [TestCase("キスかフェラ")]
         public void BlocksStrongWordsInOtherScripts(string text) =>
-            Assert.That(BadWordFilter.Default.ContainsBadWord(text), Is.True, text);
+            AssertBlocked(text);
 
         [TestCase("тебе")]
         [TestCase("хлеб")]
@@ -360,7 +360,7 @@ namespace Bun3.BadWords.Tests
         [TestCase("ウルトラマンコレクション")]
         [TestCase("カフェライブ")]
         public void PassesEverydayWordsInOtherScripts(string text) =>
-            Assert.That(BadWordFilter.Default.ContainsBadWord(text), Is.False, BadWordFilter.Default.Explain(text));
+            AssertPasses(text);
 
         // Owner ruling (2026-10-14): mild words pass in every language.
         [TestCase("mierda")]
@@ -380,7 +380,30 @@ namespace Bun3.BadWords.Tests
         [TestCase("shithead")]
         [TestCase("pissing")]
         public void PassesMildWords(string text) =>
+            AssertPasses(text);
+
+        [Test]
+        public void MaskAgreesWithContainsBadWordOnEveryDefaultEntry()
+        {
+            foreach (string entry in BadWordFilter.DefaultEntries)
+            {
+                string body = entry.TrimStart('!').Trim('|');
+                bool masked = BadWordFilter.Default.Mask(body) != body;
+                Assert.That(masked, Is.EqualTo(BadWordFilter.Default.ContainsBadWord(body)), entry);
+            }
+        }
+
+        static void AssertBlocked(string text)
+        {
+            Assert.That(BadWordFilter.Default.ContainsBadWord(text), Is.True, text);
+            Assert.That(BadWordFilter.Default.Mask(text), Does.Contain("*"), text);
+        }
+
+        static void AssertPasses(string text)
+        {
             Assert.That(BadWordFilter.Default.ContainsBadWord(text), Is.False, BadWordFilter.Default.Explain(text));
+            Assert.That(BadWordFilter.Default.Mask(text), Is.SameAs(text));
+        }
 
         [Test]
         public void ReportsDefaultBuildCost()

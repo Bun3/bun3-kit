@@ -53,71 +53,107 @@ namespace Bun3.BadWords
             }
         }
 
-        internal static int Hangul(ReadOnlySpan<char> text, Span<char> work, Span<char> destination)
+        // Every stream has a mapped overload: when first is not empty it also receives, per output character, the first and
+        // last text index behind it (index is scratch of text length).
+
+        internal static int Hangul(ReadOnlySpan<char> text, Span<char> work, Span<char> destination) =>
+            Hangul(text, work, destination, default, default, default);
+
+        internal static int Hangul(ReadOnlySpan<char> text, Span<char> work, Span<char> destination, Span<int> index, Span<int> first, Span<int> last)
         {
+            bool map = !first.IsEmpty;
             int count = 0;
-            foreach (char raw in text)
+            for (int i = 0; i < text.Length; i++)
             {
-                char c = Clean(raw);
-                if (IsHangul(c)) work[count++] = c;
+                char c = Clean(text[i]);
+                if (!IsHangul(c)) continue;
+                if (map) index[count] = i;
+                work[count++] = c;
             }
-            return HangulComposer.Compose(work.Slice(0, count), destination);
+            return HangulComposer.Compose(work.Slice(0, count), destination, map ? index.Slice(0, count) : default, first, last);
         }
 
-        internal static int Latin(ReadOnlySpan<char> text, Span<char> work, Span<char> destination)
+        internal static int Latin(ReadOnlySpan<char> text, Span<char> work, Span<char> destination) =>
+            Latin(text, work, destination, default, default, default);
+
+        internal static int Latin(ReadOnlySpan<char> text, Span<char> work, Span<char> destination, Span<int> index, Span<int> first, Span<int> last)
         {
+            bool map = !first.IsEmpty;
             int count = 0;
-            foreach (char raw in text)
+            for (int i = 0; i < text.Length; i++)
             {
-                char c = Clean(raw);
+                char c = Clean(text[i]);
                 if (c == Removed) continue;
                 char letter = LatinLetter(c);
-                if (letter != ' ') work[count++] = letter;
-                else if (count > 0 && work[count - 1] != ' ') work[count++] = ' ';
+                if (letter == ' ' && (count == 0 || work[count - 1] == ' ')) continue;
+                if (map) index[count] = i;
+                work[count++] = letter;
             }
             if (count > 0 && work[count - 1] == ' ') count--;
-            return JoinSingleLetters(work.Slice(0, count), destination);
+            return JoinSingleLetters(work.Slice(0, count), destination, map ? index.Slice(0, count) : default, first, last);
         }
 
-        internal static int Cyrillic(ReadOnlySpan<char> text, Span<char> work, Span<char> destination)
+        internal static int Cyrillic(ReadOnlySpan<char> text, Span<char> work, Span<char> destination) =>
+            Cyrillic(text, work, destination, default, default, default);
+
+        internal static int Cyrillic(ReadOnlySpan<char> text, Span<char> work, Span<char> destination, Span<int> index, Span<int> first, Span<int> last)
         {
+            bool map = !first.IsEmpty;
             int count = 0;
-            foreach (char raw in text)
+            for (int i = 0; i < text.Length; i++)
             {
-                char letter = CyrillicLetter(raw);
+                char letter = CyrillicLetter(text[i]);
                 if (letter == Removed) continue;
-                if (letter != ' ') work[count++] = letter;
-                else if (count > 0 && work[count - 1] != ' ') work[count++] = ' ';
+                if (letter == ' ' && (count == 0 || work[count - 1] == ' ')) continue;
+                if (map) index[count] = i;
+                work[count++] = letter;
             }
             if (count > 0 && work[count - 1] == ' ') count--;
-            return JoinSingleLetters(work.Slice(0, count), destination);
+            return JoinSingleLetters(work.Slice(0, count), destination, map ? index.Slice(0, count) : default, first, last);
         }
+
+        internal static int Cjk(ReadOnlySpan<char> text, Span<char> destination) => Cjk(text, destination, default, default);
 
         // Neither Japanese nor Chinese separates words with spaces, so separators are dropped rather than kept as boundaries.
-        internal static int Cjk(ReadOnlySpan<char> text, Span<char> destination)
+        internal static int Cjk(ReadOnlySpan<char> text, Span<char> destination, Span<int> first, Span<int> last)
         {
+            bool map = !first.IsEmpty;
             int count = 0;
-            foreach (char raw in text)
+            for (int i = 0; i < text.Length; i++)
             {
-                char c = Kana(raw);
+                char c = Kana(text[i]);
                 if (c == '\u3099' || c == '\u309B' || c == '\uFF9E')
                 {
-                    if (count > 0) destination[count - 1] = Voiced(destination[count - 1]);
+                    if (count == 0) continue;
+                    destination[count - 1] = Voiced(destination[count - 1]);
+                    if (map) last[count - 1] = i;
                 }
                 else if (c == '\u309A' || c == '\u309C' || c == '\uFF9F')
                 {
-                    if (count > 0 && semiVoiceable.IndexOf(destination[count - 1]) >= 0) destination[count - 1] = (char)(destination[count - 1] + 2);
+                    if (count == 0 || semiVoiceable.IndexOf(destination[count - 1]) < 0) continue;
+                    destination[count - 1] = (char)(destination[count - 1] + 2);
+                    if (map) last[count - 1] = i;
                 }
                 else if ((c >= '\u30A1' && c <= '\u30FA') || c == '\u3005')
                 {
-                    destination[count++] = c;
+                    Put(destination, ref count, c, first, last, i);
                 }
                 else if (IsHan(c))
                 {
-                    destination[count++] = Simplified(c);
+                    Put(destination, ref count, Simplified(c), first, last, i);
                 }
             }
             return count;
+        }
+
+        internal static void Put(Span<char> destination, ref int written, char c, Span<int> first, Span<int> last, int index)
+        {
+            if (!first.IsEmpty)
+            {
+                first[written] = index;
+                last[written] = index;
+            }
+            destination[written++] = c;
         }
 
         internal static char Kana(char c)
@@ -199,11 +235,28 @@ namespace Bun3.BadWords
             return Clean(c) == Removed ? Removed : ' ';
         }
 
-        internal static int Collapse(ReadOnlySpan<char> text, Span<char> destination)
+        internal static int Collapse(ReadOnlySpan<char> text, Span<char> destination) =>
+            Collapse(text, destination, default, default, default, default);
+
+        // Mapped: a collapsed run spans from its first character's textFirst to its last character's textLast.
+        internal static int Collapse(ReadOnlySpan<char> text, Span<char> destination, ReadOnlySpan<int> textFirst, ReadOnlySpan<int> textLast, Span<int> first, Span<int> last)
         {
+            bool map = !first.IsEmpty;
             int count = 0;
-            foreach (char c in text)
-                if (count == 0 || destination[count - 1] != c) destination[count++] = c;
+            for (int i = 0; i < text.Length; i++)
+            {
+                if (count > 0 && destination[count - 1] == text[i])
+                {
+                    if (map) last[count - 1] = textLast[i];
+                    continue;
+                }
+                if (map)
+                {
+                    first[count] = textFirst[i];
+                    last[count] = textLast[i];
+                }
+                destination[count++] = text[i];
+            }
             return count;
         }
 
@@ -221,24 +274,25 @@ namespace Bun3.BadWords
         }
 
         // Input holds tokens separated by single spaces with no leading or trailing space.
-        static int JoinSingleLetters(ReadOnlySpan<char> text, Span<char> destination)
+        static int JoinSingleLetters(ReadOnlySpan<char> text, Span<char> destination, ReadOnlySpan<int> index, Span<int> first, Span<int> last)
         {
+            bool map = !first.IsEmpty;
             int written = 0, i = 0;
             while (i < text.Length)
             {
-                if (written > 0) destination[written++] = ' ';
+                if (written > 0) Put(destination, ref written, ' ', first, last, map ? index[i - 1] : 0);
                 int run = 0;
                 while (i + 2 * run < text.Length && (i + 2 * run + 1 == text.Length || text[i + 2 * run + 1] == ' ')) run++;
                 if (run >= 3)
                 {
-                    for (int k = 0; k < run; k++) destination[written++] = text[i + 2 * k];
+                    for (int k = 0; k < run; k++) Put(destination, ref written, text[i + 2 * k], first, last, map ? index[i + 2 * k] : 0);
                     i += 2 * run;
                 }
                 else
                 {
                     int end = i;
                     while (end < text.Length && text[end] != ' ') end++;
-                    for (int k = i; k < end; k++) destination[written++] = text[k];
+                    for (int k = i; k < end; k++) Put(destination, ref written, text[k], first, last, map ? index[k] : 0);
                     i = end + 1;
                 }
             }
