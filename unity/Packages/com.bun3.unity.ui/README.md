@@ -5,11 +5,12 @@ Dev kits for Unity UI. A small collection of utilities that simplify common patt
 ## Features
 
 - **`ButtonInteractableScope`** — aggregate multiple conditions into a single `Button.interactable` state, and replay the disabled reason (a message or an action) through `IButtonDisabledHandler` when the user clicks the disabled button.
+- **`VirtualList`** — vertical virtualized `ScrollRect` list with variable item heights. Binds and measures only visible cells, keeps the reading position when items are measured, appended, or removed from the start, and follows new items only at the end.
 
 ## Requirements
 
 - `UnityEngine.UI` (built-in)
-- [`com.bun3.unity.core`](../com.bun3.unity.core) 0.3.0
+- [`com.bun3.unity.core`](../com.bun3.unity.core) 0.5.0
 
 ## Installation
 
@@ -46,6 +47,35 @@ If several conditions fail together, the **first failure that carries a reason**
 > A `ButtonDisabledClickReceiver` component is attached to the button's GameObject automatically at runtime to store the reason and catch the click. Seeing it in the Inspector is expected — do not add or edit it by hand.
 
 A complete example is included as a Package Manager sample (`Button Interactable Scope`). See `Samples/ButtonInteractableScope/` after import.
+
+### VirtualList
+
+```csharp
+using System.Collections.Generic;
+using Bun3.Unity.UI.Lists;
+using UnityEngine;
+
+public sealed class ChatLogView : MonoBehaviour, IVirtualListSource
+{
+    [SerializeField] VirtualList _list;
+    [SerializeField] ChatLine _linePrefab;
+    readonly List<string> _lines = new();
+
+    public int Count => _lines.Count;
+    public RectTransform CreateCell(RectTransform parent) => (RectTransform)Instantiate(_linePrefab, parent).transform;
+    public void BindCell(RectTransform cell, int index) => cell.GetComponent<ChatLine>().Bind(_lines[index]);
+
+    void Start() => _list.SetSource(this);
+
+    public void Append(string line)
+    {
+        _lines.Add(line);
+        _list.NotifyAppended(1); // follows only if the view was at the end
+    }
+}
+```
+
+Put `VirtualList` on the `ScrollRect` GameObject. No LayoutGroup or ContentSizeFitter on the content; each cell root reports a preferred height.
 
 ## Links
 

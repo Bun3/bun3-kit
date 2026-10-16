@@ -15,13 +15,13 @@ namespace Bun3.Unity.UI.Editor.Tests
             public int BindCount;
             public UniTaskCompletionSource WaitSource;
 
-            protected override void OnData(string data)
+            protected internal override void OnData(string data)
             {
                 Last = data;
                 BindCount++;
             }
 
-            protected override UniTask WaitAsync(float duration, CancellationToken cancellationToken)
+            protected internal override UniTask WaitAsync(float duration, CancellationToken cancellationToken)
                 => (WaitSource = new UniTaskCompletionSource()).Task;
         }
 

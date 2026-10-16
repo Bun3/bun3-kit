@@ -6,6 +6,12 @@
       "source": "local",
       "dependencies": {}
     },
+    "com.bun3.chat": {
+      "version": "file:../../common/src/com.bun3.chat",
+      "depth": 0,
+      "source": "local",
+      "dependencies": {}
+    },
     "com.bun3.common": {
       "version": "file:../../common/src/com.bun3.common",
       "depth": 0,
@@ -79,6 +85,15 @@
       "dependencies": {
         "com.bun3.unity.audio": "0.4.0",
         "com.bun3.unity.acoustics": "0.2.0"
+      }
+    },
+    "com.bun3.unity.chat.ngo": {
+      "version": "file:com.bun3.unity.chat.ngo",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {
+        "com.bun3.chat": "0.1.0",
+        "com.unity.netcode.gameobjects": "2.13.1"
       }
     },
     "com.bun3.unity.core": {

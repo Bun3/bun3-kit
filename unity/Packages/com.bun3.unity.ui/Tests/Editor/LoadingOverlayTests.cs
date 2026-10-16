@@ -12,7 +12,7 @@ namespace Bun3.Unity.UI.Editor.Tests
         {
             public float LastProgress = -1f;
 
-            protected override void OnProgress(float progress01) => LastProgress = progress01;
+            protected internal override void OnProgress(float progress01) => LastProgress = progress01;
         }
 
         private sealed class TestLoadingOverlay : LoadingOverlay

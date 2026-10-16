@@ -1,6 +1,7 @@
 {
   "dependencies": {
     "com.bun3.badwords": "file:../../common/src/com.bun3.badwords",
+    "com.bun3.chat": "file:../../common/src/com.bun3.chat",
     "com.bun3.common": "file:../../common/src/com.bun3.common",
     "com.bun3.gameplay": "file:../../common/src/com.bun3.gameplay",
     "com.cysharp.unitask": "https://github.com/Cysharp/UniTask.git?path=src/UniTask/Assets/Plugins/UniTask",
@@ -68,6 +69,7 @@
   },
   "testables": [
     "com.bun3.badwords",
+    "com.bun3.chat",
     "com.bun3.common",
     "com.bun3.gameplay"
   ]

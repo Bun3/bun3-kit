@@ -27,13 +27,13 @@ namespace Bun3.Unity.UI.Editor.Tests
             public int BlockedChanges;
             public bool LastBlocked;
 
-            protected override UniTask PlayShowAsync(CancellationToken cancellationToken)
+            protected internal override UniTask PlayShowAsync(CancellationToken cancellationToken)
                 => OpenSource?.Task ?? UniTask.CompletedTask;
 
-            protected override UniTask PlayHideAsync(CancellationToken cancellationToken)
+            protected internal override UniTask PlayHideAsync(CancellationToken cancellationToken)
                 => CloseSource?.Task ?? UniTask.CompletedTask;
 
-            protected override bool OnBackRequested()
+            protected internal override bool OnBackRequested()
             {
                 BackRequests++;
                 return !RejectBack;
@@ -50,7 +50,7 @@ namespace Bun3.Unity.UI.Editor.Tests
             public int LastOrderIndex = -1;
             public bool LastIsTopmost;
 
-            protected override void OnStackOrderChanged(int stackIndex, bool isTopmost)
+            protected internal override void OnStackOrderChanged(int stackIndex, bool isTopmost)
             {
                 LastOrderIndex = stackIndex;
                 LastIsTopmost = isTopmost;

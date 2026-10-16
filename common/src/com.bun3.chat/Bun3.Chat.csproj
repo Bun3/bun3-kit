@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <LangVersion>9.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <RootNamespace>Bun3.Chat</RootNamespace>
+    <AssemblyName>Bun3.Chat</AssemblyName>
+    <PackageId>Bun3.Chat</PackageId>
+    <Version>0.1.0</Version>
+    <Authors>Bun3</Authors>
+    <RepositoryUrl>https://github.com/Bun3/bun3-kit</RepositoryUrl>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="Tests/**/*.cs" />
+  </ItemGroup>
+
+</Project>

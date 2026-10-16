@@ -5,6 +5,12 @@ All notable changes to this package will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-10-12
+
+### Added
+
+- `VirtualList` (`Bun3.Unity.UI.Lists`): vertical virtualized list for `ScrollRect` with variable item heights. Only visible items are bound and measured; the rest use per-item estimates (`IVirtualListEstimator`) or `EstimatedItemHeight`. Appends, removals from the start, measurement and width changes keep the reading position; new items are followed only within `EndThreshold` of the end. Offsets use a Fenwick tree, so 10,000 items stay responsive.
+
 ## [0.2.0] - 2026-07-26
 
 ### Changed
