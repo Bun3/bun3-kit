@@ -1,0 +1,8 @@
+{
+    "name": "Bun3.Unity.Steam",
+    "rootNamespace": "Bun3.Unity.Steam",
+    "references": [ "Bun3.Unity.Core", "com.rlabrecque.steamworks.net" ],
+    "includePlatforms": [ "Editor", "LinuxStandalone64", "macOSStandalone", "WindowsStandalone64" ],
+    "autoReferenced": true,
+    "defineConstraints": [ "BUN3_STEAMWORKS" ]
+}

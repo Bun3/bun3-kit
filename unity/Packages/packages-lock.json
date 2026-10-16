@@ -68,7 +68,8 @@
       "source": "embedded",
       "dependencies": {
         "com.bun3.unity.audio.dissonance": "0.2.0",
-        "com.bun3.unity.audio.steamaudio": "0.4.0"
+        "com.bun3.unity.audio": "0.4.0",
+        "com.bun3.unity.audio.steamaudio": "0.5.0"
       }
     },
     "com.bun3.unity.audio.steamaudio": {
@@ -76,7 +77,8 @@
       "depth": 0,
       "source": "embedded",
       "dependencies": {
-        "com.bun3.unity.audio": "0.3.0"
+        "com.bun3.unity.audio": "0.4.0",
+        "com.bun3.unity.acoustics": "0.2.0"
       }
     },
     "com.bun3.unity.core": {
@@ -101,11 +103,65 @@
       "source": "embedded",
       "dependencies": {}
     },
+    "com.bun3.unity.rooms": {
+      "version": "file:com.bun3.unity.rooms",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {
+        "com.cysharp.unitask": "https://github.com/Cysharp/UniTask.git?path=src/UniTask/Assets/Plugins/UniTask"
+      }
+    },
+    "com.bun3.unity.rooms.ngo": {
+      "version": "file:com.bun3.unity.rooms.ngo",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {
+        "com.bun3.unity.rooms": "0.2.0",
+        "com.unity.netcode.gameobjects": "2.13.1",
+        "com.cysharp.unitask": "https://github.com/Cysharp/UniTask.git?path=src/UniTask/Assets/Plugins/UniTask"
+      }
+    },
+    "com.bun3.unity.rooms.steam": {
+      "version": "file:com.bun3.unity.rooms.steam",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {
+        "com.bun3.unity.rooms": "0.2.0",
+        "com.bun3.unity.steam": "0.1.0",
+        "com.cysharp.unitask": "https://github.com/Cysharp/UniTask.git?path=src/UniTask/Assets/Plugins/UniTask"
+      }
+    },
+    "com.bun3.unity.rooms.steam.ngo": {
+      "version": "file:com.bun3.unity.rooms.steam.ngo",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {
+        "com.bun3.unity.rooms.ngo": "0.1.0",
+        "com.bun3.unity.steam.ngo": "0.1.0"
+      }
+    },
     "com.bun3.unity.sound-events": {
       "version": "file:com.bun3.unity.sound-events",
       "depth": 0,
       "source": "embedded",
       "dependencies": {}
+    },
+    "com.bun3.unity.steam": {
+      "version": "file:com.bun3.unity.steam",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {
+        "com.bun3.unity.core": "0.5.2"
+      }
+    },
+    "com.bun3.unity.steam.ngo": {
+      "version": "file:com.bun3.unity.steam.ngo",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {
+        "com.bun3.unity.steam": "0.1.0",
+        "com.unity.netcode.gameobjects": "2.13.1"
+      }
     },
     "com.bun3.unity.ui": {
       "version": "file:com.bun3.unity.ui",
@@ -154,6 +210,13 @@
       "source": "git",
       "dependencies": {},
       "hash": "168b6f4f2a7dcf4164aab93db81754bae737de40"
+    },
+    "com.rlabrecque.steamworks.net": {
+      "version": "https://github.com/rlabrecque/Steamworks.NET.git?path=/com.rlabrecque.steamworks.net",
+      "depth": 0,
+      "source": "git",
+      "dependencies": {},
+      "hash": "ba71581f1ed7349e8d0f17ddc6f135dd3bc8a6a3"
     },
     "com.unity.2d.animation": {
       "version": "13.0.5",

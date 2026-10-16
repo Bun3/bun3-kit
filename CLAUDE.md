@@ -46,6 +46,9 @@
   - **partial = `타입.역할.cs`**(BCL: `MemoryExtensions.Trim.cs` — 예:
     `PopupStack.Push.cs`, `Util.Component.cs`). 각 파일 머리에 담당 역할 주석 한 줄,
     본체 XML 문서에 partial 구성을 적는다.
+- 네트워크 라이브러리 어댑터 패키지는 라이브러리 고유 접미사로 짓는다 — Netcode for
+  GameObjects는 `.ngo`(예: `com.bun3.unity.rooms.ngo`). `com.unity.netcode`가 Netcode
+  for Entities의 패키지 ID라서 `.netcode`는 대상을 구분하지 못한다.
 - 네이밍: `using`으로 감싸는 수명 타입은 `~Scope` 접미
   (예: `CancellationScope`, `ButtonInteractableScope`, `PopupCloseScope`).
 - 범용 헬퍼는 패키지 로컬 클래스가 아니라 아래 계층의 Util로 내린다 — Unity 범용은

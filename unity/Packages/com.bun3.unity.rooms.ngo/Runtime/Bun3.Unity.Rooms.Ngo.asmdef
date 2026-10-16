@@ -1,0 +1,6 @@
+{
+    "name": "Bun3.Unity.Rooms.Ngo",
+    "rootNamespace": "Bun3.Unity.Rooms.Ngo",
+    "references": [ "Bun3.Unity.Rooms", "Unity.Netcode.Runtime", "Unity.Networking.Transport", "UniTask" ],
+    "autoReferenced": true
+}

@@ -1,0 +1,8 @@
+{
+    "name": "Bun3.Unity.Steam.Ngo",
+    "rootNamespace": "Bun3.Unity.Steam.Ngo",
+    "references": [ "Bun3.Unity.Steam", "com.rlabrecque.steamworks.net", "Unity.Netcode.Runtime" ],
+    "includePlatforms": [ "Editor", "LinuxStandalone64", "macOSStandalone", "WindowsStandalone64" ],
+    "autoReferenced": true,
+    "defineConstraints": [ "BUN3_STEAMWORKS" ]
+}

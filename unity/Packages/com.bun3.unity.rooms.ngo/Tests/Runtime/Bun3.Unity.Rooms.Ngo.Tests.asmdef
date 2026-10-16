@@ -1,0 +1,17 @@
+{
+    "name": "Bun3.Unity.Rooms.Ngo.Tests",
+    "rootNamespace": "Bun3.Unity.Rooms.Ngo.Tests",
+    "references": [
+        "Bun3.Unity.Rooms",
+        "Bun3.Unity.Rooms.Ngo",
+        "Unity.Netcode.Runtime",
+        "UniTask",
+        "UnityEngine.TestRunner",
+        "UnityEditor.TestRunner"
+    ],
+    "includePlatforms": [],
+    "overrideReferences": true,
+    "precompiledReferences": [ "nunit.framework.dll" ],
+    "autoReferenced": false,
+    "defineConstraints": [ "UNITY_INCLUDE_TESTS" ]
+}

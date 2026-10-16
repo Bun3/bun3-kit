@@ -1,0 +1,15 @@
+{
+  "name": "com.bun3.unity.rooms",
+  "displayName": "Bun3 Rooms",
+  "version": "0.2.0",
+  "unity": "6000.3",
+  "description": "Netcode- and platform-agnostic multiplayer rooms: short room codes, members, ownership and host election.",
+  "author": {
+    "name": "Bun3",
+    "url": "https://github.com/Bun3",
+    "email": "bun3.dev@gmail.com"
+  },
+  "dependencies": {
+    "com.cysharp.unitask": "https://github.com/Cysharp/UniTask.git?path=src/UniTask/Assets/Plugins/UniTask"
+  }
+}

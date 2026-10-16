@@ -1,0 +1,8 @@
+{
+    "name": "Bun3.Unity.Rooms.Steam",
+    "rootNamespace": "Bun3.Unity.Rooms.Steam",
+    "references": [ "Bun3.Unity.Rooms", "Bun3.Unity.Steam", "com.rlabrecque.steamworks.net", "UniTask" ],
+    "includePlatforms": [ "Editor", "LinuxStandalone64", "macOSStandalone", "WindowsStandalone64" ],
+    "autoReferenced": true,
+    "defineConstraints": [ "BUN3_STEAMWORKS" ]
+}

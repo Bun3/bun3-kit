@@ -16,3 +16,6 @@ TestResults/
 /.superpowers/brainstorm/
 /artifacts/
 /unity/TestResult/
+
+# Steamworks.NET writes a Spacewar (480) steam_appid.txt into the project root on editor load
+/unity/steam_appid.txt
