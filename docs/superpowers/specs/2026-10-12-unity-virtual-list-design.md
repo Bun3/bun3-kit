@@ -1,7 +1,7 @@
 # uGUI 가변 높이 가상화 리스트 설계 (`Bun3.Unity.UI.Lists.VirtualList`)
 
 - 날짜: 2026-10-12
-- 상태: 사용자 리뷰 대기
+- 상태: 확정 — 구현 완료 (`com.bun3.unity.ui` 0.4.0)
 - 범위: `unity/Packages/com.bun3.unity.ui`에 세로 가상화 리스트 추가(0.3.1 → 0.4.0)
 - 목표 규모: 항목 10,000개(사용자 결정)
 - 첫 소비자: jurassic-paradise 채팅 로그. 채팅 패키지 스펙은 `2026-10-12-chat-design.md`, 게임 쪽은 JP 레포 `docs/superpowers/specs/2026-10-12-chat-system-design.md`

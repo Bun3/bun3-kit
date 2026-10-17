@@ -1,7 +1,7 @@
 # 텍스트 채팅 패키지 설계 (`com.bun3.chat` + `com.bun3.unity.chat.ngo`)
 
 - 날짜: 2026-10-12
-- 상태: 사용자 리뷰 대기
+- 상태: 확정 — 구현 완료 (`com.bun3.chat` 0.2.0, `com.bun3.unity.chat.ngo` 0.1.0)
 - 범위: 전송 계층과 무관한 채팅 코어(`common/src/com.bun3.chat` 0.1.0)와 NGO named message 어댑터(`unity/Packages/com.bun3.unity.chat.ngo` 0.1.0)
 - 첫 소비자: jurassic-paradise(NGO 리슨 호스트, 대기실·회의 채팅). 게임 쪽 설계는 JP 레포 `docs/superpowers/specs/2026-10-12-chat-system-design.md`
 - 참고: idlez-server, growdaemon, growninja 채팅 구조(실수요 파악용, 코드 미복사)
