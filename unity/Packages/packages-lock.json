@@ -96,6 +96,12 @@
         "com.unity.netcode.gameobjects": "2.13.1"
       }
     },
+    "com.bun3.unity.colliders": {
+      "version": "file:com.bun3.unity.colliders",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {}
+    },
     "com.bun3.unity.core": {
       "version": "file:com.bun3.unity.core",
       "depth": 0,

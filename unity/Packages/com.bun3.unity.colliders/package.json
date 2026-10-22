@@ -1,0 +1,8 @@
+{
+  "name": "com.bun3.unity.colliders",
+  "displayName": "Bun3 Unity Colliders",
+  "version": "0.1.0",
+  "unity": "2022.3",
+  "description": "Editor tools for 2D colliders. Select several PolygonCollider2D or EdgeCollider2D points in the Scene view by click or box and delete them together, with Undo.",
+  "author": { "name": "Bun3", "url": "https://github.com/Bun3" }
+}

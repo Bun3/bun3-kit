@@ -1,0 +1,6 @@
+{
+  "name": "Bun3.Unity.Colliders.Editor",
+  "rootNamespace": "Bun3.Unity.Colliders.Editor",
+  "references": [],
+  "includePlatforms": ["Editor"]
+}
