@@ -76,6 +76,27 @@ namespace Bun3.Unity.Audio.Tests
         }
 
         [UnityTest]
+        public IEnumerator Priority_AppliesToVoiceSource_AndMusicOutranksVoices()
+        {
+            var def = SoundMusic();
+            def.Priority = 40;
+            AudioSource configured = null;
+            using var sys = new SoundSystem(new SoundSystemConfig
+            {
+                SfxVoices = 1,
+                OnVoiceConfigured = (source, _) => configured = source,
+            });
+            sys.Play(def);
+            Assert.That(configured.priority, Is.EqualTo(40));
+            for (var i = 0; i < 2; i++)
+            {
+                Assert.That(sys.MusicIntroSources[i].priority, Is.Zero);
+                Assert.That(sys.MusicLoopSources[i].priority, Is.Zero);
+            }
+            yield break;
+        }
+
+        [UnityTest]
         public IEnumerator PlayMusic_WithIntro_HandsOffToLoop()
         {
             using var sys = new SoundSystem(new SoundSystemConfig { SfxVoices = 2 });

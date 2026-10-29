@@ -58,6 +58,9 @@ namespace Bun3.Unity.Audio
         /// <summary>Resolved Cooldown from the shared concurrency profile or local settings.</summary>
         public float EffectiveCooldown => ConcurrencyProfile != null ? ConcurrencyProfile.Cooldown : Cooldown;
 
+        /// <summary>Resolved Priority from the shared concurrency profile or local settings, clamped to 0..255.</summary>
+        public int EffectivePriority => Mathf.Clamp(ConcurrencyProfile != null ? ConcurrencyProfile.Priority : Priority, 0, 255);
+
         /// <summary>Resolved Spatial from the shared spatial profile or local settings.</summary>
         public SpatialMode EffectiveSpatial => SpatialProfile != null ? SpatialProfile.Spatial : Spatial;
 
@@ -99,6 +102,14 @@ namespace Bun3.Unity.Audio
 
         /// <summary>Minimum seconds between retriggers; 0 = none. Blocked plays return an invalid handle.</summary>
         public float Cooldown;
+
+        /// <summary>
+        /// Voice importance, 0 = most important, 255 = least. A full pool steals the least important
+        /// voice (oldest on ties) and refuses a play less important than every active voice. Also
+        /// applied as AudioSource.priority, which the engine uses to pick virtualized voices.
+        /// </summary>
+        [Range(0, 255)]
+        public int Priority = 128;
 
         /// <summary>Spatialization mode.</summary>
         public SpatialMode Spatial = SpatialMode.None;

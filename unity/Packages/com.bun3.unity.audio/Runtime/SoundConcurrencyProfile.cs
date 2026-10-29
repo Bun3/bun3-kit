@@ -11,5 +11,9 @@ namespace Bun3.Unity.Audio
 
         /// <summary>Minimum seconds between retriggers; 0 = none. Blocked plays return an invalid handle.</summary>
         public float Cooldown;
+
+        /// <summary>Voice importance, 0 = most important, 255 = least. See <see cref="SoundDef.Priority"/>.</summary>
+        [Range(0, 255)]
+        public int Priority = 128;
     }
 }
