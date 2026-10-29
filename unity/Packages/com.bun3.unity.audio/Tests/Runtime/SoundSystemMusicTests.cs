@@ -20,6 +20,82 @@ namespace Bun3.Unity.Audio.Tests
             return def;
         }
 
+        private static SoundDef SoundMusic(float volume = 1f)
+        {
+            var def = ScriptableObject.CreateInstance<SoundDef>();
+            def.Clips = new[] { AudioClip.Create("bgm", 4410, 1, 44100, false) };
+            def.Volume = new FloatRange(volume, volume);
+            def.VolumeGroup = "music";
+            return def;
+        }
+
+        [UnityTest]
+        public IEnumerator PlayMusic_SoundDef_LoopsOnMusicChannelWithLiveGroupGain()
+        {
+            var gain = 0.5f;
+            string resolved = null;
+            using var sys = new SoundSystem(new SoundSystemConfig
+            {
+                SfxVoices = 1,
+                GroupGain = group => { resolved = group; return gain; },
+            });
+            var def = SoundMusic(volume: 0.8f);
+            sys.PlayMusic(def);
+            var ch = sys.ActiveMusic;
+            Assert.IsTrue(sys.IsMusicPlaying);
+            Assert.That(sys.MusicChannels[ch].Sound, Is.SameAs(def));
+            Assert.That(sys.MusicLoopSources[ch].clip, Is.SameAs(def.Clips[0]));
+            Assert.IsTrue(sys.MusicLoopSources[ch].loop);
+            Assert.That(sys.MusicLoopSources[ch].volume, Is.EqualTo(0.4f).Within(0.001f));
+            Assert.That(resolved, Is.EqualTo("music"));
+            Assert.That(sys.Table.Slots[0].State, Is.EqualTo(VoiceState.Idle), "music must not take a voice");
+            gain = 0.25f;
+            sys.TickMusic(0f);
+            Assert.That(sys.MusicLoopSources[ch].volume, Is.EqualTo(0.2f).Within(0.001f));
+            yield break;
+        }
+
+        [UnityTest]
+        public IEnumerator PlayMusic_SoundDefRouting_IsRestoredForMusicDefOnSameChannel()
+        {
+            var config = new SoundSystemConfig { SfxVoices = 1 };
+            using var sys = new SoundSystem(config);
+            Assume.That(config.SfxGroup, Is.Not.Null);
+            Assume.That(config.MusicGroup, Is.Not.Null);
+            var def = SoundMusic();
+            def.MixerGroup = config.SfxGroup;
+            sys.PlayMusic(def);
+            var soundChannel = sys.ActiveMusic;
+            Assert.That(sys.MusicLoopSources[soundChannel].outputAudioMixerGroup, Is.SameAs(config.SfxGroup));
+            sys.PlayMusic(Def(withIntro: false), fade: 0f);
+            sys.PlayMusic(Def(withIntro: false), fade: 0f);
+            Assert.That(sys.ActiveMusic, Is.EqualTo(soundChannel));
+            Assert.That(sys.MusicChannels[soundChannel].Sound, Is.Null);
+            Assert.That(sys.MusicLoopSources[soundChannel].outputAudioMixerGroup, Is.SameAs(config.MusicGroup));
+            yield break;
+        }
+
+        [UnityTest]
+        public IEnumerator Priority_AppliesToVoiceSource_AndMusicOutranksVoices()
+        {
+            var def = SoundMusic();
+            def.Priority = 40;
+            AudioSource configured = null;
+            using var sys = new SoundSystem(new SoundSystemConfig
+            {
+                SfxVoices = 1,
+                OnVoiceConfigured = (source, _) => configured = source,
+            });
+            sys.Play(def);
+            Assert.That(configured.priority, Is.EqualTo(40));
+            for (var i = 0; i < 2; i++)
+            {
+                Assert.That(sys.MusicIntroSources[i].priority, Is.Zero);
+                Assert.That(sys.MusicLoopSources[i].priority, Is.Zero);
+            }
+            yield break;
+        }
+
         [UnityTest]
         public IEnumerator PlayMusic_WithIntro_HandsOffToLoop()
         {

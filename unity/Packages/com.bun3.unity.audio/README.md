@@ -12,6 +12,9 @@ Features:
 - Coroutine-free fades (fade-in on play, fade-out on stop).
 - Per-`SoundDef` voice limits (oldest steals when exceeded), cooldowns, and
   pitch/volume variation.
+- Voice priority: a full pool steals the least important voice and refuses
+  plays that every active voice outranks; the priority also drives the
+  engine's virtual-voice selection.
 - 2D, fixed-position, and transform-following 3D playback.
 - Logical channel volumes (`Master` / `Music` / `Sfx` / `Voice`) via an
   `AudioMixer`.
@@ -227,7 +230,18 @@ await sound.StopMusicAsync(fadeOut: 1f);
 
 sound.PauseMusic();
 sound.ResumeMusic();   // reschedules a cancelled loop from the intro's remaining time
+
+// Catalog entries can be music: a SoundDef plays one of its clips as a loop on the
+// same channels, so one catalog holds both SFX and music.
+if (catalog.TryGet("bgm.lobby", out var lobby))
+    sound.PlayMusic(lobby, fade: 1f);
 ```
+
+A `SoundDef` track uses its `Clips`, rolled `Volume`, `MixerGroup` (the music group
+when unset) and `VolumeGroup`. Its group gain is re-read every tick, so a music
+volume setting applies to the playing track. Pitch, `Loop`, concurrency, spatial and
+occlusion settings do not apply to music; the clip always loops. Music sources use
+`AudioSource.priority` 0 so engine virtualization never drops them.
 
 ### Occlusion
 
@@ -522,9 +536,10 @@ must not introduce per-frame closures or collection allocations.
 | `SetCompletionCallback` | One callback per voice, invoked after retirement. A later registration replaces the previous one. |
 | `PlayCharge` / `ChargeSoundDef` / `ChargeSoundHandle` | Progress-driven loop with optional start/complete/cancel one-shots. `SetProgress` applies the definition's curves; `Complete`/`Cancel` end the charge once. Stolen, ended or disposed charges do nothing. |
 | `PreloadAsync` / `ReleasePreloaded` | Own an Addressables batch until release or system disposal. Stop users of a clip before release. |
-| `PlayMusic` / `StopMusic` | Two-channel intro/loop crossfade subsystem; music does not consume SFX slots. |
-| `SfxVoices` | Fixed pool capacity. Per-definition limits steal the oldest matching voice; a full global pool steals its oldest voice. |
+| `PlayMusic` / `StopMusic` | Two-channel intro/loop crossfade subsystem for `MusicDef` or catalog `SoundDef` tracks; music does not consume SFX slots. |
+| `SfxVoices` | Fixed pool capacity. Per-definition limits steal the oldest matching voice; a full global pool steals its least important voice (oldest on ties) and refuses a request every active voice outranks. Above the engine's real-voice limit, the engine virtualizes the lowest-priority sources. |
 | `MaxInstances` / `Cooldown` | Definition-scoped concurrency limit and minimum retrigger seconds; zero disables the respective restriction. |
+| `Priority` | 0 (most important) to 255, default 128. Drives pool stealing and `AudioSource.priority`. |
 | `Acoustics` | Shared/local acoustic selection on a SoundDef, or within its selected spatial profile. |
 | `DistanceAttenuation` | Disable distance gain independently of direction. Basic AudioSource output uses a flat rolloff when disabled. |
 | `AttenuationProfile` | Native distance curve. Basic AudioSource output uses resolved MinDistance/MaxDistance instead. |

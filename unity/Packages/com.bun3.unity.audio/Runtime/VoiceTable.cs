@@ -31,8 +31,8 @@ namespace Bun3.Unity.Audio
         }
 
         /// <summary>
-        /// Reserves a slot for <paramref name="def"/>. Returns false when blocked by cooldown
-        /// (or zero capacity). <paramref name="stolenSlot"/> is the slot whose previous voice
+        /// Reserves a slot for <paramref name="def"/>. Returns false when blocked by cooldown,
+        /// zero capacity, or a full pool whose every voice outranks the request. <paramref name="stolenSlot"/> is the slot whose previous voice
         /// was cut short (-1 if none); <paramref name="stolenSignal"/> carries that voice's
         /// pre-overwrite generation, awaiter, and completion callback so the caller can signal it.
         /// </summary>
@@ -55,6 +55,10 @@ namespace Bun3.Unity.Audio
             }
 
             slotIndex = FindSlot(def, ref stolenSlot);
+            if (slotIndex < 0)
+            {
+                return false;
+            }
             if (stolenSlot >= 0)
             {
                 ref var stolenRef = ref Slots[stolenSlot];
@@ -75,6 +79,7 @@ namespace Bun3.Unity.Audio
             slot.Pitch = def.EffectivePitch.Roll(_rng);
             slot.PlaybackRate = Mathf.Max(0f, slot.Pitch);
             slot.StartTime = _time;
+            slot.Priority = def.EffectivePriority;
             slot.Follow = null;
             slot.Completion = null;
             slot.CompletionCallback = null;
@@ -235,8 +240,9 @@ namespace Bun3.Unity.Audio
                 }
             }
 
-            var globalOldest = 0;
-            var globalOldestTime = float.MaxValue;
+            var victim = -1;
+            var victimPriority = -1;
+            var victimTime = float.MaxValue;
             for (var i = 0; i < Slots.Length; i++)
             {
                 ref var voice = ref Slots[i];
@@ -244,14 +250,20 @@ namespace Bun3.Unity.Audio
                 {
                     return i;
                 }
-                if (voice.StartTime < globalOldestTime)
+                if (voice.Priority > victimPriority
+                    || (voice.Priority == victimPriority && voice.StartTime < victimTime))
                 {
-                    globalOldestTime = voice.StartTime;
-                    globalOldest = i;
+                    victimPriority = voice.Priority;
+                    victimTime = voice.StartTime;
+                    victim = i;
                 }
             }
-            stolenSlot = globalOldest;
-            return globalOldest;
+            if (victimPriority < def.EffectivePriority)
+            {
+                return -1;
+            }
+            stolenSlot = victim;
+            return victim;
         }
     }
 }

@@ -267,6 +267,7 @@ namespace Bun3.Unity.Audio
             var source = _sources[slot];
             source.clip = clip;
             source.loop = def.EffectiveLoop;
+            source.priority = voice.Priority;
             source.pitch = _config.PitchWithTimescale ? voice.Pitch * _lastTimeScale : voice.Pitch;
             voice.PlaybackRate = source.pitch;
             source.volume = Table.CurrentVolume(slot) * GroupGain(def); // reflects Fade.Factor 0 when fading in
@@ -367,6 +368,8 @@ namespace Bun3.Unity.Audio
             var source = go.AddComponent<AudioSource>();
             source.playOnAwake = false;
             source.spatialBlend = 0f;
+            // Outranks every voice so engine virtualization never drops music.
+            source.priority = 0;
             source.outputAudioMixerGroup = _config.MusicGroup;
             return source;
         }

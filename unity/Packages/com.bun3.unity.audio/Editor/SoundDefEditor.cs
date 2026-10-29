@@ -112,7 +112,7 @@ namespace Bun3.Unity.Audio.Editor
             DrawGroup("Routing", nameof(SoundDef.RoutingProfile), 1,
                 nameof(SoundDef.MixerGroup), nameof(SoundDef.VolumeGroup));
             DrawGroup("Concurrency", nameof(SoundDef.ConcurrencyProfile), 2,
-                nameof(SoundDef.MaxInstances), nameof(SoundDef.Cooldown));
+                nameof(SoundDef.MaxInstances), nameof(SoundDef.Cooldown), nameof(SoundDef.Priority));
             DrawSpatialGroup();
             serializedObject.ApplyModifiedProperties();
 

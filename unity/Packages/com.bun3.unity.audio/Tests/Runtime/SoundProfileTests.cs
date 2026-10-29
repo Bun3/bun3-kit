@@ -128,12 +128,17 @@ namespace Bun3.Unity.Audio.Tests
             {
                 def.MaxInstances = 2;
                 def.Cooldown = 5f;
+                def.Priority = 300;
                 def.ConcurrencyProfile = profile;
                 Assert.That(def.EffectiveMaxInstances, Is.Zero);
                 Assert.That(def.EffectiveCooldown, Is.Zero);
+                Assert.That(def.EffectivePriority, Is.EqualTo(128));
+                profile.Priority = -5;
+                Assert.That(def.EffectivePriority, Is.Zero);
                 def.ConcurrencyProfile = null;
                 Assert.That(def.EffectiveMaxInstances, Is.EqualTo(2));
                 Assert.That(def.EffectiveCooldown, Is.EqualTo(5f));
+                Assert.That(def.EffectivePriority, Is.EqualTo(255));
             }
             finally { Object.DestroyImmediate(def); Object.DestroyImmediate(profile); }
         }

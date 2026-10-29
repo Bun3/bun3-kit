@@ -39,6 +39,7 @@ namespace Bun3.Unity.Audio
         public float PlaybackRate;
 
         public float StartTime;
+        public int Priority;
         public Transform Follow;
         public AutoResetUniTaskCompletionSource Completion;
 
