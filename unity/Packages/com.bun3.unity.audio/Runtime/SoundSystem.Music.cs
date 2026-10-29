@@ -2,6 +2,7 @@
 // Intro→loop handoff is sample-accurate via PlayScheduled on the DSP clock.
 using Cysharp.Threading.Tasks;
 using UnityEngine;
+using UnityEngine.Audio;
 
 namespace Bun3.Unity.Audio
 {
@@ -49,7 +50,45 @@ namespace Bun3.Unity.Audio
             {
                 fade = def.DefaultFade;
             }
+            PlayMusicCore(def, null, 0f, def.Intro, def.Loop, _config.MusicGroup, fade);
+        }
 
+        /// <summary>
+        /// Plays a sound definition on the music channels with the same crossfade rules as the
+        /// <see cref="MusicDef"/> overload, so catalog entries can serve as music. One clip is
+        /// picked per call and loops until stopped or replaced. Volume is the rolled Volume times
+        /// the live group gain of its VolumeGroup; MixerGroup falls back to the music group.
+        /// Pitch, Loop, concurrency, spatial and occlusion settings do not apply.
+        /// </summary>
+        /// <param name="def">Definition whose clips play as music.</param>
+        /// <param name="fade">Fade-in (and crossfade) seconds; 0 or negative is instant.</param>
+        /// <exception cref="System.ObjectDisposedException">The SoundSystem has been disposed.</exception>
+        public void PlayMusic(SoundDef def, float fade = 0f)
+        {
+            if (_disposed)
+            {
+                throw new System.ObjectDisposedException(nameof(SoundSystem));
+            }
+            if (def == null || def.EffectiveClips == null || def.EffectiveClips.Length == 0)
+            {
+#if DEVELOPMENT_BUILD || UNITY_EDITOR
+                Debug.LogWarning("SoundSystem.PlayMusic: def has no loaded clips; ignored.");
+#endif
+                return;
+            }
+            var clip = PickClip(def);
+            if (clip == null)
+            {
+                return;
+            }
+            var group = def.EffectiveMixerGroup != null ? def.EffectiveMixerGroup : _config.MusicGroup;
+            PlayMusicCore(null, def, def.EffectiveVolume.Roll(_rng), null, clip, group, Mathf.Max(0f, fade));
+        }
+
+        private void PlayMusicCore(
+            MusicDef music, SoundDef sound, float soundVolume, AudioClip intro, AudioClip loop,
+            AudioMixerGroup group, float fade)
+        {
             var channel = SelectMusicChannel(
                 ActiveMusic, MusicChannels[0].State, MusicChannels[1].State);
             AutoResetUniTaskCompletionSource stolen = null;
@@ -69,7 +108,11 @@ namespace Bun3.Unity.Audio
                 }
                 silenced = BeginMusicFadeOut(ActiveMusic, fade);
             }
-            StartMusicOnChannel(channel, def, fade);
+            ref var track = ref MusicChannels[channel];
+            track.Def = music;
+            track.Sound = sound;
+            track.SoundVolume = soundVolume;
+            StartMusicOnChannel(channel, intro, loop, group, fade);
             ActiveMusic = channel;
             stolen?.TrySetResult(); // last, after all state mutation (two-phase)
             silenced?.TrySetResult();
@@ -151,9 +194,9 @@ namespace Bun3.Unity.Audio
                 track.Paused = false;
                 MusicIntroSources[i].UnPause();
                 MusicLoopSources[i].UnPause();
-                if (!track.LoopScheduled && track.Def != null)
+                if (!track.LoopScheduled)
                 {
-                    var intro = track.Def.Intro;
+                    var intro = track.Def != null ? track.Def.Intro : null;
                     var delay = intro != null
                         ? MusicMath.RemainingSeconds(MusicIntroSources[i].timeSamples, intro.samples, intro.frequency)
                         : MusicScheduleHeadroom;
@@ -164,11 +207,10 @@ namespace Bun3.Unity.Audio
             }
         }
 
-        private void StartMusicOnChannel(int channel, MusicDef def, float fadeIn)
+        private void StartMusicOnChannel(int channel, AudioClip intro, AudioClip loop, AudioMixerGroup group, float fadeIn)
         {
             ref var track = ref MusicChannels[channel];
             track.State = fadeIn > 0f ? MusicState.FadingIn : MusicState.Playing;
-            track.Def = def;
             track.Paused = false;
             if (fadeIn > 0f)
             {
@@ -184,13 +226,15 @@ namespace Bun3.Unity.Audio
             var loopSource = MusicLoopSources[channel];
             var startDsp = AudioSettings.dspTime + MusicScheduleHeadroom;
 
-            loopSource.clip = def.Loop;
+            introSource.outputAudioMixerGroup = group;
+            loopSource.outputAudioMixerGroup = group;
+            loopSource.clip = loop;
             loopSource.loop = true;
-            if (def.Intro != null)
+            if (intro != null)
             {
-                introSource.clip = def.Intro;
+                introSource.clip = intro;
                 introSource.PlayScheduled(startDsp);
-                track.LoopStartDsp = startDsp + MusicMath.ClipSeconds(def.Intro);
+                track.LoopStartDsp = startDsp + MusicMath.ClipSeconds(intro);
                 loopSource.PlayScheduled(track.LoopStartDsp);
                 track.LoopScheduled = true;
             }
@@ -234,6 +278,7 @@ namespace Bun3.Unity.Audio
             MusicLoopSources[channel].Stop();
             track.State = MusicState.Idle;
             track.Def = null;
+            track.Sound = null;
             track.Paused = false;
             track.LoopScheduled = false;
             track.Completion = null;
@@ -243,7 +288,9 @@ namespace Bun3.Unity.Audio
         private void ApplyMusicVolume(int channel)
         {
             ref var track = ref MusicChannels[channel];
-            var volume = (track.Def != null ? track.Def.Volume : 0f) * track.Fade.Factor;
+            var volume = track.Def != null ? track.Def.Volume
+                : track.Sound != null ? track.SoundVolume * GroupGain(track.Sound) : 0f;
+            volume *= track.Fade.Factor;
             MusicIntroSources[channel].volume = volume;
             MusicLoopSources[channel].volume = volume;
         }

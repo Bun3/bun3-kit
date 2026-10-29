@@ -21,6 +21,12 @@ namespace Bun3.Unity.Audio
     {
         public MusicState State;
         public MusicDef Def;
+
+        /// <summary>Catalog definition playing as music; null for <see cref="MusicDef"/> tracks.</summary>
+        public SoundDef Sound;
+
+        /// <summary>Volume rolled from <see cref="Sound"/> when the track started.</summary>
+        public float SoundVolume;
         public bool Paused;
         public bool LoopScheduled;
         public double LoopStartDsp;

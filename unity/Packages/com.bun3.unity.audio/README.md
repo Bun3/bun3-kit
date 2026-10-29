@@ -227,7 +227,17 @@ await sound.StopMusicAsync(fadeOut: 1f);
 
 sound.PauseMusic();
 sound.ResumeMusic();   // reschedules a cancelled loop from the intro's remaining time
+
+// Catalog entries can be music: a SoundDef plays one of its clips as a loop on the
+// same channels, so one catalog holds both SFX and music.
+if (catalog.TryGet("bgm.lobby", out var lobby))
+    sound.PlayMusic(lobby, fade: 1f);
 ```
+
+A `SoundDef` track uses its `Clips`, rolled `Volume`, `MixerGroup` (the music group
+when unset) and `VolumeGroup`. Its group gain is re-read every tick, so a music
+volume setting applies to the playing track. Pitch, `Loop`, concurrency, spatial and
+occlusion settings do not apply to music; the clip always loops.
 
 ### Occlusion
 
@@ -522,7 +532,7 @@ must not introduce per-frame closures or collection allocations.
 | `SetCompletionCallback` | One callback per voice, invoked after retirement. A later registration replaces the previous one. |
 | `PlayCharge` / `ChargeSoundDef` / `ChargeSoundHandle` | Progress-driven loop with optional start/complete/cancel one-shots. `SetProgress` applies the definition's curves; `Complete`/`Cancel` end the charge once. Stolen, ended or disposed charges do nothing. |
 | `PreloadAsync` / `ReleasePreloaded` | Own an Addressables batch until release or system disposal. Stop users of a clip before release. |
-| `PlayMusic` / `StopMusic` | Two-channel intro/loop crossfade subsystem; music does not consume SFX slots. |
+| `PlayMusic` / `StopMusic` | Two-channel intro/loop crossfade subsystem for `MusicDef` or catalog `SoundDef` tracks; music does not consume SFX slots. |
 | `SfxVoices` | Fixed pool capacity. Per-definition limits steal the oldest matching voice; a full global pool steals its oldest voice. |
 | `MaxInstances` / `Cooldown` | Definition-scoped concurrency limit and minimum retrigger seconds; zero disables the respective restriction. |
 | `Acoustics` | Shared/local acoustic selection on a SoundDef, or within its selected spatial profile. |
