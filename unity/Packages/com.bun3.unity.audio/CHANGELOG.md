@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.6.0] - 2026-10-29
+
+### Added
+
+- `SoundDef.Priority` / `SoundConcurrencyProfile.Priority` (0 = most important,
+  255 = least, default 128) and `SoundDef.EffectivePriority`. A full voice pool
+  steals the least important voice, oldest on ties, and refuses a play that every
+  active voice outranks; a refused play starts no cooldown. The priority is applied
+  as `AudioSource.priority` for engine voice virtualization.
+- `SoundSystem.PlayMusic(SoundDef, fade)` plays a catalog definition on the music
+  channels with the existing crossfade rules. Its volume follows the live
+  `GroupGain` of the definition's `VolumeGroup`.
+
+### Changed
+
+- Music sources use `AudioSource.priority` 0.
+- With equal priorities, stealing is unchanged (oldest voice).
+
 ## [0.5.0] - 2026-10-14
 
 ### Added
