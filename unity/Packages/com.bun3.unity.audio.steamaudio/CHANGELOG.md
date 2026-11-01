@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.0] - 2026-11-02
+
+### Changed
+
+- Pooled native SFX outputs created from one internal runtime share a single Steam Audio context and HRTF, one looping driver clip and one hidden retirement host instead of creating them per output. Disposing an output leaves the shared resources to the runtime; the public `SteamAudioSoundOutput` constructor keeps its behavior with a private runtime released with the output.
+- Require `com.bun3.unity.audio` 0.7.0.
+
 ## [0.4.0] - 2026-09-13
 
 - Add explicit SDK activation and removal support for optional audio adapters across runtime, Editor and test assemblies.

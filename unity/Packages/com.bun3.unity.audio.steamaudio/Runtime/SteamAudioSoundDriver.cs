@@ -12,8 +12,8 @@ namespace Bun3.Unity.Audio.SteamAudio
 
     internal sealed class SteamAudioSoundRetirementHost : MonoBehaviour
     {
-        private SteamAudioSoundOutput _owner;
-        internal void Bind(SteamAudioSoundOutput owner) => _owner = owner;
+        private SteamAudioSoundRuntime _owner;
+        internal void Bind(SteamAudioSoundRuntime owner) => _owner = owner;
         private void Update() => _owner?.ControlUpdate();
     }
 }

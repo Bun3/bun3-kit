@@ -30,6 +30,7 @@ namespace Bun3.Unity.Audio.SteamAudio
 
         private IntPtr _context;
         private IntPtr _hrtf;
+        internal IntPtr HrtfHandleForTest => _hrtf;
         private IntPtr _effect;
         private IntPtr _coefficients;
         private IntPtr _monoSamples;

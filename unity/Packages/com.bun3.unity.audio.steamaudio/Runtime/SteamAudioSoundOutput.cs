@@ -11,12 +11,13 @@ namespace Bun3.Unity.Audio.SteamAudio
         private readonly AudioSource _source;
         private readonly SteamAudioClipCache _clips;
         private readonly SteamAudioPathRenderer _renderer;
+        private readonly SteamAudioSoundRuntime _runtime;
+        private readonly bool _ownsRuntime;
         private readonly PathParameterMailbox _mailbox;
         private readonly float[] _mono, _stereo, _coefficients;
         private readonly int _rate, _frame;
-        private AudioClip _driverClip;
+        private AudioClip _startedDriverClip;
         private SteamAudioSoundDriver _driver;
-        private SteamAudioSoundRetirementHost _retirement;
         private SteamAudioClipCache.Pcm _pcm;
         private PathParameterLease _lease;
         private PathRenderSettings _settings;
@@ -34,18 +35,30 @@ namespace Bun3.Unity.Audio.SteamAudio
         private int _failure;
         private Exception _fault;
 
-        /// <summary>Prewarms all per-source managed/native storage and the looping driver. Main thread only.</summary>
+        /// <summary>
+        /// Prewarms all per-source managed/native storage and a private native runtime, released with this output.
+        /// A factory, when given, supplies only the renderer. Main thread only.
+        /// </summary>
         public SteamAudioSoundOutput(AudioSource source, SteamAudioClipCache clips,
             Func<int, int, SteamAudioPathRenderer> createRenderer = null)
+            : this(source, clips, null, createRenderer) { }
+
+        internal SteamAudioSoundOutput(AudioSource source, SteamAudioClipCache clips, SteamAudioSoundRuntime runtime)
+            : this(source, clips, runtime ?? throw new ArgumentNullException(nameof(runtime)), null) { }
+
+        private SteamAudioSoundOutput(AudioSource source, SteamAudioClipCache clips, SteamAudioSoundRuntime runtime,
+            Func<int, int, SteamAudioPathRenderer> createRenderer)
         {
             if (source == null) throw new ArgumentNullException(nameof(source));
             _clips = clips ?? throw new ArgumentNullException(nameof(clips));
             _source = source;
-            _rate = AudioSettings.outputSampleRate;
-            AudioSettings.GetDSPBufferSize(out _frame, out _);
+            _ownsRuntime = runtime == null;
             try
             {
-                _renderer = createRenderer != null ? createRenderer(_rate, _frame) : SteamAudioPathRenderer.CreateDefault(_rate, _frame);
+                _runtime = runtime ?? new SteamAudioSoundRuntime();
+                _rate = _runtime.SampleRate;
+                _frame = _runtime.FrameSize;
+                _renderer = createRenderer != null ? createRenderer(_rate, _frame) : _runtime.CreateRenderer();
                 if (_renderer == null || _renderer.SampleRate != _rate || _renderer.FrameSize != _frame)
                     throw new ArgumentException("The factory must provide a matching live renderer.", nameof(createRenderer));
                 _mono = new float[_frame];
@@ -59,23 +72,15 @@ namespace Bun3.Unity.Audio.SteamAudio
                 _renderer.Render(_mono, _stereo, _coefficients, 1, 1, 1, _settings.Listener);
                 _renderer.Reset();
                 _mailbox = new PathParameterMailbox(_coefficients.Length);
-                _driverClip = AudioClip.Create("Bun3 native SFX driver", _frame, 2, _rate, false);
-                Array.Fill(_stereo, 1f);
-                _driverClip.SetData(_stereo, 0);
-                Array.Clear(_stereo, 0, _stereo.Length);
                 _driver = source.gameObject.AddComponent<SteamAudioSoundDriver>();
                 _driver.Bind(this);
-                var host = new GameObject("Bun3 native sound retirement");
-                host.hideFlags = HideFlags.HideInHierarchy;
-                UnityEngine.Object.DontDestroyOnLoad(host);
-                _retirement = host.AddComponent<SteamAudioSoundRetirementHost>();
-                _retirement.Bind(this);
+                _runtime.Attach(this);
             }
             catch
             {
                 _renderer?.Dispose();
-                if (_driverClip != null) UnityEngine.Object.Destroy(_driverClip);
                 if (_driver != null) UnityEngine.Object.Destroy(_driver);
+                if (_ownsRuntime) _runtime?.Dispose();
                 throw;
             }
         }
@@ -161,7 +166,8 @@ namespace Bun3.Unity.Audio.SteamAudio
             });
             _lease.TryPublish(_coefficients, _settings);
             _lease.TrySetBlocked(StartBlocked);
-            _source.clip = _driverClip;
+            _startedDriverClip = _runtime.DriverClip;
+            _source.clip = _startedDriverClip;
             _source.loop = true;
             _source.pitch = 1;
             _source.spatialBlend = 0;
@@ -350,12 +356,12 @@ namespace Bun3.Unity.Audio.SteamAudio
             }
         }
 
-        /// <summary>Retires immediately; native release is deferred to the independent main-thread host while a reader is held.</summary>
+        /// <summary>Retires immediately; native release is deferred to the shared main-thread host while a reader is held.</summary>
         public void Dispose()
         {
             if (Interlocked.Exchange(ref _disposeRequested, 1) != 0) return;
             Retire();
-            if (_source != null && _source.clip == _driverClip) { _source.Stop(); _source.clip = null; }
+            if (_startedDriverClip is not null && _source != null && _source.clip == _startedDriverClip) { _source.Stop(); _source.clip = null; }
             TryFinalizeDisposal();
         }
 
@@ -365,10 +371,9 @@ namespace Bun3.Unity.Audio.SteamAudio
             if (state is not (0 or 3) || Interlocked.CompareExchange(ref _state, 5, state) != state) return;
             _renderer.Dispose();
             _pcm = null;
-            if (_driverClip != null) UnityEngine.Object.Destroy(_driverClip);
-            _driverClip = null;
-            if (_retirement != null) UnityEngine.Object.Destroy(_retirement.gameObject);
-            _retirement = null;
+            _startedDriverClip = null;
+            _runtime.Detach(this);
+            if (_ownsRuntime) _runtime.Dispose();
         }
 
         private static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
