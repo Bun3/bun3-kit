@@ -11,7 +11,7 @@ the core continues owning source gain, fades and mixer routing.
 | Route | Entry point | Responsibility |
 | --- | --- | --- |
 | SDK spatializer binding | `SteamAudioSoundSetup.Apply` | Configures pooled Unity sources; the installed SDK owns spatialization and scene simulation. |
-| Native planar SFX | `SteamAudioSoundOutput` + `PlanarAcousticSessionScope` | Renders prepared PCM using baked paths, grid coverage, dynamic obstacles and shared profiles. |
+| Native planar SFX | `SteamAudioSoundSetup.ApplyNativeOutput` (or `SteamAudioSoundOutput`) + `PlanarAcousticSessionScope` | Renders prepared PCM using baked paths, grid coverage, dynamic obstacles and shared profiles. |
 | Custom native integration | `SteamAudioPathSimulationScope` + `SteamAudioPathRenderer` | Supplies explicit simulation and DSP primitives; the caller supplies geometry, scheduling, coverage policy and output transport. |
 
 Use one spatialization owner per positional output. Native PCM output bypasses the Unity spatializer and does not need `SteamAudioSoundSetup.Apply`. Neither route supplies game-specific map discovery, networking, voice capture, room permissions or authoring UI. Music remains owned by the audio core.
@@ -240,7 +240,21 @@ Create/load/dispose on the Unity main/control thread. Supported SDK deserializat
 
 ## Native pooled SFX output
 
-`SteamAudioSoundOutput` implements the audio core's optional `ISoundVoiceOutput` seam. Create one output per prewarmed source through `SoundSystemConfig.CreateVoiceOutput`, retain the output/source pairs for application simulation updates, and prepare every positional clip before playback:
+`SteamAudioSoundOutput` implements the audio core's optional `ISoundVoiceOutput` seam. `SteamAudioSoundSetup.ApplyNativeOutput` assembles it in one call before the static `SoundSystem.Initialize`:
+
+```csharp
+var acousticOutputs = new PlanarAcousticOutputs(); // the list your acoustic session reads
+var config = SteamAudioSoundSetup.ApplyNativeOutput(
+    new SoundSystemConfig { SfxVoices = 24 },
+    maximumDecodedBytes: 64L * 1024 * 1024,
+    acousticOutputs);
+SoundSystem.Initialize(catalog, config);
+SoundSystem.PlayAt("door.open", doorPosition);
+```
+
+It sets `OcclusionChecksPerFrame = 0`, gives every pooled voice a `SteamAudioSoundOutput` from one shared runtime and one `SteamAudioClipCache`, decodes each definition's positional clips when the core prepares it, and registers one `PlanarAcousticSfxBinding` per voice in `acousticOutputs`. Disposing the system (`SoundSystem.Shutdown`) unregisters the bindings and releases the cache and runtime, so the same config can initialize again; use one live system per config. It throws when `CreateVoiceOutput` is already set. This is a different path from `Apply`, which attaches the SDK's `SteamAudioSource` to voices; use one or the other. Positional voices start blocked until an acoustic session publishes a covered path, so without a session (for example in a menu) only 2D sounds are heard.
+
+To assemble the pool by hand instead, create one output per prewarmed source through `SoundSystemConfig.CreateVoiceOutput`, retain the output/source pairs for application simulation updates, and prepare every positional clip before playback:
 
 ```csharp
 var cache = new SteamAudioClipCache(maximumDecodedBytes: 64L * 1024 * 1024);

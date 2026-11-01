@@ -2,6 +2,10 @@
 
 ## [0.6.0] - 2026-11-02
 
+### Added
+
+- `SteamAudioSoundSetup.ApplyNativeOutput(config, maximumDecodedBytes, acousticOutputs)` assembles native pooled SFX output in one call before `SoundSystem.Initialize`: it disables core occlusion, gives every pooled voice a `SteamAudioSoundOutput` from one shared runtime and clip cache, decodes positional clips through `SoundSystemConfig.PrepareDefinition`, registers one `PlanarAcousticSfxBinding` per voice, and releases all of it through `SoundSystemConfig.OnDisposed` so the same config can initialize again. It is separate from `Apply`, which attaches the SDK's `SteamAudioSource`.
+
 ### Changed
 
 - Pooled native SFX outputs created from one internal runtime share a single Steam Audio context and HRTF, one looping driver clip and one hidden retirement host instead of creating them per output. Disposing an output leaves the shared resources to the runtime; the public `SteamAudioSoundOutput` constructor keeps its behavior with a private runtime released with the output.
