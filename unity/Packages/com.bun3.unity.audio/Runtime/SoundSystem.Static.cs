@@ -179,9 +179,10 @@ namespace Bun3.Unity.Audio
             {
                 var snapshot = snapshots[i];
                 if (snapshot.Def == null || !snapshot.Changed()) continue;
-                snapshot.Capture();
-                Prepare(snapshot.Def);
+                try { Prepare(snapshot.Def); }
+                catch (Exception e) { Debug.LogException(e); }
                 RunPrepareHook(_config, snapshot.Def);
+                snapshot.Capture(); // after the hook, which may assign RuntimeClips
             }
         }
 #endif

@@ -299,5 +299,59 @@ namespace Bun3.Unity.Audio.Tests
             SoundSystem.Current.Tick(0.016f);
             Assert.That(() => SoundSystem.Current.Tick(0.016f), Is.Not.AllocatingGCMemory());
         }
+
+        [Test]
+        public void HookAssigningRuntimeClips_DoesNotRepeatPreparation()
+        {
+            var counts = new Dictionary<SoundDef, int>();
+            var config = Config();
+            config.PrepareDefinition = def =>
+            {
+                counts[def] = counts.TryGetValue(def, out var n) ? n + 1 : 1;
+                if (counts[def] > 1) def.RuntimeClips = new[] { _clip };
+            };
+            SoundSystem.Initialize(_catalog, config);
+            var other = AudioClip.Create("t2", 4410, 1, 44100, false);
+            try
+            {
+                _fx3d.Clips = new[] { other };
+                SoundSystem.Current.Tick(0.016f);
+                SoundSystem.Current.Tick(0.016f);
+                SoundSystem.Current.Tick(0.016f);
+                Assert.That(counts[_fx3d], Is.EqualTo(2));
+            }
+            finally { SoundSystem.Shutdown(); Object.DestroyImmediate(other); }
+        }
+
+        [Test]
+        public void NonCurrentInstance_DoesNotReprepare()
+        {
+            var counts = CountHookCalls(out var config);
+            SoundSystem.Initialize(_catalog, config);
+            using var stray = new SoundSystem(Config());
+            _fx3d.Spatial = SpatialMode.None;
+            stray.Tick(0.016f);
+            Assert.That(counts[_fx3d], Is.EqualTo(1));
+        }
+
+        [Test]
+        public void HookThrowingDuringReprepare_IsLoggedAndTickContinues()
+        {
+            var counts = new Dictionary<SoundDef, int>();
+            var config = Config();
+            config.PrepareDefinition = def =>
+            {
+                counts[def] = counts.TryGetValue(def, out var n) ? n + 1 : 1;
+                if (counts[def] > 1) throw new InvalidOperationException("boom");
+            };
+            SoundSystem.Initialize(_catalog, config);
+            _fx2d.Spatial = SpatialMode.Positional;
+            _fx3d.Spatial = SpatialMode.None;
+            LogAssert.Expect(LogType.Exception, new Regex("boom"));
+            LogAssert.Expect(LogType.Exception, new Regex("boom"));
+            Assert.DoesNotThrow(() => SoundSystem.Current.Tick(0.016f));
+            Assert.That(counts[_fx2d], Is.EqualTo(2));
+            Assert.That(counts[_fx3d], Is.EqualTo(2));
+        }
 }
 }
