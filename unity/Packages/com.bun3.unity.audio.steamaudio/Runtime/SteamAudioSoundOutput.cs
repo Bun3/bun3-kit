@@ -10,12 +10,14 @@ namespace Bun3.Unity.Audio.SteamAudio
     {
         private readonly AudioSource _source;
         private readonly SteamAudioClipCache _clips;
-        private readonly SteamAudioPathRenderer _renderer;
+        private SteamAudioPathRenderer _renderer;
         private readonly SteamAudioSoundRuntime _runtime;
         private readonly bool _ownsRuntime;
         private readonly PathParameterMailbox _mailbox;
-        private readonly float[] _mono, _stereo, _coefficients;
-        private readonly int _rate, _frame;
+        private readonly float[] _coefficients;
+        // Replaced together with the renderer only while no reader can hold this output.
+        private float[] _mono, _stereo;
+        private int _rate, _frame;
         private AudioClip _startedDriverClip;
         private SteamAudioSoundDriver _driver;
         private SteamAudioClipCache.Pcm _pcm;
@@ -37,7 +39,8 @@ namespace Bun3.Unity.Audio.SteamAudio
 
         /// <summary>
         /// Prewarms all per-source managed/native storage and a private native runtime, released with this output.
-        /// A factory, when given, supplies only the renderer. Main thread only.
+        /// A factory, when given, supplies only the initial renderer; a sample-rate or DSP frame-size change replaces it
+        /// with a default one. Main thread only.
         /// </summary>
         public SteamAudioSoundOutput(AudioSource source, SteamAudioClipCache clips,
             Func<int, int, SteamAudioPathRenderer> createRenderer = null)
@@ -141,7 +144,7 @@ namespace Bun3.Unity.Audio.SteamAudio
                 return VoiceOutputStartResult.Unsupported;
             }
             _passthrough = false;
-            if (!FormatMatches()) return Fail(SteamAudioSoundFailure.OutputFormatChanged);
+            if (!FormatMatches() || _runtime.DriverClip == null) return Fail(SteamAudioSoundFailure.OutputFormatChanged);
             if (!_clips.TryGet(selectedClip, out var pcm)) return Fail(SteamAudioSoundFailure.ClipNotPrepared);
             if (!Finite(logicalPitch)) return Fail(SteamAudioSoundFailure.InvalidPitch);
             var acoustics = definition.EffectiveAcoustics;
@@ -346,6 +349,34 @@ namespace Bun3.Unity.Audio.SteamAudio
             return AudioSettings.outputSampleRate == _rate && frame == _frame;
         }
 
+        // Device change: ends only an active request; IsComplete lets the core free the slot on its next tick.
+        internal void EndForDeviceChange()
+        {
+            if (Volatile.Read(ref _state) is not (1 or 2)) return;
+            Fail(SteamAudioSoundFailure.OutputFormatChanged);
+            Retire();
+        }
+
+        // Main thread. Swaps only while idle or retired without a reader; prewarms like construction, then frees the old renderer.
+        internal bool TryReplaceRenderer(SteamAudioPathRenderer renderer)
+        {
+            if (Volatile.Read(ref _state) is not (0 or 3)) return false;
+            if (renderer.CoefficientCount != _coefficients.Length)
+                throw new ArgumentException("The replacement must keep the parameter mailbox's coefficient count.", nameof(renderer));
+            bool resized = renderer.FrameSize != _frame;
+            var mono = resized ? new float[renderer.FrameSize] : _mono;
+            var stereo = resized ? new float[renderer.FrameSize * 2] : _stereo;
+            renderer.Render(mono, stereo, _coefficients, 1, 1, 1, _settings.Listener);
+            renderer.Reset();
+            _renderer.Dispose();
+            _renderer = renderer;
+            _mono = mono;
+            _stereo = stereo;
+            _rate = renderer.SampleRate;
+            _frame = renderer.FrameSize;
+            return true;
+        }
+
         internal void ControlUpdate()
         {
             if (Volatile.Read(ref _disposeRequested) != 0) { TryFinalizeDisposal(); return; }
@@ -390,7 +421,7 @@ namespace Bun3.Unity.Audio.SteamAudio
         ClipNotPrepared,
         /// <summary>The requested pitch was NaN or infinite.</summary>
         InvalidPitch,
-        /// <summary>The output rate or DSP frame size changed; construct a matching replacement pool.</summary>
+        /// <summary>The output rate, DSP frame size or audio device changed while this request was active; the request ended.</summary>
         OutputFormatChanged,
         /// <summary>The source filter received a callback format other than complete stereo sample pairs.</summary>
         UnsupportedOutputChannels,

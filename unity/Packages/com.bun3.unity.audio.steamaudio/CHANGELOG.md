@@ -5,6 +5,7 @@
 ### Added
 
 - `SteamAudioSoundSetup.ApplyNativeOutput(config, maximumDecodedBytes, acousticOutputs)` assembles native pooled SFX output in one call before `SoundSystem.Initialize`: it disables core occlusion, gives every pooled voice a `SteamAudioSoundOutput` from one shared runtime and clip cache, decodes positional clips through `SoundSystemConfig.PrepareDefinition`, registers one `PlanarAcousticSfxBinding` per voice, and releases all of it through `SoundSystemConfig.OnDisposed` so the same config can initialize again. It is separate from `Apply`, which attaches the SDK's `SteamAudioSource`.
+- Native SFX outputs handle audio device changes (`AudioSettings.OnAudioConfigurationChanged`, including `AudioSettings.Reset`) alongside the core recovery and rebuild only what was lost. When the shared driver clip lost its data, it is recreated and active positional requests end with `SteamAudioSoundFailure.OutputFormatChanged`; the HRTF and renderers stay. When the sample rate or DSP frame size changed, one new HRTF replaces the old one and each output renderer is swapped as soon as no audio reader holds it. Positional playback then works again without rebuilding the voice pool, re-decoding clips or reinitializing the `SoundSystem`, and the subscription is released with the `SoundSystem`.
 
 ### Changed
 
