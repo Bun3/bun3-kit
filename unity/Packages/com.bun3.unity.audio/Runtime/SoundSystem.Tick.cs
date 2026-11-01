@@ -32,6 +32,9 @@ namespace Bun3.Unity.Audio
             UpdateActiveSources();
             UpdateTimeScalePitch();
             TickMusic(dt);
+#if UNITY_EDITOR
+            CheckEditedDefinitions();
+#endif
         }
 
         private void PollVoiceOutputCompletion()

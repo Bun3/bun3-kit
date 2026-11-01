@@ -254,5 +254,50 @@ namespace Bun3.Unity.Audio.Tests
             }
             Assert.That(active, Is.EqualTo(4), "Measured calls must actually start voices.");
         }
-    }
+    
+        private Dictionary<SoundDef, int> CountHookCalls(out SoundSystemConfig config)
+        {
+            var counts = new Dictionary<SoundDef, int>();
+            config = Config();
+            config.PrepareDefinition = def => counts[def] = counts.TryGetValue(def, out var n) ? n + 1 : 1;
+            return counts;
+        }
+
+        [Test]
+        public void EditedClips_AreRepreparedOnNextTick()
+        {
+            var counts = CountHookCalls(out var config);
+            SoundSystem.Initialize(_catalog, config);
+            Assert.That(counts[_fx3d], Is.EqualTo(1));
+            var other = AudioClip.Create("t2", 4410, 1, 44100, false);
+            try
+            {
+                _fx3d.Clips = new[] { other };
+                SoundSystem.Current.Tick(0.016f);
+                Assert.That(counts[_fx3d], Is.EqualTo(2));
+                Assert.That(counts[_fx2d], Is.EqualTo(1));
+                SoundSystem.Current.Tick(0.016f);
+                Assert.That(counts[_fx3d], Is.EqualTo(2));
+            }
+            finally { SoundSystem.Shutdown(); Object.DestroyImmediate(other); }
+        }
+
+        [Test]
+        public void EditedSpatialMode_IsRepreparedOnNextTick()
+        {
+            var counts = CountHookCalls(out var config);
+            SoundSystem.Initialize(_catalog, config);
+            _fx3d.Spatial = SpatialMode.None;
+            SoundSystem.Current.Tick(0.016f);
+            Assert.That(counts[_fx3d], Is.EqualTo(2));
+        }
+
+        [Test]
+        public void UnchangedDefinitionsCheck_DoesNotAllocate()
+        {
+            SoundSystem.Initialize(_catalog, Config());
+            SoundSystem.Current.Tick(0.016f);
+            Assert.That(() => SoundSystem.Current.Tick(0.016f), Is.Not.AllocatingGCMemory());
+        }
+}
 }

@@ -32,14 +32,7 @@ namespace Bun3.Unity.Audio
             try
             {
                 system.Prepare(catalog);
-                if (config.PrepareDefinition != null)
-                {
-                    for (var i = 0; i < catalog.Entries.Count; i++)
-                    {
-                        try { config.PrepareDefinition(catalog.Entries[i].Definition); }
-                        catch (Exception e) { Debug.LogException(e); }
-                    }
-                }
+                for (var i = 0; i < catalog.Entries.Count; i++) RunPrepareHook(config, catalog.Entries[i].Definition);
             }
             catch
             {
@@ -48,6 +41,7 @@ namespace Bun3.Unity.Audio
             }
             Current = system;
             _catalog = catalog;
+            CaptureSnapshots(catalog);
             Application.quitting -= Shutdown;
             Application.quitting += Shutdown;
         }
@@ -94,6 +88,13 @@ namespace Bun3.Unity.Audio
             Current.StopMusic(Current._config.MusicFadeSeconds);
         }
 
+        private static void RunPrepareHook(SoundSystemConfig config, SoundDef def)
+        {
+            if (config.PrepareDefinition == null) return;
+            try { config.PrepareDefinition(def); }
+            catch (Exception e) { Debug.LogException(e); }
+        }
+
         private static bool TryResolve(string key, out SoundDef def)
         {
             if (Current == null)
@@ -120,6 +121,69 @@ namespace Bun3.Unity.Audio
             Current = null;
             _catalog = null;
             _warnedUninitialized = false;
+#if UNITY_EDITOR
+            _snapshots = null;
+#endif
         }
+
+        [System.Diagnostics.Conditional("UNITY_EDITOR")]
+        private static void CaptureSnapshots(SoundCatalog catalog)
+        {
+#if UNITY_EDITOR
+            var entries = catalog.Entries;
+            _snapshots = new DefSnapshot[entries.Count];
+            for (var i = 0; i < _snapshots.Length; i++) _snapshots[i] = new DefSnapshot(entries[i].Definition);
+#endif
+        }
+
+#if UNITY_EDITOR
+        // Editor only: a definition edited while playing (clips, spatial mode) is prepared again.
+        private sealed class DefSnapshot
+        {
+            internal readonly SoundDef Def;
+            private AudioClip[] _clips;
+            private SpatialMode _spatial;
+
+            internal DefSnapshot(SoundDef def)
+            {
+                Def = def;
+                Capture();
+            }
+
+            internal void Capture()
+            {
+                var clips = Def.EffectiveClips;
+                _clips = clips == null ? Array.Empty<AudioClip>() : (AudioClip[])clips.Clone();
+                _spatial = Def.EffectiveSpatial;
+            }
+
+            internal bool Changed()
+            {
+                if (Def.EffectiveSpatial != _spatial) return true;
+                var clips = Def.EffectiveClips;
+                var length = clips == null ? 0 : clips.Length;
+                if (length != _clips.Length) return true;
+                for (var i = 0; i < length; i++)
+                    if (!ReferenceEquals(clips[i], _clips[i])) return true;
+                return false;
+            }
+        }
+
+        private static DefSnapshot[] _snapshots;
+
+        private void CheckEditedDefinitions()
+        {
+            var snapshots = _snapshots;
+            if (snapshots == null || !ReferenceEquals(this, Current)) return;
+            for (var i = 0; i < snapshots.Length; i++)
+            {
+                var snapshot = snapshots[i];
+                if (snapshot.Def == null || !snapshot.Changed()) continue;
+                snapshot.Capture();
+                Prepare(snapshot.Def);
+                RunPrepareHook(_config, snapshot.Def);
+            }
+        }
+#endif
     }
 }
