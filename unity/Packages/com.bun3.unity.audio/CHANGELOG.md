@@ -20,11 +20,12 @@
   `AudioSettings.OnAudioConfigurationChanged` (device switch or
   `AudioSettings.Reset`) and recovers only what actually stopped. A voice whose
   source stopped completes and frees its slot, including voices waiting for an
-  output adapter's completion; voices are left alone while `AudioListener.pause`
-  is set. Stopped music resumes from the playhead cached each tick with a 0.05 s
-  fade-in, rescheduling the loop from the remaining intro; a stopped fading-out
-  track is silenced; paused music stays paused and is restored by `ResumeMusic`. Sources,
-  clips and prepared definitions are not recreated.
+  output adapter's completion; while `AudioListener.pause` is set this waits for
+  the first unpaused tick. Stopped music resumes from the playhead cached each
+  tick with a 0.05 s fade-in, rescheduling the loop from the remaining intro; a
+  stopped fading-out track, or one whose clip lost its data, is silenced; paused
+  music stays paused and is restored by `ResumeMusic`. Sources, clips and
+  prepared definitions are not recreated.
 
 ## [0.6.0] - 2026-10-29
 

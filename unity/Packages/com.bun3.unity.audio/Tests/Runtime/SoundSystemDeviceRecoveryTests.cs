@@ -125,6 +125,39 @@ namespace Bun3.Unity.Audio.Tests
         }
 
         [UnityTest]
+        public IEnumerator VoiceLostWhileListenerPaused_CompletesOnFirstUnpausedTick()
+        {
+            using var sys = new SoundSystem(new SoundSystemConfig { SfxVoices = 2 });
+            var lost = sys.Play(Sfx(loop: true));
+            var kept = sys.Play(Sfx(loop: true));
+            var completions = 0;
+            sys.SetCompletionCallback(lost, _ => completions++);
+            yield return null;
+            AudioListener.pause = true;
+            try
+            {
+                yield return null;
+                sys.SourceForTest(lost.SlotIndex).Stop();
+                sys.RecoverLostPlayback();
+                yield return null;
+                Assert.That(lost.IsValid, Is.True, "voices are left alone while the listener is paused");
+
+                AudioListener.pause = false;
+                sys.Tick(0.016f);
+
+                Assert.That(sys.Table.Slots[lost.SlotIndex].State, Is.EqualTo(VoiceState.Idle));
+                Assert.That(completions, Is.EqualTo(1));
+                Assert.That(kept.IsValid, Is.True, "a voice the listener only paused is not lost");
+                sys.Tick(0.016f);
+                Assert.That(completions, Is.EqualTo(1));
+            }
+            finally
+            {
+                AudioListener.pause = false;
+            }
+        }
+
+        [UnityTest]
         public IEnumerator LostMusicLoop_ResumesNearCachedPosition()
         {
             using var sys = new SoundSystem(new SoundSystemConfig { SfxVoices = 1 });
@@ -250,7 +283,7 @@ namespace Bun3.Unity.Audio.Tests
             AudioClip loopClip = null;
             Assert.Ignore("Needs an imported clip asset; Editor only.");
 #endif
-            Assume.That(loopClip, Is.Not.Null);
+            Assert.That(loopClip, Is.Not.Null);
             var music = ScriptableObject.CreateInstance<MusicDef>();
             music.Loop = loopClip;
             _created.Add(music);
@@ -267,6 +300,34 @@ namespace Bun3.Unity.Audio.Tests
             Assert.That(sys.MusicLoopSources[ch].isPlaying, Is.True);
             Assert.That(sys.MusicLoopSources[ch].timeSamples, Is.GreaterThanOrEqualTo((int)(0.2f * loopClip.frequency)));
             Assert.That(sys.Table.Slots[0].State, Is.EqualTo(VoiceState.Idle));
+        }
+
+        [UnityTest]
+        public IEnumerator RealAudioReset_SilencesMusicWhoseScriptClipLostItsData()
+        {
+            using var sys = new SoundSystem(new SoundSystemConfig { SfxVoices = 1 });
+            sys.PlayMusic(Music(0f, 10f), 0f);
+            var ch = sys.ActiveMusic;
+            var completions = 0;
+            sys.SetCompletionCallback(sys.Play(Sfx(loop: true)), _ => completions++);
+            yield return new WaitForSecondsRealtime(0.3f);
+            var errors = 0;
+            Application.LogCallback onLog = (_, _, type) => { if (type is LogType.Exception or LogType.Error) errors++; };
+            Application.logMessageReceived += onLog;
+            try
+            {
+                AudioSettings.Reset(AudioSettings.GetConfiguration());
+            }
+            finally
+            {
+                Application.logMessageReceived -= onLog;
+            }
+            yield return null;
+
+            Assert.That(errors, Is.Zero);
+            Assert.That(completions, Is.EqualTo(1));
+            Assert.That(sys.MusicChannels[ch].State, Is.EqualTo(MusicState.Idle));
+            Assert.That(sys.IsMusicPlaying, Is.False);
         }
     }
 }

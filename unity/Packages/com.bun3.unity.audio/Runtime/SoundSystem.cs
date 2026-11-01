@@ -44,6 +44,7 @@ namespace Bun3.Unity.Audio
         private readonly AudioSettings.AudioConfigurationChangeHandler _onAudioConfigurationChanged;
         private GameObject _root;
         private bool _disposed;
+        private bool _voiceRecoveryPending;
 
         /// <summary>
         /// Creates the pool and registers the tick. Dispose to tear both down. When no
@@ -473,45 +474,59 @@ namespace Bun3.Unity.Audio
 
         /// <summary>
         /// Audio configuration change (device switch or AudioSettings.Reset): Unity may stop
-        /// every source. Recovers only what actually stopped: lost voices complete (unless the
-        /// listener is paused, which also reads as stopped), lost music resumes from its cached
-        /// playhead. Cold path; allocates. Two-phase like Tick: all state first, signals last.
+        /// every source. Recovers only what actually stopped: lost voices complete, lost music
+        /// resumes from its cached playhead. While the listener is paused (which also reads as
+        /// stopped) voice recovery is deferred to the first unpaused Tick. Cold path; allocates.
+        /// Two-phase like Tick: all state first, signals last.
         /// </summary>
         internal void RecoverLostPlayback()
         {
-            if (_disposed)
+            // A leaked instance whose root was destroyed must not throw inside the static event.
+            if (_disposed || _root == null)
             {
                 return;
             }
-            var completed = new List<(int Slot, uint Generation, Cysharp.Threading.Tasks.AutoResetUniTaskCompletionSource Completion, Action<SoundHandle> Callback)>();
-            if (!AudioListener.pause)
+            List<(int Slot, uint Generation, Cysharp.Threading.Tasks.AutoResetUniTaskCompletionSource Completion, Action<SoundHandle> Callback)> lost = null;
+            if (AudioListener.pause)
             {
-                for (var i = 0; i < Table.Slots.Length; i++)
-                {
-                    ref var voice = ref Table.Slots[i];
-                    if (voice.State == VoiceState.Idle || _sources[i].isPlaying)
-                    {
-                        continue;
-                    }
-                    completed.Add((i, voice.Generation, voice.Completion, voice.CompletionCallback));
-                    Table.Release(i);
-                }
-                for (var i = 0; i < completed.Count; i++)
-                {
-                    RetireVoiceOutput(completed[i].Slot);
-                    _sources[completed[i].Slot].Stop();
-                }
+                _voiceRecoveryPending = true;
+            }
+            else
+            {
+                lost = CollectLostVoices();
             }
             var (music0, music1) = RecoverLostMusic();
 
-            for (var i = 0; i < completed.Count; i++)
+            if (lost != null)
             {
-                var entry = completed[i];
-                entry.Completion?.TrySetResult();
-                entry.Callback?.Invoke(new SoundHandle(this, entry.Slot, entry.Generation));
+                NotifyCompletedVoices(lost);
             }
             music0?.TrySetResult();
             music1?.TrySetResult();
+        }
+
+        // Releases, retires and stops every active voice whose source stopped; the caller
+        // signals the returned entries last. Null when nothing was lost.
+        private List<(int Slot, uint Generation, Cysharp.Threading.Tasks.AutoResetUniTaskCompletionSource Completion, Action<SoundHandle> Callback)> CollectLostVoices()
+        {
+            List<(int Slot, uint Generation, Cysharp.Threading.Tasks.AutoResetUniTaskCompletionSource Completion, Action<SoundHandle> Callback)> lost = null;
+            for (var i = 0; i < Table.Slots.Length; i++)
+            {
+                ref var voice = ref Table.Slots[i];
+                if (voice.State == VoiceState.Idle || _sources[i].isPlaying)
+                {
+                    continue;
+                }
+                lost ??= new(Table.Slots.Length);
+                lost.Add((i, voice.Generation, voice.Completion, voice.CompletionCallback));
+                Table.Release(i);
+            }
+            for (var i = 0; lost != null && i < lost.Count; i++)
+            {
+                RetireVoiceOutput(lost[i].Slot);
+                _sources[lost[i].Slot].Stop();
+            }
+            return lost;
         }
 
         /// <summary>

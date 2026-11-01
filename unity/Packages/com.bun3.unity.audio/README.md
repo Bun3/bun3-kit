@@ -599,9 +599,10 @@ changed authored data. Do not access Unity profile assets from an audio callback
   Unity can stop every source. Each service recovers only what actually stopped:
   music resumes from where it was with a short fade-in (paused music resumes on
   `ResumeMusic`), and stopped voices complete and free their slots instead of
-  restarting. Voices are left alone while `AudioListener.pause` is set. Nothing is
+  restarting (after `AudioListener.pause` is cleared, when it was set). Nothing is
   recreated; the recovery itself allocates. Unity discards the data of clips made
-  with `AudioClip.Create`; recreate those yourself (imported clips survive).
+  with `AudioClip.Create`; music using such a clip stops. Recreate those clips
+  yourself (imported clips survive).
 - Preferences and routing are local controls. Persisting or transmitting settings
   is the application's responsibility.
 
