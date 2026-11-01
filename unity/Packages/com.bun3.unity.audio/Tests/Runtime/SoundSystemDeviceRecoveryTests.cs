@@ -125,6 +125,24 @@ namespace Bun3.Unity.Audio.Tests
         }
 
         [UnityTest]
+        public IEnumerator ThrowingCompletionCallback_IsLoggedAndDoesNotPropagateFromDeviceChange()
+        {
+            using var sys = new SoundSystem(new SoundSystemConfig { SfxVoices = 1 });
+            var def = Sfx(loop: true);
+            var handle = sys.Play(def);
+            sys.SetCompletionCallback(handle, _ => throw new System.InvalidOperationException("boom"));
+            sys.SourceForTest(0).Stop();
+            LogAssert.Expect(LogType.Exception, new System.Text.RegularExpressions.Regex("boom"));
+
+            AudioSettings.Reset(AudioSettings.GetConfiguration());
+            yield return null;
+            yield return null;
+
+            Assert.That(sys.Table.Slots[0].State, Is.EqualTo(VoiceState.Idle));
+            Assert.That(sys.Play(def).IsValid, Is.True);
+        }
+
+        [UnityTest]
         public IEnumerator VoiceLostWhileListenerPaused_CompletesOnFirstUnpausedTick()
         {
             using var sys = new SoundSystem(new SoundSystemConfig { SfxVoices = 2 });

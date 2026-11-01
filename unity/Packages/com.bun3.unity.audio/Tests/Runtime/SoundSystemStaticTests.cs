@@ -6,7 +6,7 @@ using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
 using UnityEngine.TestTools.Constraints;
-using Is =UnityEngine.TestTools.Constraints.Is;
+using Is = UnityEngine.TestTools.Constraints.Is;
 using Object = UnityEngine.Object;
 
 namespace Bun3.Unity.Audio.Tests
@@ -254,7 +254,7 @@ namespace Bun3.Unity.Audio.Tests
             }
             Assert.That(active, Is.EqualTo(4), "Measured calls must actually start voices.");
         }
-    
+
         private Dictionary<SoundDef, int> CountHookCalls(out SoundSystemConfig config)
         {
             var counts = new Dictionary<SoundDef, int>();
@@ -353,5 +353,5 @@ namespace Bun3.Unity.Audio.Tests
             Assert.That(counts[_fx2d], Is.EqualTo(2));
             Assert.That(counts[_fx3d], Is.EqualTo(2));
         }
-}
+    }
 }

@@ -26,6 +26,8 @@
   stopped fading-out track, or one whose clip lost its data, is silenced; paused
   music stays paused and is restored by `ResumeMusic`. Sources, clips and
   prepared definitions are not recreated.
+- In the Editor, a catalog definition whose clips or spatial mode change while playing is
+  prepared again on the next tick, and `PrepareDefinition` runs for it again.
 
 ### Fixed
 

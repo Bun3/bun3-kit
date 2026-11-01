@@ -119,7 +119,9 @@ SoundSystem.StopMusic();
 `Initialize` validates the catalog and prepares every definition; it throws when
 already initialized. `Shutdown()` disposes the instance and runs on application quit.
 Unknown keys are ignored without a log; calls before `Initialize` are ignored with one
-Editor warning. `SoundSystem.Current` exposes the instance for handles, charge sounds,
+Editor warning. In the Editor, a catalog definition whose clips or spatial mode change
+while playing is prepared again on the next tick, and `PrepareDefinition` runs for it
+again. `SoundSystem.Current` exposes the instance for handles, charge sounds,
 follow playback and channel volumes.
 
 To own an instance directly instead, create a **Sound Def** asset, assign a non-null

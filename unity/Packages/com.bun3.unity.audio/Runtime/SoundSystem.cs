@@ -130,7 +130,12 @@ namespace Bun3.Unity.Audio
                     typeof(UnityEngine.PlayerLoop.Update.ScriptRunBehaviourUpdate));
             }
             Live.Add(this);
-            _onAudioConfigurationChanged = _ => RecoverLostPlayback();
+            _onAudioConfigurationChanged = _ =>
+            {
+                // Isolated so a throwing completion callback cannot skip later subscribers of the static event.
+                try { RecoverLostPlayback(); }
+                catch (Exception e) { Debug.LogException(e); }
+            };
             AudioSettings.OnAudioConfigurationChanged += _onAudioConfigurationChanged;
         }
 
