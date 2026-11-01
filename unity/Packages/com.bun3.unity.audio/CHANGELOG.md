@@ -27,6 +27,12 @@
   music stays paused and is restored by `ResumeMusic`. Sources, clips and
   prepared definitions are not recreated.
 
+### Fixed
+
+- `SoundSystem.Dispose` (and therefore `Shutdown`) outside Play Mode destroys the
+  pool root with `DestroyImmediate` instead of logging "Destroy may not be called
+  from edit mode".
+
 ## [0.6.0] - 2026-10-29
 
 ### Added

@@ -457,7 +457,8 @@ namespace Bun3.Unity.Audio
             ReleaseAllPreloadedOnDispose();
             if (_root != null)
             {
-                UnityEngine.Object.Destroy(_root);
+                if (Application.isPlaying) { UnityEngine.Object.Destroy(_root); }
+                else { UnityEngine.Object.DestroyImmediate(_root); }
                 _root = null;
             }
             _config.OnDisposed?.Invoke();
