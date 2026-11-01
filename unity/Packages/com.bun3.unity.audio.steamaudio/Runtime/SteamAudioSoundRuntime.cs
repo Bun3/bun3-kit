@@ -56,10 +56,10 @@ namespace Bun3.Unity.Audio.SteamAudio
         internal int FrameSize { get; private set; }
         internal AudioClip DriverClip { get; private set; }
 
-        internal SteamAudioPathRenderer CreateRenderer()
+        internal SteamAudioPathRenderer CreateRenderer(int order = 1)
         {
             if (_disposed) throw new ObjectDisposedException(nameof(SteamAudioSoundRuntime));
-            return new SteamAudioPathRenderer(_context, _hrtf, SampleRate, FrameSize);
+            return new SteamAudioPathRenderer(_context, _hrtf, SampleRate, FrameSize, order);
         }
 
         // Ends active outputs and rebuilds only what the change invalidated. Cold path; allocates.
@@ -82,20 +82,28 @@ namespace Bun3.Unity.Audio.SteamAudio
             _hrtf = CreateHrtf(sampleRate, frameSize);
             SampleRate = sampleRate;
             FrameSize = frameSize;
+            for (int i = 0; i < _outputs.Count; i++) ReplaceRenderer(_outputs[i]);
+            // Renderers retain their HRTF natively, so old ones keep it alive past this release.
+            old.Release();
+            CreateDriverClip();
+        }
+
+        // A failed output keeps its old renderer; its ControlUpdate format check keeps failing requests closed.
+        private void ReplaceRenderer(SteamAudioSoundOutput output)
+        {
+            output.EndForDeviceChange();
+            DropPending(output);
+            SteamAudioPathRenderer renderer = null;
             try
             {
-                for (int i = 0; i < _outputs.Count; i++)
-                {
-                    var output = _outputs[i];
-                    output.EndForDeviceChange();
-                    DropPending(output);
-                    var renderer = CreateRenderer();
-                    if (!output.TryReplaceRenderer(renderer)) _pending.Add((output, renderer));
-                }
+                renderer = CreateRenderer(output.RendererOrder);
+                if (!output.TryReplaceRenderer(renderer)) _pending.Add((output, renderer));
             }
-            // Renderers retain their HRTF natively, so old ones keep it alive past this release.
-            finally { old.Release(); }
-            CreateDriverClip();
+            catch (Exception e)
+            {
+                renderer?.Dispose();
+                Debug.LogException(e);
+            }
         }
 
         // Unity empties AudioClip.Create data on a device reset (samples reads zero).
@@ -137,7 +145,19 @@ namespace Bun3.Unity.Audio.SteamAudio
         internal void ControlUpdate()
         {
             for (int i = _pending.Count - 1; i >= 0; i--)
-                if (_pending[i].Output.TryReplaceRenderer(_pending[i].Renderer)) _pending.RemoveAt(i);
+            {
+                var (output, renderer) = _pending[i];
+                try
+                {
+                    if (!output.TryReplaceRenderer(renderer)) continue;
+                }
+                catch (Exception e)
+                {
+                    renderer.Dispose();
+                    Debug.LogException(e);
+                }
+                _pending.RemoveAt(i);
+            }
             for (int i = _outputs.Count - 1; i >= 0; i--) _outputs[i].ControlUpdate();
         }
 

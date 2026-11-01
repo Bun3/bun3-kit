@@ -40,7 +40,7 @@ namespace Bun3.Unity.Audio.SteamAudio
         /// <summary>
         /// Prewarms all per-source managed/native storage and a private native runtime, released with this output.
         /// A factory, when given, supplies only the initial renderer; a sample-rate or DSP frame-size change replaces it
-        /// with a default one. Main thread only.
+        /// with a default renderer of the same Ambisonics order. Main thread only.
         /// </summary>
         public SteamAudioSoundOutput(AudioSource source, SteamAudioClipCache clips,
             Func<int, int, SteamAudioPathRenderer> createRenderer = null)
@@ -357,12 +357,16 @@ namespace Bun3.Unity.Audio.SteamAudio
             Retire();
         }
 
+        // The parameter mailbox is sized to the coefficient count, so replacements keep this order.
+        internal int RendererOrder => (int)Math.Sqrt(_coefficients.Length) - 1;
+
         // Main thread. Swaps only while idle or retired without a reader; prewarms like construction, then frees the old renderer.
+        // The caller keeps ownership of a refused renderer and disposes it when this throws.
         internal bool TryReplaceRenderer(SteamAudioPathRenderer renderer)
         {
-            if (Volatile.Read(ref _state) is not (0 or 3)) return false;
             if (renderer.CoefficientCount != _coefficients.Length)
                 throw new ArgumentException("The replacement must keep the parameter mailbox's coefficient count.", nameof(renderer));
+            if (Volatile.Read(ref _state) is not (0 or 3)) return false;
             bool resized = renderer.FrameSize != _frame;
             var mono = resized ? new float[renderer.FrameSize] : _mono;
             var stereo = resized ? new float[renderer.FrameSize * 2] : _stereo;

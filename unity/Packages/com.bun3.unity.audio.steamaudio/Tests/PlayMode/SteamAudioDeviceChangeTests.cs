@@ -1,5 +1,7 @@
 using System.Collections;
+using System.Collections.Generic;
 using System.Reflection;
+using System.Text.RegularExpressions;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
@@ -17,9 +19,31 @@ namespace Bun3.Unity.Audio.SteamAudio.Tests
         private GameObject[] _sources;
         private SteamAudioSoundOutput[] _outputs;
         private SteamAudioSoundOutput _heldReader;
+        private readonly List<SteamAudioSoundOutput> _ownedOutputs = new();
+        private readonly List<GameObject> _ownedSources = new();
 
-        private static SteamAudioPathRenderer Renderer(SteamAudioSoundOutput output) => (SteamAudioPathRenderer)typeof(SteamAudioSoundOutput)
-            .GetField("_renderer", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(output);
+        private static int HostCount => Resources.FindObjectsOfTypeAll<SteamAudioSoundRetirementHost>().Length;
+
+        private static object Field(SteamAudioSoundOutput output, string name) =>
+            typeof(SteamAudioSoundOutput).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic).GetValue(output);
+
+        private static SteamAudioPathRenderer Renderer(SteamAudioSoundOutput output) => (SteamAudioPathRenderer)Field(output, "_renderer");
+
+        private static SteamAudioSoundRuntime RuntimeOf(SteamAudioSoundOutput output) => (SteamAudioSoundRuntime)Field(output, "_runtime");
+
+        // Native SH rejects NaN, so the replacement's prewarm render throws for this output only.
+        private static void BreakCoefficients(SteamAudioSoundOutput output) => ((float[])Field(output, "_coefficients"))[0] = float.NaN;
+
+        // Public constructor: a private runtime and an order-2 factory renderer (nine coefficients).
+        private SteamAudioSoundOutput CreateOrderTwoOutput()
+        {
+            var source = new GameObject("Order-2 factory source " + _ownedSources.Count);
+            _ownedSources.Add(source);
+            var output = new SteamAudioSoundOutput(source.AddComponent<AudioSource>(), _cache,
+                (rate, frame) => SteamAudioPathRenderer.CreateDefault(rate, frame, 2));
+            _ownedOutputs.Add(output);
+            return output;
+        }
 
         private static int RealRate => AudioSettings.outputSampleRate;
         private static int RealFrame { get { AudioSettings.GetDSPBufferSize(out int frame, out _); return frame; } }
@@ -52,8 +76,10 @@ namespace Bun3.Unity.Audio.SteamAudio.Tests
             _heldReader?.ReleaseReader();
             _heldReader = null;
             foreach (var output in _outputs) output?.Dispose();
+            foreach (var output in _ownedOutputs) output.Dispose();
             _runtime.Dispose();
             foreach (var source in _sources) Object.Destroy(source);
+            foreach (var source in _ownedSources) Object.Destroy(source);
             _cache.Dispose();
             Object.Destroy(_definition);
             Object.Destroy(_clip);
@@ -129,10 +155,12 @@ namespace Bun3.Unity.Audio.SteamAudio.Tests
         {
             Assert.That(_outputs[0].TryClaimReader(), Is.True);
             _heldReader = _outputs[0];
+            var held = Renderer(_outputs[0]);
             int latestFrame = _runtime.FrameSize * 2;
 
             _runtime.HandleAudioConfigurationChanged(OtherRate, _runtime.FrameSize);
             _runtime.HandleAudioConfigurationChanged(RealRate, latestFrame);
+            Assert.That(Renderer(_outputs[0]), Is.SameAs(held), "A held reader keeps its renderer.");
             _heldReader = null;
             _outputs[0].ReleaseReader();
             yield return null;
@@ -142,6 +170,71 @@ namespace Bun3.Unity.Audio.SteamAudio.Tests
                 Assert.That(Renderer(output).SampleRate, Is.EqualTo(RealRate));
                 Assert.That(Renderer(output).FrameSize, Is.EqualTo(latestFrame));
             }
+        }
+
+        [UnityTest]
+        public IEnumerator FactoryRendererOrder_IsKeptAcrossFormatChange()
+        {
+            int hosts = HostCount;
+            var idle = CreateOrderTwoOutput();
+            var busy = CreateOrderTwoOutput();
+            Assert.That(busy.TryStart(_definition, _clip, 1), Is.EqualTo(VoiceOutputStartResult.Started));
+            Assert.That(busy.TryClaimReader(), Is.True);
+            _heldReader = busy;
+            var held = Renderer(busy);
+
+            RuntimeOf(idle).HandleAudioConfigurationChanged(OtherRate, RealFrame);
+            RuntimeOf(busy).HandleAudioConfigurationChanged(OtherRate, RealFrame);
+
+            Assert.That(Renderer(idle).CoefficientCount, Is.EqualTo(9));
+            Assert.That(Renderer(idle).SampleRate, Is.EqualTo(OtherRate));
+            Assert.That(Renderer(busy), Is.SameAs(held), "A held reader keeps its renderer.");
+            // Disposal waits for the reader, so finishing it requires the host's update to keep running.
+            busy.Dispose();
+            _heldReader = null;
+            busy.ReleaseReader();
+            yield return null;
+            yield return null;
+
+            Assert.That(Renderer(busy).CoefficientCount, Is.EqualTo(9), "The pending replacement keeps the factory order.");
+            Assert.That(Renderer(busy).SampleRate, Is.EqualTo(OtherRate));
+            Assert.That(HostCount - hosts, Is.EqualTo(1), "The disposed output finalized; only the idle output's host remains.");
+        }
+
+        [UnityTest]
+        public IEnumerator FormatChange_FailedReplacement_KeepsOldRendererAndRecreatesClip()
+        {
+            var failing = Renderer(_outputs[0]);
+            var driver = _runtime.DriverClip;
+            BreakCoefficients(_outputs[0]);
+            LogAssert.Expect(LogType.Exception, new Regex("ArgumentOutOfRangeException"));
+
+            _runtime.HandleAudioConfigurationChanged(OtherRate, _runtime.FrameSize);
+
+            Assert.That(Renderer(_outputs[0]), Is.SameAs(failing), "The failed output keeps its old renderer.");
+            Assert.That(Renderer(_outputs[1]).SampleRate, Is.EqualTo(OtherRate), "Later outputs are still replaced.");
+            Assert.That(_runtime.DriverClip, Is.Not.SameAs(driver), "The driver clip is recreated despite the failure.");
+            // A repeated exception on the next frame would fail the test as an unexpected log.
+            yield return null;
+        }
+
+        [UnityTest]
+        public IEnumerator PendingReplacementFailure_IsLoggedOnceAndDropped()
+        {
+            Assert.That(_outputs[0].TryClaimReader(), Is.True);
+            _heldReader = _outputs[0];
+            var held = Renderer(_outputs[0]);
+            BreakCoefficients(_outputs[0]);
+            _runtime.HandleAudioConfigurationChanged(OtherRate, _runtime.FrameSize);
+            LogAssert.Expect(LogType.Exception, new Regex("ArgumentOutOfRangeException"));
+
+            _heldReader = null;
+            _outputs[0].ReleaseReader();
+            yield return null;
+            yield return null;
+
+            // The second frame would log again if the failed replacement stayed pending.
+            Assert.That(Renderer(_outputs[0]), Is.SameAs(held), "The failed output keeps its old renderer.");
         }
 
         [Test]
