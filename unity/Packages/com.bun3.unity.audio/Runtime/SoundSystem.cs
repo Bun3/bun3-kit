@@ -11,9 +11,9 @@ namespace Bun3.Unity.Audio
     /// player-loop tick. No MonoBehaviours, no coroutines, no per-play allocation.
     /// Partial layout:
     /// <list type="bullet">
-    /// <item><description>SoundSystem.cs: construction, playback, disposal.</description></item>
+    /// <item><description>SoundSystem.cs: construction, playback, disposal, audio device-change recovery.</description></item>
     /// <item><description>SoundSystem.Tick.cs: per-frame mirror of <see cref="VoiceTable"/>/music state onto AudioSources.</description></item>
-    /// <item><description>SoundSystem.Music.cs: intro+loop music channels, crossfade, pause/resume.</description></item>
+    /// <item><description>SoundSystem.Music.cs: intro+loop music channels, crossfade, pause/resume, resume after device change.</description></item>
     /// <item><description>SoundSystem.Occlusion.cs: round-robin occlusion evaluation and low-pass/volume application.</description></item>
     /// <item><description>SoundSystem.Async.cs: UniTask entry points built on voice completion sources.</description></item>
     /// <item><description>SoundSystem.Charge.cs: progress-driven charge sounds composed over voice playback.</description></item>
@@ -41,6 +41,7 @@ namespace Bun3.Unity.Audio
         private readonly SoundSystemConfig _config;
         private readonly AudioMixer _mixer;
         private readonly System.Random _rng;
+        private readonly AudioSettings.AudioConfigurationChangeHandler _onAudioConfigurationChanged;
         private GameObject _root;
         private bool _disposed;
 
@@ -128,6 +129,8 @@ namespace Bun3.Unity.Audio
                     typeof(UnityEngine.PlayerLoop.Update.ScriptRunBehaviourUpdate));
             }
             Live.Add(this);
+            _onAudioConfigurationChanged = _ => RecoverLostPlayback();
+            AudioSettings.OnAudioConfigurationChanged += _onAudioConfigurationChanged;
         }
 
         /// <summary>Plays a 2D (or def-default) sound. Returns an invalid handle when blocked.</summary>
@@ -405,6 +408,7 @@ namespace Bun3.Unity.Audio
                 return;
             }
             _disposed = true;
+            AudioSettings.OnAudioConfigurationChanged -= _onAudioConfigurationChanged;
             // Cleared first so static calls re-entering from the completions below are ignored, not thrown.
             if (Current == this) ClearStaticState();
             DisposeVoiceOutputs();
@@ -465,6 +469,49 @@ namespace Bun3.Unity.Audio
             }
             musicCompletion0?.TrySetResult();
             musicCompletion1?.TrySetResult();
+        }
+
+        /// <summary>
+        /// Audio configuration change (device switch or AudioSettings.Reset): Unity may stop
+        /// every source. Recovers only what actually stopped: lost voices complete (unless the
+        /// listener is paused, which also reads as stopped), lost music resumes from its cached
+        /// playhead. Cold path; allocates. Two-phase like Tick: all state first, signals last.
+        /// </summary>
+        internal void RecoverLostPlayback()
+        {
+            if (_disposed)
+            {
+                return;
+            }
+            var completed = new List<(int Slot, uint Generation, Cysharp.Threading.Tasks.AutoResetUniTaskCompletionSource Completion, Action<SoundHandle> Callback)>();
+            if (!AudioListener.pause)
+            {
+                for (var i = 0; i < Table.Slots.Length; i++)
+                {
+                    ref var voice = ref Table.Slots[i];
+                    if (voice.State == VoiceState.Idle || _sources[i].isPlaying)
+                    {
+                        continue;
+                    }
+                    completed.Add((i, voice.Generation, voice.Completion, voice.CompletionCallback));
+                    Table.Release(i);
+                }
+                for (var i = 0; i < completed.Count; i++)
+                {
+                    RetireVoiceOutput(completed[i].Slot);
+                    _sources[completed[i].Slot].Stop();
+                }
+            }
+            var (music0, music1) = RecoverLostMusic();
+
+            for (var i = 0; i < completed.Count; i++)
+            {
+                var entry = completed[i];
+                entry.Completion?.TrySetResult();
+                entry.Callback?.Invoke(new SoundHandle(this, entry.Slot, entry.Generation));
+            }
+            music0?.TrySetResult();
+            music1?.TrySetResult();
         }
 
         /// <summary>

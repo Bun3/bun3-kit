@@ -595,6 +595,13 @@ changed authored data. Do not access Unity profile assets from an audio callback
   occlusion implementations allocation-free. A new closure per play still allocates.
 - Construction, first-time setup, changed snapshots, Addressables and cancellation
   can allocate. The package does not promise every API is allocation-free.
+- On an audio configuration change (output device switch or `AudioSettings.Reset`)
+  Unity can stop every source. Each service recovers only what actually stopped:
+  music resumes from where it was with a short fade-in (paused music resumes on
+  `ResumeMusic`), and stopped voices complete and free their slots instead of
+  restarting. Voices are left alone while `AudioListener.pause` is set. Nothing is
+  recreated; the recovery itself allocates. Unity discards the data of clips made
+  with `AudioClip.Create`; recreate those yourself (imported clips survive).
 - Preferences and routing are local controls. Persisting or transmitting settings
   is the application's responsibility.
 

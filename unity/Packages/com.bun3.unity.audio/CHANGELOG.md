@@ -16,6 +16,15 @@
   `PrepareDefinition` (runs per catalog definition during `Initialize`; a thrown
   exception is logged and initialization continues) and `OnDisposed` (runs once
   after disposal, or when construction fails after config validation).
+- Audio configuration change recovery: every `SoundSystem` handles
+  `AudioSettings.OnAudioConfigurationChanged` (device switch or
+  `AudioSettings.Reset`) and recovers only what actually stopped. A voice whose
+  source stopped completes and frees its slot, including voices waiting for an
+  output adapter's completion; voices are left alone while `AudioListener.pause`
+  is set. Stopped music resumes from the playhead cached each tick with a 0.05 s
+  fade-in, rescheduling the loop from the remaining intro; a stopped fading-out
+  track is silenced; paused music stays paused and is restored by `ResumeMusic`. Sources,
+  clips and prepared definitions are not recreated.
 
 ## [0.6.0] - 2026-10-29
 

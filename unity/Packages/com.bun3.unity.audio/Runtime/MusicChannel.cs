@@ -32,6 +32,15 @@ namespace Bun3.Unity.Audio
         public double LoopStartDsp;
         public FadeState Fade;
         public AutoResetUniTaskCompletionSource Completion;
+
+        /// <summary>True while the intro is the audible source, as of the last unpaused tick.</summary>
+        public bool InIntro;
+
+        /// <summary>Playhead of the audible source, in samples, as of the last unpaused tick.</summary>
+        public int PlayheadSamples;
+
+        /// <summary>A configuration change arrived while paused; resume restores a lost source.</summary>
+        public bool RecoverOnResume;
     }
 
     /// <summary>Pure DSP-schedule arithmetic, kept engine-free for direct testing.</summary>
