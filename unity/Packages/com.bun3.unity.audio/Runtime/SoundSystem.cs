@@ -18,6 +18,7 @@ namespace Bun3.Unity.Audio
     /// <item><description>SoundSystem.Async.cs: UniTask entry points built on voice completion sources.</description></item>
     /// <item><description>SoundSystem.Charge.cs: progress-driven charge sounds composed over voice playback.</description></item>
     /// <item><description>SoundSystem.Addressables.cs: Addressable clip preload/release (compiled under BUN3_ADDRESSABLES).</description></item>
+    /// <item><description>SoundSystem.Static.cs: process-wide static entry point (Initialize/Shutdown, playback by catalog key).</description></item>
     /// </list>
     /// </summary>
     public sealed partial class SoundSystem : IDisposable
@@ -113,6 +114,7 @@ namespace Bun3.Unity.Audio
                 if (Application.isPlaying) { UnityEngine.Object.Destroy(_root); }
                 else { UnityEngine.Object.DestroyImmediate(_root); }
                 _root = null;
+                config.OnDisposed?.Invoke();
                 throw;
             }
 
@@ -403,6 +405,8 @@ namespace Bun3.Unity.Audio
                 return;
             }
             _disposed = true;
+            // Cleared first so static calls re-entering from the completions below are ignored, not thrown.
+            if (Current == this) ClearStaticState();
             DisposeVoiceOutputs();
 
             // Two-phase, same discipline as Tick: capture every active slot's awaiter before
@@ -451,6 +455,7 @@ namespace Bun3.Unity.Audio
                 UnityEngine.Object.Destroy(_root);
                 _root = null;
             }
+            _config.OnDisposed?.Invoke();
 
             for (var i = 0; i < completed.Count; i++)
             {

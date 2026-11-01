@@ -345,7 +345,7 @@ namespace Bun3.Unity.Audio
             }
             catch (System.OperationCanceledException)
             {
-                StopMusic();
+                StopMusic(0f);
                 throw;
             }
         }

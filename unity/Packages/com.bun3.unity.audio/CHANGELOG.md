@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.7.0] - 2026-11-01
+
+### Added
+
+- Static entry point: `SoundSystem.Initialize(catalog, config)` validates the
+  catalog, creates `SoundSystem.Current` and prepares every catalog definition;
+  `Shutdown()` disposes it and also runs on application quit. `Play(key)` plays in
+  2D, `PlayAt(key, position)` plays positionally unless the definition's spatial
+  mode is None, `PlayMusic(key)` keeps the same key playing and stops music for an
+  unknown key, and `StopMusic()` fades it out. Unknown keys are ignored without a
+  log; calls before `Initialize` are ignored with one Editor warning. Key playback
+  does not allocate. Disposing `Current` directly clears the static state.
+- `SoundSystemConfig.MusicFadeSeconds` (default 1) for the static music calls,
+  `PrepareDefinition` (runs per catalog definition during `Initialize`; a thrown
+  exception is logged and initialization continues) and `OnDisposed` (runs once
+  after disposal, or when construction fails after config validation).
+
 ## [0.6.0] - 2026-10-29
 
 ### Added

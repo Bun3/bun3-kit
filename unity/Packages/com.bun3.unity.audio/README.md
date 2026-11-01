@@ -94,9 +94,38 @@ decide game voice groups, or synchronize volume preferences over a network.
 
 ## Quick start
 
-Create a **Bun3 > Audio > Sound Def** asset, assign a non-null clip, and leave Spatial
-at None for a UI sound. Assign it to this component in a scene with an active
-`AudioListener`. Use an application-level owner for audio that survives scene changes.
+Create **Bun3 > Audio > Sound Def** assets and map them by key in a **Bun3 > Audio >
+Sound Catalog**. Initialize once at boot, then play by key from anywhere:
+
+```csharp
+using Bun3.Unity.Audio;
+using UnityEngine;
+
+public sealed class AudioBoot : MonoBehaviour
+{
+    [SerializeField] private SoundCatalog catalog = null;
+
+    private void Awake()
+        => SoundSystem.Initialize(catalog, new SoundSystemConfig { SfxVoices = 24, MusicFadeSeconds = 1f });
+}
+
+// Anywhere afterwards:
+SoundSystem.Play("ui.click");                        // always 2D
+SoundSystem.PlayAt("door.open", transform.position); // positional unless the def's Spatial is None
+SoundSystem.PlayMusic("bgm.title");                  // same key keeps playing; unknown key stops music
+SoundSystem.StopMusic();
+```
+
+`Initialize` validates the catalog and prepares every definition; it throws when
+already initialized. `Shutdown()` disposes the instance and runs on application quit.
+Unknown keys are ignored without a log; calls before `Initialize` are ignored with one
+Editor warning. `SoundSystem.Current` exposes the instance for handles, charge sounds,
+follow playback and channel volumes.
+
+To own an instance directly instead, create a **Sound Def** asset, assign a non-null
+clip, and leave Spatial at None for a UI sound. Assign it to this component in a scene
+with an active `AudioListener`. Use an application-level owner for audio that survives
+scene changes.
 
 ```csharp
 using Bun3.Unity.Audio;
