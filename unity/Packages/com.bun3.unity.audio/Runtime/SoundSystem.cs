@@ -11,13 +11,14 @@ namespace Bun3.Unity.Audio
     /// player-loop tick. No MonoBehaviours, no coroutines, no per-play allocation.
     /// Partial layout:
     /// <list type="bullet">
-    /// <item><description>SoundSystem.cs: construction, playback, disposal.</description></item>
+    /// <item><description>SoundSystem.cs: construction, playback, disposal, audio device-change recovery.</description></item>
     /// <item><description>SoundSystem.Tick.cs: per-frame mirror of <see cref="VoiceTable"/>/music state onto AudioSources.</description></item>
-    /// <item><description>SoundSystem.Music.cs: intro+loop music channels, crossfade, pause/resume.</description></item>
+    /// <item><description>SoundSystem.Music.cs: intro+loop music channels, crossfade, pause/resume, resume after device change.</description></item>
     /// <item><description>SoundSystem.Occlusion.cs: round-robin occlusion evaluation and low-pass/volume application.</description></item>
     /// <item><description>SoundSystem.Async.cs: UniTask entry points built on voice completion sources.</description></item>
     /// <item><description>SoundSystem.Charge.cs: progress-driven charge sounds composed over voice playback.</description></item>
     /// <item><description>SoundSystem.Addressables.cs: Addressable clip preload/release (compiled under BUN3_ADDRESSABLES).</description></item>
+    /// <item><description>SoundSystem.Static.cs: process-wide static entry point (Initialize/Shutdown, playback by catalog key).</description></item>
     /// </list>
     /// </summary>
     public sealed partial class SoundSystem : IDisposable
@@ -40,8 +41,10 @@ namespace Bun3.Unity.Audio
         private readonly SoundSystemConfig _config;
         private readonly AudioMixer _mixer;
         private readonly System.Random _rng;
+        private readonly AudioSettings.AudioConfigurationChangeHandler _onAudioConfigurationChanged;
         private GameObject _root;
         private bool _disposed;
+        private bool _voiceRecoveryPending;
 
         /// <summary>
         /// Creates the pool and registers the tick. Dispose to tear both down. When no
@@ -113,6 +116,7 @@ namespace Bun3.Unity.Audio
                 if (Application.isPlaying) { UnityEngine.Object.Destroy(_root); }
                 else { UnityEngine.Object.DestroyImmediate(_root); }
                 _root = null;
+                config.OnDisposed?.Invoke();
                 throw;
             }
 
@@ -126,6 +130,13 @@ namespace Bun3.Unity.Audio
                     typeof(UnityEngine.PlayerLoop.Update.ScriptRunBehaviourUpdate));
             }
             Live.Add(this);
+            _onAudioConfigurationChanged = _ =>
+            {
+                // Isolated so a throwing completion callback cannot skip later subscribers of the static event.
+                try { RecoverLostPlayback(); }
+                catch (Exception e) { Debug.LogException(e); }
+            };
+            AudioSettings.OnAudioConfigurationChanged += _onAudioConfigurationChanged;
         }
 
         /// <summary>Plays a 2D (or def-default) sound. Returns an invalid handle when blocked.</summary>
@@ -403,6 +414,9 @@ namespace Bun3.Unity.Audio
                 return;
             }
             _disposed = true;
+            AudioSettings.OnAudioConfigurationChanged -= _onAudioConfigurationChanged;
+            // Cleared first so static calls re-entering from the completions below are ignored, not thrown.
+            if (Current == this) ClearStaticState();
             DisposeVoiceOutputs();
 
             // Two-phase, same discipline as Tick: capture every active slot's awaiter before
@@ -448,9 +462,11 @@ namespace Bun3.Unity.Audio
             ReleaseAllPreloadedOnDispose();
             if (_root != null)
             {
-                UnityEngine.Object.Destroy(_root);
+                if (Application.isPlaying) { UnityEngine.Object.Destroy(_root); }
+                else { UnityEngine.Object.DestroyImmediate(_root); }
                 _root = null;
             }
+            _config.OnDisposed?.Invoke();
 
             for (var i = 0; i < completed.Count; i++)
             {
@@ -460,6 +476,63 @@ namespace Bun3.Unity.Audio
             }
             musicCompletion0?.TrySetResult();
             musicCompletion1?.TrySetResult();
+        }
+
+        /// <summary>
+        /// Audio configuration change (device switch or AudioSettings.Reset): Unity may stop
+        /// every source. Recovers only what actually stopped: lost voices complete, lost music
+        /// resumes from its cached playhead. While the listener is paused (which also reads as
+        /// stopped) voice recovery is deferred to the first unpaused Tick. Cold path; allocates.
+        /// Two-phase like Tick: all state first, signals last.
+        /// </summary>
+        internal void RecoverLostPlayback()
+        {
+            // A leaked instance whose root was destroyed must not throw inside the static event.
+            if (_disposed || _root == null)
+            {
+                return;
+            }
+            List<(int Slot, uint Generation, Cysharp.Threading.Tasks.AutoResetUniTaskCompletionSource Completion, Action<SoundHandle> Callback)> lost = null;
+            if (AudioListener.pause)
+            {
+                _voiceRecoveryPending = true;
+            }
+            else
+            {
+                lost = CollectLostVoices();
+            }
+            var (music0, music1) = RecoverLostMusic();
+
+            if (lost != null)
+            {
+                NotifyCompletedVoices(lost);
+            }
+            music0?.TrySetResult();
+            music1?.TrySetResult();
+        }
+
+        // Releases, retires and stops every active voice whose source stopped; the caller
+        // signals the returned entries last. Null when nothing was lost.
+        private List<(int Slot, uint Generation, Cysharp.Threading.Tasks.AutoResetUniTaskCompletionSource Completion, Action<SoundHandle> Callback)> CollectLostVoices()
+        {
+            List<(int Slot, uint Generation, Cysharp.Threading.Tasks.AutoResetUniTaskCompletionSource Completion, Action<SoundHandle> Callback)> lost = null;
+            for (var i = 0; i < Table.Slots.Length; i++)
+            {
+                ref var voice = ref Table.Slots[i];
+                if (voice.State == VoiceState.Idle || _sources[i].isPlaying)
+                {
+                    continue;
+                }
+                lost ??= new(Table.Slots.Length);
+                lost.Add((i, voice.Generation, voice.Completion, voice.CompletionCallback));
+                Table.Release(i);
+            }
+            for (var i = 0; lost != null && i < lost.Count; i++)
+            {
+                RetireVoiceOutput(lost[i].Slot);
+                _sources[lost[i].Slot].Stop();
+            }
+            return lost;
         }
 
         /// <summary>

@@ -10,6 +10,7 @@ namespace Bun3.Unity.Audio
     {
         private const int MusicChannelCount = 2;
         private const double MusicScheduleHeadroom = 0.05;
+        private const float MusicRecoveryFadeSeconds = 0.05f;
 
         internal readonly MusicChannel[] MusicChannels = new MusicChannel[MusicChannelCount];
         internal readonly AudioSource[] MusicIntroSources = new AudioSource[MusicChannelCount];
@@ -184,6 +185,8 @@ namespace Bun3.Unity.Audio
             {
                 return;
             }
+            AutoResetUniTaskCompletionSource first = null;
+            AutoResetUniTaskCompletionSource second = null;
             for (var i = 0; i < MusicChannelCount; i++)
             {
                 ref var track = ref MusicChannels[i];
@@ -194,6 +197,19 @@ namespace Bun3.Unity.Audio
                 track.Paused = false;
                 MusicIntroSources[i].UnPause();
                 MusicLoopSources[i].UnPause();
+                if (track.RecoverOnResume)
+                {
+                    track.RecoverOnResume = false;
+                    if (!AudibleMusicSource(i).isPlaying)
+                    {
+                        if (!RestoreMusicChannel(i))
+                        {
+                            var completion = SilenceLostMusicChannel(i);
+                            if (i == 0) { first = completion; } else { second = completion; }
+                        }
+                        continue;
+                    }
+                }
                 if (!track.LoopScheduled)
                 {
                     var intro = track.Def != null ? track.Def.Intro : null;
@@ -205,6 +221,8 @@ namespace Bun3.Unity.Audio
                     track.LoopScheduled = true;
                 }
             }
+            first?.TrySetResult(); // last, after all state mutation (two-phase)
+            second?.TrySetResult();
         }
 
         private void StartMusicOnChannel(int channel, AudioClip intro, AudioClip loop, AudioMixerGroup group, float fadeIn)
@@ -221,6 +239,9 @@ namespace Bun3.Unity.Audio
                 track.Fade.SetInstant(1f);
             }
             track.Completion = null;
+            track.InIntro = intro != null;
+            track.PlayheadSamples = 0;
+            track.RecoverOnResume = false;
 
             var introSource = MusicIntroSources[channel];
             var loopSource = MusicLoopSources[channel];
@@ -282,6 +303,9 @@ namespace Bun3.Unity.Audio
             track.Paused = false;
             track.LoopScheduled = false;
             track.Completion = null;
+            track.InIntro = false;
+            track.PlayheadSamples = 0;
+            track.RecoverOnResume = false;
             return completion;
         }
 
@@ -345,9 +369,89 @@ namespace Bun3.Unity.Audio
             }
             catch (System.OperationCanceledException)
             {
-                StopMusic();
+                StopMusic(0f);
                 throw;
             }
+        }
+
+        // Device-change recovery for music; voices are handled by the caller in SoundSystem.cs.
+        // Returns the completions of fading-out channels it silenced; callers signal them last.
+        private (AutoResetUniTaskCompletionSource, AutoResetUniTaskCompletionSource) RecoverLostMusic()
+        {
+            AutoResetUniTaskCompletionSource first = null;
+            AutoResetUniTaskCompletionSource second = null;
+            for (var i = 0; i < MusicChannelCount; i++)
+            {
+                ref var track = ref MusicChannels[i];
+                // A paused source also reports !isPlaying: it may or may not have lost its state.
+                if (track.State == MusicState.Idle || AudibleMusicSource(i).isPlaying)
+                {
+                    continue;
+                }
+                if (track.Paused && track.State != MusicState.FadingOut)
+                {
+                    track.RecoverOnResume = true;
+                }
+                else if (track.State == MusicState.FadingOut || !RestoreMusicChannel(i))
+                {
+                    var completion = SilenceLostMusicChannel(i);
+                    if (i == 0) { first = completion; } else { second = completion; }
+                }
+            }
+            return (first, second);
+        }
+
+        // Frees a channel whose playback cannot continue; the caller signals the completion last.
+        private AutoResetUniTaskCompletionSource SilenceLostMusicChannel(int channel)
+        {
+            if (ActiveMusic == channel)
+            {
+                ActiveMusic = -1;
+            }
+            return SilenceMusicChannel(channel);
+        }
+
+        // AudioClip.Create clips lose their data on a configuration change (samples drops to 0).
+        private static bool HasAudio(AudioClip clip) => clip != null && clip.samples > 0;
+
+        private AudioSource AudibleMusicSource(int channel)
+            => MusicChannels[channel].InIntro ? MusicIntroSources[channel] : MusicLoopSources[channel];
+
+        // Replays the audible source from the cached playhead; the DSP clock is re-read because
+        // a configuration change may restart it. Returns false, changing nothing, when a clip it
+        // needs has no audio left.
+        private bool RestoreMusicChannel(int channel)
+        {
+            ref var track = ref MusicChannels[channel];
+            var intro = MusicIntroSources[channel];
+            var loop = MusicLoopSources[channel];
+            if (!HasAudio(loop.clip) || (track.InIntro && !HasAudio(intro.clip)))
+            {
+                return false;
+            }
+            if (track.InIntro)
+            {
+                intro.timeSamples = track.PlayheadSamples;
+                intro.Play();
+                loop.Stop();
+                track.LoopStartDsp = AudioSettings.dspTime
+                    + MusicMath.RemainingSeconds(track.PlayheadSamples, intro.clip.samples, intro.clip.frequency);
+                loop.PlayScheduled(track.LoopStartDsp);
+            }
+            else
+            {
+                loop.timeSamples = track.PlayheadSamples % loop.clip.samples;
+                loop.Play();
+                track.LoopStartDsp = AudioSettings.dspTime;
+            }
+            track.LoopScheduled = true;
+            if (track.State == MusicState.Playing)
+            {
+                track.Fade.Begin(0f, 1f, MusicRecoveryFadeSeconds);
+                track.State = MusicState.FadingIn;
+            }
+            ApplyMusicVolume(channel);
+            return true;
         }
 
         internal void TickMusic(float dt)
@@ -366,6 +470,10 @@ namespace Bun3.Unity.Audio
             {
                 return null;
             }
+
+            var intro = MusicIntroSources[channel];
+            track.InIntro = intro.clip != null && track.LoopScheduled && AudioSettings.dspTime < track.LoopStartDsp;
+            track.PlayheadSamples = track.InIntro ? intro.timeSamples : MusicLoopSources[channel].timeSamples;
 
             AutoResetUniTaskCompletionSource completion = null;
             if (track.Fade.Advance(deltaTime))

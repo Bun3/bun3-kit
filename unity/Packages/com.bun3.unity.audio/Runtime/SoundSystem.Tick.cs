@@ -1,4 +1,6 @@
 // Per-frame mirror: advances VoiceTable and applies volume/position/stop to AudioSources.
+using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace Bun3.Unity.Audio
@@ -23,15 +25,28 @@ namespace Bun3.Unity.Audio
 
         internal void Tick(float dt)
         {
+            if (_voiceRecoveryPending && !AudioListener.pause)
+            {
+                _voiceRecoveryPending = false;
+                var lost = CollectLostVoices();
+                if (lost != null)
+                {
+                    NotifyCompletedVoices(lost);
+                    if (_disposed) return; // a callback disposed this system
+                }
+            }
             _completedScratch.Clear();
             EvaluateOcclusion();
             PollVoiceOutputCompletion();
             Table.Tick(dt, _completedScratch);
             RetireCompletedVoices();
-            NotifyCompletedVoices();
+            NotifyCompletedVoices(_completedScratch);
             UpdateActiveSources();
             UpdateTimeScalePitch();
             TickMusic(dt);
+#if UNITY_EDITOR
+            CheckEditedDefinitions();
+#endif
         }
 
         private void PollVoiceOutputCompletion()
@@ -56,11 +71,11 @@ namespace Bun3.Unity.Audio
             }
         }
 
-        private void NotifyCompletedVoices()
+        private void NotifyCompletedVoices(List<(int Slot, uint Generation, Cysharp.Threading.Tasks.AutoResetUniTaskCompletionSource Completion, Action<SoundHandle> Callback)> completed)
         {
-            for (var i = 0; i < _completedScratch.Count; i++)
+            for (var i = 0; i < completed.Count; i++)
             {
-                var entry = _completedScratch[i];
+                var entry = completed[i];
                 entry.Completion?.TrySetResult();
                 entry.Callback?.Invoke(new SoundHandle(this, entry.Slot, entry.Generation));
             }

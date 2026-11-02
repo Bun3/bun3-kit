@@ -520,7 +520,8 @@ namespace Bun3.Unity.Audio.SteamAudio.Tests
                 acoustics.MinDistance = 8;
                 def.Acoustics.Local = acoustics;
                 Assert.That(output.MinDistance, Is.EqualTo(3), "Authored edits take effect on the next ownership request.");
-                var host = (MonoBehaviour)typeof(SteamAudioSoundOutput).GetField("_retirement", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(output);
+                var runtime = typeof(SteamAudioSoundOutput).GetField("_runtime", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(output);
+                var host = (MonoBehaviour)runtime.GetType().GetField("_host", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(runtime);
                 Assert.That(claim.Invoke(output, null), Is.True);
                 UnityEngine.Object.Destroy(go);
                 yield return null;

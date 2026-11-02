@@ -107,5 +107,22 @@ namespace Bun3.Unity.Audio
         /// out the binder it registered.
         /// </summary>
         public Action<AudioSource, SoundDef> OnVoiceConfigured;
+
+        /// <summary>Fade seconds used by the static <see cref="SoundSystem.PlayMusic(string)"/> and <see cref="SoundSystem.StopMusic()"/>.</summary>
+        public float MusicFadeSeconds = 1f;
+
+        /// <summary>
+        /// Invoked for each catalog definition that <see cref="SoundSystem.Initialize"/> prepares, after cooldown
+        /// preparation. Throwing means that definition cannot be prepared: the exception is logged once and
+        /// initialization continues with the next definition.
+        /// </summary>
+        public Action<SoundDef> PrepareDefinition;
+
+        /// <summary>
+        /// Invoked once when a <see cref="SoundSystem"/> built from this config is disposed, after its outputs are
+        /// disposed and its root is destroyed, or when its constructor fails after config validation.
+        /// Release resources tied to the system here.
+        /// </summary>
+        public Action OnDisposed;
     }
 }

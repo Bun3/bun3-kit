@@ -94,9 +94,40 @@ decide game voice groups, or synchronize volume preferences over a network.
 
 ## Quick start
 
-Create a **Bun3 > Audio > Sound Def** asset, assign a non-null clip, and leave Spatial
-at None for a UI sound. Assign it to this component in a scene with an active
-`AudioListener`. Use an application-level owner for audio that survives scene changes.
+Create **Bun3 > Audio > Sound Def** assets and map them by key in a **Bun3 > Audio >
+Sound Catalog**. Initialize once at boot, then play by key from anywhere:
+
+```csharp
+using Bun3.Unity.Audio;
+using UnityEngine;
+
+public sealed class AudioBoot : MonoBehaviour
+{
+    [SerializeField] private SoundCatalog catalog = null;
+
+    private void Awake()
+        => SoundSystem.Initialize(catalog, new SoundSystemConfig { SfxVoices = 24, MusicFadeSeconds = 1f });
+}
+
+// Anywhere afterwards:
+SoundSystem.Play("ui.click");                        // always 2D
+SoundSystem.PlayAt("door.open", transform.position); // positional unless the def's Spatial is None
+SoundSystem.PlayMusic("bgm.title");                  // same key keeps playing; unknown key stops music
+SoundSystem.StopMusic();
+```
+
+`Initialize` validates the catalog and prepares every definition; it throws when
+already initialized. `Shutdown()` disposes the instance and runs on application quit.
+Unknown keys are ignored without a log; calls before `Initialize` are ignored with one
+Editor warning. In the Editor, a catalog definition whose clips or spatial mode change
+while playing is prepared again on the next tick, and `PrepareDefinition` runs for it
+again. `SoundSystem.Current` exposes the instance for handles, charge sounds,
+follow playback and channel volumes.
+
+To own an instance directly instead, create a **Sound Def** asset, assign a non-null
+clip, and leave Spatial at None for a UI sound. Assign it to this component in a scene
+with an active `AudioListener`. Use an application-level owner for audio that survives
+scene changes.
 
 ```csharp
 using Bun3.Unity.Audio;
@@ -566,6 +597,14 @@ changed authored data. Do not access Unity profile assets from an audio callback
   occlusion implementations allocation-free. A new closure per play still allocates.
 - Construction, first-time setup, changed snapshots, Addressables and cancellation
   can allocate. The package does not promise every API is allocation-free.
+- On an audio configuration change (output device switch or `AudioSettings.Reset`)
+  Unity can stop every source. Each service recovers only what actually stopped:
+  music resumes from where it was with a short fade-in (paused music resumes on
+  `ResumeMusic`), and stopped voices complete and free their slots instead of
+  restarting (after `AudioListener.pause` is cleared, when it was set). Nothing is
+  recreated; the recovery itself allocates. Unity discards the data of clips made
+  with `AudioClip.Create`; music using such a clip stops. Recreate those clips
+  yourself (imported clips survive).
 - Preferences and routing are local controls. Persisting or transmitting settings
   is the application's responsibility.
 

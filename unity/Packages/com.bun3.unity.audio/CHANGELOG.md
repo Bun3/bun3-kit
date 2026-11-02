@@ -1,5 +1,40 @@
 # Changelog
 
+## [0.7.0] - 2026-11-01
+
+### Added
+
+- Static entry point: `SoundSystem.Initialize(catalog, config)` validates the
+  catalog, creates `SoundSystem.Current` and prepares every catalog definition;
+  `Shutdown()` disposes it and also runs on application quit. `Play(key)` plays in
+  2D, `PlayAt(key, position)` plays positionally unless the definition's spatial
+  mode is None, `PlayMusic(key)` keeps the same key playing and stops music for an
+  unknown key, and `StopMusic()` fades it out. Unknown keys are ignored without a
+  log; calls before `Initialize` are ignored with one Editor warning. Key playback
+  does not allocate. Disposing `Current` directly clears the static state.
+- `SoundSystemConfig.MusicFadeSeconds` (default 1) for the static music calls,
+  `PrepareDefinition` (runs per catalog definition during `Initialize`; a thrown
+  exception is logged and initialization continues) and `OnDisposed` (runs once
+  after disposal, or when construction fails after config validation).
+- Audio configuration change recovery: every `SoundSystem` handles
+  `AudioSettings.OnAudioConfigurationChanged` (device switch or
+  `AudioSettings.Reset`) and recovers only what actually stopped. A voice whose
+  source stopped completes and frees its slot, including voices waiting for an
+  output adapter's completion; while `AudioListener.pause` is set this waits for
+  the first unpaused tick. Stopped music resumes from the playhead cached each
+  tick with a 0.05 s fade-in, rescheduling the loop from the remaining intro; a
+  stopped fading-out track, or one whose clip lost its data, is silenced; paused
+  music stays paused and is restored by `ResumeMusic`. Sources, clips and
+  prepared definitions are not recreated.
+- In the Editor, a catalog definition whose clips or spatial mode change while playing is
+  prepared again on the next tick, and `PrepareDefinition` runs for it again.
+
+### Fixed
+
+- `SoundSystem.Dispose` (and therefore `Shutdown`) outside Play Mode destroys the
+  pool root with `DestroyImmediate` instead of logging "Destroy may not be called
+  from edit mode".
+
 ## [0.6.0] - 2026-10-29
 
 ### Added

@@ -1,15 +1,16 @@
 using System;
+using System.Collections.Generic;
 using Bun3.Unity.Audio;
 using UnityEngine;
 
 namespace Bun3.Unity.Audio.SteamAudio
 {
     /// <summary>
-    /// Wires a <see cref="SoundSystemConfig"/> to Steam Audio: disables the core
-    /// linecast occlusion/low-pass pipeline (Steam Audio owns spatialization and
-    /// occlusion instead) and chains a per-voice binder that attaches and
-    /// configures a <see cref="global::SteamAudio.SteamAudioSource"/> on every
-    /// configured SFX voice.
+    /// Wires a <see cref="SoundSystemConfig"/> to Steam Audio through one of two separate paths, both of
+    /// which disable the core linecast occlusion/low-pass pipeline: <see cref="Apply"/> chains a per-voice
+    /// binder that attaches and configures a <see cref="global::SteamAudio.SteamAudioSource"/> on every
+    /// configured SFX voice; <see cref="ApplyNativeOutput"/> gives every pooled voice a native
+    /// <see cref="SteamAudioSoundOutput"/> instead.
     /// </summary>
     public static class SteamAudioSoundSetup
     {
@@ -50,6 +51,84 @@ namespace Bun3.Unity.Audio.SteamAudio
 
             config.OnVoiceConfigured += Binder;
             return config;
+        }
+
+        /// <summary>
+        /// Wires <paramref name="config"/> to native pooled SFX output. This is a separate path from
+        /// <see cref="Apply"/>, which attaches the SDK's <see cref="global::SteamAudio.SteamAudioSource"/> to voices:
+        /// here every pooled voice gets a <see cref="SteamAudioSoundOutput"/> that renders positional sounds itself,
+        /// plus a <see cref="PlanarAcousticSfxBinding"/> registered in <paramref name="acousticOutputs"/> so an acoustic
+        /// session can publish paths to it. Sets <see cref="SoundSystemConfig.OcclusionChecksPerFrame"/> to 0, creates
+        /// one shared runtime and one <see cref="SteamAudioClipCache"/> when the system builds its first voice, decodes
+        /// each prepared definition into that cache, and releases all of it when the system is disposed, so the same
+        /// config can initialize again. Existing <see cref="SoundSystemConfig.PrepareDefinition"/> and
+        /// <see cref="SoundSystemConfig.OnDisposed"/> hooks are kept. Positional voices stay blocked until an acoustic
+        /// session publishes a covered path; 2D voices play their authored clips. Use one live
+        /// <see cref="SoundSystem"/> per config. Returns <paramref name="config"/>.
+        /// </summary>
+        /// <exception cref="ArgumentNullException"><paramref name="config"/> or <paramref name="acousticOutputs"/> is null.</exception>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="maximumDecodedBytes"/> is not positive.</exception>
+        /// <exception cref="InvalidOperationException"><see cref="SoundSystemConfig.CreateVoiceOutput"/> is already set.</exception>
+        public static SoundSystemConfig ApplyNativeOutput(SoundSystemConfig config, long maximumDecodedBytes,
+            PlanarAcousticOutputs acousticOutputs)
+        {
+            if (config == null) throw new ArgumentNullException(nameof(config));
+            if (acousticOutputs == null) throw new ArgumentNullException(nameof(acousticOutputs));
+            if (maximumDecodedBytes <= 0) throw new ArgumentOutOfRangeException(nameof(maximumDecodedBytes));
+            if (config.CreateVoiceOutput != null)
+                throw new InvalidOperationException("CreateVoiceOutput is already set; native output owns every pooled voice.");
+            var assembly = new NativeOutputAssembly(maximumDecodedBytes, acousticOutputs);
+            config.OcclusionChecksPerFrame = 0;
+            config.CreateVoiceOutput = assembly.CreateVoiceOutput;
+            config.PrepareDefinition += assembly.PrepareDefinition;
+            config.OnDisposed += assembly.Release;
+            return config;
+        }
+
+        // Rebuilds its runtime and cache for each SoundSystem built from the config.
+        private sealed class NativeOutputAssembly
+        {
+            private readonly long _maximumDecodedBytes;
+            private readonly PlanarAcousticOutputs _acousticOutputs;
+            private readonly List<PlanarAcousticSfxBinding> _bindings = new();
+            private SteamAudioSoundRuntime _runtime;
+            private SteamAudioClipCache _cache;
+
+            internal NativeOutputAssembly(long maximumDecodedBytes, PlanarAcousticOutputs acousticOutputs)
+            {
+                _maximumDecodedBytes = maximumDecodedBytes;
+                _acousticOutputs = acousticOutputs;
+            }
+
+            internal ISoundVoiceOutput CreateVoiceOutput(AudioSource source)
+            {
+                _runtime ??= new SteamAudioSoundRuntime();
+                _cache ??= new SteamAudioClipCache(_maximumDecodedBytes);
+                var output = new SteamAudioSoundOutput(source, _cache, _runtime);
+                var binding = new PlanarAcousticSfxBinding(source, output);
+                _acousticOutputs.Register(binding);
+                _bindings.Add(binding);
+                return output;
+            }
+
+            internal void PrepareDefinition(SoundDef definition) => _cache?.PrepareDefinition(definition);
+
+            // Runs inside SoundSystem.Dispose before pending completions fire, so it must not throw.
+            // The runtime keeps its host until outputs still holding a reader finalize.
+            internal void Release()
+            {
+                for (int i = 0; i < _bindings.Count; i++)
+                {
+                    try { _acousticOutputs.Unregister(_bindings[i]); }
+                    catch (Exception e) { Debug.LogException(e); }
+                }
+                _bindings.Clear();
+                _cache?.Dispose();
+                _cache = null;
+                try { _runtime?.Dispose(); }
+                catch (Exception e) { Debug.LogException(e); }
+                _runtime = null;
+            }
         }
 
         /// <summary>
