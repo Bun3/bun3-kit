@@ -10,6 +10,8 @@ namespace Bun3.Unity.Telemetry
     {
         readonly List<(ITelemetrySink Sink, TelemetryTier Tiers)> sinks = new();
         readonly List<string> dropKeys = new();
+        readonly List<string> logPrefixes = new();
+        readonly List<ITelemetryCapture> captures = new();
         TelemetryContextFill fill;
         Func<bool> consent;
         string runId;
@@ -40,6 +42,20 @@ namespace Bun3.Unity.Telemetry
         public TelemetryBuilder DropKeys(params string[] keys)
         {
             if (keys != null) dropKeys.AddRange(keys);
+            return this;
+        }
+
+        /// <summary>Lists log line prefixes that are recorded as log_line whatever their log level.</summary>
+        public TelemetryBuilder EngineLogPrefixes(params string[] prefixes)
+        {
+            if (prefixes != null) logPrefixes.AddRange(prefixes);
+            return this;
+        }
+
+        /// <summary>Adds a record source that <see cref="Telemetry.Install"/> installs and uninstalls with the hub. A null capture adds nothing.</summary>
+        public TelemetryBuilder Capture(ITelemetryCapture capture)
+        {
+            if (capture != null) captures.Add(capture);
             return this;
         }
 
@@ -75,6 +91,10 @@ namespace Bun3.Unity.Telemetry
             utcNow,
             dropKeys.ToArray(),
             sinks);
+
+        internal string[] LogPrefixes => logPrefixes.ToArray();
+
+        internal IReadOnlyList<ITelemetryCapture> Captures => captures;
 
         internal TelemetryBuilder WithClock(Func<DateTime> utcNow)
         {
