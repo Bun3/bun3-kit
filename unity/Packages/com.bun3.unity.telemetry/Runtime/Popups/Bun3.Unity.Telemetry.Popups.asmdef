@@ -1,0 +1,16 @@
+{
+    "name": "Bun3.Unity.Telemetry.Popups",
+    "rootNamespace": "Bun3.Unity.Telemetry.Popups",
+    "references": [ "Bun3.Unity.Telemetry", "Bun3.Unity.UI" ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [ "BUN3_TELEMETRY_POPUPS" ],
+    "versionDefines": [
+        { "name": "com.bun3.unity.ui", "expression": "", "define": "BUN3_TELEMETRY_POPUPS" }
+    ],
+    "noEngineReferences": false
+}
