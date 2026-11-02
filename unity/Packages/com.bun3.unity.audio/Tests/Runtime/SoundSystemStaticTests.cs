@@ -128,6 +128,41 @@ namespace Bun3.Unity.Audio.Tests
         }
 
         [Test]
+        public void KeyPlayback_ReturnsStoppableHandle_UnknownKeyReturnsInvalid()
+        {
+            SoundSystem.Initialize(_catalog, Config());
+            var handle = SoundSystem.Play("fx.2d");
+            var positional = SoundSystem.PlayAt("fx.3d", Vector3.one);
+            Assert.That(handle.IsValid, Is.True);
+            Assert.That(positional.IsValid, Is.True);
+            Assert.That(SoundSystem.Play("missing").IsValid, Is.False);
+            Assert.That(SoundSystem.PlayAt("missing", Vector3.one).IsValid, Is.False);
+
+            handle.Stop();
+            Assert.That(SoundSystem.Current.Table.Slots[handle.SlotIndex].State, Is.EqualTo(VoiceState.FadingOut));
+            Assert.That(SoundSystem.Current.Table.Slots[positional.SlotIndex].State, Is.Not.EqualTo(VoiceState.FadingOut));
+        }
+
+        [Test]
+        public void FallbackKey_PlaysOnlyWhenPrimaryKeyIsMissing()
+        {
+            SoundSystem.Initialize(_catalog, Config());
+            SoundSystem.Play("missing", "fx.2d");
+            SoundSystem.Play("fx.3d", "fx.2d");
+            SoundSystem.PlayAt("missing", "fx.3d", new Vector3(1, 2, 0));
+            Assert.That(SoundSystem.Play("missing", "also.missing").IsValid, Is.False);
+            Assert.That(SoundSystem.Play("missing", null).IsValid, Is.False);
+
+            Assert.That(_records.Count, Is.EqualTo(3));
+            Assert.That(_records[0].Def, Is.SameAs(_fx2d));
+            Assert.That(_records[1].Def, Is.SameAs(_fx3d));
+            Assert.That(_records[1].Spatial, Is.EqualTo(SpatialMode.None));
+            Assert.That(_records[2].Def, Is.SameAs(_fx3d));
+            Assert.That(_records[2].Spatial, Is.EqualTo(SpatialMode.Positional));
+            Assert.That(_records[2].Position, Is.EqualTo(new Vector3(1, 2, 0)));
+        }
+
+        [Test]
         public void PlayMusic_SameKeyKeepsChannel_UnknownKeyStops()
         {
             SoundSystem.Initialize(_catalog, Config());
@@ -238,7 +273,7 @@ namespace Bun3.Unity.Audio.Tests
             TestDelegate play = () =>
             {
                 SoundSystem.Play("fx.2d");
-                SoundSystem.PlayAt("fx.3d", position);
+                SoundSystem.PlayAt("missing", "fx.3d", position);
             };
             // Warm the same delegate: Mono interns a lambda's string literals on its first run.
             play();
