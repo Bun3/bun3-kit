@@ -128,7 +128,7 @@ namespace Bun3.Unity.Telemetry
         }
     }
 
-    /// <summary>A destination for records.</summary>
+    /// <summary>A destination for records. The hub calls every member on the main thread only.</summary>
     public interface ITelemetrySink
     {
         /// <summary>True when records leave the device; remote sinks are gated by consent.</summary>

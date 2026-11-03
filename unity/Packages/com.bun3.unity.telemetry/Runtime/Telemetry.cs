@@ -64,7 +64,7 @@ namespace Bun3.Unity.Telemetry
 
         static void Quitting() => FlushAsync(TimeSpan.FromSeconds(2)).Forget();
 
-        /// <summary>Records an event on the active hub.</summary>
+        /// <summary>Records an event on the active hub. Call it on the main thread only.</summary>
         public static void Track(TelemetryCategory category, string name, params (string Key, object Value)[] props) =>
             Hub?.Track(category, name, props);
 

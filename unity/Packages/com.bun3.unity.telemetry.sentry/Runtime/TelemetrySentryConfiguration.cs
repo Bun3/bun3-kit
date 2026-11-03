@@ -61,7 +61,10 @@ namespace Bun3.Unity.Telemetry.Sentry
         /// <param name="building">True in the editor while not playing, which is the build post-processing run.</param>
         protected abstract TelemetryEnvironmentOptions Environment(bool building);
 
-        /// <summary>Whether the player consents to remote reporting. Called on the main thread.</summary>
+        /// <summary>
+        /// Whether the player consents to remote reporting. Called on the main thread during SDK initialization, before any scene loads,
+        /// and again at subsystem registration. If it reads false then, the SDK stays off for the whole run, so the consent source must be readable that early.
+        /// </summary>
         protected abstract bool Consent();
 
         internal static SentrySettings Settings(TelemetryEnvironmentOptions env, bool consent, bool building, string version)

@@ -24,7 +24,7 @@ namespace Bun3.Unity.Telemetry.Tests
         }
 
         [Test] public void EscapesQuotesNewlinesAndControlChars() =>
-            Assert.AreEqual("\"a\\\"b\\\\c\\nd\\te\\u0001한\"", Str("a\"b\\c\nd\te\u0001한"));
+            Assert.AreEqual("\"a\\\"b\\\\c\\nd\\te\\u0001\uD55C\"", Str("a\"b\\c\nd\te\u0001\uD55C"));
 
         [Test] public void WritesNumbersWithInvariantCulture()
         {

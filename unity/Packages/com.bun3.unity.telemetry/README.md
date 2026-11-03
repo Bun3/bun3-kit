@@ -10,3 +10,21 @@ Game-agnostic telemetry for Unity.
 - `Telemetry.Install(builder)` installs the builder's captures: engine log lines, scene changes, UI interactions (a path and text length, never input text) and any `ITelemetryCapture` added with `TelemetryBuilder.Capture`.
 - `LocalJsonlSink` writes records to JSON lines files and `HistorySink` keeps the recent records of the current run.
 - Optional popup recording lives in the `Bun3.Unity.Telemetry.Popups` assembly, which compiles only when `com.bun3.unity.ui` is installed: `builder.CapturePopups(stack)` records `popup_opened` and `popup_closed` (with `seconds_open`) for that `PopupStack`.
+
+## Minimal setup
+
+```csharp
+var runId = Guid.NewGuid().ToString("N");
+var builder = new TelemetryBuilder(environment)       // environment: the TelemetryEnvironmentOptions bundle for this build
+    .RunId(runId)                                     // the same value goes to LocalJsonlSink so its file name matches the records' run_id
+    .Context((ref TelemetryContext c) => c.DistinctId = userId)
+    .Consent(() => userAllowsReporting)
+    .Add(new LocalJsonlSink(Path.Combine(Application.persistentDataPath, "logs"), runId, DateTime.UtcNow, keepRuns: 20, maxFileBytes: 8 * 1024 * 1024), TelemetryTier.All)
+    .AddConsole()                                     // attaches only when the bundle has console options
+    .AddPostHog()                                     // attaches only when the bundle has PostHog options with a key
+    .AddSentry();                                     // attaches only when the bundle has Sentry options with a DSN
+Telemetry.Install(builder);
+Telemetry.Track(TelemetryCategory.Analytics, "level_started", ("level", 3));
+```
+
+`LocalJsonlSink` takes the run id at construction, so pass the same value to the builder's `RunId`. `AddPostHog` and `AddSentry` come from the optional PostHog and Sentry packages and read their options from the environment bundle, so a bundle without a key or DSN attaches nothing.

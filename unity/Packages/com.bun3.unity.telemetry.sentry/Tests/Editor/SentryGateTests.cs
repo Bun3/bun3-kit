@@ -122,6 +122,26 @@ namespace Bun3.Unity.Telemetry.Sentry.Tests
             Assert.AreSame(b, SentryGate.BeforeBreadcrumb(b, new SentryHint()));
         }
 
+        [Test] public void SubscribeLinksConsentChangesToTheGate()
+        {
+            var consent = true;
+            SentryGate.Register(() => consent);
+            try
+            {
+                SentryGate.Subscribe();
+                Assert.IsTrue(SentryGate.Consent);
+                consent = false;
+                Telemetry.NotifyConsentChanged();
+                Assert.IsFalse(SentryGate.Consent);
+                Assert.IsTrue(SentryGate.ConsentEverOff);
+            }
+            finally
+            {
+                Telemetry.ConsentChanged -= SentryGate.Refresh;
+                SentryGate.Register(null);
+            }
+        }
+
         [Test] public void ConsentReadFailure_DoesNotLatchOff()
         {
             SentryGate.RefreshFrom(() => throw new InvalidOperationException());

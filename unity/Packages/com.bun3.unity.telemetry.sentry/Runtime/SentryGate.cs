@@ -72,7 +72,7 @@ namespace Bun3.Unity.Telemetry.Sentry
 
         // The core clears Telemetry.ConsentChanged at SubsystemRegistration, so subscribe after it.
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
-        static void Subscribe()
+        internal static void Subscribe()
         {
             Telemetry.ConsentChanged -= Refresh;
             Telemetry.ConsentChanged += Refresh;
