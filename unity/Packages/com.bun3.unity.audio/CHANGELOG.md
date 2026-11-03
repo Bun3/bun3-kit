@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.8.0] - 2026-11-02
+
+### Added
+
+- `SoundSystem.Play(key, fallbackKey)` and `PlayAt(key, fallbackKey, position)` play
+  the fallback key only when the first key has nothing to play.
+
+### Changed
+
+- Static `Play` and `PlayAt` return the started `SoundHandle` instead of `void`, so a
+  looping definition played by key can be stopped. Unknown keys return
+  `SoundHandle.Invalid`. Callers that converted these methods to `Action` delegates
+  must wrap them in a lambda.
+- Static key calls treat a definition without loaded clips like an unknown key: `Play`
+  and `PlayAt` fall back or return `SoundHandle.Invalid` without the per-call Editor
+  warning, and `PlayMusic` stops the music. Catalog entries can be authored before
+  their audio arrives.
+
 ## [0.7.0] - 2026-11-01
 
 ### Added

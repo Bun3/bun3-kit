@@ -112,14 +112,20 @@ public sealed class AudioBoot : MonoBehaviour
 // Anywhere afterwards:
 SoundSystem.Play("ui.click");                        // always 2D
 SoundSystem.PlayAt("door.open", transform.position); // positional unless the def's Spatial is None
-SoundSystem.PlayMusic("bgm.title");                  // same key keeps playing; unknown key stops music
+SoundSystem.PlayMusic("bgm.title");                  // same key keeps playing; unknown or empty key stops music
 SoundSystem.StopMusic();
+
+var hold = SoundSystem.Play("sfx.valve.hold", "sfx.interaction.hold"); // second key when the first is missing or empty
+hold.Stop();                                                            // stops a looping definition
 ```
 
 `Initialize` validates the catalog and prepares every definition; it throws when
 already initialized. `Shutdown()` disposes the instance and runs on application quit.
-Unknown keys are ignored without a log; calls before `Initialize` are ignored with one
-Editor warning. In the Editor, a catalog definition whose clips or spatial mode change
+Unknown keys are ignored without a log and return `SoundHandle.Invalid`; calls before
+`Initialize` are ignored with one Editor warning. A definition without loaded clips counts
+as an unknown key, so catalog entries can be authored before their audio arrives. `Play`
+and `PlayAt` take an optional fallback key, played only when the first key has nothing to
+play, so a specific key can fall back to a shared template until its own sound exists. In the Editor, a catalog definition whose clips or spatial mode change
 while playing is prepared again on the next tick, and `PrepareDefinition` runs for it
 again. `SoundSystem.Current` exposes the instance for handles, charge sounds,
 follow playback and channel volumes.

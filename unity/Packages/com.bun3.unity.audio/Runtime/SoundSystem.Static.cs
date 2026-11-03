@@ -53,30 +53,36 @@ namespace Bun3.Unity.Audio
             Current?.Dispose();
         }
 
-        /// <summary>Plays a catalog key in 2D, even when its definition is positional. Unknown keys are ignored.</summary>
-        public static void Play(string key)
-        {
-            if (TryResolve(key, out var def)) Current.Play(def, Vector3.zero, SpatialMode.None);
-        }
+        /// <summary>
+        /// Plays a catalog key in 2D, even when its definition is positional. Unknown keys and definitions without
+        /// loaded clips are ignored and return <see cref="SoundHandle.Invalid"/>; the handle stops a looping definition.
+        /// </summary>
+        public static SoundHandle Play(string key) => Play(key, null);
+
+        /// <summary>Plays <paramref name="key"/> like <see cref="Play(string)"/>, or <paramref name="fallbackKey"/> when the first key has nothing to play.</summary>
+        public static SoundHandle Play(string key, string fallbackKey) =>
+            TryResolve(key, fallbackKey, out var def) ? Current.Play(def, Vector3.zero, SpatialMode.None) : SoundHandle.Invalid;
 
         /// <summary>
         /// Plays a catalog key at a fixed position, or in 2D when its definition's spatial mode is None.
-        /// Unknown keys are ignored.
+        /// Unknown keys and definitions without loaded clips are ignored and return <see cref="SoundHandle.Invalid"/>.
         /// </summary>
-        public static void PlayAt(string key, Vector3 position)
-        {
-            if (TryResolve(key, out var def))
-                Current.Play(def, position, def.EffectiveSpatial == SpatialMode.None ? SpatialMode.None : SpatialMode.Positional);
-        }
+        public static SoundHandle PlayAt(string key, Vector3 position) => PlayAt(key, null, position);
+
+        /// <summary>Plays <paramref name="key"/> like <see cref="PlayAt(string, Vector3)"/>, or <paramref name="fallbackKey"/> when the first key has nothing to play.</summary>
+        public static SoundHandle PlayAt(string key, string fallbackKey, Vector3 position) =>
+            TryResolve(key, fallbackKey, out var def)
+                ? Current.Play(def, position, def.EffectiveSpatial == SpatialMode.None ? SpatialMode.None : SpatialMode.Positional)
+                : SoundHandle.Invalid;
 
         /// <summary>
         /// Makes a catalog key the current music with <see cref="SoundSystemConfig.MusicFadeSeconds"/>.
-        /// The same key keeps playing without restarting; an unknown key stops the music.
+        /// The same key keeps playing without restarting; an unknown key or a definition without loaded clips stops the music.
         /// </summary>
         public static void PlayMusic(string key)
         {
             if (Current == null) { WarnUninitialized(); return; }
-            if (!_catalog.TryGet(key, out var def)) { StopMusic(); return; }
+            if (!TryGetPlayable(key, out var def)) { StopMusic(); return; }
             if (Current.IsMusicPlaying && Current.MusicChannels[Current.ActiveMusic].Sound == def) return;
             Current.PlayMusic(def, Current._config.MusicFadeSeconds);
         }
@@ -95,7 +101,7 @@ namespace Bun3.Unity.Audio
             catch (Exception e) { Debug.LogException(e); }
         }
 
-        private static bool TryResolve(string key, out SoundDef def)
+        private static bool TryResolve(string key, string fallbackKey, out SoundDef def)
         {
             if (Current == null)
             {
@@ -103,8 +109,12 @@ namespace Bun3.Unity.Audio
                 def = null;
                 return false;
             }
-            return _catalog.TryGet(key, out def);
+            return TryGetPlayable(key, out def) || TryGetPlayable(fallbackKey, out def);
         }
+
+        // A definition without loaded clips is a placeholder authored ahead of its audio and counts as missing.
+        private static bool TryGetPlayable(string key, out SoundDef def) =>
+            _catalog.TryGet(key, out def) && def.EffectiveClips is { Length: > 0 };
 
         [System.Diagnostics.Conditional("UNITY_EDITOR")]
         private static void WarnUninitialized()
