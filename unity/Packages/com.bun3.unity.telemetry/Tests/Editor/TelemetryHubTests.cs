@@ -144,6 +144,61 @@ namespace Bun3.Unity.Telemetry.Tests
         }
 
         [Test]
+        public void DropKeysAlsoFilterContextExtra()
+        {
+            var sink = new ListSink();
+            var hub = Base().DropKeys("token")
+                .Context((ref TelemetryContext c) => c.Extra = new (string, object)[] { ("token", "t"), ("lobby_id", "l") })
+                .Add(sink, TelemetryTier.Analytics).Build();
+            LogAssert.Expect(LogType.Warning, new Regex(@"^\[Bun3\.Telemetry\].*token"));
+            hub.Track(TelemetryCategory.Analytics, "a");
+            var extra = sink.Written[0].Context.Extra;
+            Assert.That(extra.Length, Is.EqualTo(1));
+            Assert.That(extra[0].Key, Is.EqualTo("lobby_id"));
+        }
+
+        sealed class GatedSink : ListSink
+        {
+            public readonly UniTaskCompletionSource Gate = new();
+            public override UniTask FlushAsync(TimeSpan timeout) => Gate.Task;
+        }
+
+        sealed class FlushCountSink : ListSink
+        {
+            public int Flushes;
+            public override UniTask FlushAsync(TimeSpan timeout) { Flushes++; return UniTask.CompletedTask; }
+        }
+
+        [Test]
+        public void SlowSinkFlush_DoesNotDelayOthersStarting()
+        {
+            var slow = new GatedSink();
+            var next = new FlushCountSink();
+            var hub = Base().Add(slow, TelemetryTier.Analytics).Add(next, TelemetryTier.Analytics).Build();
+            var all = hub.FlushAsync(TimeSpan.FromSeconds(1));
+            Assert.That(next.Flushes, Is.EqualTo(1), "The second sink starts flushing while the first is pending");
+            Assert.That(all.Status, Is.EqualTo(UniTaskStatus.Pending));
+            slow.Gate.TrySetResult();
+            Assert.That(all.Status, Is.EqualTo(UniTaskStatus.Succeeded));
+        }
+
+        [Test]
+        public void FlushThrows_OthersStillFlush()
+        {
+            var next = new FlushCountSink();
+            var hub = Base().Add(new FlushThrowingSink(), TelemetryTier.Analytics).Add(next, TelemetryTier.Analytics).Build();
+            LogAssert.Expect(LogType.Warning, Prefix);
+            var all = hub.FlushAsync(TimeSpan.FromSeconds(1));
+            Assert.That(next.Flushes, Is.EqualTo(1));
+            Assert.That(all.Status, Is.EqualTo(UniTaskStatus.Succeeded));
+        }
+
+        sealed class FlushThrowingSink : ListSink
+        {
+            public override UniTask FlushAsync(TimeSpan timeout) => throw new InvalidOperationException("flush");
+        }
+
+        [Test]
         public void ConsentOffSkipsRemoteSinksAndTicks()
         {
             var local = new ListSink();

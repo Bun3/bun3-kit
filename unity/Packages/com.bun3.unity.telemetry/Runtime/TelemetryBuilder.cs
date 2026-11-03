@@ -38,7 +38,7 @@ namespace Bun3.Unity.Telemetry
             return this;
         }
 
-        /// <summary>Lists property keys that are removed from every record.</summary>
+        /// <summary>Lists property keys that are removed from every record, including the context extras.</summary>
         public TelemetryBuilder DropKeys(params string[] keys)
         {
             if (keys != null) dropKeys.AddRange(keys);

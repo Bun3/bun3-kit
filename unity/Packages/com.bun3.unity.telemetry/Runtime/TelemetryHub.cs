@@ -89,7 +89,7 @@ namespace Bun3.Unity.Telemetry
                     }
                 }
             }
-            context.Extra = WithoutNullValues(context.Extra);
+            if (context.Extra != null) context.Extra = Filter(WithoutNullValues(context.Extra));
             return context;
         }
 
@@ -173,15 +173,19 @@ namespace Bun3.Unity.Telemetry
             }
         }
 
-        /// <summary>Flushes every allowed sink in turn.</summary>
-        public async UniTask FlushAsync(TimeSpan timeout)
+        /// <summary>Flushes every allowed sink at once, so a slow sink does not hold up the others.</summary>
+        public UniTask FlushAsync(TimeSpan timeout)
         {
+            var flushes = new List<UniTask>(sinks.Length);
             foreach (var e in sinks)
-            {
-                if (!Allowed(e)) continue;
-                try { await e.Sink.FlushAsync(timeout); }
-                catch (Exception ex) { Fail(e, ex); }
-            }
+                if (Allowed(e)) flushes.Add(Flush(e, timeout));
+            return UniTask.WhenAll(flushes);
+        }
+
+        async UniTask Flush(Entry e, TimeSpan timeout)
+        {
+            try { await e.Sink.FlushAsync(timeout); }
+            catch (Exception ex) { Fail(e, ex); }
         }
     }
 }

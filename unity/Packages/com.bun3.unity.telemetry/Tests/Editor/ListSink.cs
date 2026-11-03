@@ -13,6 +13,6 @@ namespace Bun3.Unity.Telemetry.Tests
 
         public virtual void Write(TelemetryRecord record) => Written.Add(record);
         public void Tick(double now) => Ticks++;
-        public UniTask FlushAsync(TimeSpan timeout) => UniTask.CompletedTask;
+        public virtual UniTask FlushAsync(TimeSpan timeout) => UniTask.CompletedTask;
     }
 }
