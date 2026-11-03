@@ -43,7 +43,7 @@ namespace Bun3.Unity.Audio.Tests
 
         private readonly List<(SoundDef Def, SpatialMode Spatial, Vector3 Position)> _records = new(16);
         private AudioClip _clip;
-        private SoundDef _fx2d, _fx3d, _bgm;
+        private SoundDef _fx2d, _fx3d, _bgm, _empty;
         private SoundCatalog _catalog;
 
         [SetUp]
@@ -54,12 +54,14 @@ namespace Bun3.Unity.Audio.Tests
             _fx2d = Def(SpatialMode.None);
             _fx3d = Def(SpatialMode.Positional);
             _bgm = Def(SpatialMode.None);
+            _empty = ScriptableObject.CreateInstance<SoundDef>();
             _catalog = ScriptableObject.CreateInstance<SoundCatalog>();
             _catalog.SetEntries(new[]
             {
                 new SoundCatalogEntry("fx.2d", _fx2d),
                 new SoundCatalogEntry("fx.3d", _fx3d),
                 new SoundCatalogEntry("bgm", _bgm),
+                new SoundCatalogEntry("empty", _empty),
             });
         }
 
@@ -71,6 +73,7 @@ namespace Bun3.Unity.Audio.Tests
             Object.DestroyImmediate(_fx2d);
             Object.DestroyImmediate(_fx3d);
             Object.DestroyImmediate(_bgm);
+            Object.DestroyImmediate(_empty);
             Object.DestroyImmediate(_clip);
         }
 
@@ -144,14 +147,15 @@ namespace Bun3.Unity.Audio.Tests
         }
 
         [Test]
-        public void FallbackKey_PlaysOnlyWhenPrimaryKeyIsMissing()
+        public void FallbackKey_PlaysOnlyWhenPrimaryKeyIsMissingOrHasNoClips()
         {
             SoundSystem.Initialize(_catalog, Config());
-            SoundSystem.Play("missing", "fx.2d");
+            SoundSystem.Play("empty", "fx.2d");
             SoundSystem.Play("fx.3d", "fx.2d");
             SoundSystem.PlayAt("missing", "fx.3d", new Vector3(1, 2, 0));
             Assert.That(SoundSystem.Play("missing", "also.missing").IsValid, Is.False);
             Assert.That(SoundSystem.Play("missing", null).IsValid, Is.False);
+            Assert.That(SoundSystem.Play("empty").IsValid, Is.False);
 
             Assert.That(_records.Count, Is.EqualTo(3));
             Assert.That(_records[0].Def, Is.SameAs(_fx2d));
@@ -163,7 +167,7 @@ namespace Bun3.Unity.Audio.Tests
         }
 
         [Test]
-        public void PlayMusic_SameKeyKeepsChannel_UnknownKeyStops()
+        public void PlayMusic_SameKeyKeepsChannel_UnknownOrEmptyKeyStops()
         {
             SoundSystem.Initialize(_catalog, Config());
             var current = SoundSystem.Current;
@@ -174,6 +178,9 @@ namespace Bun3.Unity.Audio.Tests
             Assert.That(current.IsMusicPlaying, Is.False);
             SoundSystem.PlayMusic("bgm");
             Assert.That(current.IsMusicPlaying, Is.True);
+            SoundSystem.PlayMusic("empty");
+            Assert.That(current.IsMusicPlaying, Is.False);
+            SoundSystem.PlayMusic("bgm");
             SoundSystem.StopMusic();
             Assert.That(current.IsMusicPlaying, Is.False);
         }
@@ -226,7 +233,7 @@ namespace Bun3.Unity.Audio.Tests
             };
             LogAssert.Expect(LogType.Exception, new Regex("ArgumentException"));
             SoundSystem.Initialize(_catalog, config);
-            Assert.That(prepared, Is.EqualTo(new[] { _fx2d, _fx3d, _bgm }));
+            Assert.That(prepared, Is.EqualTo(new[] { _fx2d, _fx3d, _bgm, _empty }));
             Assert.That(SoundSystem.Current, Is.Not.Null);
         }
 
