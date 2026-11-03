@@ -1,0 +1,14 @@
+{
+    "name": "Bun3.Unity.Telemetry.Sentry",
+    "rootNamespace": "Bun3.Unity.Telemetry.Sentry",
+    "references": [ "Bun3.Unity.Telemetry", "UniTask", "io.sentry.unity.runtime" ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

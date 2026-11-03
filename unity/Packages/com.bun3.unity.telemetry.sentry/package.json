@@ -1,0 +1,17 @@
+{
+  "name": "com.bun3.unity.telemetry.sentry",
+  "displayName": "Bun3 Unity Telemetry Sentry",
+  "version": "0.1.0",
+  "unity": "6000.3",
+  "description": "Sentry sink for Bun3 Unity Telemetry: records become breadcrumbs, and error reports carry the local record tail when the player consents.",
+  "author": {
+    "name": "Bun3",
+    "url": "https://github.com/Bun3",
+    "email": "bun3.dev@gmail.com"
+  },
+  "dependencies": {
+    "com.bun3.unity.telemetry": "0.1.0",
+    "com.cysharp.unitask": "https://github.com/Cysharp/UniTask.git?path=src/UniTask/Assets/Plugins/UniTask",
+    "io.sentry.unity": "https://github.com/getsentry/unity.git"
+  }
+}

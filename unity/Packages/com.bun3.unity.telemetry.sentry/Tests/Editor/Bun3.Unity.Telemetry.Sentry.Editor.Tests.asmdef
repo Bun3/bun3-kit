@@ -1,0 +1,10 @@
+{
+  "name": "Bun3.Unity.Telemetry.Sentry.Editor.Tests",
+  "rootNamespace": "Bun3.Unity.Telemetry.Sentry.Tests",
+  "references": ["Bun3.Unity.Telemetry", "Bun3.Unity.Telemetry.Sentry", "UniTask", "io.sentry.unity.runtime", "UnityEngine.TestRunner", "UnityEditor.TestRunner"],
+  "includePlatforms": ["Editor"],
+  "overrideReferences": true,
+  "precompiledReferences": ["nunit.framework.dll", "Sentry.dll", "Sentry.Unity.dll"],
+  "autoReferenced": false,
+  "defineConstraints": ["UNITY_INCLUDE_TESTS"]
+}
