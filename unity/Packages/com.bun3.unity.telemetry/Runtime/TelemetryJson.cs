@@ -59,12 +59,29 @@ namespace Bun3.Unity.Telemetry
             }
         }
 
-        static void Field(ref Utf16ValueStringBuilder sb, string key, string value)
+        /// <summary>Appends <c>,"key":"value"</c>. The key is written as is and must not need escaping.</summary>
+        public static void WriteField(ref Utf16ValueStringBuilder sb, string key, string value)
         {
             sb.Append(",\"");
             sb.Append(key);
             sb.Append("\":");
             WriteString(ref sb, value);
+        }
+
+        /// <summary>Appends <c>"key":value</c> members separated by commas. A comma also comes first unless <paramref name="first"/> is true.</summary>
+        /// <param name="skipNull">True to leave out members whose value is null.</param>
+        public static void WriteMembers(ref Utf16ValueStringBuilder sb, (string Key, object Value)[] members, bool skipNull, bool first = false)
+        {
+            if (members == null) return;
+            foreach (var (key, value) in members)
+            {
+                if (skipNull && value == null) continue;
+                if (first) first = false;
+                else sb.Append(',');
+                WriteString(ref sb, key);
+                sb.Append(':');
+                WriteValue(ref sb, value);
+            }
         }
 
         /// <summary>Builds the JSON line of a record: fixed keys, then context extras in order, then <c>props</c>.</summary>
@@ -81,36 +98,17 @@ namespace Bun3.Unity.Telemetry
                 sb.Append(",\"tier\":\"");
                 sb.Append(TelemetryCategories.TierName(TelemetryCategories.Tier(r.Category)));
                 sb.Append('"');
-                Field(ref sb, "category", TelemetryCategories.Name(r.Category));
-                Field(ref sb, "event", r.Name);
-                Field(ref sb, "distinct_id", c.DistinctId);
-                Field(ref sb, "run_id", c.RunId);
-                Field(ref sb, "build", c.Build);
-                Field(ref sb, "environment", c.Environment);
-                Field(ref sb, "scene", c.Scene);
-                Field(ref sb, "language", c.Language);
-                if (c.Extra != null)
-                {
-                    foreach (var (key, value) in c.Extra)
-                    {
-                        if (value == null) continue;
-                        sb.Append(',');
-                        WriteString(ref sb, key);
-                        sb.Append(':');
-                        WriteValue(ref sb, value);
-                    }
-                }
+                WriteField(ref sb, "category", TelemetryCategories.Name(r.Category));
+                WriteField(ref sb, "event", r.Name);
+                WriteField(ref sb, "distinct_id", c.DistinctId);
+                WriteField(ref sb, "run_id", c.RunId);
+                WriteField(ref sb, "build", c.Build);
+                WriteField(ref sb, "environment", c.Environment);
+                WriteField(ref sb, "scene", c.Scene);
+                WriteField(ref sb, "language", c.Language);
+                WriteMembers(ref sb, c.Extra, skipNull: true);
                 sb.Append(",\"props\":{");
-                if (r.Props != null)
-                {
-                    for (var i = 0; i < r.Props.Length; i++)
-                    {
-                        if (i > 0) sb.Append(',');
-                        WriteString(ref sb, r.Props[i].Key);
-                        sb.Append(':');
-                        WriteValue(ref sb, r.Props[i].Value);
-                    }
-                }
+                WriteMembers(ref sb, r.Props, skipNull: false, first: true);
                 sb.Append("}}");
                 return sb.ToString();
             }

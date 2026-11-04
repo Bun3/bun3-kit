@@ -127,15 +127,7 @@ namespace Bun3.Unity.Telemetry
                     using var fs = new FileStream(FilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
                     var start = Math.Max(0, fs.Length - maxBytes);
                     fs.Seek(start, SeekOrigin.Begin);
-                    head = new byte[fs.Length - start];
-                    var n = 0;
-                    while (n < head.Length)
-                    {
-                        var r = fs.Read(head, n, head.Length - n);
-                        if (r <= 0) break;
-                        n += r;
-                    }
-                    if (n < head.Length) Array.Resize(ref head, n);
+                    head = new BinaryReader(fs).ReadBytes((int)(fs.Length - start));
                     cut = start > 0;
                 }
                 catch (Exception) { }
@@ -150,9 +142,7 @@ namespace Bun3.Unity.Telemetry
                     var nl = Array.IndexOf(all, (byte)'\n', begin > 0 ? begin - 1 : 0);
                     begin = nl < 0 ? all.Length : nl + 1;
                 }
-                var result = new byte[all.Length - begin];
-                Buffer.BlockCopy(all, begin, result, 0, result.Length);
-                return result;
+                return all.AsSpan(begin).ToArray();
             }
         }
     }

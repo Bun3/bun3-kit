@@ -42,11 +42,7 @@ namespace Bun3.Unity.Telemetry.Sentry
                 options.AutoSessionTracking = false;
                 options.AttachScreenshot = false;
                 options.AttachViewHierarchy = false;
-                options.AddBreadcrumbsForLogType[LogType.Log] = false;
-                options.AddBreadcrumbsForLogType[LogType.Warning] = false;
-                options.AddBreadcrumbsForLogType[LogType.Assert] = false;
-                options.AddBreadcrumbsForLogType[LogType.Error] = false;
-                options.AddBreadcrumbsForLogType[LogType.Exception] = false;
+                foreach (LogType t in Enum.GetValues(typeof(LogType))) options.AddBreadcrumbsForLogType[t] = false;
                 options.SetBeforeSend(SentryGate.BeforeSend);
                 options.SetBeforeBreadcrumb(SentryGate.BeforeBreadcrumb);
             }

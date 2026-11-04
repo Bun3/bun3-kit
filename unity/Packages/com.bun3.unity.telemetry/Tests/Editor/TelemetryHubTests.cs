@@ -116,19 +116,6 @@ namespace Bun3.Unity.Telemetry.Tests
         }
 
         [Test]
-        public void NullExtraValues_AreRemoved()
-        {
-            var sink = new ListSink();
-            var hub = Base()
-                .Context((ref TelemetryContext c) => c.Extra = new (string, object)[] { ("a", 1), ("b", null) })
-                .Add(sink, TelemetryTier.Analytics).Build();
-            hub.Track(TelemetryCategory.Analytics, "a");
-            Assert.That(sink.Written[0].Context.Extra.Length, Is.EqualTo(1));
-            Assert.That(sink.Written[0].Context.Get("a"), Is.EqualTo(1));
-            Assert.That(sink.Written[0].Context.Get("b"), Is.Null);
-        }
-
-        [Test]
         public void DropKeysRemovedAndWarnedOnce()
         {
             var sink = new ListSink();

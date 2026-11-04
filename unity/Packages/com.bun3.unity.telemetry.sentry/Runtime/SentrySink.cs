@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using Cysharp.Threading.Tasks;
 
 namespace Bun3.Unity.Telemetry.Sentry
@@ -26,8 +27,7 @@ namespace Bun3.Unity.Telemetry.Sentry
         {
             this.api = api;
             this.hook = hook;
-            this.tagKeys = new string[tagKeys?.Count ?? 0];
-            for (var i = 0; i < this.tagKeys.Length; i++) this.tagKeys[i] = tagKeys[i];
+            this.tagKeys = tagKeys?.ToArray() ?? Array.Empty<string>();
             tagValues = new string[this.tagKeys.Length];
         }
 

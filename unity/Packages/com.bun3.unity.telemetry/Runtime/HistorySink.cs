@@ -12,7 +12,6 @@ namespace Bun3.Unity.Telemetry
 
         readonly int capacity;
         readonly List<TelemetryRecord> records = new();
-        readonly object gate = new();
         bool open;
 
         /// <summary>Creates a closed sink.</summary>
@@ -23,29 +22,28 @@ namespace Bun3.Unity.Telemetry
         public bool Remote => false;
 
         /// <summary>True while records are being kept.</summary>
-        public bool IsOpen { get { lock (gate) return open; } }
+        public bool IsOpen => open;
 
         /// <summary>Clears the history and starts keeping records. Clears even when already open.</summary>
         public void Open()
         {
-            lock (gate) { records.Clear(); open = true; }
+            records.Clear();
+            open = true;
         }
 
         /// <summary>Clears the history and stops keeping records.</summary>
         public void Close()
         {
-            lock (gate) { records.Clear(); open = false; }
+            records.Clear();
+            open = false;
         }
 
         /// <inheritdoc />
         public void Write(TelemetryRecord record)
         {
-            lock (gate)
-            {
-                if (!open) return;
-                records.Add(record);
-                if (records.Count > capacity) DropOne();
-            }
+            if (!open) return;
+            records.Add(record);
+            if (records.Count > capacity) DropOne();
         }
 
         // ponytail: linear scan and RemoveAt; cost only appears once the capacity is exceeded.
@@ -61,9 +59,8 @@ namespace Bun3.Unity.Telemetry
         public IReadOnlyList<TelemetryRecord> Find(params string[] names)
         {
             var found = new List<TelemetryRecord>();
-            lock (gate)
-                foreach (var r in records)
-                    if (names == null || names.Length == 0 || Array.IndexOf(names, r.Name) >= 0) found.Add(r);
+            foreach (var r in records)
+                if (names == null || names.Length == 0 || Array.IndexOf(names, r.Name) >= 0) found.Add(r);
             found.Sort((a, b) => a.Seq.CompareTo(b.Seq));
             return found;
         }

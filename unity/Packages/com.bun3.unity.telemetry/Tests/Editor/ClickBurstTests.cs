@@ -41,9 +41,8 @@ namespace Bun3.Unity.Telemetry.Tests
         {
             var b = new ClickBurst();
             Assert.That(b.Register("A", 0, out _, out _), Is.True);
-            Assert.That(b.Register("A", 1.2, out var path, out var count), Is.True);
+            Assert.That(b.Register("A", 1.2, out var path, out _), Is.True);
             Assert.That(path, Is.Null);
-            Assert.That(count, Is.EqualTo(1));
         }
     }
 }

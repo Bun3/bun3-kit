@@ -192,14 +192,6 @@ namespace Bun3.Unity.Telemetry.PostHog
             finally { sb.Dispose(); }
         }
 
-        static void Prop(ref Utf16ValueStringBuilder sb, string key, string value)
-        {
-            sb.Append(",\"");
-            sb.Append(key);
-            sb.Append("\":");
-            TelemetryJson.WriteString(ref sb, value);
-        }
-
         static void AppendEvent(ref Utf16ValueStringBuilder sb, in Entry e)
         {
             var r = e.Record;
@@ -213,34 +205,15 @@ namespace Bun3.Unity.Telemetry.PostHog
             sb.Append("\",\"properties\":{\"distinct_id\":");
             TelemetryJson.WriteString(ref sb, c.DistinctId);
             sb.Append(",\"$process_person_profile\":false");
-            Prop(ref sb, "run_id", c.RunId);
-            Prop(ref sb, "build", c.Build);
-            Prop(ref sb, "environment", c.Environment);
-            Prop(ref sb, "scene", c.Scene);
-            Prop(ref sb, "language", c.Language);
-            if (c.Extra != null)
-            {
-                for (var i = 0; i < c.Extra.Length; i++)
-                {
-                    if (c.Extra[i].Value == null) continue;
-                    sb.Append(',');
-                    TelemetryJson.WriteString(ref sb, c.Extra[i].Key);
-                    sb.Append(':');
-                    TelemetryJson.WriteValue(ref sb, c.Extra[i].Value);
-                }
-            }
+            TelemetryJson.WriteField(ref sb, "run_id", c.RunId);
+            TelemetryJson.WriteField(ref sb, "build", c.Build);
+            TelemetryJson.WriteField(ref sb, "environment", c.Environment);
+            TelemetryJson.WriteField(ref sb, "scene", c.Scene);
+            TelemetryJson.WriteField(ref sb, "language", c.Language);
+            TelemetryJson.WriteMembers(ref sb, c.Extra, skipNull: true);
             sb.Append(",\"seq\":");
             sb.Append(r.Seq.ToString(CultureInfo.InvariantCulture));
-            if (r.Props != null)
-            {
-                for (var i = 0; i < r.Props.Length; i++)
-                {
-                    sb.Append(',');
-                    TelemetryJson.WriteString(ref sb, r.Props[i].Key);
-                    sb.Append(':');
-                    TelemetryJson.WriteValue(ref sb, r.Props[i].Value);
-                }
-            }
+            TelemetryJson.WriteMembers(ref sb, r.Props, skipNull: false);
             sb.Append("}}");
         }
     }

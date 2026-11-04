@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Threading;
 using Cysharp.Text;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
@@ -89,22 +88,8 @@ namespace Bun3.Unity.Telemetry
                     }
                 }
             }
-            if (context.Extra != null) context.Extra = Filter(WithoutNullValues(context.Extra));
+            if (context.Extra != null) context.Extra = Filter(context.Extra);
             return context;
-        }
-
-        static (string Key, object Value)[] WithoutNullValues((string Key, object Value)[] extra)
-        {
-            if (extra == null) return null;
-            var nulls = 0;
-            foreach (var x in extra)
-                if (x.Value == null) nulls++;
-            if (nulls == 0) return extra;
-            var kept = new (string Key, object Value)[extra.Length - nulls];
-            var n = 0;
-            foreach (var x in extra)
-                if (x.Value != null) kept[n++] = x;
-            return kept;
         }
 
         /// <summary>Records an event and writes it to every sink that subscribed to its tier and is allowed by consent.</summary>
@@ -118,7 +103,7 @@ namespace Bun3.Unity.Telemetry
                     Name = name,
                     Category = category,
                     Utc = utcNow(),
-                    Seq = Interlocked.Increment(ref seq),
+                    Seq = ++seq,
                     Context = BuildContext(),
                     Props = Filter(props),
                 };

@@ -93,13 +93,7 @@ namespace Bun3.Unity.Telemetry
         public (string Key, object Value)[] Extra;
 
         /// <summary>The value of the first <see cref="Extra"/> entry with this key, or null.</summary>
-        public object Get(string key)
-        {
-            if (Extra == null) return null;
-            for (var i = 0; i < Extra.Length; i++)
-                if (Extra[i].Key == key) return Extra[i].Value;
-            return null;
-        }
+        public object Get(string key) => TelemetryRecord.Find(Extra, key);
     }
 
     /// <summary>One telemetry record as handed to sinks.</summary>
@@ -119,11 +113,13 @@ namespace Bun3.Unity.Telemetry
         public (string Key, object Value)[] Props;
 
         /// <summary>The value of the first property with this key, or null.</summary>
-        public object Prop(string key)
+        public object Prop(string key) => Find(Props, key);
+
+        internal static object Find((string Key, object Value)[] pairs, string key)
         {
-            if (Props == null) return null;
-            for (var i = 0; i < Props.Length; i++)
-                if (Props[i].Key == key) return Props[i].Value;
+            if (pairs == null) return null;
+            foreach (var (k, v) in pairs)
+                if (k == key) return v;
             return null;
         }
     }

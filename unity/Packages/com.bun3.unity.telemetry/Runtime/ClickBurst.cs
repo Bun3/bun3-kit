@@ -21,7 +21,6 @@ namespace Bun3.Unity.Telemetry
                 return false;
             }
             if (path != null && count >= 2) { endedPath = path; endedCount = count; }
-            else if (path != null) endedCount = count;
             path = clickPath;
             last = now;
             count = 1;
