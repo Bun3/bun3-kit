@@ -29,7 +29,12 @@ namespace Bun3.Unity.Diagnostics.Editor.Tests
             var required = new[]
             {
                 "OriginalShaderName", "PassName", "VertexCount", "DrawCallCount",
-                "InstanceCount", "BatchBreakCause", "ComponentInstanceID",
+                "InstanceCount", "BatchBreakCause",
+#if UNITY_6000_5_OR_NEWER
+                "ComponentEntityId",
+#else
+                "ComponentInstanceID",
+#endif
             };
             foreach (var name in required)
                 Assert.Contains(name, names, $"FrameDebuggerEventData no longer exposes {name}");

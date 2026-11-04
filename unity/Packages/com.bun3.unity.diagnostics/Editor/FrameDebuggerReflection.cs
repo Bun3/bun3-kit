@@ -184,6 +184,10 @@ namespace Bun3.Unity.Diagnostics
                     fields[fi.Name.TrimStart('m', '_')] = v.ToString();
                 else if (v is UnityEngine.Object uo && uo)
                     fields[fi.Name.TrimStart('m', '_')] = uo.name;
+#if UNITY_6000_5_OR_NEWER
+                else if (v is UnityEngine.EntityId)
+                    fields[fi.Name.TrimStart('m', '_')] = v.ToString();
+#endif
             }
 
             return fields;

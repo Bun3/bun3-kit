@@ -11,6 +11,9 @@ using Bun3.Gameplay.Tags;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEditor.IMGUI.Controls;
+#if UNITY_6000_3_OR_NEWER
+using TreeViewState = UnityEditor.IMGUI.Controls.TreeViewState<int>;
+#endif
 using UnityEngine;
 
 namespace Bun3.Gameplay.Unity.Tests

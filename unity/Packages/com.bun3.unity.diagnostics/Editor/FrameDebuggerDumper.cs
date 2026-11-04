@@ -260,6 +260,15 @@ namespace Bun3.Unity.Diagnostics
 
         static string ResolveGameObjectPath(IReadOnlyDictionary<string, string> fields)
         {
+#if UNITY_6000_5_OR_NEWER
+            if (!fields.TryGetValue("ComponentEntityId", out var raw)
+                || !ulong.TryParse(raw, out var id))
+            {
+                return "";
+            }
+
+            var obj = EditorUtility.EntityIdToObject(EntityId.FromULong(id));
+#else
             if (!fields.TryGetValue("ComponentInstanceID", out var raw)
                 || !int.TryParse(raw, out var id)
                 || id == 0)
@@ -268,6 +277,7 @@ namespace Bun3.Unity.Diagnostics
             }
 
             var obj = EditorUtility.InstanceIDToObject(id);
+#endif
             if (obj is Component c)
                 return HierarchyPath(c.gameObject);
             return obj ? obj.name : "";
