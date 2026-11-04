@@ -8,7 +8,7 @@
     "overrideReferences": false,
     "precompiledReferences": [],
     "autoReferenced": true,
-    "defineConstraints": [ "BUN3_TELEMETRY_POPUPS" ],
+    "defineConstraints": [ "BUN3_TELEMETRY_POPUPS", "UNITY_6000_5_OR_NEWER" ],
     "versionDefines": [
         { "name": "com.bun3.unity.ui", "expression": "", "define": "BUN3_TELEMETRY_POPUPS" }
     ],

@@ -83,7 +83,7 @@
       "depth": 0,
       "source": "embedded",
       "dependencies": {
-        "com.bun3.unity.audio": "0.4.0",
+        "com.bun3.unity.audio": "0.7.0",
         "com.bun3.unity.acoustics": "0.2.0"
       }
     },
@@ -182,6 +182,35 @@
       "dependencies": {
         "com.bun3.unity.steam": "0.1.0",
         "com.unity.netcode.gameobjects": "2.13.1"
+      }
+    },
+    "com.bun3.unity.telemetry": {
+      "version": "file:com.bun3.unity.telemetry",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {
+        "com.cysharp.unitask": "https://github.com/Cysharp/UniTask.git?path=src/UniTask/Assets/Plugins/UniTask",
+        "com.mackysoft.serializereference-extensions": "1.7.0",
+        "com.unity.ugui": "2.0.0"
+      }
+    },
+    "com.bun3.unity.telemetry.posthog": {
+      "version": "file:com.bun3.unity.telemetry.posthog",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {
+        "com.bun3.unity.telemetry": "0.1.0",
+        "com.cysharp.unitask": "https://github.com/Cysharp/UniTask.git?path=src/UniTask/Assets/Plugins/UniTask",
+        "com.unity.modules.unitywebrequest": "1.0.0"
+      }
+    },
+    "com.bun3.unity.telemetry.sentry": {
+      "version": "file:com.bun3.unity.telemetry.sentry",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {
+        "com.bun3.unity.telemetry": "0.1.0",
+        "com.cysharp.unitask": "https://github.com/Cysharp/UniTask.git?path=src/UniTask/Assets/Plugins/UniTask"
       }
     },
     "com.bun3.unity.ui": {

@@ -2,6 +2,8 @@
 
 Game-agnostic telemetry for Unity.
 
+Requires Unity 6000.5 or newer: ZString needs the public `System.Runtime.CompilerServices.Unsafe` that 6000.5 ships, and every telemetry assembly is constrained to `UNITY_6000_5_OR_NEWER`, so older editors skip them instead of failing to compile. UPM ignores git dependencies inside `package.json`, so the project manifest must list `com.cysharp.unitask` and `com.cysharp.zstring` itself.
+
 - `Telemetry.Track(category, name, props)` is the single entry point; it is a no-op until a hub is installed.
 - `TelemetryBuilder` assembles a `TelemetryHub`: sinks are attached one line at a time with the tiers they receive, remote sinks are gated by a consent callback, and keys the game lists are dropped from every record.
 - The kit fills `run_id`, `build`, `environment` and `scene`; the game fills the rest through a `TelemetryContextFill` callback.

@@ -2,7 +2,7 @@
   "name": "com.bun3.unity.telemetry.posthog",
   "displayName": "Bun3 Unity Telemetry PostHog",
   "version": "0.1.0",
-  "unity": "6000.3",
+  "unity": "6000.5",
   "description": "PostHog sink for Bun3 Unity Telemetry: batches records and posts them to the PostHog batch endpoint.",
   "author": {
     "name": "Bun3",
@@ -12,7 +12,6 @@
   "dependencies": {
     "com.bun3.unity.telemetry": "0.1.0",
     "com.cysharp.unitask": "https://github.com/Cysharp/UniTask.git?path=src/UniTask/Assets/Plugins/UniTask",
-    "com.cysharp.zstring": "https://github.com/Cysharp/ZString.git?path=src/ZString.Unity/Assets/Scripts/ZString",
     "com.unity.modules.unitywebrequest": "1.0.0"
   }
 }
