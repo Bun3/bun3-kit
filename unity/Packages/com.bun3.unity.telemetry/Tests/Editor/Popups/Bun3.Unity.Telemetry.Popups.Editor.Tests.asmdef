@@ -1,0 +1,13 @@
+{
+  "name": "Bun3.Unity.Telemetry.Popups.Editor.Tests",
+  "rootNamespace": "Bun3.Unity.Telemetry.Popups.Tests",
+  "references": ["Bun3.Unity.Telemetry", "Bun3.Unity.Telemetry.Popups", "Bun3.Unity.UI", "UniTask", "UnityEngine.TestRunner", "UnityEditor.TestRunner"],
+  "includePlatforms": ["Editor"],
+  "overrideReferences": true,
+  "precompiledReferences": ["nunit.framework.dll"],
+  "autoReferenced": false,
+  "defineConstraints": ["UNITY_INCLUDE_TESTS", "BUN3_TELEMETRY_POPUPS", "UNITY_6000_5_OR_NEWER"],
+  "versionDefines": [
+    { "name": "com.bun3.unity.ui", "expression": "", "define": "BUN3_TELEMETRY_POPUPS" }
+  ]
+}

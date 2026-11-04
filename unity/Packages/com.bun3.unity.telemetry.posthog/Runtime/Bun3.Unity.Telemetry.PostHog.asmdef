@@ -1,0 +1,14 @@
+{
+    "name": "Bun3.Unity.Telemetry.PostHog",
+    "rootNamespace": "Bun3.Unity.Telemetry.PostHog",
+    "references": [ "Bun3.Unity.Telemetry", "UniTask", "ZString" ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [ "UNITY_6000_5_OR_NEWER" ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

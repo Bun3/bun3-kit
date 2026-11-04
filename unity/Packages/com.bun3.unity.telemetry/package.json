@@ -1,0 +1,17 @@
+{
+  "name": "com.bun3.unity.telemetry",
+  "displayName": "Bun3 Unity Telemetry",
+  "version": "0.1.0",
+  "unity": "6000.5",
+  "description": "Game-agnostic telemetry for Unity: a tiered record hub with consent gating, key dropping and per-environment sink options, plus JSON line formatting and a console sink.",
+  "author": {
+    "name": "Bun3",
+    "url": "https://github.com/Bun3",
+    "email": "bun3.dev@gmail.com"
+  },
+  "dependencies": {
+    "com.cysharp.unitask": "https://github.com/Cysharp/UniTask.git?path=src/UniTask/Assets/Plugins/UniTask",
+    "com.mackysoft.serializereference-extensions": "1.7.0",
+    "com.unity.ugui": "2.0.0"
+  }
+}

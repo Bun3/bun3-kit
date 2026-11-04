@@ -1,0 +1,14 @@
+{
+    "name": "Bun3.Unity.Telemetry",
+    "rootNamespace": "Bun3.Unity.Telemetry",
+    "references": [ "UniTask", "ZString", "MackySoft.SerializeReferenceExtensions", "Unity.TextMeshPro", "UnityEngine.UI" ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [ "UNITY_6000_5_OR_NEWER" ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
