@@ -26,7 +26,8 @@ function Invoke-Unity([string[]]$Arguments) {
   & git -C $repoRoot status --short
   if ($LASTEXITCODE -ne 0) { throw 'Unable to inspect repository state after Unity.' }
   if ($unityExit -ne 0) { throw "Unity $Mode failed with exit code $unityExit." }
-  if (Select-String -LiteralPath $logPath -Pattern 'warning CS|error CS|Compilation failed' -Quiet) {
+  # Warnings fail the run only in the gameplay package; vendored Assets/Plugins code warns on newer editors.
+  if (Select-String -LiteralPath $logPath -Pattern 'com\.bun3\.gameplay[\\/].*warning CS|error CS|Compilation failed' -Quiet) {
     throw "Unity $Mode emitted a C# diagnostic: $logPath"
   }
 }
