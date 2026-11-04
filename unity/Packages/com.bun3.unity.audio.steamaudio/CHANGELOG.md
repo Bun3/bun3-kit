@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.6.1] - 2026-11-05
+
+### Fixed
+
+- `PlanarAcousticSessionScope` no longer emits the Unity 6000.5 `FindObjectsByType(FindObjectsSortMode)` deprecation warning when it looks for the active `AudioListener`; earlier editors keep the old call.
+
 ## [0.6.0] - 2026-11-02
 
 ### Added

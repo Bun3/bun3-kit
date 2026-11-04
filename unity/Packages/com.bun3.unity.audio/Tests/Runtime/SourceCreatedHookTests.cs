@@ -53,12 +53,19 @@ namespace Bun3.Unity.Audio.Tests
         [UnityTest]
         public IEnumerator ThrowingPreparationDisposesPartiallyCreatedPool()
         {
-            var before = Object.FindObjectsByType<AudioSource>(FindObjectsSortMode.None).Length;
+            var before = AudioSourceCount();
             var config = new SoundSystemConfig { SfxVoices = 2 };
             SetHook(config, _ => throw new InvalidOperationException("Preparation failed."));
             Assert.Throws<InvalidOperationException>(() => new SoundSystem(config));
             yield return null;
-            Assert.That(Object.FindObjectsByType<AudioSource>(FindObjectsSortMode.None).Length, Is.EqualTo(before));
+            Assert.That(AudioSourceCount(), Is.EqualTo(before));
         }
+
+        private static int AudioSourceCount() =>
+#if UNITY_6000_5_OR_NEWER
+            Object.FindObjectsByType<AudioSource>().Length;
+#else
+            Object.FindObjectsByType<AudioSource>(FindObjectsSortMode.None).Length;
+#endif
     }
 }

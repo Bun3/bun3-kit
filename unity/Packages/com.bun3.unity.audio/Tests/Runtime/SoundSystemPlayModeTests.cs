@@ -46,7 +46,11 @@ namespace Bun3.Unity.Audio.Tests
             sys.Dispose();
             Assert.IsFalse(handle.IsValid);
             yield return null; // Object.Destroy defers actual destruction to end of frame.
+#if UNITY_6000_5_OR_NEWER
+            Assert.That(Object.FindObjectsByType<AudioSource>(), Is.Empty);
+#else
             Assert.That(Object.FindObjectsByType<AudioSource>(FindObjectsSortMode.None), Is.Empty);
+#endif
         }
 
         [UnityTest]

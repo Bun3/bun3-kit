@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.8.1] - 2026-11-05
+
+### Fixed
+
+- PlayMode tests no longer emit the Unity 6000.5 `FindObjectsByType(FindObjectsSortMode)` deprecation warning; earlier editors keep the old call.
+
 ## [0.8.0] - 2026-11-02
 
 ### Added

@@ -85,7 +85,11 @@ namespace Bun3.Unity.Audio.SteamAudio
             if (listener == null && now >= nextListenerSearch)
             {
                 nextListenerSearch = now + 1f;
+#if UNITY_6000_5_OR_NEWER
+                var candidates = UnityEngine.Object.FindObjectsByType<AudioListener>();
+#else
                 var candidates = UnityEngine.Object.FindObjectsByType<AudioListener>(FindObjectsSortMode.None);
+#endif
                 for (int i = 0; i < candidates.Length; i++)
                     if (candidates[i].isActiveAndEnabled) { listener = candidates[i]; break; }
             }
