@@ -9,7 +9,7 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'GameplayUnityTestSupport.ps1')
-$unityEditor = 'E:\Unitys\6000.3.14f1\Editor\Unity.exe'
+$unityEditor = 'E:\Unitys\6000.5.5f1\Editor\Unity.exe'
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..\..')).Path
 $unityProject = (Resolve-Path (Join-Path $repoRoot 'unity')).Path
 $stamp = [DateTime]::UtcNow.ToString('yyyyMMddHHmmssfff')
