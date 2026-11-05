@@ -147,6 +147,30 @@ namespace Bun3.Unity.Telemetry.GameAnalytics.Tests
         }
 
         [Test]
+        public void AddGameAnalyticsNeedsBothKeys()
+        {
+            var api = new FakeApi();
+            TelemetryHub Hub(GameAnalyticsSinkOptions options)
+            {
+                var environment = new TelemetryEnvironmentOptions { Name = "playtest" };
+                if (options != null) environment.Sinks.Add(options);
+                return new TelemetryBuilder(environment).AddGameAnalytics(api: api).Build();
+            }
+
+            Assert.That(Hub(null).Sink<GameAnalyticsSink>(), Is.Null);
+            Assert.That(Hub(new GameAnalyticsSinkOptions { GameKey = "g" }).Sink<GameAnalyticsSink>(), Is.Null);
+            Assert.That(Hub(new GameAnalyticsSinkOptions { SecretKey = "s" }).Sink<GameAnalyticsSink>(), Is.Null);
+            Assert.That(Hub(new GameAnalyticsSinkOptions { GameKey = "g", SecretKey = "s", Tiers = TelemetryTier.None }).Sink<GameAnalyticsSink>(), Is.Null);
+
+            var hub = Hub(new GameAnalyticsSinkOptions { GameKey = "g", SecretKey = "s" });
+            Assert.That(hub.Sink<GameAnalyticsSink>(), Is.Not.Null);
+            hub.Track(TelemetryCategory.Ui, "ui_click");
+            Assert.That(api.Calls, Is.Empty, "Analytics tier only by default");
+            hub.Track(TelemetryCategory.Analytics, "app_started");
+            Assert.That(api.Calls, Has.Member("Initialize"));
+        }
+
+        [Test]
         public void MapFailureDropsOnlyThatRecord()
         {
             var api = new FakeApi();

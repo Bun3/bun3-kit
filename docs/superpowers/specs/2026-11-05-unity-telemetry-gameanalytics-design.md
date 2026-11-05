@@ -173,6 +173,16 @@ public delegate bool GameAnalyticsMap(TelemetryRecord record, List<GameAnalytics
 ## 8. 빌더에게 맡기는 것 (구현 전에 확인)
 
 조사에서 확인하지 못해 구현하면서 확인해야 하는 SDK 사실이다. 결과에 따라 고르는 대안을 함께 적었다.
+
+**구현 때 확인한 결과 (2026-11-05, SDK 8.3.1, lock 6f6d36f9의 소스 기준)**
+- 설치: 핀 없는 git URL로 설치된다. 런타임 asmdef 이름은 `GameAnalyticsSDK`.
+- 설정 객체: `GameAnalytics.SettingsGA`(Resources에서 지연 로드, 에셋이 없으면 플레이어에서는 null). 키는 정적 `Settings.UpdateKeys(index, gameKey, secretKey)`, 빌드는 `Build[index]`와 `BuildNumberAutoDetect[index] = false`, 플랫폼 항목이 없으면 `AddPlatform`. 모두 런타임에 바꿀 수 있어 대안(설정 에셋에 키 두기)은 쓰지 않는다.
+- 자동 보고: `SubmitErrors`·`NativeErrorReporting`·`SubmitFpsAverage`·`SubmitFpsCritical`·`EnableFPSHistogram`·`EnableMemoryHistogram`·`EnableMemoryTracking`·`EnableHardwareTracking`·`EnableSDKInitEvent`가 공개 필드라 초기화 전에 끈다. 정보 로그(`InfoLogBuild`)도 끈다.
+- 사용자 정의 차원: `Initialize`가 설정 객체의 `CustomDimensions01` 목록을 허용 값으로 넘긴다. 목록에 환경 이름을 넣고, 초기화 전(`GA_Setup.SetAvailableCustomDimensions01` 후 `SetCustomDimension01`)과 초기화 뒤에 한 번씩 지정한다. 웹 화면 등록 필요 여부는 실측에서 본다.
+- 컴포넌트: `GameAnalytics` 컴포넌트는 초기화에 필요 없지만 종료 때 세션을 끝낸다(`OnApplicationQuit`, Windows 1.5초 대기). 없으면 저장소가 만들고, 컴포넌트의 `Awake`가 씬을 넘어 남긴다.
+- 사용자 ID: `SetCustomId`는 래퍼 호출 하나뿐이고 설정 플래그가 없다.
+- 이름 규칙: `GAValidator`의 `^[A-Za-z0-9\s\-_\.\(\)\!\?]{1,64}(:...){0,4}$`. 다듬기는 공백 중 일반 공백만 허용한다.
+- 미확인으로 남은 것: 네이티브 DLL이 6000.5 Mono 플레이어에서 동작하는지, 전송 끄기가 세션 신호도 멈추는지, 웹 화면 차원 등록 필요 여부. 실측(JP 작업 6)에서 본다.
 - git URL로 설치되는지. 안 되면 OpenUPM 범위 레지스트리(§4.1).
 - 런타임에 설정 객체를 얻어 게임 키·시크릿 키와 `SubmitErrors`를 넣을 수 있는지. 안 되면 설정 에셋에 둔다(§4.6).
 - GameObject를 코드로 만들어 초기화할 수 있는지(프리팹 없이).
