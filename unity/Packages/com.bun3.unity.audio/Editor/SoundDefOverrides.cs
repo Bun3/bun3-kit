@@ -127,9 +127,23 @@ namespace Bun3.Unity.Audio.Editor
             selection.serializedObject.ApplyModifiedProperties();
         }
 
-        /// <summary>Copies every inherited acoustic value into local settings, then clears the flags and profile.</summary>
+        /// <summary>
+        /// Copies every inherited acoustic value into local settings, then clears the flags and profile.
+        /// A multi-object selection applies pending edits, then detaches each target with its own flags.
+        /// </summary>
         public static void UseLocalAcoustics(SerializedProperty selection)
         {
+            var owner = selection.serializedObject;
+            if (owner.isEditingMultipleObjects)
+            {
+                owner.ApplyModifiedProperties();
+                foreach (var target in owner.targetObjects)
+                    using (var single = new SerializedObject(target))
+                        UseLocalAcoustics(single.FindProperty(selection.propertyPath));
+                owner.Update();
+                return;
+            }
+
             var reference = AcousticProfileOf(selection);
             if (reference.objectReferenceValue == null) return;
             var flags = AcousticFlags(selection);

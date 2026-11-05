@@ -154,6 +154,32 @@ namespace Bun3.Unity.Audio.Tests
             Assert.That(def.Acoustics.Local.MonoDistance, Is.EqualTo(8f), "An overridden field keeps its local value.");
         }
 
+        [Test]
+        public void UseLocalAcoustics_MultiTarget_CopiesEachTarget()
+        {
+            var profile = Create<SoundAcousticProfile>();
+            profile.Settings.MinDistance = 4f;
+            profile.Settings.MaxDistance = 50f;
+            var first = Create<SoundSpatialProfile>();
+            var second = Create<SoundSpatialProfile>();
+            first.Acoustics.Profile = profile;
+            second.Acoustics.Profile = profile;
+            var local = SoundAcousticSettings.Default;
+            local.MaxDistance = 25f;
+            second.Acoustics.Local = local;
+            second.Acoustics.Overrides = SoundAcousticField.MaxDistance;
+            var serialized = new SerializedObject(new Object[] { first, second });
+
+            SoundDefOverrides.UseLocalAcoustics(serialized.FindProperty("_acoustics"));
+
+            Assert.That(first.Acoustics.Profile, Is.Null);
+            Assert.That(second.Acoustics.Profile, Is.Null);
+            Assert.That(first.Acoustics.Local.MaxDistance, Is.EqualTo(50f));
+            Assert.That(second.Acoustics.Local.MaxDistance, Is.EqualTo(25f), "Each target keeps its own overridden value.");
+            Assert.That(second.Acoustics.Local.MinDistance, Is.EqualTo(4f));
+            Assert.That(second.Acoustics.Overrides, Is.EqualTo(SoundAcousticField.None));
+        }
+
         private T Create<T>() where T : ScriptableObject
         {
             var created = ScriptableObject.CreateInstance<T>();

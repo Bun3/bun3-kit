@@ -130,7 +130,10 @@ namespace Bun3.Unity.Audio.Editor
         private const float EditProfileWidth = 72f;
         private static readonly Color BarColor = new(1f / 255f, 153f / 255f, 235f / 255f, 0.75f);
 
-        /// <summary>Draws a profile reference with Use local and Edit profile buttons; clearing it runs <paramref name="useLocal"/> instead.</summary>
+        /// <summary>
+        /// Draws a profile reference with Use local and Edit profile buttons when <paramref name="editable"/>.
+        /// Clearing it, also in multi-object editing, discards the pending None and runs <paramref name="useLocal"/> instead.
+        /// </summary>
         internal static void ProfileField(Rect rect, SerializedProperty reference, bool editable, Action useLocal)
         {
             var profile = reference.objectReferenceValue;
@@ -139,12 +142,15 @@ namespace Bun3.Unity.Audio.Editor
             if (buttons) field.xMax -= UseLocalWidth + EditProfileWidth + 4f;
             EditorGUI.BeginChangeCheck();
             EditorGUI.PropertyField(field, reference);
-            var cleared = EditorGUI.EndChangeCheck() && buttons && reference.objectReferenceValue == null;
-            if (cleared) reference.objectReferenceValue = profile;
+            if (EditorGUI.EndChangeCheck() && reference.objectReferenceValue == null)
+            {
+                reference.serializedObject.Update();
+                useLocal();
+            }
             if (!buttons) return;
 
             var button = new Rect(field.xMax + 2f, rect.y, UseLocalWidth, rect.height);
-            if (GUI.Button(button, "Use local", EditorStyles.miniButton) || cleared) useLocal();
+            if (GUI.Button(button, "Use local", EditorStyles.miniButton)) useLocal();
             button.x = button.xMax + 2f;
             button.width = EditProfileWidth;
             if (GUI.Button(button, "Edit profile", EditorStyles.miniButton))
