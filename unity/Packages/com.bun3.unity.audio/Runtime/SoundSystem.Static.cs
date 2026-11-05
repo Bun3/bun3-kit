@@ -11,7 +11,7 @@ namespace Bun3.Unity.Audio
 
         /// <summary>
         /// The instance created by <see cref="Initialize"/>; null before initialization and after shutdown or
-        /// disposal. Use it for what the static API does not cover: handles, charge sounds, follow, channel volumes.
+        /// disposal. Use it for what the static API does not cover: handles, follow, channel volumes.
         /// </summary>
         public static SoundSystem Current { get; private set; }
 
@@ -76,6 +76,36 @@ namespace Bun3.Unity.Audio
                 : SoundHandle.Invalid;
 
         /// <summary>
+        /// Starts the charge loop <paramref name="key"/> in 2D, even when its definitions are positional, with the
+        /// one-shots keyed <paramref name="key"/> plus <see cref="SoundCatalog.ChargeStartSuffix"/>,
+        /// <see cref="SoundCatalog.ChargeCompleteSuffix"/> and <see cref="SoundCatalog.ChargeCancelSuffix"/>.
+        /// An unknown key or a definition without loaded clips returns <see cref="ChargeSoundHandle.Invalid"/>.
+        /// </summary>
+        public static ChargeSoundHandle PlayCharge(string key) => PlayCharge(key, null);
+
+        /// <summary>
+        /// Starts a charge like <see cref="PlayCharge(string)"/>. The loop is <paramref name="key"/>, or
+        /// <paramref name="fallbackKey"/> when the first key has nothing to play. Each one-shot is
+        /// <paramref name="key"/>'s part, or else <paramref name="fallbackKey"/>'s same part, or else silent.
+        /// </summary>
+        public static ChargeSoundHandle PlayCharge(string key, string fallbackKey) =>
+            PlayChargeKey(key, fallbackKey, Vector3.zero, null, SpatialMode.None);
+
+        /// <summary>
+        /// Starts a charge like <see cref="PlayCharge(string, string)"/> at a fixed position, playing each part in 2D
+        /// when its definition's spatial mode is None.
+        /// </summary>
+        public static ChargeSoundHandle PlayChargeAt(string key, string fallbackKey, Vector3 position) =>
+            PlayChargeKey(key, fallbackKey, position, null, SpatialMode.Positional);
+
+        /// <summary>
+        /// Starts a charge like <see cref="PlayCharge(string, string)"/> tracking <paramref name="follow"/>, playing each
+        /// part with its definition's own spatial mode.
+        /// </summary>
+        public static ChargeSoundHandle PlayCharge(string key, string fallbackKey, Transform follow) =>
+            PlayChargeKey(key, fallbackKey, follow != null ? follow.position : Vector3.zero, follow, null);
+
+        /// <summary>
         /// Makes a catalog key the current music with <see cref="SoundSystemConfig.MusicFadeSeconds"/>.
         /// The same key keeps playing without restarting; an unknown key or a definition without loaded clips stops the music.
         /// </summary>
@@ -112,9 +142,22 @@ namespace Bun3.Unity.Audio
             return TryGetPlayable(key, out def) || TryGetPlayable(fallbackKey, out def);
         }
 
+        private static ChargeSoundHandle PlayChargeKey(string key, string fallbackKey, Vector3 position, Transform follow, SpatialMode? spatial)
+        {
+            if (!TryResolve(key, fallbackKey, out var loop)) return ChargeSoundHandle.Invalid;
+            _catalog.GetChargeParts(key, out var start, out var complete, out var cancel);
+            _catalog.GetChargeParts(fallbackKey, out var fallbackStart, out var fallbackComplete, out var fallbackCancel);
+            return Current.PlayChargeCore(loop, PlayableOr(start, fallbackStart), PlayableOr(complete, fallbackComplete),
+                PlayableOr(cancel, fallbackCancel), position, follow, spatial);
+        }
+
+        private static SoundDef PlayableOr(SoundDef def, SoundDef fallback) =>
+            IsPlayable(def) ? def : IsPlayable(fallback) ? fallback : null;
+
         // A definition without loaded clips is a placeholder authored ahead of its audio and counts as missing.
-        private static bool TryGetPlayable(string key, out SoundDef def) =>
-            _catalog.TryGet(key, out def) && def.EffectiveClips is { Length: > 0 };
+        private static bool TryGetPlayable(string key, out SoundDef def) => _catalog.TryGet(key, out def) && IsPlayable(def);
+
+        private static bool IsPlayable(SoundDef def) => def != null && def.EffectiveClips is { Length: > 0 };
 
         [System.Diagnostics.Conditional("UNITY_EDITOR")]
         private static void WarnUninitialized()

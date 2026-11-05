@@ -6,51 +6,38 @@ namespace Bun3.Unity.Audio
 {
     public sealed partial class SoundSystem
     {
-        /// <summary>Starts a 2D (or loop-definition-default) charge sound. Returns an invalid handle when the loop cannot play.</summary>
-        /// <param name="def">Charge definition; its Loop is required.</param>
-        public ChargeSoundHandle PlayCharge(ChargeSoundDef def) => PlayChargeCore(def, Vector3.zero, null);
-
-        /// <summary>Starts a charge sound at a fixed world position. Returns an invalid handle when the loop cannot play.</summary>
-        /// <param name="def">Charge definition; its Loop is required.</param>
-        /// <param name="position">Fixed world position shared by every part of the charge.</param>
-        public ChargeSoundHandle PlayCharge(ChargeSoundDef def, Vector3 position) => PlayChargeCore(def, position, null);
-
-        /// <summary>Starts a charge sound tracking a transform every frame. Returns an invalid handle when the loop cannot play.</summary>
-        /// <param name="def">Charge definition; its Loop is required.</param>
-        /// <param name="follow">Transform tracked by every part of the charge.</param>
-        public ChargeSoundHandle PlayCharge(ChargeSoundDef def, Transform follow)
-            => PlayChargeCore(def, follow != null ? follow.position : Vector3.zero, follow);
-
-        private ChargeSoundHandle PlayChargeCore(ChargeSoundDef def, Vector3 position, Transform follow)
+        // spatial: None forces 2D, Positional maps like the static PlayAt, null keeps each part's own mode.
+        internal ChargeSoundHandle PlayChargeCore(SoundDef loop, SoundDef start, SoundDef complete, SoundDef cancel,
+            Vector3 position, Transform follow, SpatialMode? spatial = null)
         {
             if (_disposed)
             {
                 throw new ObjectDisposedException(nameof(SoundSystem));
             }
-            if (def == null || def.Loop == null)
+            if (loop == null)
             {
 #if DEVELOPMENT_BUILD || UNITY_EDITOR
-                Debug.LogWarning("SoundSystem.PlayCharge: def or its Loop is null; returning an invalid handle.");
+                Debug.LogWarning("SoundSystem.PlayCharge: loop definition is null; returning an invalid handle.");
 #endif
                 return ChargeSoundHandle.Invalid;
             }
 #if DEVELOPMENT_BUILD || UNITY_EDITOR
-            if (!def.Loop.EffectiveLoop)
+            if (!loop.EffectiveLoop)
             {
                 Debug.LogWarning("SoundSystem.PlayCharge: Loop definition does not loop; the charge ends with its clip.");
             }
 #endif
             // Curve-zero volume goes in before the source starts; pitch follows in the same call.
-            var loop = PlayCore(def.Loop, position, follow, 0f, null, def.VolumeAt(0f));
-            if (!TryGetSlot(loop, out var slot))
+            var handle = PlayCore(loop, position, follow, 0f, PartSpatial(loop, spatial), loop.Charge.VolumeAt(0f));
+            if (!TryGetSlot(handle, out var slot))
             {
                 return ChargeSoundHandle.Invalid;
             }
-            var charge = new ChargeSoundHandle(loop, def, Table.Slots[slot].Pitch);
+            var charge = new ChargeSoundHandle(handle, loop, complete, cancel, Table.Slots[slot].Pitch, spatial);
             ApplyChargePitch(slot, charge, 0f);
-            if (def.Start != null)
+            if (start != null)
             {
-                PlayCore(def.Start, position, follow, 0f);
+                PlayCore(start, position, follow, 0f, PartSpatial(start, spatial));
             }
             return charge;
         }
@@ -64,7 +51,7 @@ namespace Bun3.Unity.Audio
             {
                 return;
             }
-            Table.Slots[slot].VolumeScale = charge.Def.VolumeAt(progress);
+            Table.Slots[slot].VolumeScale = charge.LoopDef.Charge.VolumeAt(progress);
             ApplyChargePitch(slot, charge, progress);
         }
 
@@ -74,26 +61,30 @@ namespace Bun3.Unity.Audio
             {
                 return SoundHandle.Invalid;
             }
-            var def = charge.Def;
+            var settings = charge.LoopDef.Charge;
             var follow = Table.Slots[slot].Follow;
             var position = _sources[slot].transform.position;
             // FadingOut is what makes IsChargeActive false; Stop's fade restart never runs twice.
-            Table.BeginFadeOut(slot, completed ? def.CompleteFadeOut : def.CancelFadeOut);
-            var stinger = completed ? def.Complete : def.Cancel;
+            Table.BeginFadeOut(slot, completed ? settings.CompleteFadeOut : settings.CancelFadeOut);
+            var stinger = completed ? charge.CompleteDef : charge.CancelDef;
             if (stinger == null)
             {
                 return SoundHandle.Invalid;
             }
+            var spatial = PartSpatial(stinger, charge.Spatial);
             return follow != null
-                ? PlayCore(stinger, follow.position, follow, 0f)
-                : PlayCore(stinger, position, null, 0f);
+                ? PlayCore(stinger, follow.position, follow, 0f, spatial)
+                : PlayCore(stinger, position, null, 0f, spatial);
         }
 
         private void ApplyChargePitch(int slot, in ChargeSoundHandle charge, float progress)
         {
-            var pitch = Mathf.Max(0f, charge.BasePitch * charge.Def.PitchScaleAt(progress));
+            var pitch = Mathf.Max(0f, charge.BasePitch * charge.LoopDef.Charge.PitchScaleAt(progress));
             Table.Slots[slot].Pitch = pitch;
             SetSourcePitch(slot, pitch);
         }
+
+        private static SpatialMode? PartSpatial(SoundDef def, SpatialMode? spatial)
+            => spatial == SpatialMode.Positional && def.EffectiveSpatial == SpatialMode.None ? SpatialMode.None : spatial;
     }
 }

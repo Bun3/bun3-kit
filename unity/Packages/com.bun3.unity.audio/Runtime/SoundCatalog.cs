@@ -23,36 +23,63 @@ namespace Bun3.Unity.Audio
     [CreateAssetMenu(menuName = "Bun3/Audio/Sound Catalog", fileName = "SoundCatalog")]
     public sealed class SoundCatalog : ScriptableObject
     {
+        /// <summary>Key suffix of the one-shot played when the charge loop with the key before it starts.</summary>
+        public const string ChargeStartSuffix = ".start";
+        /// <summary>Key suffix of the one-shot played when the charge loop with the key before it completes.</summary>
+        public const string ChargeCompleteSuffix = ".complete";
+        /// <summary>Key suffix of the one-shot played when the charge loop with the key before it is cancelled.</summary>
+        public const string ChargeCancelSuffix = ".cancel";
+
+        private static readonly string[] ChargeSuffixes = { ChargeStartSuffix, ChargeCompleteSuffix, ChargeCancelSuffix };
+
         [SerializeField] private SoundCatalogEntry[] entries = Array.Empty<SoundCatalogEntry>();
         private Dictionary<string, SoundDef> lookup;
+        private Dictionary<string, SoundDef[]> chargeParts; // loop key -> parts in ChargeSuffixes order
         /// <summary>The authored mappings, in authoring order.</summary>
         public IReadOnlyList<SoundCatalogEntry> Entries => entries;
         /// <summary>Replaces mappings after validating them, preserving the previous catalog on failure.</summary>
         public void SetEntries(SoundCatalogEntry[] value)
         {
             var copy = value == null ? Array.Empty<SoundCatalogEntry>() : (SoundCatalogEntry[])value.Clone();
-            var index = BuildIndex(copy);
+            var (index, parts) = BuildIndex(copy);
             entries = copy;
-            lookup = index;
+            (lookup, chargeParts) = (index, parts);
         }
         /// <summary>Validates all keys and references and prepares allocation-free lookups.</summary>
-        public void ValidateOrThrow() => lookup = BuildIndex(entries);
+        public void ValidateOrThrow() => (lookup, chargeParts) = BuildIndex(entries);
         /// <summary>Finds a definition; null and unknown keys return false.</summary>
         public bool TryGet(string key, out SoundDef definition)
         {
             definition = null;
             if (string.IsNullOrWhiteSpace(key)) return false;
-            lookup ??= BuildIndex(entries);
+            EnsureIndex();
             return lookup.TryGetValue(key, out definition) && definition != null;
         }
         /// <summary>Finds a definition, or returns null for an unknown key.</summary>
         public SoundDef Get(string key) => TryGet(key, out var definition) ? definition : null;
+
+        // Parts are found by key alone, whether or not loopKey itself is in the catalog.
+        internal void GetChargeParts(string loopKey, out SoundDef start, out SoundDef complete, out SoundDef cancel)
+        {
+            start = complete = cancel = null;
+            if (string.IsNullOrWhiteSpace(loopKey)) return;
+            EnsureIndex();
+            if (!chargeParts.TryGetValue(loopKey, out var parts)) return;
+            (start, complete, cancel) = (parts[0], parts[1], parts[2]);
+        }
+
         private void OnValidate() => lookup = null;
         private void OnEnable() => lookup = null;
-        private static Dictionary<string, SoundDef> BuildIndex(SoundCatalogEntry[] source)
+        private void EnsureIndex()
+        {
+            if (lookup == null) (lookup, chargeParts) = BuildIndex(entries);
+        }
+
+        private static (Dictionary<string, SoundDef>, Dictionary<string, SoundDef[]>) BuildIndex(SoundCatalogEntry[] source)
         {
             source ??= Array.Empty<SoundCatalogEntry>();
             var result = new Dictionary<string, SoundDef>(source.Length, StringComparer.Ordinal);
+            var parts = new Dictionary<string, SoundDef[]>(StringComparer.Ordinal);
             for (int i = 0; i < source.Length; i++)
             {
                 var entry = source[i];
@@ -62,8 +89,15 @@ namespace Bun3.Unity.Audio
                     throw new ArgumentException("Sound catalog entries require definitions.");
                 if (!result.TryAdd(entry.Key, entry.Definition))
                     throw new ArgumentException("Sound catalog keys must be unique (ordinal, case-sensitive).");
+                for (int s = 0; s < ChargeSuffixes.Length; s++)
+                {
+                    if (!entry.Key.EndsWith(ChargeSuffixes[s], StringComparison.Ordinal)) continue;
+                    var loopKey = entry.Key.Substring(0, entry.Key.Length - ChargeSuffixes[s].Length);
+                    if (!parts.TryGetValue(loopKey, out var defs)) parts.Add(loopKey, defs = new SoundDef[ChargeSuffixes.Length]);
+                    defs[s] = entry.Definition;
+                }
             }
-            return result;
+            return (result, parts);
         }
     }
 }

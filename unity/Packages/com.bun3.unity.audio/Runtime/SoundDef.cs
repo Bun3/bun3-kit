@@ -127,6 +127,9 @@ namespace Bun3.Unity.Audio
         /// <summary>Optional full-obstruction gain override; a negative value uses system settings.</summary>
         public float OcclusionVolumeAtFull = -1f;
 
+        /// <summary>Progress curves and fades used only when this definition plays as a charge loop.</summary>
+        public SoundChargeSettings Charge = new();
+
         [SerializeField, HideInInspector]
         private SoundDefField _overrides;
 
