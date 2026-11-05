@@ -1,28 +1,15 @@
+using System;
 using UnityEngine;
 
 namespace Bun3.Unity.Audio
 {
     /// <summary>
-    /// Progress-driven charge sound: a looping layer whose volume and pitch follow a 0..1
-    /// progress value, plus optional start, complete and cancel one-shots. Each part is a
-    /// regular <see cref="SoundDef"/> and keeps its own clips, variation, routing, spatial
-    /// mode and profiles. Played with <see cref="SoundSystem.PlayCharge(ChargeSoundDef)"/>.
+    /// Progress curves and fades used only when a <see cref="SoundDef"/> plays as a charge loop through
+    /// <see cref="SoundSystem.PlayCharge(string, string)"/>. The loop's volume and pitch follow a 0..1 progress value.
     /// </summary>
-    [CreateAssetMenu(menuName = "Bun3/Audio/Charge Sound Def", fileName = "ChargeSoundDef")]
-    public sealed class ChargeSoundDef : ScriptableObject
+    [Serializable]
+    public sealed class SoundChargeSettings
     {
-        /// <summary>Required looping layer. Its definition should enable Loop.</summary>
-        public SoundDef Loop;
-
-        /// <summary>Optional one-shot played when the charge starts.</summary>
-        public SoundDef Start;
-
-        /// <summary>Optional one-shot played by <see cref="ChargeSoundHandle.Complete"/>.</summary>
-        public SoundDef Complete;
-
-        /// <summary>Optional one-shot played by <see cref="ChargeSoundHandle.Cancel"/>.</summary>
-        public SoundDef Cancel;
-
         /// <summary>Loop volume multiplier (Y) by progress (X, 0..1). Null or empty is a constant 1.</summary>
         public AnimationCurve VolumeByProgress = AnimationCurve.Linear(0f, 0f, 1f, 1f);
 

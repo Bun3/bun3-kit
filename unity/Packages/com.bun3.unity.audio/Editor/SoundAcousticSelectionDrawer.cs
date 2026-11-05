@@ -1,3 +1,4 @@
+using System;
 using UnityEditor;
 using UnityEngine;
 
@@ -6,23 +7,32 @@ namespace Bun3.Unity.Audio.Editor
     [CustomPropertyDrawer(typeof(SoundAcousticSelection))]
     internal sealed class SoundAcousticSelectionDrawer : PropertyDrawer
     {
+        private SerializedObject _profile;
+
         public override void OnGUI(Rect position, SerializedProperty property, GUIContent label)
         {
             EditorGUI.BeginProperty(position, label, property);
-            position.height = EditorGUIUtility.singleLineHeight;
-            property.isExpanded = EditorGUI.Foldout(position, property.isExpanded, label, true);
+            var line = new Rect(position.x, position.y, position.width, EditorGUIUtility.singleLineHeight);
+            property.isExpanded = EditorGUI.Foldout(line, property.isExpanded, label, true);
             if (property.isExpanded)
             {
-                var profile = property.FindPropertyRelative(nameof(SoundAcousticSelection.Profile));
-                var local = property.FindPropertyRelative(nameof(SoundAcousticSelection.Local));
-                position.y += EditorGUIUtility.singleLineHeight + EditorGUIUtility.standardVerticalSpacing;
+                var selection = property.Copy();
+                var reference = property.FindPropertyRelative(nameof(SoundAcousticSelection.Profile));
+                var profile = ProfileObject(reference);
+                // Override flags are edited on one object at a time so targets with different flags are never merged.
+                var editable = GUI.enabled && !property.serializedObject.isEditingMultipleObjects;
                 using (new EditorGUI.IndentLevelScope())
                 {
-                    EditorGUI.PropertyField(position, profile);
-                    if (!profile.hasMultipleDifferentValues && profile.objectReferenceValue == null)
+                    NextLine(ref line);
+                    SoundOverrideGUI.ProfileField(line, reference, editable, () => SoundDefOverrides.UseLocalAcoustics(selection));
+                    if (!reference.hasMultipleDifferentValues)
                     {
-                        position.y += EditorGUIUtility.singleLineHeight + EditorGUIUtility.standardVerticalSpacing;
-                        SoundAcousticSettingsGUI.Draw(ref position, local);
+                        foreach (var field in SoundDefOverrides.AcousticFields)
+                        {
+                            if (!IsVisible(selection, profile, field)) continue;
+                            NextLine(ref line);
+                            DrawField(line, selection, profile, field, editable);
+                        }
                     }
                 }
             }
@@ -35,101 +45,78 @@ namespace Bun3.Unity.Audio.Editor
             if (property.isExpanded)
             {
                 lines++;
-                var profile = property.FindPropertyRelative(nameof(SoundAcousticSelection.Profile));
-                if (!profile.hasMultipleDifferentValues && profile.objectReferenceValue == null)
+                var reference = property.FindPropertyRelative(nameof(SoundAcousticSelection.Profile));
+                if (!reference.hasMultipleDifferentValues)
                 {
-                    lines += SoundAcousticSettingsGUI.GetLineCount(
-                        property.FindPropertyRelative(nameof(SoundAcousticSelection.Local)));
+                    var profile = ProfileObject(reference);
+                    foreach (var field in SoundDefOverrides.AcousticFields)
+                        if (IsVisible(property, profile, field)) lines++;
                 }
             }
             return lines * EditorGUIUtility.singleLineHeight
                 + (lines - 1) * EditorGUIUtility.standardVerticalSpacing;
         }
+
+        private static void DrawField(Rect rect, SerializedProperty selection, SerializedObject profile, SoundAcousticField field, bool editable)
+        {
+            var inherited = profile != null && SoundDefOverrides.IsAcousticInherited(selection, field);
+            if (profile != null && editable)
+            {
+                SoundOverrideGUI.ContextMenu(rect, inherited,
+                    () => { selection.serializedObject.Update(); SoundDefOverrides.OverrideAcoustic(selection, field); },
+                    () => { selection.serializedObject.Update(); SoundDefOverrides.RevertAcoustic(selection, field); });
+            }
+            SoundOverrideGUI.Field(rect, Shown(selection, profile, field), inherited, profile != null && !inherited);
+        }
+
+        private static bool IsVisible(SerializedProperty selection, SerializedObject profile, SoundAcousticField field) =>
+            SoundAcousticSettingsGUI.IsVisible(field, dependency => Shown(selection, profile, dependency));
+
+        private static SerializedProperty Shown(SerializedProperty selection, SerializedObject profile, SoundAcousticField field) =>
+            profile != null && SoundDefOverrides.IsAcousticInherited(selection, field)
+                ? profile.FindProperty($"{nameof(SoundAcousticProfile.Settings)}.{field}")
+                : selection.FindPropertyRelative($"{nameof(SoundAcousticSelection.Local)}.{field}");
+
+        // Read-only view of the assigned profile; never applied.
+        private SerializedObject ProfileObject(SerializedProperty reference)
+        {
+            var profile = reference.hasMultipleDifferentValues ? null : reference.objectReferenceValue;
+            if (profile == null) return null;
+            if (_profile == null || _profile.targetObject != profile)
+            {
+                _profile?.Dispose();
+                _profile = new SerializedObject(profile);
+            }
+            _profile.Update();
+            return _profile;
+        }
+
+        private static void NextLine(ref Rect line) =>
+            line.y += EditorGUIUtility.singleLineHeight + EditorGUIUtility.standardVerticalSpacing;
     }
 
     internal static class SoundAcousticSettingsGUI
     {
         internal static void DrawLayout(SerializedProperty settings)
         {
-            EditorGUILayout.PropertyField(settings.FindPropertyRelative(nameof(SoundAcousticSettings.DistanceAttenuation)));
-            if (settings.FindPropertyRelative(nameof(SoundAcousticSettings.DistanceAttenuation)).boolValue)
-            {
-                var attenuationProfile = settings.FindPropertyRelative(nameof(SoundAcousticSettings.AttenuationProfile));
-                EditorGUILayout.PropertyField(attenuationProfile);
-                if (!attenuationProfile.hasMultipleDifferentValues && attenuationProfile.objectReferenceValue == null)
-                {
-                    EditorGUILayout.PropertyField(settings.FindPropertyRelative(nameof(SoundAcousticSettings.MinDistance)));
-                    EditorGUILayout.PropertyField(settings.FindPropertyRelative(nameof(SoundAcousticSettings.MaxDistance)));
-                }
-            }
-
-            EditorGUILayout.PropertyField(settings.FindPropertyRelative(nameof(SoundAcousticSettings.InheritSpatialBlend)));
-            if (!settings.FindPropertyRelative(nameof(SoundAcousticSettings.InheritSpatialBlend)).boolValue)
-            {
-                var blendProfile = settings.FindPropertyRelative(nameof(SoundAcousticSettings.SpatialBlendProfile));
-                EditorGUILayout.PropertyField(blendProfile);
-                if (!blendProfile.hasMultipleDifferentValues && blendProfile.objectReferenceValue == null)
-                {
-                    EditorGUILayout.PropertyField(settings.FindPropertyRelative(nameof(SoundAcousticSettings.MonoDistance)));
-                    EditorGUILayout.PropertyField(settings.FindPropertyRelative(nameof(SoundAcousticSettings.FullSpatialDistance)));
-                }
-            }
+            foreach (var field in SoundDefOverrides.AcousticFields)
+                if (IsVisible(field, dependency => settings.FindPropertyRelative(dependency.ToString())))
+                    EditorGUILayout.PropertyField(settings.FindPropertyRelative(field.ToString()));
         }
 
-        internal static void Draw(ref Rect position, SerializedProperty settings)
+        /// <summary>Whether <paramref name="field"/> applies, given the shown values of the fields it depends on.</summary>
+        internal static bool IsVisible(SoundAcousticField field, Func<SoundAcousticField, SerializedProperty> shown) => field switch
         {
-            DrawField(ref position, settings, nameof(SoundAcousticSettings.DistanceAttenuation));
-            if (settings.FindPropertyRelative(nameof(SoundAcousticSettings.DistanceAttenuation)).boolValue)
-            {
-                var attenuationProfile = settings.FindPropertyRelative(nameof(SoundAcousticSettings.AttenuationProfile));
-                DrawField(ref position, attenuationProfile);
-                if (!attenuationProfile.hasMultipleDifferentValues && attenuationProfile.objectReferenceValue == null)
-                {
-                    DrawField(ref position, settings, nameof(SoundAcousticSettings.MinDistance));
-                    DrawField(ref position, settings, nameof(SoundAcousticSettings.MaxDistance));
-                }
-            }
+            SoundAcousticField.AttenuationProfile => shown(SoundAcousticField.DistanceAttenuation).boolValue,
+            SoundAcousticField.MinDistance or SoundAcousticField.MaxDistance =>
+                shown(SoundAcousticField.DistanceAttenuation).boolValue && IsNone(shown(SoundAcousticField.AttenuationProfile)),
+            SoundAcousticField.SpatialBlendProfile => !shown(SoundAcousticField.InheritSpatialBlend).boolValue,
+            SoundAcousticField.MonoDistance or SoundAcousticField.FullSpatialDistance =>
+                !shown(SoundAcousticField.InheritSpatialBlend).boolValue && IsNone(shown(SoundAcousticField.SpatialBlendProfile)),
+            _ => true,
+        };
 
-            DrawField(ref position, settings, nameof(SoundAcousticSettings.InheritSpatialBlend));
-            if (!settings.FindPropertyRelative(nameof(SoundAcousticSettings.InheritSpatialBlend)).boolValue)
-            {
-                var blendProfile = settings.FindPropertyRelative(nameof(SoundAcousticSettings.SpatialBlendProfile));
-                DrawField(ref position, blendProfile);
-                if (!blendProfile.hasMultipleDifferentValues && blendProfile.objectReferenceValue == null)
-                {
-                    DrawField(ref position, settings, nameof(SoundAcousticSettings.MonoDistance));
-                    DrawField(ref position, settings, nameof(SoundAcousticSettings.FullSpatialDistance));
-                }
-            }
-        }
-
-        internal static int GetLineCount(SerializedProperty settings)
-        {
-            var lines = 2;
-            if (settings.FindPropertyRelative(nameof(SoundAcousticSettings.DistanceAttenuation)).boolValue)
-            {
-                lines++;
-                var profile = settings.FindPropertyRelative(nameof(SoundAcousticSettings.AttenuationProfile));
-                if (!profile.hasMultipleDifferentValues && profile.objectReferenceValue == null) lines += 2;
-            }
-            if (!settings.FindPropertyRelative(nameof(SoundAcousticSettings.InheritSpatialBlend)).boolValue)
-            {
-                lines++;
-                var profile = settings.FindPropertyRelative(nameof(SoundAcousticSettings.SpatialBlendProfile));
-                if (!profile.hasMultipleDifferentValues && profile.objectReferenceValue == null) lines += 2;
-            }
-            return lines;
-        }
-
-        private static void DrawField(ref Rect position, SerializedProperty parent, string name)
-        {
-            DrawField(ref position, parent.FindPropertyRelative(name));
-        }
-
-        private static void DrawField(ref Rect position, SerializedProperty property)
-        {
-            EditorGUI.PropertyField(position, property);
-            position.y += EditorGUIUtility.singleLineHeight + EditorGUIUtility.standardVerticalSpacing;
-        }
+        private static bool IsNone(SerializedProperty profile) =>
+            !profile.hasMultipleDifferentValues && profile.objectReferenceValue == null;
     }
 }

@@ -1,5 +1,47 @@
 # Changelog
 
+## [0.9.0] - 2026-11-05
+
+### Added
+
+- Sound Catalog table inspector, also in a resizable window (**Window > Bun3 > Sound
+  Catalog** or **Open in Window**): search, filter chips, sorting, prefix grouping and
+  column tooltips; cell editing with undo; Volume and Priority bulk edits on the selected
+  rows that are shown; a cell menu (override, revert, select profile, copy to selected
+  rows, preview, duplicate, rename, delete); **+ Add Sound**; a detail pane for the
+  selected sound; and preview at the sound's rolled volume and pitch. Rows without clips
+  and invalid rows are marked in place instead of one warning box per key.
+- Per-field profile overrides: `SoundDefField` flags with `SoundDef.IsOverridden`, and
+  `SoundAcousticField` flags in `SoundAcousticSelection.Overrides`. Each `Effective*` value
+  and `SoundAcousticSelection.Resolve()` use the local value of an overridden field;
+  without flags nothing changes.
+- `SoundCatalogEditing` (`AddSound`, `Duplicate`, `Rename`, `Delete`, `IsOwnedBy`,
+  `Validate`) and `SoundDefOverrides` (`IsInherited`, `Override`, `Revert`, `UseLocal` and
+  the acoustic variants), the editor API the table and setup code share.
+- Static `SoundSystem.PlayCharge(key, fallbackKey)`, `PlayChargeAt` and a
+  Transform-following overload, with `SoundDef.Charge` (`SoundChargeSettings`) on the loop
+  definition. The one-shots are the keys `key.start`, `key.complete` and `key.cancel`,
+  each falling back to the fallback key's part.
+- `ChargeSoundHandle.Stop()` ends a charge at once without a one-shot.
+
+### Changed
+
+- Detaching a profile (Use local, or setting it to None) copies its values into the local
+  fields first, so the sound does not change. Assigning a profile still copies nothing.
+- Definitions live as hidden sub-assets of the catalog file, created and managed from the
+  table. The table marks rows whose definition is outside the catalog file;
+  `ValidateOrThrow` still accepts them.
+- The SoundDef inspector shows inherited values disabled with per-field Override and Revert
+  on right-click, plus Use local and Edit profile per group, instead of editing the shared
+  profile. It shows the charge settings of a looping definition, and its preview applies
+  the rolled volume and pitch.
+
+### Breaking
+
+- `ChargeSoundDef` and the instance `PlayCharge(ChargeSoundDef…)` overloads are removed.
+  Use `SoundSystem.PlayCharge(key, fallbackKey)` with the loop definition's
+  `SoundDef.Charge`.
+
 ## [0.8.1] - 2026-11-05
 
 ### Fixed
