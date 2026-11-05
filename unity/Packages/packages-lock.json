@@ -194,6 +194,15 @@
         "com.unity.ugui": "2.0.0"
       }
     },
+    "com.bun3.unity.telemetry.gameanalytics": {
+      "version": "file:com.bun3.unity.telemetry.gameanalytics",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {
+        "com.bun3.unity.telemetry": "0.1.1",
+        "com.cysharp.unitask": "https://github.com/Cysharp/UniTask.git?path=src/UniTask/Assets/Plugins/UniTask"
+      }
+    },
     "com.bun3.unity.telemetry.posthog": {
       "version": "file:com.bun3.unity.telemetry.posthog",
       "depth": 0,
@@ -246,6 +255,13 @@
       "source": "git",
       "dependencies": {},
       "hash": "604dc1eb5ada260a7be546d3d647482dc5bd0578"
+    },
+    "com.gameanalytics.sdk": {
+      "version": "https://github.com/GameAnalytics/GA-SDK-UNITY.git",
+      "depth": 0,
+      "source": "git",
+      "dependencies": {},
+      "hash": "6f6d36f9a99fbdd44666ac3bb4242a1d909fa9d1"
     },
     "com.github-glitchenzo.nugetforunity": {
       "version": "https://github.com/GlitchEnzo/NuGetForUnity.git?path=/src/NuGetForUnity",

@@ -1,0 +1,16 @@
+{
+  "name": "com.bun3.unity.telemetry.gameanalytics",
+  "displayName": "Bun3 Unity Telemetry GameAnalytics",
+  "version": "0.1.0",
+  "unity": "6000.5",
+  "description": "GameAnalytics sink for Bun3 Unity Telemetry: maps records to GameAnalytics design and progression events through a game-supplied mapping.",
+  "author": {
+    "name": "Bun3",
+    "url": "https://github.com/Bun3",
+    "email": "bun3.dev@gmail.com"
+  },
+  "dependencies": {
+    "com.bun3.unity.telemetry": "0.1.1",
+    "com.cysharp.unitask": "https://github.com/Cysharp/UniTask.git?path=src/UniTask/Assets/Plugins/UniTask"
+  }
+}

@@ -1,0 +1,14 @@
+{
+    "name": "Bun3.Unity.Telemetry.GameAnalytics",
+    "rootNamespace": "Bun3.Unity.Telemetry.GameAnalytics",
+    "references": [ "Bun3.Unity.Telemetry", "UniTask", "ZString", "GameAnalyticsSDK" ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [ "UNITY_6000_5_OR_NEWER" ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

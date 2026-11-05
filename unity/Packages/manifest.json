@@ -5,6 +5,7 @@
     "com.bun3.common": "file:../../common/src/com.bun3.common",
     "com.bun3.gameplay": "file:../../common/src/com.bun3.gameplay",
     "com.cysharp.unitask": "https://github.com/Cysharp/UniTask.git?path=src/UniTask/Assets/Plugins/UniTask",
+    "com.gameanalytics.sdk": "https://github.com/GameAnalytics/GA-SDK-UNITY.git",
     "com.cysharp.zstring": "https://github.com/Cysharp/ZString.git?path=src/ZString.Unity/Assets/Scripts/ZString",
     "com.github-glitchenzo.nugetforunity": "https://github.com/GlitchEnzo/NuGetForUnity.git?path=/src/NuGetForUnity",
     "com.mackysoft.serializereference-extensions": "https://github.com/Bun3/Unity-SerializeReferenceExtensions.git?path=Assets/MackySoft/MackySoft.SerializeReferenceExtensions",
