@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.1] - 2026-11-05
+
+### Added
+
+- `TelemetryHub.RemoteAllowed`: the consent answer the hub uses to gate remote sinks, for sinks that must react to consent changes themselves.
+
 ## [0.1.0] - 2026-11-03
 
 Requires Unity 6000.5 or newer; the assemblies are skipped on older editors.

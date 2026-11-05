@@ -1,7 +1,7 @@
 {
   "name": "com.bun3.unity.telemetry",
   "displayName": "Bun3 Unity Telemetry",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "unity": "6000.5",
   "description": "Game-agnostic telemetry for Unity: a tiered record hub with consent gating, key dropping and per-environment sink options, plus JSON line formatting and a console sink.",
   "author": {

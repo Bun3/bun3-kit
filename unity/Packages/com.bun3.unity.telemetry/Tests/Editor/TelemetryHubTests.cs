@@ -229,6 +229,15 @@ namespace Bun3.Unity.Telemetry.Tests
         }
 
         [Test]
+        public void RemoteAllowedFollowsConsentAndTreatsThrowAsNo()
+        {
+            Assert.That(Base().Consent(() => true).Build().RemoteAllowed, Is.True);
+            Assert.That(Base().Consent(() => false).Build().RemoteAllowed, Is.False);
+            Assert.That(Base().Consent(() => throw new InvalidOperationException()).Build().RemoteAllowed, Is.False);
+            Assert.That(Base().Build().RemoteAllowed, Is.True, "No consent callback means consent");
+        }
+
+        [Test]
         public void SinkThrows_OthersStillWrite_WarnedOnce()
         {
             var good = new ListSink();

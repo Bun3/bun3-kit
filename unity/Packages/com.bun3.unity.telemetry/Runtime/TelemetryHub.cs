@@ -51,12 +51,17 @@ namespace Bun3.Unity.Telemetry
             return null;
         }
 
-        bool Allowed(Entry e)
+        /// <summary>Whether remote sinks may receive records now: true without a consent callback, false when it returns false or throws.</summary>
+        public bool RemoteAllowed
         {
-            if (!e.Sink.Remote) return true;
-            try { return consent == null || consent(); }
-            catch { return false; }
+            get
+            {
+                try { return consent == null || consent(); }
+                catch { return false; }
+            }
         }
+
+        bool Allowed(Entry e) => !e.Sink.Remote || RemoteAllowed;
 
         void Fail(Entry e, Exception ex)
         {
