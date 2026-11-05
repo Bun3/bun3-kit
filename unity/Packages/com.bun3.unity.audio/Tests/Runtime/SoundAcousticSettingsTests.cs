@@ -1,4 +1,6 @@
 using System;
+using UnityEngine.TestTools.Constraints;
+using Is = NUnit.Framework.Is;
 using NUnit.Framework;
 using UnityEngine;
 
@@ -81,5 +83,67 @@ namespace Bun3.Unity.Audio.Tests
             Assert.That(allocated, Is.Zero);
         }
 
+        [Test]
+        public void Resolve_MergesProfileAndOverriddenLocalFields()
+        {
+            var profile = ScriptableObject.CreateInstance<SoundAcousticProfile>();
+            try
+            {
+                var shared = SoundAcousticSettings.Default;
+                shared.MinDistance = 2f;
+                shared.MaxDistance = 40f;
+                profile.Settings = shared;
+                var local = SoundAcousticSettings.Default;
+                local.MinDistance = 5f;
+                local.MaxDistance = 18f;
+                var selection = new SoundAcousticSelection { Profile = profile, Local = local };
+
+                Assert.That(selection.Resolve().MinDistance, Is.EqualTo(2f));
+                Assert.That(selection.Resolve().MaxDistance, Is.EqualTo(40f));
+
+                selection.Overrides = SoundAcousticField.MaxDistance;
+                Assert.That(selection.Resolve().MinDistance, Is.EqualTo(2f));
+                Assert.That(selection.Resolve().MaxDistance, Is.EqualTo(18f));
+
+                selection.Profile = null;
+                selection.Overrides = SoundAcousticField.None;
+                Assert.That(selection.Resolve().MinDistance, Is.EqualTo(5f));
+                Assert.That(selection.Resolve().MaxDistance, Is.EqualTo(18f));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(profile);
+            }
+        }
+
+        [Test]
+        public void Resolve_DoesNotAllocate()
+        {
+            var profile = ScriptableObject.CreateInstance<SoundAcousticProfile>();
+            try
+            {
+                var selection = new SoundAcousticSelection
+                {
+                    Profile = profile,
+                    Local = SoundAcousticSettings.Default,
+                    Overrides = SoundAcousticField.MaxDistance | SoundAcousticField.MonoDistance,
+                };
+                Assert.That(() => GC.KeepAlive(new byte[1024]),
+                    UnityEngine.TestTools.Constraints.Is.AllocatingGCMemory(),
+                    "GC allocation recorder must detect a known allocation before measuring this path.");
+                TestDelegate read = () =>
+                {
+                    float sum = 0f;
+                    for (int i = 0; i < 1000; i++) sum += selection.Resolve().MaxDistance;
+                    if (float.IsNaN(sum)) throw new InvalidOperationException();
+                };
+                read();
+                Assert.That(read, Is.Not.AllocatingGCMemory());
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(profile);
+            }
+        }
     }
 }

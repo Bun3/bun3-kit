@@ -1,101 +1,67 @@
-using System;
-using System.Collections.Generic;
-using System.Reflection;
 using UnityEditor;
 using UnityEngine;
+using Object = UnityEngine.Object;
 
 namespace Bun3.Unity.Audio.Editor
 {
     /// <summary>
-    /// Adds a Preview row to the <see cref="SoundDef"/> inspector: picks a random clip from
-    /// <see cref="SoundDef.Clips"/> and plays it through Unity's internal editor audio-preview
-    /// API (<c>UnityEditor.AudioUtil</c>), reached via reflection since that type is internal
-    /// and its method set has churned across Editor versions. The reflection lookup runs once
-    /// per domain load in a static constructor; a missing method disables the button instead of
-    /// throwing during inspector draw. Verified against Unity 6000.3's
-    /// <c>PlayPreviewClip(AudioClip, int, bool)</c> / <c>StopAllPreviewClips()</c> signatures.
-    /// Pitch/volume variation is not reproduced by AudioUtil, so preview plays the raw clip and
-    /// the def's rolled ranges are shown as read-only info instead.
+    /// Draws <see cref="SoundDef"/> with per-field profile overrides (see <see cref="SoundDefOverrides"/>), the charge
+    /// settings of a looping definition, and Preview and Stop through <see cref="SoundPreview"/>.
     /// </summary>
     [CustomEditor(typeof(SoundDef))]
     internal sealed class SoundDefEditor : UnityEditor.Editor
     {
-        // Not readonly: a failed Invoke nulls the offending one out so the button disables
-        // itself and the warning it logs ("preview disabled") stays true for the rest of the session.
-        private static MethodInfo PlayPreviewClipMethod;
-        private static MethodInfo StopAllPreviewClipsMethod;
-
-        private readonly UnityEditor.Editor[] _profileEditors = new UnityEditor.Editor[4];
+        private readonly SerializedObject[] _profiles = new SerializedObject[4];
 
         private void OnDisable()
         {
-            foreach (var editor in _profileEditors)
-                if (editor != null) DestroyImmediate(editor);
+            foreach (var profile in _profiles) profile?.Dispose();
         }
 
-        private void DrawGroup(string heading, string profileName, int editorIndex, params string[] fields)
+        private void DrawGroup(SoundProfileGroup group)
         {
             EditorGUILayout.Space();
-            EditorGUILayout.LabelField(heading, EditorStyles.boldLabel);
-            var profile = serializedObject.FindProperty(profileName);
-            EditorGUILayout.PropertyField(profile);
-            var settings = serializedObject;
-            if (profile.objectReferenceValue != null)
-            {
-                EditorGUILayout.HelpBox("Shared settings: edits affect every sound using this profile. Clear the profile to use the preserved local settings.", MessageType.Info);
-                CreateCachedEditor(profile.objectReferenceValue, null, ref _profileEditors[editorIndex]);
-                settings = _profileEditors[editorIndex].serializedObject;
-                settings.Update();
-            }
-            foreach (var field in fields)
-                EditorGUILayout.PropertyField(settings.FindProperty(field), true);
-            if (settings != serializedObject) settings.ApplyModifiedProperties();
+            EditorGUILayout.LabelField(group.ToString(), EditorStyles.boldLabel);
+            var reference = serializedObject.FindProperty(SoundDefOverrides.ProfilePropertyPath(group));
+            var profile = ProfileObject(group, reference.objectReferenceValue);
+            SoundOverrideGUI.ProfileField(EditorGUILayout.GetControlRect(), reference, GUI.enabled,
+                () => SoundDefOverrides.UseLocal(serializedObject, group));
+            foreach (var field in SoundDefOverrides.FieldsOf(group))
+                DrawField(field, profile);
         }
 
-        private void DrawSpatialGroup()
+        private void DrawField(SoundDefField field, SerializedObject profile)
         {
-            EditorGUILayout.Space();
-            EditorGUILayout.LabelField("Spatial", EditorStyles.boldLabel);
-            var profile = serializedObject.FindProperty(nameof(SoundDef.SpatialProfile));
-            EditorGUILayout.PropertyField(profile);
-            var settings = serializedObject;
-            if (profile.objectReferenceValue != null)
+            var path = SoundDefOverrides.PropertyPath(field);
+            var local = serializedObject.FindProperty(path);
+            var inherited = profile != null && SoundDefOverrides.IsInherited(serializedObject, field);
+            var shown = inherited ? profile.FindProperty(path) : local;
+            shown.isExpanded = local.isExpanded;
+            var rect = EditorGUILayout.GetControlRect(true, EditorGUI.GetPropertyHeight(shown, true));
+            if (profile != null && GUI.enabled)
             {
-                EditorGUILayout.HelpBox("Shared settings: edits affect every sound using this profile. Clear the profile to use the preserved local settings.", MessageType.Info);
-                var spatialProfile = (SoundSpatialProfile)profile.objectReferenceValue;
-                CreateCachedEditor(spatialProfile, null, ref _profileEditors[3]);
-                settings = _profileEditors[3].serializedObject;
-                settings.Update();
+                // Acoustics answers only on its header line; its own rows carry the acoustic profile menu.
+                var menuRect = field == SoundDefField.Acoustics ? new Rect(rect.x, rect.y, rect.width, EditorGUIUtility.singleLineHeight) : rect;
+                SoundOverrideGUI.ContextMenu(menuRect, inherited,
+                    () => { serializedObject.Update(); SoundDefOverrides.Override(serializedObject, field); },
+                    () => { serializedObject.Update(); SoundDefOverrides.Revert(serializedObject, field); });
             }
-
-            EditorGUILayout.PropertyField(settings.FindProperty(nameof(SoundDef.Spatial)));
-            EditorGUILayout.PropertyField(settings.FindProperty("_acoustics"), new GUIContent("Acoustics"), true);
-            EditorGUILayout.PropertyField(settings.FindProperty(nameof(SoundDef.Occlusion)));
-            EditorGUILayout.PropertyField(settings.FindProperty(nameof(SoundDef.OcclusionVolumeAtFull)));
-            if (settings != serializedObject) settings.ApplyModifiedProperties();
+            SoundOverrideGUI.Field(rect, shown, inherited, profile != null && !inherited);
+            local.isExpanded = shown.isExpanded;
         }
 
-        static SoundDefEditor()
+        // Read-only view of the assigned profile; never applied.
+        private SerializedObject ProfileObject(SoundProfileGroup group, Object profile)
         {
-            try
+            ref var cached = ref _profiles[(int)group];
+            if (profile == null) return null;
+            if (cached == null || cached.targetObject != profile)
             {
-                var audioUtilType = typeof(AudioImporter).Assembly.GetType("UnityEditor.AudioUtil");
-                PlayPreviewClipMethod = audioUtilType?.GetMethod(
-                    "PlayPreviewClip",
-                    BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic,
-                    null,
-                    new[] { typeof(AudioClip), typeof(int), typeof(bool) },
-                    null);
-                StopAllPreviewClipsMethod = audioUtilType?.GetMethod(
-                    "StopAllPreviewClips",
-                    BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+                cached?.Dispose();
+                cached = new SerializedObject(profile);
             }
-            catch (Exception e)
-            {
-                Debug.LogWarning(
-                    "Bun3.Unity.Audio.Editor: failed to reflect UnityEditor.AudioUtil preview " +
-                    $"methods; SoundDef preview disabled. {e.Message}");
-            }
+            cached.Update();
+            return cached;
         }
 
         public override void OnInspectorGUI()
@@ -107,16 +73,24 @@ namespace Bun3.Unity.Audio.Editor
 #if BUN3_ADDRESSABLES
             EditorGUILayout.PropertyField(serializedObject.FindProperty(nameof(SoundDef.AddressableClips)), true);
 #endif
-            DrawGroup("Playback", nameof(SoundDef.PlaybackProfile), 0,
-                nameof(SoundDef.Volume), nameof(SoundDef.Pitch), nameof(SoundDef.Loop));
-            DrawGroup("Routing", nameof(SoundDef.RoutingProfile), 1,
-                nameof(SoundDef.MixerGroup), nameof(SoundDef.VolumeGroup));
-            DrawGroup("Concurrency", nameof(SoundDef.ConcurrencyProfile), 2,
-                nameof(SoundDef.MaxInstances), nameof(SoundDef.Cooldown), nameof(SoundDef.Priority));
-            DrawSpatialGroup();
+            for (var group = SoundProfileGroup.Playback; group <= SoundProfileGroup.Spatial; group++)
+                DrawGroup(group);
+            DrawCharge((SoundDef)target);
             serializedObject.ApplyModifiedProperties();
 
             DrawPreview((SoundDef)target);
+        }
+
+        private void DrawCharge(SoundDef def)
+        {
+            if (!def.EffectiveLoop) return;
+            EditorGUILayout.Space();
+            EditorGUILayout.LabelField(new GUIContent("Charge", "Used only when this sound plays as a charge loop through SoundSystem.PlayCharge."), EditorStyles.boldLabel);
+            var charge = serializedObject.FindProperty(nameof(SoundDef.Charge));
+            EditorGUILayout.PropertyField(charge.FindPropertyRelative(nameof(SoundChargeSettings.VolumeByProgress)));
+            EditorGUILayout.PropertyField(charge.FindPropertyRelative(nameof(SoundChargeSettings.PitchByProgress)));
+            EditorGUILayout.PropertyField(charge.FindPropertyRelative(nameof(SoundChargeSettings.CompleteFadeOut)));
+            EditorGUILayout.PropertyField(charge.FindPropertyRelative(nameof(SoundChargeSettings.CancelFadeOut)));
         }
 
         private static void DrawPreview(SoundDef def)
@@ -127,27 +101,10 @@ namespace Bun3.Unity.Audio.Editor
             var hasClips = HasAnyClip(def.Clips);
             using (new EditorGUILayout.HorizontalScope())
             {
-                using (new EditorGUI.DisabledScope(!hasClips || PlayPreviewClipMethod == null))
-                {
-                    if (GUILayout.Button("▶ Preview"))
-                    {
-                        PlayRandomClip(def);
-                    }
-                }
-                using (new EditorGUI.DisabledScope(StopAllPreviewClipsMethod == null))
-                {
-                    if (GUILayout.Button("■ Stop"))
-                    {
-                        StopAllPreview();
-                    }
-                }
+                using (new EditorGUI.DisabledScope(!hasClips))
+                    if (GUILayout.Button("▶ Preview")) SoundPreview.Play(def);
+                if (GUILayout.Button("■ Stop")) SoundPreview.Stop();
             }
-
-            EditorGUILayout.LabelField(
-                $"Volume [{def.EffectiveVolume.Min:0.##}, {def.EffectiveVolume.Max:0.##}]  " +
-                $"Pitch [{def.EffectivePitch.Min:0.##}, {def.EffectivePitch.Max:0.##}] " +
-                "(preview plays the raw clip; rolled ranges are not applied)",
-                EditorStyles.miniLabel);
 
             var hasAddressable = HasAddressableClips(def);
             if (!hasClips && !hasAddressable)
@@ -188,58 +145,6 @@ namespace Bun3.Unity.Audio.Editor
 #else
             return false;
 #endif
-        }
-
-        private static void PlayRandomClip(SoundDef def)
-        {
-            if (PlayPreviewClipMethod == null)
-            {
-                Debug.LogWarning(
-                    "Bun3.Unity.Audio.Editor: AudioUtil.PlayPreviewClip not found on this " +
-                    "Editor version; preview disabled.");
-                return;
-            }
-
-            var candidates = new List<AudioClip>(def.Clips.Length);
-            foreach (var clip in def.Clips)
-            {
-                if (clip != null)
-                {
-                    candidates.Add(clip);
-                }
-            }
-            if (candidates.Count == 0)
-            {
-                return;
-            }
-
-            var picked = candidates[UnityEngine.Random.Range(0, candidates.Count)];
-            try
-            {
-                PlayPreviewClipMethod.Invoke(null, new object[] { picked, 0, false });
-            }
-            catch (Exception e)
-            {
-                PlayPreviewClipMethod = null;
-                Debug.LogWarning(
-                    $"Bun3.Unity.Audio.Editor: AudioUtil.PlayPreviewClip threw; preview " +
-                    $"disabled for this session. {e.Message}");
-            }
-        }
-
-        private static void StopAllPreview()
-        {
-            try
-            {
-                StopAllPreviewClipsMethod.Invoke(null, null);
-            }
-            catch (Exception e)
-            {
-                StopAllPreviewClipsMethod = null;
-                Debug.LogWarning(
-                    $"Bun3.Unity.Audio.Editor: AudioUtil.StopAllPreviewClips threw; stop " +
-                    $"disabled for this session. {e.Message}");
-            }
         }
     }
 }

@@ -20,7 +20,8 @@ namespace Bun3.Unity.Audio
     /// <summary>
     /// Designer-tuned sound definition. The asset reference itself is the runtime key —
     /// no string or enum IDs. Fields are read once at play time; live edits apply to
-    /// subsequent plays.
+    /// subsequent plays. With a shared profile assigned, each <c>Effective*</c> value comes from
+    /// the profile unless that field is overridden, in which case the def's local value is used.
     /// </summary>
     [CreateAssetMenu(menuName = "Bun3/Audio/Sound Def", fileName = "SoundDef")]
     public sealed class SoundDef : ScriptableObject
@@ -37,46 +38,52 @@ namespace Bun3.Unity.Audio
         /// <summary>Optional shared spatial settings; null preserves the local group.</summary>
         public SoundSpatialProfile SpatialProfile;
 
+        /// <summary>Whether <paramref name="field"/> uses this def's local value instead of its shared profile's.</summary>
+        public bool IsOverridden(SoundDefField field) => (_overrides & field) != 0;
+
+        /// <summary>Raw override flags; a flag only matters while the field's profile is assigned.</summary>
+        internal SoundDefField Overrides { get => _overrides; set => _overrides = value; }
+
         /// <summary>Resolved Volume from the shared playback profile or local settings.</summary>
-        public FloatRange EffectiveVolume => PlaybackProfile != null ? PlaybackProfile.Volume : Volume;
+        public FloatRange EffectiveVolume => PlaybackProfile != null && !IsOverridden(SoundDefField.Volume) ? PlaybackProfile.Volume : Volume;
 
         /// <summary>Resolved Pitch from the shared playback profile or local settings.</summary>
-        public FloatRange EffectivePitch => PlaybackProfile != null ? PlaybackProfile.Pitch : Pitch;
+        public FloatRange EffectivePitch => PlaybackProfile != null && !IsOverridden(SoundDefField.Pitch) ? PlaybackProfile.Pitch : Pitch;
 
         /// <summary>Resolved Loop from the shared playback profile or local settings.</summary>
-        public bool EffectiveLoop => PlaybackProfile != null ? PlaybackProfile.Loop : Loop;
+        public bool EffectiveLoop => PlaybackProfile != null && !IsOverridden(SoundDefField.Loop) ? PlaybackProfile.Loop : Loop;
 
         /// <summary>Resolved MixerGroup from the shared routing profile or local settings.</summary>
-        public AudioMixerGroup EffectiveMixerGroup => RoutingProfile != null ? RoutingProfile.MixerGroup : MixerGroup;
+        public AudioMixerGroup EffectiveMixerGroup => RoutingProfile != null && !IsOverridden(SoundDefField.MixerGroup) ? RoutingProfile.MixerGroup : MixerGroup;
 
         /// <summary>Resolved VolumeGroup from the shared routing profile or local settings.</summary>
-        public string EffectiveVolumeGroup => RoutingProfile != null ? RoutingProfile.VolumeGroup : VolumeGroup;
+        public string EffectiveVolumeGroup => RoutingProfile != null && !IsOverridden(SoundDefField.VolumeGroup) ? RoutingProfile.VolumeGroup : VolumeGroup;
 
         /// <summary>Resolved MaxInstances from the shared concurrency profile or local settings.</summary>
-        public int EffectiveMaxInstances => ConcurrencyProfile != null ? ConcurrencyProfile.MaxInstances : MaxInstances;
+        public int EffectiveMaxInstances => ConcurrencyProfile != null && !IsOverridden(SoundDefField.MaxInstances) ? ConcurrencyProfile.MaxInstances : MaxInstances;
 
         /// <summary>Resolved Cooldown from the shared concurrency profile or local settings.</summary>
-        public float EffectiveCooldown => ConcurrencyProfile != null ? ConcurrencyProfile.Cooldown : Cooldown;
+        public float EffectiveCooldown => ConcurrencyProfile != null && !IsOverridden(SoundDefField.Cooldown) ? ConcurrencyProfile.Cooldown : Cooldown;
 
         /// <summary>Resolved Priority from the shared concurrency profile or local settings, clamped to 0..255.</summary>
-        public int EffectivePriority => Mathf.Clamp(ConcurrencyProfile != null ? ConcurrencyProfile.Priority : Priority, 0, 255);
+        public int EffectivePriority => Mathf.Clamp(ConcurrencyProfile != null && !IsOverridden(SoundDefField.Priority) ? ConcurrencyProfile.Priority : Priority, 0, 255);
 
         /// <summary>Resolved Spatial from the shared spatial profile or local settings.</summary>
-        public SpatialMode EffectiveSpatial => SpatialProfile != null ? SpatialProfile.Spatial : Spatial;
+        public SpatialMode EffectiveSpatial => SpatialProfile != null && !IsOverridden(SoundDefField.Spatial) ? SpatialProfile.Spatial : Spatial;
 
         /// <summary>Local or shared acoustic settings.</summary>
         public SoundAcousticSelection Acoustics => _acoustics;
 
         /// <summary>Resolved acoustic settings from the selected spatial owner.</summary>
-        public SoundAcousticSettings EffectiveAcoustics => SpatialProfile != null
+        public SoundAcousticSettings EffectiveAcoustics => SpatialProfile != null && !IsOverridden(SoundDefField.Acoustics)
             ? SpatialProfile.Acoustics.Resolve()
             : Acoustics.Resolve();
 
         /// <summary>Resolved Occlusion from the shared spatial profile or local settings.</summary>
-        public bool EffectiveOcclusion => SpatialProfile != null ? SpatialProfile.Occlusion : Occlusion;
+        public bool EffectiveOcclusion => SpatialProfile != null && !IsOverridden(SoundDefField.Occlusion) ? SpatialProfile.Occlusion : Occlusion;
 
         /// <summary>Resolved OcclusionVolumeAtFull from the shared spatial profile or local settings.</summary>
-        public float EffectiveOcclusionVolumeAtFull => SpatialProfile != null ? SpatialProfile.OcclusionVolumeAtFull : OcclusionVolumeAtFull;
+        public float EffectiveOcclusionVolumeAtFull => SpatialProfile != null && !IsOverridden(SoundDefField.OcclusionVolumeAtFull) ? SpatialProfile.OcclusionVolumeAtFull : OcclusionVolumeAtFull;
 
         /// <summary>Candidate clips; one is chosen per play, avoiding the previous pick.</summary>
         public AudioClip[] Clips;
@@ -119,6 +126,12 @@ namespace Bun3.Unity.Audio
 
         /// <summary>Optional full-obstruction gain override; a negative value uses system settings.</summary>
         public float OcclusionVolumeAtFull = -1f;
+
+        /// <summary>Progress curves and fades used only when this definition plays as a charge loop.</summary>
+        public SoundChargeSettings Charge = new();
+
+        [SerializeField, HideInInspector]
+        private SoundDefField _overrides;
 
         [SerializeField, HideInInspector]
         private SoundAcousticSelection _acoustics = new();
