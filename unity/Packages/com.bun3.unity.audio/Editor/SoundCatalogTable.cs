@@ -85,7 +85,10 @@ namespace Bun3.Unity.Audio.Editor
         /// <summary>Every catalog entry in catalog order, as captured by the last <see cref="Refresh"/>.</summary>
         public IReadOnlyList<Row> Rows => _rows;
 
-        /// <summary>The selected rows in catalog order. Rows hidden by the search or a chip are never selected.</summary>
+        /// <summary>
+        /// The selected entry rows in catalog order, never group headers. Rows hidden by the search or a chip are never
+        /// selected, and a selected entry stays selected when other entries are added, removed or moved.
+        /// </summary>
         public List<Row> SelectedRows()
         {
             var selected = new List<Row>();
@@ -104,7 +107,10 @@ namespace Bun3.Unity.Audio.Editor
         public void Refresh()
         {
             // Issues depend only on keys, definitions and their files, so value edits skip the costly validation.
-            if (_dirty || _issues == null || EntriesChanged()) _issues = SoundCatalogEditing.Validate(_catalog);
+            var entriesChanged = EntriesChanged();
+            if (_dirty || _issues == null || entriesChanged) _issues = SoundCatalogEditing.Validate(_catalog);
+            // Row ids are entry positions, so a changed entry list carries the selection over by key and definition.
+            var selected = entriesChanged ? SelectedRows() : null;
             _dirty = false;
             _rows.Clear();
             _watched.Clear();
@@ -135,6 +141,7 @@ namespace Bun3.Unity.Audio.Editor
                 _serialized.Remove(def);
             }
 
+            if (selected != null) _view.SetSelection(SameEntries(selected));
             BuildChips();
             _problems = Problems(issueCounts);
             _dirtyCount = DirtyCount();
@@ -439,6 +446,20 @@ namespace Bun3.Unity.Audio.Editor
         {
             _dirty = true;
             _view.Repaint();
+        }
+
+        // The ids of current rows with the key and definition of an earlier row; each earlier row matches once.
+        private List<int> SameEntries(List<Row> earlier)
+        {
+            var ids = new List<int>(earlier.Count);
+            foreach (var row in _rows)
+            {
+                var match = earlier.FindIndex(old => old.Key == row.Key && ReferenceEquals(old.Def, row.Def));
+                if (match < 0) continue;
+                earlier.RemoveAt(match);
+                ids.Add(row.id);
+            }
+            return ids;
         }
 
         private bool EntriesChanged()
