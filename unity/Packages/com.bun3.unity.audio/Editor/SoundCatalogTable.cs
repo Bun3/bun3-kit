@@ -17,6 +17,8 @@ namespace Bun3.Unity.Audio.Editor
     /// <list type="bullet">
     /// <item><description>SoundCatalogTable.cs: row model, refresh, finding, selection and layout.</description></item>
     /// <item><description>SoundCatalogTable.Columns.cs: columns, tooltips, header and cell drawing.</description></item>
+    /// <item><description>SoundCatalogTable.Edit.cs: cell and bulk edits, the cell menu, and adding, duplicating, renaming and deleting sounds.</description></item>
+    /// <item><description>SoundCatalogTable.Detail.cs: the selected sound's detail pane.</description></item>
     /// </list>
     /// </summary>
     internal sealed partial class SoundCatalogTable : IDisposable
@@ -157,11 +159,12 @@ namespace Bun3.Unity.Audio.Editor
             var toolbar = new Rect(rect.x, rect.y, rect.width, EditorStyles.toolbar.fixedHeight);
             GUI.Box(toolbar, GUIContent.none, EditorStyles.toolbar);
             var line = EditorGUIUtility.singleLineHeight;
-            var search = new Rect(toolbar.x + 4f, toolbar.y + 2f, Mathf.Clamp(toolbar.width - 150f, 80f, 360f), line);
+            var search = new Rect(toolbar.x + 4f, toolbar.y + 2f, Mathf.Clamp(toolbar.width - 240f, 80f, 360f), line);
             var text = _searchField.OnToolbarGUI(search, _search);
             if (text != _search) SetSearch(text);
             var grouped = EditorGUI.ToggleLeft(new Rect(search.xMax + 10f, toolbar.y + 1f, 130f, line), "Group by prefix", _grouped);
             if (grouped != _grouped) SetGrouped(grouped);
+            AddSoundGUI(new Rect(toolbar.xMax - 90f, toolbar.y, 86f, toolbar.height));
             rect.yMin = ChipsGUI(new Rect(rect.x, toolbar.yMax, rect.width, rect.height));
 
             if (_problems != null)
@@ -176,6 +179,7 @@ namespace Bun3.Unity.Audio.Editor
             DetailGUI(ref rect);
             _view.OnGUI(rect);
             StatusGUI(status);
+            RunPending();
         }
 
         /// <summary>Stops listening for changes and releases the cached serialized definitions.</summary>
@@ -185,6 +189,7 @@ namespace Bun3.Unity.Audio.Editor
             EditorApplication.projectChanged -= MarkDirty;
             foreach (var serialized in _serialized.Values) serialized.Dispose();
             _serialized.Clear();
+            ReleaseDetail();
         }
 
         // Hooks for the editing parts: input on a cell before it draws, and panels taken out of the table area.
@@ -567,7 +572,7 @@ namespace Bun3.Unity.Audio.Editor
             public readonly int Count;
         }
 
-        private sealed class View : TreeView<int>
+        private sealed partial class View : TreeView<int>
         {
             private readonly SoundCatalogTable _table;
 

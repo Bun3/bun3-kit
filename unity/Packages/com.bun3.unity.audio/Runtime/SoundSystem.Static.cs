@@ -11,7 +11,8 @@ namespace Bun3.Unity.Audio
 
         /// <summary>
         /// The instance created by <see cref="Initialize"/>; null before initialization and after shutdown or
-        /// disposal. Use it for what the static API does not cover: handles, follow, channel volumes.
+        /// disposal. Use it for what the static API does not cover, such as a one-shot that follows a Transform,
+        /// channel volumes and awaiting playback.
         /// </summary>
         public static SoundSystem Current { get; private set; }
 

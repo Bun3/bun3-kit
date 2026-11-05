@@ -29,6 +29,8 @@ Features:
   `TransitionTo` wrapper over `AudioMixerSnapshot` transitions.
 - Bundled default `AudioMixer` (`Bun3DefaultAudioMixer`) so channel volumes
   and routing work with zero mixer setup.
+- A Sound Catalog table inspector to find, compare, edit, add and delete every
+  sound in one place, with per-field profile overrides.
 
 ## Install
 
@@ -94,8 +96,9 @@ decide game voice groups, or synchronize volume preferences over a network.
 
 ## Quick start
 
-Create **Bun3 > Audio > Sound Def** assets and map them by key in a **Bun3 > Audio >
-Sound Catalog**. Initialize once at boot, then play by key from anywhere:
+Create a **Bun3 > Audio > Sound Catalog** and add sounds with **+ Add Sound** in its
+inspector table (see [Sound catalog table](#sound-catalog-table)). Initialize once at
+boot, then play by key from anywhere:
 
 ```csharp
 using Bun3.Unity.Audio;
@@ -127,8 +130,8 @@ as an unknown key, so catalog entries can be authored before their audio arrives
 and `PlayAt` take an optional fallback key, played only when the first key has nothing to
 play, so a specific key can fall back to a shared template until its own sound exists. In the Editor, a catalog definition whose clips or spatial mode change
 while playing is prepared again on the next tick, and `PrepareDefinition` runs for it
-again. `SoundSystem.Current` exposes the instance for handles, charge sounds,
-follow playback and channel volumes.
+again. `SoundSystem.Current` exposes the instance for one-shots that follow a Transform,
+channel volumes and awaiting playback.
 
 To own an instance directly instead, create a **Sound Def** asset, assign a non-null
 clip, and leave Spatial at None for a UI sound. Assign it to this component in a scene
@@ -213,23 +216,35 @@ sound.Dispose();
 
 A charge sound follows a progress value the game owns — hold-to-charge attacks,
 reloads, crafting gauges. It plays a looping layer whose volume and pitch track
-progress, plus optional start, complete and cancel one-shots.
+progress, plus optional start, complete and cancel one-shots, all found by catalog key.
 
 ```csharp
-ChargeSoundHandle charge = sound.PlayCharge(myChargeDef, playerTransform); // start one-shot + loop
-charge.SetProgress(heldSeconds / requiredSeconds);  // every frame, 0..1; may decrease
-charge.Complete();  // loop fades out over CompleteFadeOut; Complete one-shot plays where the loop is
-charge.Cancel();    // loop fades out over CancelFadeOut; Cancel one-shot plays if assigned
+var charge = SoundSystem.PlayCharge("sfx.box.hold", "sfx.interaction.hold"); // start one-shot + loop
+charge.SetProgress(heldSeconds / requiredSeconds); // every frame, 0..1; may decrease
+charge.Complete(); // loop fades out over CompleteFadeOut; the complete one-shot plays where the loop is
+charge.Cancel();   // loop fades out over CancelFadeOut; the cancel one-shot plays if there is one
+charge.Stop();     // stops the loop at once without a one-shot
 ```
 
-`ChargeSoundDef` references up to four `SoundDef`s — `Loop` (required), `Start`,
-`Complete`, `Cancel` — so each part keeps its own clips, variation, routing,
-spatial mode and profiles. `VolumeByProgress` scales the loop's rolled volume and
-`PitchByProgress` scales its rolled pitch; X is progress 0..1 and a null or empty
-curve is a constant 1. Defaults ramp volume 0 → 1 and pitch 0.667 → 1.
+The loop is the first key, or the fallback key when the first has nothing to play. The
+one-shots are found by name: for the loop key `K` they are `K.start`, `K.complete` and
+`K.cancel` (`SoundCatalog.ChargeStartSuffix` and the others). Each one-shot is the first
+key's part, or else the fallback key's same part, or else silent; a definition without
+clips counts as missing. When neither key can play, `PlayCharge` returns
+`ChargeSoundHandle.Invalid`. `PlayCharge(key, fallbackKey)` plays in 2D,
+`PlayChargeAt(key, fallbackKey, position)` plays at a fixed position (parts whose spatial
+mode is None stay 2D), and `PlayCharge(key, fallbackKey, transform)` tracks a Transform
+with each part's own spatial mode. Finding the parts does not allocate.
 
-Progress applies immediately, without smoothing. `Complete` and `Cancel` end the
-charge once: a second call plays nothing. If voice limits steal the loop, the loop
+The loop definition's `Charge` settings shape the charge. `VolumeByProgress` scales the
+loop's rolled volume and `PitchByProgress` scales its rolled pitch; X is progress 0..1 and
+a null or empty curve is a constant 1. Defaults ramp volume 0 → 1 and pitch 0.667 → 1.
+`CompleteFadeOut` (default 0.05 s) and `CancelFadeOut` (default 0.15 s) set the loop's fade
+when the charge ends. These settings are used only when the definition plays as a charge
+loop, have no profile, and appear in the table's detail pane for looping sounds.
+
+Progress applies immediately, without smoothing. `Complete`, `Cancel` and `Stop` end the
+charge once: a later call plays nothing. If voice limits steal the loop, the loop
 ends, or the system is disposed, every call does nothing and no completion sound
 plays — keep `SfxVoices` headroom for long charges.
 
@@ -245,8 +260,8 @@ Authoring:
   enemies winding up) needs one instance per concurrent charger; otherwise a new
   charge steals an older one's loop and that charge plays no completion sound.
   Import from WAV with Decompress On Load.
-- **One-shots:** Start 0.1–0.3 s; Complete 0.3–1 s with an immediate attack in the
-  loop's key; Cancel optional.
+- **One-shots:** `K.start` 0.1–0.3 s; `K.complete` 0.3–1 s with an immediate attack in
+  the loop's key; `K.cancel` optional.
 
 ### Music
 
@@ -479,9 +494,11 @@ UnityEngine.AddressableAssets.Addressables.Release(handle);
 UnityEngine.Object.Destroy(def);
 ```
 
-Sound definitions are authored as `SoundDef` assets
-(`Assets > Create > Bun3 > Audio > Sound Def`), which hold clips, volume/pitch
-ranges, loop/spatial settings, max instances, and cooldown. Music tracks are
+Sound definitions hold clips, volume/pitch ranges, loop/spatial settings, max
+instances, and cooldown. Catalog sounds live inside the catalog file (see
+[Sound catalog table](#sound-catalog-table)); a standalone `SoundDef` asset
+(`Assets > Create > Bun3 > Audio > Sound Def`) still works for direct
+`sound.Play(def)` calls. Music tracks are
 authored as `MusicDef` assets (`Assets > Create > Bun3 > Audio > Music Def`),
 which hold the optional intro clip, the required loop clip, volume, and the
 default fade duration.
@@ -497,7 +514,7 @@ Before removing SDK assets, remove or guard application references to adapter ty
 
 ### String catalogs and request-local playback
 
-`SoundCatalog` maps ordinal, case-sensitive string keys to `SoundDef` assets. Create it through **Bun3/Audio/Sound Catalog**. Definitions remain the single source of playback settings; catalogs contain no duplicate clip, gain, or cooldown fields. `ValidateOrThrow()` rejects blank/duplicate keys and missing definitions. `TryGet` returns false for unknown keys. `SetEntries` validates atomically; warm lookup allocates no managed memory.
+`SoundCatalog` maps ordinal, case-sensitive string keys to `SoundDef`s, which the catalog table stores inside the catalog file as hidden sub-assets. Create it through **Bun3/Audio/Sound Catalog**. Definitions remain the single source of playback settings; catalogs contain no duplicate clip, gain, or cooldown fields. `ValidateOrThrow()` rejects blank/duplicate keys and missing definitions. `TryGet` returns false for unknown keys. `SetEntries` validates atomically; warm lookup allocates no managed memory.
 
 ```csharp
 sound.Prepare(catalog); // Validate and prewarm cooldown tracking.
@@ -512,12 +529,54 @@ The spatial/gain overload overrides a single request without editing the asset. 
 
 `SoundDef.VolumeGroup` is an optional logical string group. `SoundSystemConfig.GroupGain` resolves its live gain at play and on each tick, independent of `MixerGroup` routing. Cache the callback and avoid allocations or exceptions. Catalogs and groups have no game-specific enums or network IDs.
 
+### Sound catalog table
+
+The Sound Catalog inspector is a table of every key. **Open in Window**, or **Window > Bun3 >
+Sound Catalog**, shows the same table in a resizable window.
+
+- **Find:** the search keeps keys that contain every typed word. Chips filter by missing clips,
+  profiles, overrides, spatial mode and volume group. Column headers sort descending, then
+  ascending, then off. **Group by prefix** folds keys by their first one or two segments.
+- **Edit a cell:** double-click it, or click it and press Enter, then type and press Enter.
+  Volume and Pitch take a range such as `0.75-0.9` (`–`, `~`, `,` or a space also separate
+  the ends) or one number for both ends; text that does not parse is ignored. Loop's check
+  box and the Spatial menu change at once. Every value edit can be undone.
+- **Several rows:** Ctrl+click or Shift+click two or more rows to show a bar that sets Volume
+  (a fixed value) or Priority on every selected row that is shown. Rows hidden by the search,
+  a chip or a collapsed group are not changed. A value from a profile is overridden first, and
+  the whole edit is one undo step.
+- **Profile values** are grey with a link icon and cannot be edited in place. Right-click the
+  cell and choose **Override with local value**, which copies the profile's value first, or
+  **Revert to profile** to follow the profile again.
+- **Right-click a cell** for those two and **Select profile asset**, **Copy <column> to
+  selected rows**, **Preview**, **Duplicate sound…**, **Rename key…** and **Delete sound**.
+  Rows that share a definition with another row also offer **Duplicate for this key**.
+- **Add, duplicate, rename, delete:** **+ Add Sound** asks for a key and stores a new
+  definition inside the catalog file. Rename changes the key and the definition's name, but
+  not game code that uses the old key. Delete asks for confirmation and removes the
+  definition at once. These four save the catalog and cannot be undone; restore from version
+  control.
+- **Detail pane:** selecting one row shows its definition below the table: clips (drag and
+  drop), Addressable clips, each group's profile with **Use local** and **Edit profile**,
+  mixer group, occlusion, acoustics, the charge settings of a looping sound, and Preview and
+  Stop.
+- **Preview** plays one random clip at the sound's rolled volume and pitch through a hidden
+  editor AudioSource, so sounds can be compared by ear. The player's volume group setting is
+  not applied, and muted editor audio stays silent.
+- **Problems:** a row without clips is marked yellow. Blank or duplicate keys, missing
+  definitions, definitions outside the catalog file and definitions shared by two rows are
+  marked red and counted above the table; the table still opens.
+
+Editor code, such as game setup scripts, uses the same operations through
+`SoundCatalogEditing` (`AddSound`, `Duplicate`, `Rename`, `Delete`, `IsOwnedBy`, `Validate`)
+and the per-field override rules through `SoundDefOverrides`.
+
 
 ## Shared definition profiles
 
 `SoundDef` optionally references four independently shared assets: `SoundPlaybackProfile` (volume, pitch, loop), `SoundRoutingProfile` (mixer and logical volume group), `SoundConcurrencyProfile` (per-definition limits/cooldown), and `SoundSpatialProfile` (positioning, occlusion and an acoustic selection). Clips and sound identity stay on the definition. Sharing a concurrency profile does not combine active voice counts or cooldown state between definitions.
 
-`SoundAcousticSelection` gives SFX and voice the same choice between a shared `SoundAcousticProfile` and retained local `SoundAcousticSettings`. The acoustic settings contain distance attenuation, its optional curve, fallback minimum/maximum distances, and the mono/full-width selection. A selected `SoundDef.SpatialProfile` has the highest precedence and supplies its own acoustic selection; otherwise `SoundDef.Acoustics` resolves its selected profile or local values. Assigning or clearing either profile never copies over the inactive local values. No per-field override mask is applied.
+`SoundAcousticSelection` gives SFX and voice the same choice between a shared `SoundAcousticProfile` and retained local `SoundAcousticSettings`. The acoustic settings contain distance attenuation, its optional curve, fallback minimum/maximum distances, and the mono/full-width selection. A selected `SoundDef.SpatialProfile` has the highest precedence and supplies its own acoustic selection; otherwise `SoundDef.Acoustics` resolves its selected profile or local values. Each field follows its group's profile until it is overridden: `SoundDef.IsOverridden(field)` (`SoundDefField` flags) and `SoundAcousticSelection.Overrides` (`SoundAcousticField` flags) mark the fields that use the local value instead. In the editor, overriding a field copies the profile's current value into it first, and reverting clears the mark and leaves the local value unused, so neither changes what plays. Detaching a profile with **Use local**, or by setting it to None, first copies every value still taken from it into the local fields. Assigning a profile copies nothing; fields without an override mark follow the new profile. These copies are editor operations (`SoundDefOverrides`); setting a profile field from code copies nothing.
 
 Use `EffectiveAcoustics` in custom `SoundDef` consumers. Edit retained local values through `Acoustics.Local`, assigning the modified struct back to the selection. Duplicate a profile for a sound-specific variation, or clear its reference and author the local group.
 
@@ -571,7 +630,7 @@ must not introduce per-frame closures or collection allocations.
 | `Prepare(SoundDef)` / `Prepare(SoundCatalog)` | Prewarm cooldown bookkeeping. Catalog preparation also validates mappings. |
 | `SoundHandle` | Generation-checked stop, fade, pitch, volume, follow and await controls. Stale handles do nothing. |
 | `SetCompletionCallback` | One callback per voice, invoked after retirement. A later registration replaces the previous one. |
-| `PlayCharge` / `ChargeSoundDef` / `ChargeSoundHandle` | Progress-driven loop with optional start/complete/cancel one-shots. `SetProgress` applies the definition's curves; `Complete`/`Cancel` end the charge once. Stolen, ended or disposed charges do nothing. |
+| `PlayCharge` / `PlayChargeAt` / `ChargeSoundHandle` | Progress-driven loop with optional start/complete/cancel one-shots found by key suffix. `SetProgress` applies the loop definition's `Charge` curves; `Complete`/`Cancel`/`Stop` end the charge once. Stolen, ended or disposed charges do nothing. |
 | `PreloadAsync` / `ReleasePreloaded` | Own an Addressables batch until release or system disposal. Stop users of a clip before release. |
 | `PlayMusic` / `StopMusic` | Two-channel intro/loop crossfade subsystem for `MusicDef` or catalog `SoundDef` tracks; music does not consume SFX slots. |
 | `SfxVoices` | Fixed pool capacity. Per-definition limits steal the oldest matching voice; a full global pool steals its least important voice (oldest on ties) and refuses a request every active voice outranks. Above the engine's real-voice limit, the engine virtualizes the lowest-priority sources. |

@@ -1,6 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Reflection;
 using UnityEditor;
 using UnityEngine;
 using Object = UnityEngine.Object;
@@ -8,25 +5,12 @@ using Object = UnityEngine.Object;
 namespace Bun3.Unity.Audio.Editor
 {
     /// <summary>
-    /// Draws <see cref="SoundDef"/> with per-field profile overrides (see <see cref="SoundDefOverrides"/>) and a Preview
-    /// row. Preview picks a random clip from
-    /// <see cref="SoundDef.Clips"/> and plays it through Unity's internal editor audio-preview
-    /// API (<c>UnityEditor.AudioUtil</c>), reached via reflection since that type is internal
-    /// and its method set has churned across Editor versions. The reflection lookup runs once
-    /// per domain load in a static constructor; a missing method disables the button instead of
-    /// throwing during inspector draw. Verified against Unity 6000.3's
-    /// <c>PlayPreviewClip(AudioClip, int, bool)</c> / <c>StopAllPreviewClips()</c> signatures.
-    /// Pitch/volume variation is not reproduced by AudioUtil, so preview plays the raw clip and
-    /// the def's rolled ranges are shown as read-only info instead.
+    /// Draws <see cref="SoundDef"/> with per-field profile overrides (see <see cref="SoundDefOverrides"/>), the charge
+    /// settings of a looping definition, and Preview and Stop through <see cref="SoundPreview"/>.
     /// </summary>
     [CustomEditor(typeof(SoundDef))]
     internal sealed class SoundDefEditor : UnityEditor.Editor
     {
-        // Not readonly: a failed Invoke nulls the offending one out so the button disables
-        // itself and the warning it logs ("preview disabled") stays true for the rest of the session.
-        private static MethodInfo PlayPreviewClipMethod;
-        private static MethodInfo StopAllPreviewClipsMethod;
-
         private readonly SerializedObject[] _profiles = new SerializedObject[4];
 
         private void OnDisable()
@@ -80,29 +64,6 @@ namespace Bun3.Unity.Audio.Editor
             return cached;
         }
 
-        static SoundDefEditor()
-        {
-            try
-            {
-                var audioUtilType = typeof(AudioImporter).Assembly.GetType("UnityEditor.AudioUtil");
-                PlayPreviewClipMethod = audioUtilType?.GetMethod(
-                    "PlayPreviewClip",
-                    BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic,
-                    null,
-                    new[] { typeof(AudioClip), typeof(int), typeof(bool) },
-                    null);
-                StopAllPreviewClipsMethod = audioUtilType?.GetMethod(
-                    "StopAllPreviewClips",
-                    BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
-            }
-            catch (Exception e)
-            {
-                Debug.LogWarning(
-                    "Bun3.Unity.Audio.Editor: failed to reflect UnityEditor.AudioUtil preview " +
-                    $"methods; SoundDef preview disabled. {e.Message}");
-            }
-        }
-
         public override void OnInspectorGUI()
         {
             serializedObject.Update();
@@ -114,9 +75,22 @@ namespace Bun3.Unity.Audio.Editor
 #endif
             for (var group = SoundProfileGroup.Playback; group <= SoundProfileGroup.Spatial; group++)
                 DrawGroup(group);
+            DrawCharge((SoundDef)target);
             serializedObject.ApplyModifiedProperties();
 
             DrawPreview((SoundDef)target);
+        }
+
+        private void DrawCharge(SoundDef def)
+        {
+            if (!def.EffectiveLoop) return;
+            EditorGUILayout.Space();
+            EditorGUILayout.LabelField(new GUIContent("Charge", "Used only when this sound plays as a charge loop through SoundSystem.PlayCharge."), EditorStyles.boldLabel);
+            var charge = serializedObject.FindProperty(nameof(SoundDef.Charge));
+            EditorGUILayout.PropertyField(charge.FindPropertyRelative(nameof(SoundChargeSettings.VolumeByProgress)));
+            EditorGUILayout.PropertyField(charge.FindPropertyRelative(nameof(SoundChargeSettings.PitchByProgress)));
+            EditorGUILayout.PropertyField(charge.FindPropertyRelative(nameof(SoundChargeSettings.CompleteFadeOut)));
+            EditorGUILayout.PropertyField(charge.FindPropertyRelative(nameof(SoundChargeSettings.CancelFadeOut)));
         }
 
         private static void DrawPreview(SoundDef def)
@@ -127,27 +101,10 @@ namespace Bun3.Unity.Audio.Editor
             var hasClips = HasAnyClip(def.Clips);
             using (new EditorGUILayout.HorizontalScope())
             {
-                using (new EditorGUI.DisabledScope(!hasClips || PlayPreviewClipMethod == null))
-                {
-                    if (GUILayout.Button("▶ Preview"))
-                    {
-                        PlayRandomClip(def);
-                    }
-                }
-                using (new EditorGUI.DisabledScope(StopAllPreviewClipsMethod == null))
-                {
-                    if (GUILayout.Button("■ Stop"))
-                    {
-                        StopAllPreview();
-                    }
-                }
+                using (new EditorGUI.DisabledScope(!hasClips))
+                    if (GUILayout.Button("▶ Preview")) SoundPreview.Play(def);
+                if (GUILayout.Button("■ Stop")) SoundPreview.Stop();
             }
-
-            EditorGUILayout.LabelField(
-                $"Volume [{def.EffectiveVolume.Min:0.##}, {def.EffectiveVolume.Max:0.##}]  " +
-                $"Pitch [{def.EffectivePitch.Min:0.##}, {def.EffectivePitch.Max:0.##}] " +
-                "(preview plays the raw clip; rolled ranges are not applied)",
-                EditorStyles.miniLabel);
 
             var hasAddressable = HasAddressableClips(def);
             if (!hasClips && !hasAddressable)
@@ -188,58 +145,6 @@ namespace Bun3.Unity.Audio.Editor
 #else
             return false;
 #endif
-        }
-
-        private static void PlayRandomClip(SoundDef def)
-        {
-            if (PlayPreviewClipMethod == null)
-            {
-                Debug.LogWarning(
-                    "Bun3.Unity.Audio.Editor: AudioUtil.PlayPreviewClip not found on this " +
-                    "Editor version; preview disabled.");
-                return;
-            }
-
-            var candidates = new List<AudioClip>(def.Clips.Length);
-            foreach (var clip in def.Clips)
-            {
-                if (clip != null)
-                {
-                    candidates.Add(clip);
-                }
-            }
-            if (candidates.Count == 0)
-            {
-                return;
-            }
-
-            var picked = candidates[UnityEngine.Random.Range(0, candidates.Count)];
-            try
-            {
-                PlayPreviewClipMethod.Invoke(null, new object[] { picked, 0, false });
-            }
-            catch (Exception e)
-            {
-                PlayPreviewClipMethod = null;
-                Debug.LogWarning(
-                    $"Bun3.Unity.Audio.Editor: AudioUtil.PlayPreviewClip threw; preview " +
-                    $"disabled for this session. {e.Message}");
-            }
-        }
-
-        private static void StopAllPreview()
-        {
-            try
-            {
-                StopAllPreviewClipsMethod.Invoke(null, null);
-            }
-            catch (Exception e)
-            {
-                StopAllPreviewClipsMethod = null;
-                Debug.LogWarning(
-                    $"Bun3.Unity.Audio.Editor: AudioUtil.StopAllPreviewClips threw; stop " +
-                    $"disabled for this session. {e.Message}");
-            }
         }
     }
 }

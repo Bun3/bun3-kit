@@ -239,8 +239,7 @@ namespace Bun3.Unity.Audio.Editor
             var overridden = (row.Overridden & field) != 0;
             if (inherited || overridden)
             {
-                var profile = row.Profiles[(int)SoundDefOverrides.GroupOf(field)];
-                Tip.tooltip = (inherited ? "From " : "Overrides ") + profile.name;
+                Tip.tooltip = (inherited ? "From " : "Overrides ") + ProfileName(row.Profiles[(int)SoundDefOverrides.GroupOf(field)]);
                 GUI.Label(rect, Tip);
             }
             if (overridden) SoundOverrideGUI.OverrideBar(rect);
@@ -250,13 +249,18 @@ namespace Bun3.Unity.Audio.Editor
                 if (column == Column.Volume) VolumeBar(ref rect, row.Volume, inherited);
                 if (column == Column.Loop)
                 {
-                    EditorStyles.toggle.Draw(new Rect(rect.x + 4f, rect.center.y - 8f, 16f, 16f), false, false, row.Loop, false);
+                    EditorStyles.toggle.Draw(CheckRect(rect), false, false, row.Loop, false);
                     return;
                 }
                 Cell.text = Text(row, column);
                 Draw(rect, Cell, overridden ? EditorStyles.boldLabel : EditorStyles.label);
             }
         }
+
+        // A profile deleted after the last refresh reads as null.
+        private static string ProfileName(Object profile) => profile != null ? profile.name : "a missing profile";
+
+        private static Rect CheckRect(Rect cell) => new(cell.x + 4f, cell.center.y - 8f, 16f, 16f);
 
         private static void VolumeBar(ref Rect rect, FloatRange volume, bool inherited)
         {
@@ -291,6 +295,7 @@ namespace Bun3.Unity.Audio.Editor
         {
             public static readonly GUIStyle Dim = new(EditorStyles.label) { normal = { textColor = new Color(0.6f, 0.6f, 0.6f) } };
             public static readonly GUIStyle Warn = new(EditorStyles.label) { normal = { textColor = WarningColor } };
+            public static readonly GUIStyle Error = new(EditorStyles.miniLabel) { normal = { textColor = ErrorColor }, wordWrap = true };
             public static readonly GUIStyle KeyPrefix = new(Dim) { padding = new RectOffset(0, 0, 1, 2) };
             public static readonly GUIStyle KeyName = new(EditorStyles.boldLabel) { padding = new RectOffset(0, 0, 1, 2) };
             public static readonly GUIContent Play = EditorGUIUtility.IconContent("PlayButton");
