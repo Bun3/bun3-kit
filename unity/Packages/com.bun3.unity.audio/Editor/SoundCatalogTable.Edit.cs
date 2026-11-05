@@ -17,7 +17,7 @@ namespace Bun3.Unity.Audio.Editor
         private static readonly GUIContent AddSoundContent = new("+ Add Sound", "Add a sound with a new key. Its definition is stored inside this catalog.");
         private static readonly GUIContent BulkContent = new(string.Empty,
             "Type a value and press Enter to set it on every selected row that is shown. A value from a profile is overridden first.");
-        private static readonly Regex RangePattern = new(@"^\s*(-?[\d.]+)\s*(?:[-–~,\s]\s*(-?[\d.]+))?\s*$");
+        private static readonly Regex RangePattern = new(@"^\s*(-?[\d.]+)\s*(?:[-–~\s]\s*(-?[\d.]+))?\s*$");
 
         private Column _column = Column.Volume;
         private Row _editRow;
@@ -220,7 +220,8 @@ namespace Bun3.Unity.Audio.Editor
             }
         }
 
-        // Accepts "0.75-0.9", "0.75–0.9", "0.75~0.9", "0.75,0.9" or "0.75 0.9", or one number for both ends.
+        // Accepts "0.75-0.9", "0.75–0.9", "0.75~0.9" or "0.75 0.9", or one number for both ends. A comma is not a
+        // separator, so a comma decimal such as "0,5" is refused instead of read as a range.
         private static bool TryParseRange(string text, out FloatRange range)
         {
             range = default;
@@ -325,9 +326,11 @@ namespace Bun3.Unity.Audio.Editor
 
         private void Delete(string key)
         {
-            if (EditorUtility.DisplayDialog("Delete sound",
-                    $"Delete '{key}' and its definition from this catalog? This cannot be undone; restore it from version control.",
-                    "Delete", "Cancel"))
+            var message = SoundCatalogEditing.DeletesDefinition(_catalog, key)
+                ? $"Delete '{key}' and its definition from this catalog? This cannot be undone; restore it from version control."
+                : $"Remove the entry '{key}' from this catalog? Only the entry is removed; a definition is deleted only when this " +
+                  "catalog stores it and no other row uses it. This cannot be undone; restore it from version control.";
+            if (EditorUtility.DisplayDialog("Delete sound", message, "Delete", "Cancel"))
                 SoundCatalogEditing.Delete(_catalog, key);
         }
 
@@ -363,7 +366,8 @@ namespace Bun3.Unity.Audio.Editor
                 _table.EndEdit(args.acceptedRename && args.newName != args.originalName ? args.newName : null);
         }
 
-        // A key field; the edit throws ArgumentException for a key it refuses, which is shown and leaves the prompt open.
+        // A key field; the edit gets the trimmed key and throws ArgumentException for a key it refuses, which is shown and
+        // leaves the prompt open.
         private sealed class KeyPrompt : PopupWindowContent
         {
             private const string FieldName = "Bun3SoundKey";
@@ -416,7 +420,7 @@ namespace Bun3.Unity.Audio.Editor
             {
                 try
                 {
-                    _edit(_key);
+                    _edit(_key.Trim());
                 }
                 catch (Exception e) when (e is ArgumentException or InvalidOperationException)
                 {

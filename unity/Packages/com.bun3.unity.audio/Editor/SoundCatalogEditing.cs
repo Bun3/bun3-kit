@@ -24,7 +24,10 @@ namespace Bun3.Unity.Audio.Editor
         SharedDefinition,
     }
 
-    /// <summary>Edits a saved <see cref="SoundCatalog"/> so each owned <see cref="SoundDef"/> is a hidden sub-asset of it.</summary>
+    /// <summary>
+    /// Edits a saved <see cref="SoundCatalog"/> so each owned <see cref="SoundDef"/> is a hidden sub-asset of it.
+    /// A new key is trimmed of leading and trailing whitespace before it is checked and stored.
+    /// </summary>
     public static class SoundCatalogEditing
     {
         /// <summary>Adds a new definition named by <paramref name="key"/> as a sub-asset and appends its entry.</summary>
@@ -32,7 +35,7 @@ namespace Bun3.Unity.Audio.Editor
         {
             RequireSaved(catalog);
             var rows = new List<SoundCatalogEntry>(catalog.Entries);
-            RequireFreeKey(rows, key);
+            key = RequireFreeKey(rows, key);
             var def = ScriptableObject.CreateInstance<SoundDef>();
             rows.Add(new SoundCatalogEntry(key, def));
             Own(catalog, def, key, rows);
@@ -46,7 +49,7 @@ namespace Bun3.Unity.Audio.Editor
             var rows = new List<SoundCatalogEntry>(catalog.Entries);
             var source = rows[IndexOf(rows, sourceKey)].Definition;
             if (source == null) throw new ArgumentException("The source entry has no definition.", nameof(sourceKey));
-            RequireFreeKey(rows, newKey);
+            newKey = RequireFreeKey(rows, newKey);
             var copy = Object.Instantiate(source);
             rows.Add(new SoundCatalogEntry(newKey, copy));
             Own(catalog, copy, newKey, rows);
@@ -59,7 +62,7 @@ namespace Bun3.Unity.Audio.Editor
             RequireSaved(catalog);
             var rows = new List<SoundCatalogEntry>(catalog.Entries);
             int index = IndexOf(rows, key);
-            RequireFreeKey(rows, newKey);
+            newKey = RequireFreeKey(rows, newKey);
             var def = rows[index].Definition;
             rows[index] = new SoundCatalogEntry(newKey, def);
             if (def != null && IsOwnedBy(catalog, def)) def.name = newKey;
@@ -73,14 +76,22 @@ namespace Bun3.Unity.Audio.Editor
             var rows = new List<SoundCatalogEntry>(catalog.Entries);
             int index = IndexOf(rows, key);
             var def = rows[index].Definition;
+            bool destroy = DeletesDefinition(catalog, key);
             rows.RemoveAt(index);
-            bool destroy = def != null && IsOwnedBy(catalog, def) && rows.All(r => r.Definition != def);
             Commit(catalog, rows, def);
             if (!destroy) return;
             AssetDatabase.RemoveObjectFromAsset(def);
             Object.DestroyImmediate(def, true);
             EditorUtility.SetDirty(catalog);
             AssetDatabase.SaveAssetIfDirty(catalog);
+        }
+
+        /// <summary>Whether <see cref="Delete"/> also deletes the definition of <paramref name="key"/>: the catalog owns it and no other entry uses it.</summary>
+        internal static bool DeletesDefinition(SoundCatalog catalog, string key)
+        {
+            var rows = new List<SoundCatalogEntry>(catalog.Entries);
+            var def = rows[IndexOf(rows, key)].Definition;
+            return def != null && IsOwnedBy(catalog, def) && rows.Count(r => r.Definition == def) == 1;
         }
 
         /// <summary>True when the definition lives in the catalog's file and is not that file's main asset.</summary>
@@ -118,10 +129,13 @@ namespace Bun3.Unity.Audio.Editor
                 throw new InvalidOperationException("The sound catalog must be a saved asset.");
         }
 
-        private static void RequireFreeKey(List<SoundCatalogEntry> rows, string key)
+        // Returns the trimmed key, or throws when it is blank or already used.
+        private static string RequireFreeKey(List<SoundCatalogEntry> rows, string key)
         {
             if (string.IsNullOrWhiteSpace(key)) throw new ArgumentException("Keys must not be blank.", nameof(key));
+            key = key.Trim();
             if (rows.Any(r => r.Key == key)) throw new ArgumentException($"Key '{key}' already exists.", nameof(key));
+            return key;
         }
 
         private static int IndexOf(List<SoundCatalogEntry> rows, string key)

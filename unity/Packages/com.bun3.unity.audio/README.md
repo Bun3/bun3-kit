@@ -538,9 +538,10 @@ Sound Catalog**, shows the same table in a resizable window.
   profiles, overrides, spatial mode and volume group. Column headers sort descending, then
   ascending, then off. **Group by prefix** folds keys by their first one or two segments.
 - **Edit a cell:** double-click it, or click it and press Enter, then type and press Enter.
-  Volume and Pitch take a range such as `0.75-0.9` (`–`, `~`, `,` or a space also separate
-  the ends) or one number for both ends; text that does not parse is ignored. Loop's check
-  box and the Spatial menu change at once. Every value edit can be undone.
+  Volume and Pitch take a range such as `0.75-0.9` (`–`, `~` or a space also separate the
+  ends) or one number for both ends; text that does not parse, such as the comma decimal
+  `0,5`, is ignored. Loop's check box and the Spatial menu change at once. Every value edit
+  can be undone.
 - **Several rows:** Ctrl+click or Shift+click two or more rows to show a bar that sets Volume
   (a fixed value) or Priority on every selected row that is shown. Rows hidden by the search,
   a chip or a collapsed group are not changed. A value from a profile is overridden first, and
@@ -548,14 +549,15 @@ Sound Catalog**, shows the same table in a resizable window.
 - **Profile values** are grey with a link icon and cannot be edited in place. Right-click the
   cell and choose **Override with local value**, which copies the profile's value first, or
   **Revert to profile** to follow the profile again.
-- **Right-click a cell** for those two and **Select profile asset**, **Copy <column> to
+- **Right-click a cell** for those two and **Select profile asset**, **Copy `<column>` to
   selected rows**, **Preview**, **Duplicate sound…**, **Rename key…** and **Delete sound**.
   Rows that share a definition with another row also offer **Duplicate for this key**.
-- **Add, duplicate, rename, delete:** **+ Add Sound** asks for a key and stores a new
-  definition inside the catalog file. Rename changes the key and the definition's name, but
-  not game code that uses the old key. Delete asks for confirmation and removes the
-  definition at once. These four save the catalog and cannot be undone; restore from version
-  control.
+- **Add, duplicate, rename, delete:** **+ Add Sound** asks for a key, trimmed of leading and
+  trailing spaces, and stores a new definition inside the catalog file. Rename changes the key
+  and the definition's name, but not game code that uses the old key. Delete asks for
+  confirmation and removes the entry; it deletes the definition too only when the catalog
+  stores it and no other row uses it. These four save the catalog and cannot be undone;
+  restore from version control.
 - **Detail pane:** selecting one row shows its definition below the table: clips (drag and
   drop), Addressable clips, each group's profile with **Use local** and **Edit profile**,
   mixer group, occlusion, acoustics, the charge settings of a looping sound, and Preview and

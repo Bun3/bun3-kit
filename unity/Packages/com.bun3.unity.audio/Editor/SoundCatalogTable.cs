@@ -1,6 +1,7 @@
 // Table state, row model, finding (search, chips, sorting, grouping), selection and layout.
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEditor;
 using UnityEditor.IMGUI.Controls;
 using UnityEngine;
@@ -200,7 +201,7 @@ namespace Bun3.Unity.Audio.Editor
         {
             var def = row.Def;
             serialized.Update();
-            row.ClipCount = def.Clips?.Length ?? 0;
+            row.ClipCount = def.Clips?.Count(clip => clip != null) ?? 0;
 #if BUN3_ADDRESSABLES
             row.Addressable = row.ClipCount == 0 && def.AddressableClips is { Length: > 0 };
 #endif

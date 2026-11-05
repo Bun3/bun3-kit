@@ -114,6 +114,28 @@ namespace Bun3.Unity.Audio.Tests
         }
 
         [Test]
+        public void Override_Acoustics_CopiesWholeSelection()
+        {
+            var acoustic = Create<SoundAcousticProfile>();
+            acoustic.Settings.MaxDistance = 50f;
+            var spatial = Create<SoundSpatialProfile>();
+            spatial.Acoustics.Profile = acoustic;
+            spatial.Acoustics.Local.MinDistance = 3f;
+            spatial.Acoustics.Overrides = SoundAcousticField.MinDistance;
+            var def = Create<SoundDef>();
+            def.SpatialProfile = spatial;
+            var effective = def.EffectiveAcoustics;
+
+            SoundDefOverrides.Override(new SerializedObject(def), SoundDefField.Acoustics);
+
+            Assert.That(def.Acoustics.Profile, Is.SameAs(acoustic));
+            Assert.That(def.Acoustics.Local.MinDistance, Is.EqualTo(3f));
+            Assert.That(def.Acoustics.Overrides, Is.EqualTo(SoundAcousticField.MinDistance));
+            Assert.That(def.IsOverridden(SoundDefField.Acoustics), Is.True);
+            Assert.That(def.EffectiveAcoustics, Is.EqualTo(effective), "Overriding must not change what plays.");
+        }
+
+        [Test]
         public void OverrideAcoustic_CopiesProfileSetting()
         {
             var profile = Create<SoundAcousticProfile>();

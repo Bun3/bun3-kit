@@ -1,6 +1,7 @@
 using System;
 using UnityEditor;
 using UnityEngine;
+using Object = UnityEngine.Object;
 
 namespace Bun3.Unity.Audio.Editor
 {
@@ -14,22 +15,42 @@ namespace Bun3.Unity.Audio.Editor
         private const float EditProfileWidth = 72f;
         private static readonly Color BarColor = new(1f / 255f, 153f / 255f, 235f / 255f, 0.75f);
 
+        // The object picker applies every object it highlights. A highlighted None is held here instead and applied
+        // when that picker closes, so browsing past None or pressing Esc never detaches the profile.
+        private static (Object target, string path, int picker) _browsedNone;
+
         /// <summary>
         /// Draws a profile reference with Use local and Edit profile buttons when <paramref name="editable"/>.
-        /// Clearing it, also in multi-object editing, discards the pending None and runs <paramref name="useLocal"/> instead.
+        /// Clearing it, also in multi-object editing, discards the pending None and runs <paramref name="useLocal"/> instead;
+        /// None chosen in the object picker counts only once the picker closes without Esc.
         /// </summary>
         internal static void ProfileField(Rect rect, SerializedProperty reference, bool editable, Action useLocal)
         {
+            var current = Event.current;
+            var browsed = (reference.serializedObject.targetObject, reference.propertyPath, EditorGUIUtility.GetObjectPickerControlID());
+            if (current.type == EventType.ExecuteCommand && current.commandName is "ObjectSelectorClosed" or "ObjectSelectorCanceled"
+                && _browsedNone == browsed)
+            {
+                _browsedNone = default;
+                if (current.commandName == "ObjectSelectorClosed") useLocal();
+            }
+
             var profile = reference.objectReferenceValue;
             var buttons = editable && profile != null;
             var field = rect;
             if (buttons) field.xMax -= UseLocalWidth + EditProfileWidth + 4f;
             EditorGUI.BeginChangeCheck();
             EditorGUI.PropertyField(field, reference);
-            if (EditorGUI.EndChangeCheck() && reference.objectReferenceValue == null)
+            if (EditorGUI.EndChangeCheck())
             {
-                reference.serializedObject.Update();
-                useLocal();
+                var browsing = current.commandName == "ObjectSelectorUpdated";
+                var cleared = reference.objectReferenceValue == null;
+                _browsedNone = browsing && cleared ? browsed : default;
+                if (cleared)
+                {
+                    reference.serializedObject.Update();
+                    if (!browsing) useLocal();
+                }
             }
             if (!buttons) return;
 
