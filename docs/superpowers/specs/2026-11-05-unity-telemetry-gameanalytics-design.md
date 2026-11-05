@@ -172,7 +172,7 @@ public delegate bool GameAnalyticsMap(TelemetryRecord record, List<GameAnalytics
 
 ## 8. 빌더에게 맡기는 것 (구현 전에 확인)
 
-조사에서 확인하지 못해 구현하면서 확인해야 하는 SDK 사실이다. 결과에 따라 고르는 대안을 함께 적었다.
+조사에서 확인하지 못해 구현하면서 확인한 SDK 사실과 그 결과다. 처음 체크리스트(대안 포함)는 Git 이력에 있다.
 
 **구현 때 확인한 결과 (2026-11-05, SDK 8.3.1, lock 6f6d36f9의 소스 기준)**
 - 설치: 핀 없는 git URL로 설치된다. 런타임 asmdef 이름은 `GameAnalyticsSDK`.
@@ -182,16 +182,8 @@ public delegate bool GameAnalyticsMap(TelemetryRecord record, List<GameAnalytics
 - 컴포넌트: `GameAnalytics` 컴포넌트는 초기화에 필요 없지만 종료 때 세션을 끝낸다(`OnApplicationQuit`, Windows 1.5초 대기). 없으면 저장소가 만들고, 컴포넌트의 `Awake`가 씬을 넘어 남긴다.
 - 사용자 ID: `SetCustomId`는 래퍼 호출 하나뿐이고 설정 플래그가 없다.
 - 이름 규칙: `GAValidator`의 `^[A-Za-z0-9\s\-_\.\(\)\!\?]{1,64}(:...){0,4}$`. 다듬기는 공백 중 일반 공백만 허용한다.
-- 미확인으로 남은 것: 네이티브 DLL이 6000.5 Mono 플레이어에서 동작하는지, 전송 끄기가 세션 신호도 멈추는지, 웹 화면 차원 등록 필요 여부. 실측(JP 작업 6)에서 본다.
-- git URL로 설치되는지. 안 되면 OpenUPM 범위 레지스트리(§4.1).
-- 런타임에 설정 객체를 얻어 게임 키·시크릿 키와 `SubmitErrors`를 넣을 수 있는지. 안 되면 설정 에셋에 둔다(§4.6).
-- GameObject를 코드로 만들어 초기화할 수 있는지(프리팹 없이).
-- 사용자 ID에 설정 플래그가 필요한지.
-- Windows 기본 경로(네이티브 DLL)가 Unity 6000.5 Mono 플레이어에서 동작하는지. 안 되면 `GA_USE_MONO_WRAPPER` 정의로 관리 코드 래퍼를 쓴다.
-- 전송 끄기가 세션 신호도 멈추는지. 멈추지 않으면 동의를 끌 때 세션을 끝내는 SDK 호출이 있는지 찾는다.
-- 이벤트 이름에 허용되는 문자 정규식(§4.3의 다듬기 규칙).
-- 사용자 정의 차원 허용 값을 설정 에셋 목록에 넣는 것만으로 되는지, 웹 화면 등록도 필요한지(§4.4). 빌드 확인 때 웹 화면에서 환경으로 거를 수 있는지 본다.
-- 패키지 asmdef 이름과 테스트에서 SDK 정적 호출을 감쌀 지점.
+- 실측(2026-11-05, 플레이테스트 빌드 0.50.1): 네이티브 DLL이 Unity 6000.5 Mono 플레이어에서 동작한다(`GA_USE_MONO_WRAPPER` 불필요). 사용자 ID는 SteamID, SDK 상태에 `dimension01` = `playtest`가 저장되고, 메뉴에서 보낸 디자인 이벤트가 Realtime의 Live Events에 들어온다. 서버는 이벤트 묶음을 모두 받았다.
+- 아직 미확인: 전송 끄기가 종료 때 세션 끝 신호도 멈추는지, 웹 화면에서 차원 01로 거를 수 있는지(Live Events에는 차원 필터가 없다).
 
 ## 9. 남은 질문 / 다음 할 일
 
