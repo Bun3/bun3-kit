@@ -34,9 +34,8 @@ namespace Bun3.Unity.Audio.Editor
             var rows = new List<SoundCatalogEntry>(catalog.Entries);
             RequireFreeKey(rows, key);
             var def = ScriptableObject.CreateInstance<SoundDef>();
-            Own(catalog, def, key);
             rows.Add(new SoundCatalogEntry(key, def));
-            Commit(catalog, rows, def);
+            Own(catalog, def, key, rows);
             return def;
         }
 
@@ -49,9 +48,8 @@ namespace Bun3.Unity.Audio.Editor
             if (source == null) throw new ArgumentException("The source entry has no definition.", nameof(sourceKey));
             RequireFreeKey(rows, newKey);
             var copy = Object.Instantiate(source);
-            Own(catalog, copy, newKey);
             rows.Add(new SoundCatalogEntry(newKey, copy));
-            Commit(catalog, rows, copy);
+            Own(catalog, copy, newKey, rows);
             return copy;
         }
 
@@ -133,16 +131,34 @@ namespace Bun3.Unity.Audio.Editor
             return index;
         }
 
-        private static void Own(SoundCatalog catalog, SoundDef def, string key)
+        // Adds the Def to the catalog file, and takes it out again if writing the rows fails.
+        private static void Own(SoundCatalog catalog, SoundDef def, string key, List<SoundCatalogEntry> rows)
         {
             def.name = key;
             def.hideFlags = HideFlags.HideInHierarchy;
             AssetDatabase.AddObjectToAsset(def, catalog);
+            try { Commit(catalog, rows, def); }
+            catch
+            {
+                AssetDatabase.RemoveObjectFromAsset(def);
+                Object.DestroyImmediate(def, true);
+                throw;
+            }
         }
 
         private static void Commit(SoundCatalog catalog, List<SoundCatalogEntry> rows, SoundDef def)
         {
-            catalog.SetEntries(rows.ToArray());
+            // Not SetEntries: it rejects invalid rows, and removing them is how a user repairs a catalog.
+            var so = new SerializedObject(catalog);
+            var entries = so.FindProperty("entries");
+            entries.arraySize = rows.Count;
+            for (int i = 0; i < rows.Count; i++)
+            {
+                var row = entries.GetArrayElementAtIndex(i);
+                row.FindPropertyRelative("key").stringValue = rows[i].Key;
+                row.FindPropertyRelative("definition").objectReferenceValue = rows[i].Definition;
+            }
+            so.ApplyModifiedPropertiesWithoutUndo(); // also drops the catalog's cached lookup
             EditorUtility.SetDirty(catalog);
             if (def != null) EditorUtility.SetDirty(def);
             AssetDatabase.SaveAssetIfDirty(catalog);

@@ -1,10 +1,9 @@
 using System;
-using System.Collections;
+using System.Linq;
 using Bun3.Unity.Audio.Editor;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
-using UnityEngine.TestTools;
 using Object = UnityEngine.Object;
 
 namespace Bun3.Unity.Audio.Tests
@@ -18,24 +17,18 @@ namespace Bun3.Unity.Audio.Tests
         [SetUp]
         public void SetUp()
         {
-            Quiet();
             if (!AssetDatabase.IsValidFolder(Folder)) AssetDatabase.CreateFolder("Assets", "__Bun3AudioCatalogEditingTests");
             catalog = ScriptableObject.CreateInstance<SoundCatalog>();
             path = Folder + "/Catalog.asset";
             AssetDatabase.CreateAsset(catalog, path);
         }
 
-        [UnityTearDown]
-        public IEnumerator TearDown()
+        [TearDown]
+        public void TearDown()
         {
-            Quiet();
             AssetDatabase.DeleteAsset(Folder);
             AssetDatabase.Refresh();
-            yield return null;
         }
-
-        // The editor's Search index can log a sharing violation on its own db whenever assets change; the flag resets per phase.
-        private static void Quiet() => LogAssert.ignoreFailingMessages = true;
 
         private int SubAssetCount() => AssetDatabase.LoadAllAssetsAtPath(path).Length;
 
@@ -56,7 +49,6 @@ namespace Bun3.Unity.Audio.Tests
         [Test]
         public void AddSound_CreatesHiddenSubAssetNamedByKey()
         {
-            Quiet();
             var def = SoundCatalogEditing.AddSound(catalog, "door");
             Assert.That(SoundCatalogEditing.IsOwnedBy(catalog, def), Is.True);
             Assert.That(def.hideFlags, Is.EqualTo(HideFlags.HideInHierarchy));
@@ -68,7 +60,6 @@ namespace Bun3.Unity.Audio.Tests
         [Test]
         public void Duplicate_CopiesValues()
         {
-            Quiet();
             var source = SoundCatalogEditing.AddSound(catalog, "a");
             source.Volume = new FloatRange(0.4f, 0.4f);
             var copy = SoundCatalogEditing.Duplicate(catalog, "a", "b");
@@ -81,7 +72,6 @@ namespace Bun3.Unity.Audio.Tests
         [Test]
         public void Rename_ChangesKeyAndName()
         {
-            Quiet();
             var def = SoundCatalogEditing.AddSound(catalog, "a");
             SoundCatalogEditing.Rename(catalog, "a", "b");
             Assert.That(catalog.Get("a"), Is.Null);
@@ -92,7 +82,6 @@ namespace Bun3.Unity.Audio.Tests
         [Test]
         public void Delete_RemovesEntryAndSubAsset()
         {
-            Quiet();
             SoundCatalogEditing.AddSound(catalog, "a");
             SoundCatalogEditing.AddSound(catalog, "b");
             int before = SubAssetCount();
@@ -105,7 +94,6 @@ namespace Bun3.Unity.Audio.Tests
         [Test]
         public void Delete_ExternalDefinition_RemovesEntryOnly()
         {
-            Quiet();
             var external = ScriptableObject.CreateInstance<SoundDef>();
             AssetDatabase.CreateAsset(external, Folder + "/External.asset");
             catalog.SetEntries(new[] { new SoundCatalogEntry("x", external) });
@@ -119,7 +107,6 @@ namespace Bun3.Unity.Audio.Tests
         [Test]
         public void AddAndRename_RejectBlankOrDuplicateKeys_WithoutChanges()
         {
-            Quiet();
             SoundCatalogEditing.AddSound(catalog, "a");
             SoundCatalogEditing.AddSound(catalog, "b");
             int before = SubAssetCount();
@@ -139,16 +126,14 @@ namespace Bun3.Unity.Audio.Tests
         [Test]
         public void Edits_RequireSavedCatalog()
         {
-            Quiet();
             var loose = ScriptableObject.CreateInstance<SoundCatalog>();
             try { Assert.Throws<InvalidOperationException>(() => SoundCatalogEditing.AddSound(loose, "a")); }
             finally { Object.DestroyImmediate(loose); }
         }
 
         [Test]
-        public void Validate_ReportsSharedExternalAndOkRows()
+        public void Validate_ReportsInvalidEntriesPerRow()
         {
-            Quiet();
             var shared = SoundCatalogEditing.AddSound(catalog, "s1");
             var external = ScriptableObject.CreateInstance<SoundDef>();
             try
@@ -170,7 +155,6 @@ namespace Bun3.Unity.Audio.Tests
         [Test]
         public void Validate_ReportsBlankDuplicateAndMissingRows()
         {
-            Quiet();
             var def = SoundCatalogEditing.AddSound(catalog, "tmp");
             WriteRows((" ", def), ("d", def), ("d", null), ("m", null), ("ok", def));
             Assert.That(SoundCatalogEditing.Validate(catalog), Is.EqualTo(new[]
@@ -178,6 +162,21 @@ namespace Bun3.Unity.Audio.Tests
                 SoundCatalogIssue.BlankKey, SoundCatalogIssue.DuplicateKey, SoundCatalogIssue.DuplicateKey,
                 SoundCatalogIssue.MissingDefinition, SoundCatalogIssue.SharedDefinition,
             }));
+        }
+
+        [Test]
+        public void StructuralEdits_WorkOnCatalogsWithInvalidRows()
+        {
+            var def = SoundCatalogEditing.AddSound(catalog, "tmp");
+            WriteRows((" ", def), ("m", null), ("ok", def));
+            int before = SubAssetCount();
+            Assert.Throws<ArgumentException>(() => SoundCatalogEditing.AddSound(catalog, "ok"));
+            Assert.That(SubAssetCount(), Is.EqualTo(before));
+            SoundCatalogEditing.AddSound(catalog, "new");
+            Assert.That(SubAssetCount(), Is.EqualTo(before + 1));
+            SoundCatalogEditing.Delete(catalog, "m");
+            SoundCatalogEditing.Rename(catalog, " ", "fixed");
+            Assert.That(catalog.Entries.Select(e => e.Key), Is.EqualTo(new[] { "fixed", "ok", "new" }));
         }
     }
 }
