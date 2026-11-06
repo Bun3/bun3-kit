@@ -532,7 +532,9 @@ The spatial/gain overload overrides a single request without editing the asset. 
 ### Sound catalog table
 
 The Sound Catalog inspector is a table of every key. **Open in Window**, or **Window > Bun3 >
-Sound Catalog**, shows the same table in a resizable window.
+Sound Catalog**, shows the same table in a resizable window. The toolbar menu next to
+**+ Add Sound** switches the table's tooltips between English and Korean for you alone; to change
+a translation, edit `Editor/Localization/ko.po`, whose keys are the English tooltip texts.
 
 - **Find:** the search keeps keys that contain every typed word. Chips filter by missing clips,
   profiles, overrides, spatial mode and volume group. Column headers sort descending, then

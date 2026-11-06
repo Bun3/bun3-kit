@@ -1,4 +1,4 @@
-// Columns: definitions, header and group tooltips, sort order and cell drawing.
+// Columns: definitions, header and group tooltips, tooltip language, sort order and cell drawing.
 using System.Globalization;
 using UnityEditor;
 using UnityEditor.IMGUI.Controls;
@@ -79,8 +79,19 @@ namespace Bun3.Unity.Audio.Editor
                 "Whether the sound has a position in the world. Can come from a shared Spatial profile.")),
         };
 
+        // Tooltips are written in English, which is also the translation key; Localization/<code>.po holds the rest.
+        private const string LanguagePref = "Bun3.Audio.SoundCatalogTable.Language";
+        private const string TranslationFolder = "Packages/com.bun3.unity.audio/Editor/Localization/";
+        private static readonly string[] LanguageCodes = { "en", "ko" };
+        private static readonly GUIContent[] LanguageNames = { new("English"), new("Korean") };
+        private static string _language;
+        private static LocalizationAsset _translations;
+
+        private static string Language => _language ??= EditorPrefs.GetString(LanguagePref, LanguageCodes[0]);
+
         private static readonly GUIContent Cell = new();
         private static readonly GUIContent Tip = new();
+        private static readonly GUIContent BandLabel = new();
         private static readonly Color ErrorColor = new(0.9f, 0.25f, 0.2f);
         private static readonly Color ErrorTint = new(0.9f, 0.25f, 0.2f, 0.1f);
         private static readonly Color WarningColor = new(0.96f, 0.74f, 0.01f);
@@ -145,7 +156,29 @@ namespace Bun3.Unity.Audio.Editor
             ? range.Min.ToString("0.00", CultureInfo.InvariantCulture)
             : range.Min.ToString("0.00", CultureInfo.InvariantCulture) + "–" + range.Max.ToString("0.00", CultureInfo.InvariantCulture);
 
-        private static string Describe(SoundCatalogIssue issue) => issue switch
+        // A text without a translation stays English.
+        private static string Tr(string english)
+        {
+            if (string.IsNullOrEmpty(english) || Language == LanguageCodes[0]) return english;
+            if (_translations == null) _translations = AssetDatabase.LoadAssetAtPath<LocalizationAsset>(TranslationFolder + Language + ".po");
+            var text = _translations != null ? _translations.GetLocalizedString(english) : null;
+            return string.IsNullOrEmpty(text) ? english : text;
+        }
+
+        private static void LanguageGUI(Rect rect)
+        {
+            var index = System.Array.IndexOf(LanguageCodes, Language);
+            LanguageNames[1].text = Tr("Korean");
+            var selected = EditorGUI.Popup(rect, Mathf.Max(index, 0), LanguageNames, EditorStyles.toolbarPopup);
+            Tip.tooltip = Tr("Language of the table's tooltips. Saved for you on this computer.");
+            GUI.Label(rect, Tip);
+            if (selected == index) return;
+            _language = LanguageCodes[selected];
+            _translations = null;
+            EditorPrefs.SetString(LanguagePref, _language);
+        }
+
+        private static string Describe(SoundCatalogIssue issue) => Tr(issue switch
         {
             SoundCatalogIssue.BlankKey => "The key is blank.",
             SoundCatalogIssue.DuplicateKey => "Another row uses the same key.",
@@ -153,7 +186,7 @@ namespace Bun3.Unity.Audio.Editor
             SoundCatalogIssue.ExternalDefinition => "The definition is an asset outside this catalog file.",
             SoundCatalogIssue.SharedDefinition => "Another row uses the same definition.",
             _ => null,
-        };
+        });
 
         private static void RowBackground(Rect rowRect, Row row)
         {
@@ -239,7 +272,8 @@ namespace Bun3.Unity.Audio.Editor
             var overridden = (row.Overridden & field) != 0;
             if (inherited || overridden)
             {
-                Tip.tooltip = (inherited ? "From " : "Overrides ") + ProfileName(row.Profiles[(int)SoundDefOverrides.GroupOf(field)]);
+                var profile = row.Profiles[(int)SoundDefOverrides.GroupOf(field)];
+                Tip.tooltip = string.Format(Tr(inherited ? "From {0}" : "Overrides {0}"), profile != null ? profile.name : Tr("a missing profile"));
                 GUI.Label(rect, Tip);
             }
             if (overridden) SoundOverrideGUI.OverrideBar(rect);
@@ -307,11 +341,17 @@ namespace Bun3.Unity.Audio.Editor
         private sealed class Header : MultiColumnHeader
         {
             private const float BandHeight = 18f;
+            private string _language;
 
             public Header(MultiColumnHeaderState state) : base(state) => height += BandHeight;
 
             public override void OnGUI(Rect rect, float xScroll)
             {
+                if (_language != Language)
+                {
+                    _language = Language;
+                    for (int i = 0; i < Columns.Length; i++) state.columns[i].headerContent.tooltip = Tr(Columns[i].Tooltip);
+                }
                 var band = new Rect(rect.x, rect.y, rect.width, BandHeight);
                 base.OnGUI(new Rect(rect.x, band.yMax, rect.width, rect.height - BandHeight), xScroll);
                 GUI.Label(band, GUIContent.none, DefaultStyles.background);
@@ -319,7 +359,9 @@ namespace Bun3.Unity.Audio.Editor
                 foreach (var (first, last, content) in Bands)
                 {
                     var span = Rect.MinMaxRect(GetColumnRect((int)first).xMin, 0f, GetColumnRect((int)last).xMax, BandHeight);
-                    GUI.Label(span, content, DefaultStyles.columnHeaderCenterAligned);
+                    BandLabel.text = content.text;
+                    BandLabel.tooltip = Tr(content.tooltip);
+                    GUI.Label(span, BandLabel, DefaultStyles.columnHeaderCenterAligned);
                     if (Event.current.type == EventType.Repaint)
                         EditorGUI.DrawRect(new Rect(span.xMax - 1f, 3f, 1f, BandHeight - 6f), new Color(0f, 0f, 0f, 0.3f));
                 }

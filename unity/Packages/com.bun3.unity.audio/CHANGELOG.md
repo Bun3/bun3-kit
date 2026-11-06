@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.10.0] - 2026-11-06
+
+### Added
+
+- Sound Catalog table: a toolbar menu shows the table's tooltips in English or Korean.
+  The choice is saved per user in EditorPrefs; translations live in
+  `Editor/Localization/ko.po`, keyed by the English text, and a text without one stays English.
+
 ## [0.9.0] - 2026-11-05
 
 ### Added

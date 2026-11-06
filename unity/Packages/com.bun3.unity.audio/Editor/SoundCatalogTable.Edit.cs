@@ -14,9 +14,11 @@ namespace Bun3.Unity.Audio.Editor
         private const string RenameNote = "Game code that uses the old key string is not updated.";
 
         private static readonly GUIContent OverrideHint = new("Right-click → Override with local value to edit");
-        private static readonly GUIContent AddSoundContent = new("+ Add Sound", "Add a sound with a new key. Its definition is stored inside this catalog.");
-        private static readonly GUIContent BulkContent = new(string.Empty,
-            "Type a value and press Enter to set it on every selected row that is shown. A value from a profile is overridden first.");
+        private const string AddSoundTooltip = "Add a sound with a new key. Its definition is stored inside this catalog.";
+        private const string BulkTooltip =
+            "Type a value and press Enter to set it on every selected row that is shown. A value from a profile is overridden first.";
+        private static readonly GUIContent AddSoundContent = new("+ Add Sound");
+        private static readonly GUIContent BulkContent = new();
         private static readonly Regex RangePattern = new(@"^\s*(-?[\d.]+)\s*(?:[-–~\s]\s*(-?[\d.]+))?\s*$");
 
         private Column _column = Column.Volume;
@@ -261,6 +263,7 @@ namespace Bun3.Unity.Audio.Editor
             var bar = new Rect(area.x, area.yMax - EditorStyles.toolbar.fixedHeight, area.width, EditorStyles.toolbar.fixedHeight);
             area.yMax = bar.yMin;
             BulkContent.text = $"Set on {rows.Count} rows:";
+            BulkContent.tooltip = Tr(BulkTooltip);
             GUILayout.BeginArea(bar, EditorStyles.toolbar);
             using (new EditorGUILayout.HorizontalScope())
             {
@@ -284,6 +287,7 @@ namespace Bun3.Unity.Audio.Editor
 
         private void AddSoundGUI(Rect rect)
         {
+            AddSoundContent.tooltip = Tr(AddSoundTooltip);
             if (GUI.Button(rect, AddSoundContent, EditorStyles.toolbarButton))
                 PopupWindow.Show(rect, NewPrompt("Add Sound", "Add", string.Empty, null, key => SoundCatalogEditing.AddSound(_catalog, key)));
         }
