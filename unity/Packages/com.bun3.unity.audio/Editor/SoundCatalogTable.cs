@@ -17,7 +17,7 @@ namespace Bun3.Unity.Audio.Editor
     /// Partial layout:
     /// <list type="bullet">
     /// <item><description>SoundCatalogTable.cs: row model, refresh, finding, selection and layout.</description></item>
-    /// <item><description>SoundCatalogTable.Columns.cs: columns, tooltips, header and cell drawing.</description></item>
+    /// <item><description>SoundCatalogTable.Columns.cs: columns, tooltips and their language, header and cell drawing.</description></item>
     /// <item><description>SoundCatalogTable.Edit.cs: cell and bulk edits, the cell menu, and adding, duplicating, renaming and deleting sounds.</description></item>
     /// <item><description>SoundCatalogTable.Detail.cs: the selected sound's detail pane.</description></item>
     /// </list>
@@ -160,11 +160,12 @@ namespace Bun3.Unity.Audio.Editor
             var toolbar = new Rect(rect.x, rect.y, rect.width, EditorStyles.toolbar.fixedHeight);
             GUI.Box(toolbar, GUIContent.none, EditorStyles.toolbar);
             var line = EditorGUIUtility.singleLineHeight;
-            var search = new Rect(toolbar.x + 4f, toolbar.y + 2f, Mathf.Clamp(toolbar.width - 240f, 80f, 360f), line);
+            var search = new Rect(toolbar.x + 4f, toolbar.y + 2f, Mathf.Clamp(toolbar.width - 320f, 80f, 360f), line);
             var text = _searchField.OnToolbarGUI(search, _search);
             if (text != _search) SetSearch(text);
             var grouped = EditorGUI.ToggleLeft(new Rect(search.xMax + 10f, toolbar.y + 1f, 130f, line), "Group by prefix", _grouped);
             if (grouped != _grouped) SetGrouped(grouped);
+            LanguageGUI(new Rect(toolbar.xMax - 168f, toolbar.y, 74f, toolbar.height));
             AddSoundGUI(new Rect(toolbar.xMax - 90f, toolbar.y, 86f, toolbar.height));
             rect.yMin = ChipsGUI(new Rect(rect.x, toolbar.yMax, rect.width, rect.height));
 

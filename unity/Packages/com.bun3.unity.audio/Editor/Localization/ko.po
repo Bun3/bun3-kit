@@ -1,0 +1,114 @@
+msgid ""
+msgstr ""
+"Language: ko\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+# Toolbar
+msgid "Korean"
+msgstr "한국어"
+
+msgid "Language of the table's tooltips. Saved for you on this computer."
+msgstr "표 툴팁의 언어입니다. 이 컴퓨터에서 본인에게만 저장됩니다."
+
+msgid "Add a sound with a new key. Its definition is stored inside this catalog."
+msgstr "새 키로 사운드를 추가합니다. 정의는 이 카탈로그 안에 저장됩니다."
+
+msgid "Type a value and press Enter to set it on every selected row that is shown. A value from a profile is overridden first."
+msgstr "값을 입력하고 Enter를 누르면 보이는 선택 행 전부에 적용됩니다. 프로파일에서 온 값은 먼저 덮어쓰기로 바뀝니다."
+
+# Column headers
+msgid "Select rows for bulk editing. Ctrl+click adds a row, Shift+click selects a range."
+msgstr "여러 행을 한꺼번에 편집하려면 선택합니다. Ctrl+클릭은 행을 추가하고, Shift+클릭은 범위를 선택합니다."
+
+msgid "Preview with this sound's volume and pitch. Disabled when the sound has no clips."
+msgstr "이 사운드의 볼륨과 피치로 미리 듣습니다. 클립이 없으면 비활성화됩니다."
+
+msgid "Name passed to SoundSystem.Play. Also the name of the definition stored in this catalog."
+msgstr "SoundSystem.Play에 넘기는 이름입니다. 이 카탈로그 안에 저장된 정의의 이름이기도 합니다."
+
+msgid ""
+"Number of AudioClips. One is picked at random on each play.\n"
+"0 means nothing plays; the fallback key plays instead when one is given."
+msgstr ""
+"AudioClip 개수입니다. 재생할 때마다 하나를 무작위로 고릅니다.\n"
+"0이면 아무것도 재생되지 않으며, 폴백 키를 넘겼다면 그 키가 대신 재생됩니다."
+
+msgid ""
+"Volume from 0 to 1, picked between Min and Max on each play. Set both to the same value for a fixed level.\n"
+"The player's volume setting for this sound's Volume Group is applied on top."
+msgstr ""
+"0에서 1 사이의 볼륨으로, 재생할 때마다 Min과 Max 사이에서 고릅니다. 크기를 고정하려면 두 값을 같게 둡니다.\n"
+"그 위에 이 사운드의 Volume Group에 해당하는 플레이어 볼륨 설정이 적용됩니다."
+
+msgid "Pitch multiplier picked between Min and Max on each play. 1 is the original pitch; a range like 0.95–1.05 adds slight variation."
+msgstr "재생할 때마다 Min과 Max 사이에서 고르는 피치 배율입니다. 1이 원래 피치이며, 0.95–1.05 같은 범위를 주면 조금씩 달라집니다."
+
+msgid "Repeats until the code stops it. A charge sound uses this loop as its rising layer."
+msgstr "코드가 멈출 때까지 반복합니다. 차지 사운드는 이 루프를 차오르는 소리로 씁니다."
+
+msgid "Which player volume setting scales this sound, e.g. sfx, music or ui."
+msgstr "이 사운드의 크기를 조절하는 플레이어 볼륨 설정입니다. 예: sfx, music, ui."
+
+msgid ""
+"Maximum copies of this sound playing at once. ∞ means no limit.\n"
+"When the limit is reached, the oldest copy is replaced."
+msgstr ""
+"이 사운드를 동시에 재생할 수 있는 최대 개수입니다. ∞는 제한이 없다는 뜻입니다.\n"
+"한도에 다다르면 가장 오래된 재생을 새 재생으로 바꿉니다."
+
+msgid "Minimum seconds between play requests. Requests inside this window are ignored. — means no limit."
+msgstr "재생 요청 사이의 최소 간격(초)입니다. 이 시간 안에 들어온 요청은 무시합니다. —는 제한이 없다는 뜻입니다."
+
+msgid ""
+"0 is the most important, 255 the least (default 128).\n"
+"When every channel is busy, the least important sound is replaced. A new sound less important than all playing ones does not play."
+msgstr ""
+"0이 가장 중요하고 255가 가장 덜 중요합니다(기본값 128).\n"
+"모든 채널이 사용 중이면 가장 덜 중요한 소리를 바꿉니다. 재생 중인 모든 소리보다 덜 중요한 새 소리는 재생되지 않습니다."
+
+msgid ""
+"None: heard the same everywhere.\n"
+"Positional or Follow: heard from a world position, with distance falloff and occlusion."
+msgstr ""
+"None: 어디서나 똑같이 들립니다.\n"
+"Positional, Follow: 월드 위치에서 들리며, 거리에 따라 작아지고 가로막히면 먹먹해집니다."
+
+# Column groups
+msgid "How the sound plays: volume, pitch and looping. Can come from a shared Playback profile."
+msgstr "소리를 재생하는 방식입니다: 볼륨, 피치, 반복. 공유 Playback 프로파일에서 가져올 수 있습니다."
+
+msgid "Which player volume setting and mixer group the sound uses. Can come from a shared Routing profile."
+msgstr "소리가 쓰는 플레이어 볼륨 설정과 믹서 그룹입니다. 공유 Routing 프로파일에서 가져올 수 있습니다."
+
+msgid "How overlapping requests are handled: instance limit, request cooldown and channel priority. Can come from a shared Concurrency profile."
+msgstr "겹치는 요청을 처리하는 방식입니다: 동시 재생 수, 요청 쿨다운, 채널 우선순위. 공유 Concurrency 프로파일에서 가져올 수 있습니다."
+
+msgid "Whether the sound has a position in the world. Can come from a shared Spatial profile."
+msgstr "소리가 월드 안에 위치를 가지는지 정합니다. 공유 Spatial 프로파일에서 가져올 수 있습니다."
+
+# Cells
+msgid "From {0}"
+msgstr "{0}에서 가져온 값입니다"
+
+msgid "Overrides {0}"
+msgstr "{0}의 값을 덮어씁니다"
+
+msgid "a missing profile"
+msgstr "없어진 프로파일"
+
+msgid "The key is blank."
+msgstr "키가 비어 있습니다."
+
+msgid "Another row uses the same key."
+msgstr "다른 행이 같은 키를 씁니다."
+
+msgid "This row has no definition."
+msgstr "이 행에 정의가 없습니다."
+
+msgid "The definition is an asset outside this catalog file."
+msgstr "정의가 이 카탈로그 파일 밖의 에셋입니다."
+
+msgid "Another row uses the same definition."
+msgstr "다른 행이 같은 정의를 씁니다."
