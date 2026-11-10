@@ -1,9 +1,9 @@
 {
   "name": "com.bun3.common",
   "displayName": "Bun3 Common",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "unity": "2022.3",
-  "description": "Platform-agnostic shared library for Bun3 packages. netstandard2.1; no UnityEngine dependency.",
+  "description": "Platform-agnostic shared library for Bun3 packages: pooling, collections, cancellation scope, and an allocation-free struct event bus. netstandard2.1; no UnityEngine dependency.",
   "dependencies": {
     "com.mrdav30.fixedmathsharp.lean": "7.0.0"
   },
