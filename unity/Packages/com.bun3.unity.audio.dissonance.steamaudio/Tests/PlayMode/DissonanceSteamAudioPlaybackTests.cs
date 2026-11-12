@@ -57,6 +57,14 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio.Tests
         }
 
         [Test]
+        public void PackageShipsNoManagedAudioCallback()
+        {
+            foreach (var type in typeof(DissonanceSteamAudioPlayback).Assembly.GetTypes())
+                Assert.That(type.GetMethod("OnAudioFilterRead", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic), Is.Null,
+                    type.FullName + " would run managed code on the audio thread.");
+        }
+
+        [Test]
         public void PlaybackComponentImplementsSdkPoolContract()
         {
             var type = PlaybackType();
@@ -171,7 +179,6 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio.Tests
                 Assert.That((float)type.GetProperty("PeakDecodedAmplitude").GetValue(component), Is.GreaterThan(0), "Real Unity clip callbacks must consume SDK-decoded input.");
                 Assert.That((float)type.GetProperty("PeakStereoDifference").GetValue(component), Is.GreaterThan(1e-6f), "Real streaming callbacks must process native directional stereo.");
                 var firstClip = source.clip;
-                var firstMonitor = type.GetField("_monitor", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(component);
                 var firstPump = type.GetField("_lastPlayback", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(component);
                 if (completeInput)
                 {
@@ -197,7 +204,6 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio.Tests
                         Assert.That(parameters.GetValue(component), Is.Not.Null);
                         Assert.That(factoryCalls, Is.EqualTo(1), "Natural speech restarts must retain the native context, HRTF and effect.");
                         Assert.That(source.clip, Is.SameAs(firstClip));
-                        Assert.That(type.GetField("_monitor", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(component), Is.SameAs(firstMonitor));
                         var secondPump = type.GetField("_lastPlayback", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(component);
                         Assert.That(secondPump, Is.Not.SameAs(firstPump), "Generation admission must remain immutable.");
                         var pcm = firstPump.GetType().GetField("_stereo", BindingFlags.Instance | BindingFlags.NonPublic);
@@ -274,8 +280,8 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio.Tests
                     while (downstream.PeakStereoDifference <= 1e-6f && Time.realtimeSinceStartup < deadline) yield return null;
                     Assert.That(downstream.PeakStereoDifference, Is.GreaterThan(1e-6f));
                     Assert.That(mailbox.TrySetBlocked(mailbox.Generation, true), Is.True);
-                    yield return null;
-                    yield return null; // Exclude a filter invocation which began before the control write.
+                    // Speech already written ahead of the play position before the gate still plays out.
+                    yield return new WaitForSecondsRealtime(.2f);
                     downstream.ResetPeak();
                     long frameStart = downstream.Frames;
                     deadline = Time.realtimeSinceStartup + 3;
@@ -301,9 +307,6 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio.Tests
                     var pump = decoder.GetType().GetProperty("Pump", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(decoder);
                     var read = (Action<float[]>)Delegate.CreateDelegate(typeof(Action<float[]>), pump, pump.GetType().GetMethod("ReadStereo"));
                     var oldClip = source.clip;
-                    var oldMonitor = type.GetField("_monitor", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(component);
-                    var lateOutput = (Action<float[], int>)Delegate.CreateDelegate(typeof(Action<float[], int>), oldMonitor,
-                        oldMonitor.GetType().GetMethod("OnAudioFilterRead", BindingFlags.Instance | BindingFlags.NonPublic));
                     var output = new float[512];
                     volume.Armed = true;
                     var worker = Task.Run(() =>
@@ -364,14 +367,6 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio.Tests
                     source.Stop();
                     yield return null;
                     yield return null;
-                    var replacementPump = decoder.GetType().GetProperty("Pump", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(decoder);
-                    var delivered = pump.GetType().GetProperty("DeliveredFrames");
-                    long replacementFrames = (long)delivered.GetValue(replacementPump);
-                    long retiredFrames = (long)delivered.GetValue(pump);
-                    lateOutput(output, 2);
-                    Assert.That((long)delivered.GetValue(pump), Is.EqualTo(retiredFrames + output.Length / 2));
-                    Assert.That((long)delivered.GetValue(replacementPump), Is.EqualTo(replacementFrames),
-                        "An old source-filter callback must report only to its immutable retired generation.");
                 }
                 go.SetActive(false);
                 Assert.That(source.isPlaying, Is.False);
