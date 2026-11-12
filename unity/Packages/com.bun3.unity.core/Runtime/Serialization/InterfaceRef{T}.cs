@@ -26,7 +26,7 @@ namespace Bun3.Unity.Core.Serialization
 
         /// <summary>
         /// Maps an object dropped in the inspector to the object to store: itself when it implements <typeparamref name="T"/>,
-        /// the first implementing component when it is a <see cref="GameObject"/>, otherwise null.
+        /// otherwise the first implementing component on its <see cref="GameObject"/> (or on the dropped component's GameObject), otherwise null.
         /// </summary>
         /// <param name="dropped">Object assigned by the user.</param>
         /// <returns>The object to serialize, or null when nothing on it implements <typeparamref name="T"/>.</returns>
@@ -34,7 +34,8 @@ namespace Bun3.Unity.Core.Serialization
         {
             if (dropped == null) return null;
             if (dropped is T) return dropped;
-            return dropped is GameObject go && go.TryGetComponent(typeof(T), out var component) ? component : null;
+            var go = dropped is Component c ? c.gameObject : dropped as GameObject;
+            return go != null && go.TryGetComponent(typeof(T), out var component) ? component : null;
         }
     }
 }

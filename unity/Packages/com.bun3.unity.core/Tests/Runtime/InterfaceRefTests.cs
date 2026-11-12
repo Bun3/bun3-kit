@@ -52,5 +52,14 @@ namespace Bun3.Unity.Core.Tests
 
             Assert.That(InterfaceRef<IProbe>.Resolve(go), Is.SameAs(probe));
         }
+
+        [Test]
+        public void ResolvePicksImplementingSiblingFromComponent()
+        {
+            go = new GameObject("probe");
+            var probe = go.AddComponent<Probe>();
+
+            Assert.That(InterfaceRef<IProbe>.Resolve(go.transform), Is.SameAs(probe));
+        }
     }
 }

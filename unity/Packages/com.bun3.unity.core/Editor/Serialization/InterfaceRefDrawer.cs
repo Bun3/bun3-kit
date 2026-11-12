@@ -18,9 +18,10 @@ namespace Bun3.Unity.Core.Editor.Serialization
             var target = property.FindPropertyRelative("target");
             var refType = RefType(fieldInfo.FieldType);
             var interfaceType = refType.GetGenericArguments()[0];
-            label = new GUIContent(label.text, interfaceType.Name);
+            label = new GUIContent(label.text, string.IsNullOrEmpty(label.tooltip) ? interfaceType.Name : label.tooltip);
 
             EditorGUI.BeginProperty(position, label, property);
+            EditorGUI.showMixedValue = target.hasMultipleDifferentValues;
             EditorGUI.BeginChangeCheck();
             var dropped = EditorGUI.ObjectField(position, label, target.objectReferenceValue, typeof(Object), true);
             if (EditorGUI.EndChangeCheck())
@@ -29,6 +30,7 @@ namespace Bun3.Unity.Core.Editor.Serialization
                 if (dropped == null || resolved != null) target.objectReferenceValue = resolved;
                 else Debug.LogWarning(dropped.name + " does not implement " + interfaceType.Name, dropped);
             }
+            EditorGUI.showMixedValue = false;
             EditorGUI.EndProperty();
         }
 
