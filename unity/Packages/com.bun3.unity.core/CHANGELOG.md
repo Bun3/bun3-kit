@@ -5,6 +5,13 @@ All notable changes to this package will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.1] - 2026-11-12
+
+### Fixed
+
+- `InterfaceRef<T>.Resolve` also resolves a dropped component that is not a `T` through its GameObject, so dragging any component of the right object works.
+- `InterfaceRefDrawer` keeps a field's `[Tooltip]` (the interface name is only the fallback) and shows the mixed-value state when several objects are edited.
+
 ## [0.7.0] - 2026-11-12
 
 ### Added
