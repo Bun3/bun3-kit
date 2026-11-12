@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.7.0] - 2026-11-12
+
+### Changed
+
+- Native pooled SFX output now renders through the Steam Audio Unity spatializer instead of a managed `OnAudioFilterRead` driver, so no managed code runs on the audio thread and a stop-the-world GC no longer stalls the mixer (music included). Unity plays the authored clip; `SteamAudioSoundOutput` only writes spatializer parameters on the main thread.
+- `SteamAudioSoundSetup.ApplyNativeOutput(config, acousticOutputs)` drops the decoded-PCM budget and the `PrepareDefinition` hook, and logs the detected spatializer support once.
+- Mono clips get a √2 pathing gain because Unity feeds them into the spatializer at 1/√2 per channel; positional loudness matches the previous renderer.
+- `SteamAudioSetupValidator` also warns when no spatializer plugin is selected.
+
+### Added
+
+- `Native~/steam-audio-4.8.1-unity-pathing-width.patch` and its build in `build_diagnostics.py`: a Bun3 `audioplugin_phonon.dll` with spatializer parameter 34, pathing stereo width (near-field mono). The stock plugin still works without near-field mono.
+- `SteamAudioSpatializer.Detect`/`Classify` (`Missing`, `Stock`, `Patched`) and `SteamAudioSpatializerParams`.
+- `SteamAudioSoundOutput.SetSimulationSource`, `SetPath`, `Block`, `IsActive`, `IsBlocked`, `HasSimulationSource`, `Generation`.
+- `SteamAudioGcStallTests` (explicit; run alone in a fresh process).
+
+### Removed
+
+- `SteamAudioClipCache`, `SteamAudioSoundRuntime`, the managed SFX driver and retirement host, `SteamAudioSoundOutput.CurrentParameters`/`Fault`, and the `ClipNotPrepared`, `OutputFormatChanged`, `UnsupportedOutputChannels` and `ProcessingFailed` failures.
+
+### Migration
+
+1. Set **Project Settings > Audio > Spatializer Plugin** to **Steam Audio Spatializer**.
+2. Build and install the patched `audioplugin_phonon.dll` (`Native~/README.md`) for near-field mono.
+3. Call `ApplyNativeOutput(config, acousticOutputs)` without the byte budget; remove any decoded-cache setting.
+
 ## [0.6.1] - 2026-11-05
 
 ### Fixed

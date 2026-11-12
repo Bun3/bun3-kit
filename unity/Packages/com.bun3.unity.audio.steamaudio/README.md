@@ -102,7 +102,8 @@ Prerequisites:
 
 - Import and activate the SDK as described above. In a custom application asmdef, reference `Bun3.Unity.Audio` and `Bun3.Unity.Audio.SteamAudio`, and gate it with `BUN3_STEAMAUDIO` and `STEAMAUDIO_ENABLED` if it is optional.
 - Supply a valid `PlanarAcousticMap` whose bake, occupancy mask and native coordinate frame describe the same geometry. Creating a map is a loading/editor task described below; this component does not bake an empty map automatically.
-- Assign a SoundDef with effective spatial mode **Positional**, a loaded mono/stereo **Decompress On Load** clip, and an audible volume/distance profile. Resolve Addressables before preparation if used. Place this component and the active AudioListener inside connected walkable cells and the baked probe coverage.
+- Set **Project Settings > Audio > Spatializer Plugin** to **Steam Audio Spatializer**. Install the patched `audioplugin_phonon.dll` from `Native~` for near-field mono; the stock plugin renders everything else.
+- Assign a SoundDef with effective spatial mode **Positional**, a mono or stereo clip, and an audible volume/distance profile. Resolve Addressables before preparation if used. Place this component and the active AudioListener inside connected walkable cells and the baked probe coverage.
 - Use a working stereo Unity audio output and unmuted mixer. Outputs handle audio device and format changes themselves; see the note after the example.
 
 Save as `PlanarSoundExample.cs`, attach it to a scene object, and assign both assets:
@@ -118,7 +119,6 @@ public sealed class PlanarSoundExample : MonoBehaviour
     [SerializeField] private PlanarAcousticMap map = null;
     [SerializeField] private SoundDef sound = null;
 
-    private SteamAudioClipCache cache;
     private SoundSystem sounds;
     private PlanarAcousticOutputs outputs;
     private PlanarAcousticSessionScope session;
@@ -131,8 +131,6 @@ public sealed class PlanarSoundExample : MonoBehaviour
                 throw new InvalidOperationException("Assign a map and positional sound.");
 
             outputs = new PlanarAcousticOutputs();
-            cache = new SteamAudioClipCache(64L * 1024 * 1024);
-            cache.PrepareDefinition(sound);
             sounds = new SoundSystem(new SoundSystemConfig
             {
                 SfxVoices = 8,
@@ -161,7 +159,7 @@ public sealed class PlanarSoundExample : MonoBehaviour
 
     private ISoundVoiceOutput CreateOutput(AudioSource source)
     {
-        var output = new SteamAudioSoundOutput(source, cache);
+        var output = new SteamAudioSoundOutput(source);
         outputs.Register(new PlanarAcousticSfxBinding(source, output));
         return output;
     }
@@ -180,15 +178,13 @@ public sealed class PlanarSoundExample : MonoBehaviour
         outputs?.Clear();
         sounds?.Dispose();
         sounds = null;
-        cache?.Dispose();
-        cache = null;
     }
 }
 ```
 
 `SoundSystem` drives its own core update through the player loop; only the acoustic session needs the explicit `Tick`. Playback starts blocked until a covered native result is published. `SoundSystem` owns and disposes the outputs returned by `CreateVoiceOutput`; the registry only owns registrations. The closure and buffers are created during initialization, outside steady-state playback. This component intentionally plays once from its starting position; use the core's follow overload with an effective Follow definition for moving sounds.
 
-The session retries its world factory on audio-device changes, preserving registrations. The outputs handle the same event themselves, so the SoundSystem, pool and cache stay: a request active during the change ends with `OutputFormatChanged`, and a sample-rate or DSP frame-size change rebuilds each output's renderer for the new format.
+The session retries its world factory on audio-device changes, preserving registrations. Outputs keep no per-device state: Unity keeps playing the authored clip and every play re-applies the spatializer parameters.
 
 ## Native path PCM rendering
 
@@ -246,39 +242,20 @@ Create/load/dispose on the Unity main/control thread. Supported SDK deserializat
 var acousticOutputs = new PlanarAcousticOutputs(); // the list your acoustic session reads
 var config = SteamAudioSoundSetup.ApplyNativeOutput(
     new SoundSystemConfig { SfxVoices = 24 },
-    maximumDecodedBytes: 64L * 1024 * 1024,
     acousticOutputs);
 SoundSystem.Initialize(catalog, config);
 SoundSystem.PlayAt("door.open", doorPosition);
 ```
 
-It sets `OcclusionChecksPerFrame = 0`, gives every pooled voice a `SteamAudioSoundOutput` from one shared runtime and one `SteamAudioClipCache`, decodes each definition's positional clips when the core prepares it, and registers one `PlanarAcousticSfxBinding` per voice in `acousticOutputs`. Disposing the system (`SoundSystem.Shutdown`) unregisters the bindings and releases the cache and runtime, so the same config can initialize again; use one live system per config. It throws when `CreateVoiceOutput` is already set. This is a different path from `Apply`, which attaches the SDK's `SteamAudioSource` to voices; use one or the other. Positional voices start blocked until an acoustic session publishes a covered path, so without a session (for example in a menu) only 2D sounds are heard.
+It sets `OcclusionChecksPerFrame = 0`, gives every pooled voice a `SteamAudioSoundOutput`, and registers one `PlanarAcousticSfxBinding` per voice in `acousticOutputs`. On the first voice it reports `SteamAudioSpatializer.Detect()` once: an error when the Steam Audio spatializer is not selected (positional sound then plays unspatialized) and a warning when the stock plugin lacks the pathing stereo width. Disposing the system (`SoundSystem.Shutdown`) unregisters the bindings, so the same config can initialize again; use one live system per config. It throws when `CreateVoiceOutput` is already set. This is a different path from `Apply`, which attaches the SDK's `SteamAudioSource` to voices; use one or the other. Positional voices start blocked until an acoustic session publishes a covered path, so without a session (for example in a menu) only 2D sounds are heard.
 
-To assemble the pool by hand instead, create one output per prewarmed source through `SoundSystemConfig.CreateVoiceOutput`, retain the output/source pairs for application simulation updates, and prepare every positional clip before playback:
+To assemble the pool by hand, return `new SteamAudioSoundOutput(source)` from `SoundSystemConfig.CreateVoiceOutput` and register a `PlanarAcousticSfxBinding(source, output)` with the acoustic session's outputs.
 
-```csharp
-var cache = new SteamAudioClipCache(maximumDecodedBytes: 64L * 1024 * 1024);
-cache.PrepareClips(positionalClips);
-var config = new SoundSystemConfig
-{
-    SfxVoices = 24,
-    OcclusionChecksPerFrame = 0,
-    CreateVoiceOutput = source => new SteamAudioSoundOutput(source, cache)
-};
-var sounds = new SoundSystem(config);
-```
+No managed code runs on the audio thread. Unity plays the authored clip (pitch, loop, volume, fades and mixer routing stay on the `AudioSource`), and the Steam Audio Unity spatializer renders the pathing output of the registered simulation source natively. Each published path writes, on the main thread, the pathing mix level (path gain, or zero while blocked), the pathing stereo width (`SteamAudioSpatializerParams.PathingStereoWidth`, patched plugin only) and EQ normalization; direct and reflection mixes are zero. Unity feeds a mono clip into the spatializer at 1/√2 per channel, so mono clips get a √2 pathing gain to keep the level of a stereo clip. Nonpositional requests return Unsupported and play unspatialized. A non-looping voice completes when Unity stops playing it.
 
-This construction fragment does not yet publish simulation parameters or prepare the core definition. Use the complete planar example above, or implement the lower-level publication/coverage contract below, before positional playback.
+A managed audio callback (`OnAudioFilterRead`, `PCMReaderCallback`) attaches the mixer thread to the scripting runtime, and every later stop-the-world GC then stalls all audio, including music. Keep such callbacks out of shipping builds; `SteamAudioGcStallTests` checks this in a fresh process.
 
-The cache budget counts managed float PCM in addition to Unity's own asset memory. Preparation accepts loaded mono/stereo Decompress On Load clips and commits a batch only after its complete validation/copy succeeds. Runtime-created streaming clips can report Decompress On Load while still rejecting `GetData`; Unity emits a readability diagnostic and the cache rejects them. No loading/decompression/cache growth occurs inside Play or an audio callback. Disposing the cache drops its references; outputs retain their current immutable PCM through retirement and release it during reuse/disposal.
-
-Each output prewarms a renderer, buffers, reusable parameter storage; the runtime supplies one shared looping stereo flatline clip. Its source filter reads cached PCM, applies forward pitch through a linear interpolating cursor, downmixes stereo positional input to a point source, and renders native stereo. It multiplies that output into the driver envelope, preserving Unity source/fade/mixer gain once. Unity spatialization, rolloff and Doppler are bypassed for handled positional voices. Nonpositional/UI requests keep the original clip and pass through untouched. Missing prepared data or unsupported output format returns Unavailable, never dry positional fallback.
-
-Logical pitch clamps to 0..3; zero freezes input and effect progress while writing silence. This implements forward pitch/rate semantics, not Unity's proprietary resampler. Natural completion drains the native terminal input overlap and convolution tail, then observes one subsequent source-filter block before releasing the core voice. Stop/fade/steal/dispose retire immediately. A held reader delays reset/reuse and native release; an independent precreated main-thread host survives source destruction until that reader releases. No new clip, source, PCM array or producer object is needed per play. An audio device change ends the requests active at that moment with `OutputFormatChanged` and recreates the driver clip if Unity dropped its data. A sample-rate or DSP frame-size change also creates one new HRTF and swaps each output's renderer and frame buffers once no processing reader holds it; a renderer from a custom factory is replaced by a default one of the same Ambisonics order. Sources and cached PCM stay.
-
-`CurrentParameters` is a valid immutable `PathParameterLease` only for an active handled request; `MaxDistance` exposes that request's authored range and `MinDistance` its nonnegative minimum. Forward `MinDistance` to the corresponding simulation source before its next run; user/bus gain belongs to the Unity source. Invalid nonfinite minimum distances return Unavailable. `StartBlocked` defaults true. Publish a current copied native result through `lease.TryPublish(sh, new PathRenderSettings(...))`, then explicitly call `lease.TrySetBlocked(false)` once coverage and application policy permit output. Keep the token itself; old tokens cannot acquire a replacement generation. Path gain excludes user/bus volume and distance attenuation already encoded in SH. Probe coverage, geometry revisions and room permissions remain application-owned.
-
-`SteamAudioPathRenderer.CreateDefault(rate, frame)` creates a retained default context/HRTF pair without requiring map simulation to exist first. A custom renderer factory can instead share properly retained native resources across the pool. `PathParameterMailbox` supplies one fixed three-slot implementation to SFX and voice consumers; one control writer and one processing reader are supported. Reusing its storage requires retirement and reader quiescence, with exclusive admission during the generation transition.
+`SteamAudioPathRenderer.CreateDefault(rate, frame)` creates a retained default context/HRTF pair without requiring map simulation to exist first. A custom renderer factory can instead share properly retained native resources across the pool. `PathParameterMailbox` supplies one fixed three-slot implementation to voice consumers; one control writer and one processing reader are supported. Reusing its storage requires retirement and reader quiescence, with exclusive admission during the generation transition.
 
 The PlayMode regression tests cover native source-filter output from prepared stereo PCM, source and mixer gain measured through `AudioListener.GetOutputData`, pitch/completion, pause/tail/reuse, source destruction under a held processing claim, warm allocations and delayed-reader admission. A dedicated EditMode test exercises the default renderer factory. These test contracts concern engine PCM behavior; they do not establish hardware audibility or every platform's backend. See the test section below for running the current suites.
 
@@ -343,8 +320,7 @@ The fingerprint is metadata, not automatic comparison with current game geometry
 
 | Object | Lifetime and thread contract |
 | --- | --- |
-| SoundSystem / SteamAudioSoundOutput | Create/dispose from Unity control code. SoundSystem owns factory-returned outputs; native processing runs through the source audio filter. Held processing readers defer final native release. |
-| SteamAudioClipCache | Prepare during loading on the Unity control thread. Its fixed byte budget covers decoded float PCM; disposing drops cache references, while active outputs may still retain their PCM. |
+| SoundSystem / SteamAudioSoundOutput | Create/dispose from Unity control code. SoundSystem owns factory-returned outputs; rendering runs in the Steam Audio spatializer with no managed audio callback. The spatializer retains registered simulation sources itself. |
 | PlanarAcousticSessionScope | Owns world reconstruction and device subscription, not playback outputs or cached clips. Dispose before the SoundSystem/output pool. |
 | PlanarAcousticWorld / simulation / mesh scopes | Use their creating control thread; dispose in dependency order. Source capacity is fixed and registration can fail without throwing. |
 | SteamAudioAcousticSceneScope | Owns loaded scene/probes and a retained context. Exposed wrappers are borrowed; callers must not release them. |
@@ -363,7 +339,7 @@ The low-level renderer supports orders 0 through 3; planar bindings use order 1.
 | UPM cannot resolve a Bun3 dependency | Add explicit Git/embedded entries for the complete chain, or configure the registry serving the declared versions. |
 | Legacy spatializer has no effect | Select Steam Audio Spatializer and supply SDK scene/geometry setup. The validator does not warn for an empty selection. |
 | Native positional sound is silent | Check definition/cache preparation, active listener, mono/stereo readable clip, positive profile gain, connected grid cells and probe coverage. Native output deliberately starts blocked. |
-| Output becomes unavailable | Inspect `SteamAudioSoundOutput.Failure` and `Fault`; check clip preparation, retired readers, sample rate and DSP frame size. `OutputFormatChanged` ends a request that was active during a device change; the next play uses the rebuilt renderer. |
+| Positional sound is dry or silent | Check the startup log from `ApplyNativeOutput`: select **Steam Audio Spatializer**, install the patched plugin for near-field mono, and inspect `SteamAudioSoundOutput.Failure`, `IsBlocked` and `HasSimulationSource`. |
 | A source never receives a path | Check the world's source capacity (default 64), generation validity, simulation Tick and current geometry. Stale or missing results remain blocked. |
 | World creation fails or stays null | Inspect `LastInitializationError`; check asset validation/native libraries, then call `TryReinitialize` after correcting the cause. A Tick exception releases the world and is rethrown. |
 | Gain falls faster than expected | Remove duplicate distance/user-volume multiplication. Native SH includes distance attenuation; the core owns source/fade/mixer gain. |
