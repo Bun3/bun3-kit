@@ -154,7 +154,8 @@ namespace Bun3.Unity.Audio.SteamAudio.Tests
             Publish(world, binding, source, new Vector2(10, 0), Vector2.zero);
             Assert.That(output.IsBlocked, Is.True);
             Assert.That(Param(source, PathingMix), Is.Zero);
-            yield return null;
+            yield return new WaitForSecondsRealtime(.2f);
+            Assert.That(Rms(0), Is.LessThan(1e-6), "A blocked path renders silence.");
             output.Dispose();
             Object.Destroy(go);
         }
@@ -172,8 +173,18 @@ namespace Bun3.Unity.Audio.SteamAudio.Tests
             Assert.That(output.TryStart(_def, _mono, 1, SpatialMode.Positional), Is.EqualTo(VoiceOutputStartResult.Started));
             source.Play();
 
-            Publish(world, binding, source, new Vector2(-1.6f, 0), new Vector2(-2, 0));
+            for (int i = 0; i < 8; i++)
+            {
+                Publish(world, binding, source, new Vector2(-1.6f, 0), new Vector2(-2, 0));
+                yield return new WaitForSecondsRealtime(.05f);
+            }
             Assert.That(Param(source, PathingWidth), Is.Zero, "Within Mono Distance the pathing output is dual mono.");
+            var left = new float[1024];
+            var right = new float[1024];
+            AudioListener.GetOutputData(left, 0);
+            AudioListener.GetOutputData(right, 1);
+            Assert.That(Rms(0), Is.GreaterThan(0), "The near-field voice must be audible.");
+            for (int i = 0; i < left.Length; i++) Assert.That(left[i], Is.EqualTo(right[i]).Within(1e-5f), "frame " + i);
             Publish(world, binding, source, new Vector2(2, 0), new Vector2(-2, 0));
             Assert.That(Param(source, PathingWidth), Is.EqualTo(1), "Beyond Full Spatial Distance the output keeps full width.");
             yield return null;
@@ -242,13 +253,63 @@ namespace Bun3.Unity.Audio.SteamAudio.Tests
             return Math.Sqrt(sum / 4096);
         }
 
-        static double Rms()
+        static double Rms(int channel = 0)
         {
             var left = new float[2048];
-            AudioListener.GetOutputData(left, 0);
+            AudioListener.GetOutputData(left, channel);
             double sum = 0;
             foreach (float sample in left) sum += sample * sample;
             return Math.Sqrt(sum / left.Length);
+        }
+
+        [UnityTest]
+        public IEnumerator ListenerPauseDoesNotCompleteOneShot()
+        {
+            var go = new GameObject("Native SFX one-shot");
+            var source = go.AddComponent<AudioSource>();
+            source.clip = _mono;
+            var output = new SteamAudioSoundOutput(source);
+            var oneShot = ScriptableObject.CreateInstance<SoundDef>();
+            oneShot.Clips = new[] { _mono };
+            oneShot.Spatial = SpatialMode.Positional;
+            try
+            {
+                Assert.That(output.TryStart(oneShot, _mono, 1, SpatialMode.Positional), Is.EqualTo(VoiceOutputStartResult.Started));
+                source.Play();
+                yield return null;
+                AudioListener.pause = true;
+                yield return null;
+                Assert.That(output.IsComplete, Is.False, "A paused listener must not end positional one-shots.");
+            }
+            finally
+            {
+                AudioListener.pause = false;
+                output.Dispose();
+                Object.Destroy(go);
+                Object.Destroy(oneShot);
+            }
+        }
+
+        [UnityTest]
+        public IEnumerator PublishReappliesPathingOnlyConfiguration()
+        {
+            using var world = World();
+            var go = new GameObject("Native SFX voice");
+            var source = go.AddComponent<AudioSource>();
+            source.clip = _mono;
+            var output = new SteamAudioSoundOutput(source);
+            using var binding = new PlanarAcousticSfxBinding(source, output);
+            Assert.That(output.TryStart(_def, _mono, 1, SpatialMode.Positional), Is.EqualTo(VoiceOutputStartResult.Started));
+            source.Play();
+            // A recreated effect instance comes back with the plugin defaults: direct path on, pathing off.
+            source.SetSpatializerFloat(6, 0);
+            source.SetSpatializerFloat(23, 1);
+            Publish(world, binding, source, new Vector2(2, 0), Vector2.zero);
+            Assert.That(Param(source, 6), Is.EqualTo(1));
+            Assert.That(Param(source, 23), Is.Zero);
+            yield return null;
+            output.Dispose();
+            Object.Destroy(go);
         }
 
         [UnityTest]

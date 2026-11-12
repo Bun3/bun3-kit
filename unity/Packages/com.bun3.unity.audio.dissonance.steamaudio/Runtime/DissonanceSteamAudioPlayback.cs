@@ -38,6 +38,7 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio
         private float[] _block;
         private readonly RingWrite[] _writes = new RingWrite[4];
         private float _leadSeconds = .06f;
+        private long _speechReported;
         private bool _startPending;
 
         /// <summary>Starts each speech generation blocked before its first PCM callback. Applies to future generations.</summary>
@@ -50,6 +51,9 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio
             get => _leadSeconds;
             set => _leadSeconds = value > 0 && !float.IsInfinity(value) ? value : throw new ArgumentOutOfRangeException(nameof(value));
         }
+
+        /// <summary>Times the current speech's play position overtook the written speech (main-thread stalls).</summary>
+        public int Underruns => _ring?.Underruns ?? 0;
 
         /// <summary>Gets the current generation's publication mailbox, or null between speech sessions.</summary>
         public DissonancePathMailbox Parameters => _decoder?.Pump?.Parameters;
@@ -239,7 +243,13 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio
                 Fill(current, 0);
                 _source.Play();
             }
-            else if (_source.isPlaying) Fill(current, _source.timeSamples);
+            else if (!_source.isPlaying || _clip == null || _clip.samples != _ring.LengthFrames)
+            {
+                // A device reset stops the source and can empty the clip; release the speaker for the next utterance.
+                RetireOutput();
+                return;
+            }
+            else Fill(current, _source.timeSamples);
             if (!current.HasOutputDrained) return;
 
             _decoder.Retire(false);
@@ -261,6 +271,7 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio
                 _rate = rate;
                 _frame = frame;
                 _ring = new VoiceClipRing(rate, _leadSeconds);
+                _speechReported = 0;
                 if (_block == null || _block.Length != _ring.BlockFrames * 2) _block = new float[_ring.BlockFrames * 2];
                 if (_clip != null && _clip.samples != _ring.LengthFrames) { Destroy(_clip); _clip = null; }
                 if (_clip == null) _clip = AudioClip.Create("Bun3 speech ring", _ring.LengthFrames, 2, rate, false);
@@ -294,8 +305,14 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio
         {
             if (_ring == null || _clip == null || _clip.samples != _ring.LengthFrames) return;
             int count = _ring.Plan(playFrame, _writes);
-            if (_ring.AdvancedFrames > 0) pump.RecordDeliveredFrames(_ring.AdvancedFrames);
             int block = _ring.BlockFrames;
+            // Report only played speech, in blocks, so underrun gaps neither end the speech early nor widen the drain margin.
+            for (long played = _ring.SpeechFramesPlayed; _speechReported < played;)
+            {
+                int frames = (int)Math.Min(block, played - _speechReported);
+                pump.RecordDeliveredFrames(frames);
+                _speechReported += frames;
+            }
             for (int i = 0; i < count; i++)
             {
                 var write = _writes[i];

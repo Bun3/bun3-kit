@@ -79,7 +79,9 @@ namespace Bun3.Unity.Audio.SteamAudio
         public SteamAudioSoundFailure Failure => _failure;
 
         /// <inheritdoc/>
-        public bool IsComplete => _failure != SteamAudioSoundFailure.None || IsActive && !_loop && !_source.isPlaying;
+        // A paused listener also reports isPlaying false; that is not the end of the clip.
+        public bool IsComplete => _failure != SteamAudioSoundFailure.None ||
+            IsActive && !_loop && !_source.isPlaying && !(AudioListener.pause && !_source.ignoreListenerPause);
 
         /// <inheritdoc/>
         public VoiceOutputStartResult TryStart(SoundDef definition, AudioClip selectedClip, float logicalPitch)
@@ -108,7 +110,6 @@ namespace Bun3.Unity.Audio.SteamAudio
             _source.spatialBlend = 1;
             _source.dopplerLevel = 0;
             _source.spatialize = true;
-            SteamAudioSpatializerParams.ConfigurePathingOnly(_source);
             Apply();
             return VoiceOutputStartResult.Started;
         }
@@ -173,6 +174,8 @@ namespace Bun3.Unity.Audio.SteamAudio
         private void Apply()
         {
             if (_source == null) return;
+            // Re-sent every time: a recreated effect instance comes back with the plugin defaults (direct on, pathing off).
+            SteamAudioSpatializerParams.ConfigurePathingOnly(_source);
             _source.SetSpatializerFloat(SteamAudioSpatializerParams.SimulationOutputsHandle, _unityHandle);
             bool audible = IsActive && !_blocked && _unityHandle >= 0;
             _source.SetSpatializerFloat(SteamAudioSpatializerParams.PathingMixLevel, audible ? _pathGain * _inputCompensation : 0);

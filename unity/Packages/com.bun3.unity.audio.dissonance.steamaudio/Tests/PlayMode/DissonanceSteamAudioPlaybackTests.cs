@@ -99,7 +99,10 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio.Tests
         [UnityTest]
         public IEnumerator ChannelSnapshotRemainsAvailableWhileDecoderReadIsHeld() => Exercise(true, false, metadata: true);
 
-        static IEnumerator Exercise(bool overlapReset, bool destroyWhileReading, bool completeInput = false, bool testGate = false, bool delayedPath = false, bool paced = false, bool reuse = false, bool metadata = false)
+        [UnityTest]
+        public IEnumerator ExternallyStoppedSourceReleasesTheSpeakerForTheNextUtterance() => Exercise(false, false, externalStop: true);
+
+        static IEnumerator Exercise(bool overlapReset, bool destroyWhileReading, bool completeInput = false, bool testGate = false, bool delayedPath = false, bool paced = false, bool reuse = false, bool metadata = false, bool externalStop = false)
         {
             var type = PlaybackType();
             var context = new SA.Context();
@@ -180,6 +183,22 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio.Tests
                 Assert.That((float)type.GetProperty("PeakStereoDifference").GetValue(component), Is.GreaterThan(1e-6f), "Real streaming callbacks must process native directional stereo.");
                 var firstClip = source.clip;
                 var firstPump = type.GetField("_lastPlayback", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(component);
+                if (externalStop)
+                {
+                    // A device reset stops sources without telling the playback component.
+                    source.Stop();
+                    deadline = Time.realtimeSinceStartup + 2;
+                    while (playback.IsSpeaking && Time.realtimeSinceStartup < deadline) yield return null;
+                    Assert.That(playback.IsSpeaking, Is.False, "A stopped source must not latch the speaker as talking.");
+                    playback.StartPlayback();
+                    for (uint packet = 200; packet < 230; packet++)
+                        playback.ReceiveAudioPacket(new VoicePacket(playback.PlayerName, ChannelPriority.Default, 1, true,
+                            new ArraySegment<byte>(bytes), packet, channels));
+                    deadline = Time.realtimeSinceStartup + 5;
+                    while (!source.isPlaying && Time.realtimeSinceStartup < deadline) yield return null;
+                    Assert.That(source.isPlaying, Is.True, "The next utterance must play again.");
+                    yield break;
+                }
                 if (completeInput)
                 {
                     deadline = Time.realtimeSinceStartup + 2;

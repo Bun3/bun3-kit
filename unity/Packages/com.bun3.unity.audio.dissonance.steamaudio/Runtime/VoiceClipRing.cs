@@ -25,13 +25,13 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio
     /// </summary>
     public sealed class VoiceClipRing
     {
-        private long _played, _written, _silenced;
+        private long _played, _written, _silenced, _origin, _gaps;
         private int _lastPlay;
         private bool _started;
 
         /// <summary>Creates a ring for a sample rate.</summary>
         /// <exception cref="ArgumentOutOfRangeException">A rate below 100 Hz, a nonpositive lead, or a length not above the lead.</exception>
-        public VoiceClipRing(int sampleRate, float leadSeconds = .06f, float lengthSeconds = 1f)
+        public VoiceClipRing(int sampleRate, float leadSeconds = .06f, float lengthSeconds = 4f)
         {
             if (sampleRate < 100) throw new ArgumentOutOfRangeException(nameof(sampleRate));
             if (!(leadSeconds > 0)) throw new ArgumentOutOfRangeException(nameof(leadSeconds));
@@ -57,6 +57,12 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio
         public int Underruns { get; private set; }
 
         /// <summary>
+        /// Speech frames the play position has passed, excluding the silent gaps that underruns inserted. Can step back
+        /// by under one block at an underrun; callers report only increases.
+        /// </summary>
+        public long SpeechFramesPlayed => Math.Max(0, Math.Min(_played, _written) - _origin - _gaps);
+
+        /// <summary>
         /// Plans the writes for the clip's current play frame. Returns how many entries of <paramref name="writes"/> were
         /// filled: speech first, then silence, each split where it wraps. Four entries always suffice.
         /// </summary>
@@ -67,7 +73,7 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio
             {
                 _started = true;
                 _lastPlay = playFrame;
-                _played = _written = _silenced = playFrame;
+                _played = _written = _silenced = _origin = playFrame;
             }
             AdvancedFrames = (playFrame - _lastPlay + LengthFrames) % LengthFrames;
             _lastPlay = playFrame;
@@ -75,7 +81,9 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio
             if (_written < _played)
             {
                 Underruns++;
-                _written = CeilBlock(_played);
+                long resync = CeilBlock(_played);
+                _gaps += resync - _written;
+                _written = resync;
             }
             int count = 0;
             long target = CeilBlock(_played + LeadFrames);

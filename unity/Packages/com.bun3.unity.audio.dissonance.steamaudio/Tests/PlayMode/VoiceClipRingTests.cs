@@ -22,7 +22,7 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio.Tests
         [Test]
         public void FirstPlanWritesLeadThenSilence()
         {
-            var ring = new VoiceClipRing(48000);
+            var ring = new VoiceClipRing(48000, lengthSeconds: 1f);
             Assert.That(ring.LengthFrames, Is.EqualTo(48000));
             Assert.That(ring.BlockFrames, Is.EqualTo(480));
             var writes = Plan(ring, 0);
@@ -34,7 +34,7 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio.Tests
         [Test]
         public void SteadyPlanWritesOnlyTheAdvance()
         {
-            var ring = new VoiceClipRing(48000);
+            var ring = new VoiceClipRing(48000, lengthSeconds: 1f);
             Plan(ring, 0);
             var writes = Plan(ring, 480);
             Assert.That(ring.AdvancedFrames, Is.EqualTo(480));
@@ -47,7 +47,7 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio.Tests
         [Test]
         public void OverrunResyncsWithoutRepeatingAudio()
         {
-            var ring = new VoiceClipRing(48000);
+            var ring = new VoiceClipRing(48000, lengthSeconds: 1f);
             Plan(ring, 0);
             var writes = Plan(ring, 10000);
             Assert.That(ring.Underruns, Is.EqualTo(1));
@@ -55,9 +55,29 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio.Tests
         }
 
         [Test]
+        public void DefaultRingOutlastsLongStalls()
+        {
+            Assert.That(new VoiceClipRing(48000).LengthFrames, Is.EqualTo(4 * 48000));
+        }
+
+        [Test]
+        public void SpeechFramesPlayedExcludeUnderrunGaps()
+        {
+            var ring = new VoiceClipRing(48000, lengthSeconds: 1f);
+            Plan(ring, 0);
+            Plan(ring, 1440);
+            Assert.That(ring.SpeechFramesPlayed, Is.EqualTo(1440));
+            Plan(ring, 10000);
+            Assert.That(ring.Underruns, Is.EqualTo(1));
+            Plan(ring, 10560);
+            Assert.That(ring.SpeechFramesPlayed, Is.EqualTo(4320 + 480),
+                "Only the written speech and the speech after the resync point count as delivered.");
+        }
+
+        [Test]
         public void WrapAroundSplitsWrites()
         {
-            var ring = new VoiceClipRing(48000);
+            var ring = new VoiceClipRing(48000, lengthSeconds: 1f);
             Plan(ring, 0);
             var writes = Plan(ring, 45600);
             AssertWrite(writes[0], 45600, 2400, false);
