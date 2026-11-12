@@ -6,6 +6,7 @@ Bun3 shared toolkit for Unity. General-purpose utilities used across Bun3 packag
 
 - **`Bun3.Unity.Core.Attributes.ReadOnlyAttribute`** — make a serialized field non-editable in the inspector.
 - **`UnifiedToggleGroup`** — preset-based unified toggle that produces identical results in editor and runtime, with custom-extensible options and cascading control of nested groups. Built-in implementations cover `CanvasGroup`, `Image`, `LayoutElement`, `GameObject` activation, and another `UnifiedToggleGroup` (for cascading).
+- **`Bun3.Unity.Core.Motion.Juice`** — punch, shake and flash feedback motions for UI and world objects. Each restores its target exactly, and repeated triggers never accumulate. Runs from a player-loop system, without a scene object.
 - **`Bun3.Common.Threading.CancellationScope`** — a structured cancellation-lifetime scope (a linked `CancellationTokenSource` in disposable form) for presentation/cutscene/staged-UI sequences, shipped in the shared `com.bun3.common` package. Cancelling a parent scope cancels every child; the core type is BCL-only, with `MonoBehaviour.CreateCancellationScope()` and a UniTask `Run(...)` provided as extensions in `Bun3.Unity.Core.Threading` (`CancellationScopeExtensions`). UniTask cancellation runs `try/finally` cleanup, so interrupted sequences leave consistent state.
 
 ## Requirements

@@ -5,6 +5,13 @@ All notable changes to this package will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-11-12
+
+### Added
+
+- `Bun3.Unity.Core.Motion.Juice` — short feedback motions for UI and world objects: `Punch(Transform)` (scale up and back), `Shake(Transform)` (sideways swings that shrink to rest, local units) and `Flash(Graphic)`/`Flash(SpriteRenderer)` (tint fading back to the own color). Each motion remembers the starting value and restores it exactly; re-triggering the same kind on the same target restarts from that value, so repeated triggers never accumulate. Runs on unscaled time from a `PlayerLoopSystemHelper` system after `LateUpdate`, without a scene object, and only in play mode.
+- Runtime tests covering exact restoration, re-trigger, and destroyed targets.
+
 ## [0.5.2] - 2026-09-14
 
 ### Fixed

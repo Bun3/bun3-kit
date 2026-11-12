@@ -1,10 +1,10 @@
 {
   "name": "com.bun3.unity.core",
   "displayName": "Bun3 Unity Core",
-  "version": "0.5.2",
+  "version": "0.6.0",
   "unity": "6000.3",
   "unityRelease": "14f1",
-  "description": "Bun3 shared toolkit for Unity. Includes ReadOnlyAttribute, UnifiedToggleGroup (N-preset toggle with extensible options and cascading groups), CancellationScope (structured cancellation-lifetime scope with UniTask helpers), and PlayerLoopSystemHelper (static per-frame callbacks via player-loop insertion).",
+  "description": "Bun3 shared toolkit for Unity. Includes ReadOnlyAttribute, UnifiedToggleGroup (N-preset toggle with extensible options and cascading groups), CancellationScope (structured cancellation-lifetime scope with UniTask helpers), PlayerLoopSystemHelper (static per-frame callbacks via player-loop insertion), and Juice (punch, shake and flash feedback motions that restore their targets exactly).",
   "author": {
     "name": "Bun3",
     "url": "https://github.com/Bun3",

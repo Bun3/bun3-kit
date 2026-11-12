@@ -22,6 +22,23 @@ public class Example : MonoBehaviour
 }
 ```
 
+## Juice
+
+`Juice` plays short feedback motions on UI and world objects and puts every target back exactly as it found it.
+
+```csharp
+using Bun3.Unity.Core.Motion;
+
+Juice.Punch(button.transform, scale: 1.15f, seconds: 0.12f); // grow and return
+Juice.Shake(panel.transform, distance: 6f, seconds: 0.18f);  // pixels for UI, world units for world objects
+Juice.Flash(image, Color.red, seconds: 0.15f);               // Graphic or SpriteRenderer
+```
+
+- Triggering the same kind on the same target again restarts from the remembered value, so mashing a button never leaves it bigger or shifted.
+- Motions use unscaled time and run after `LateUpdate` from a player-loop system; no scene object is needed. Calls outside play mode do nothing.
+- A destroyed target is dropped silently.
+- Do not target a property another script writes every frame; the two writes overwrite each other.
+
 ## UnifiedToggleGroup
 
 `UnifiedToggleGroup` lets you define a finite set of named **presets** for a UI panel (or any GameObject hierarchy) and switch between them with a single call. Each child toggle owns a list of **options** describing how its target component should look in each preset. Because the same invocation path is used in editor and at runtime, what you preview in the inspector is exactly what ships.
