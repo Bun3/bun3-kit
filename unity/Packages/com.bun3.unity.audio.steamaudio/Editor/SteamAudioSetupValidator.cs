@@ -18,14 +18,14 @@ namespace Bun3.Unity.Audio.SteamAudio.Editor
         private static void Validate()
         {
             var configured = ReadConfiguredSpatializerName();
-            if (string.IsNullOrEmpty(configured) || configured == ExpectedSpatializerName)
+            if (configured == ExpectedSpatializerName)
             {
                 return;
             }
 
             Debug.LogWarning(
                 $"Bun3.Unity.Audio.SteamAudio: project's Audio spatializer plugin is " +
-                $"\"{configured}\", not \"{ExpectedSpatializerName}\". Set it in " +
+                $"\"{(string.IsNullOrEmpty(configured) ? "(none)" : configured)}\", not \"{ExpectedSpatializerName}\". Set it in " +
                 "Project Settings > Audio > Spatializer Plugin for the Steam Audio adapter to work.");
         }
 
