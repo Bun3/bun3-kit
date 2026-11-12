@@ -47,6 +47,18 @@ The full preexisting audio suite is broader than this foundation run. In
 particular, its Addressables round-trip tests require the repository's
 `Assets/Bun3AudioTestAssets` and matching Addressables setup in the host.
 
+## GC mixer stall test
+
+`SteamAudioGcStallTests` is explicit and must run alone in a fresh Editor process: once any managed audio callback (`OnAudioFilterRead`, including test taps) has run in a process, every later GC stalls the mixer, so running it after other playback tests reports a false failure. It lives in the `Bun3.Unity.Audio.SteamAudio.FreshProcess` namespace so the foundation filter above does not select it. Run it by full name:
+
+```powershell
+Unity.exe -batchmode -nographics -projectPath <host> -runTests -testPlatform PlayMode `
+    -testFilter "Bun3.Unity.Audio.SteamAudio.FreshProcess.SteamAudioGcStallTests.GcDoesNotStallMixerAfterSpatializedPlayback" `
+    -testResults <results.xml> -logFile <editor.log>
+```
+
+The host needs the Steam Audio spatializer selected. With the patched plugin the near-field width tests run; with the stock plugin they are inconclusive.
+
 ## Optional acoustics, NGO and combined native playback tests
 
 Add `-IncludeExtensions` to run the original foundation suites together with

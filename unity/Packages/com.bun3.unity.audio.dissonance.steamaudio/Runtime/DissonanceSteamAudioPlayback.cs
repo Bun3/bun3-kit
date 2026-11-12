@@ -34,11 +34,26 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio
         private long _generation;
         private Exception _fault;
         private DissonancePathPlayback _lastPlayback;
-        private DissonanceOutputMonitor _monitor;
+        private VoiceClipRing _ring;
+        private float[] _block;
+        private readonly RingWrite[] _writes = new RingWrite[4];
+        private float _leadSeconds = .06f;
+        private long _speechReported;
         private bool _startPending;
 
         /// <summary>Starts each speech generation blocked before its first PCM callback. Applies to future generations.</summary>
         public bool StartBlocked { get; set; }
+
+        /// <summary>Speech written ahead of the play position, in seconds (default 0.06). Applies from the next speech.</summary>
+        /// <exception cref="ArgumentOutOfRangeException">The value is not positive and finite.</exception>
+        public float LeadSeconds
+        {
+            get => _leadSeconds;
+            set => _leadSeconds = value > 0 && !float.IsInfinity(value) ? value : throw new ArgumentOutOfRangeException(nameof(value));
+        }
+
+        /// <summary>Times the current speech's play position overtook the written speech (main-thread stalls).</summary>
+        public int Underruns => _ring?.Underruns ?? 0;
 
         /// <summary>Gets the current generation's publication mailbox, or null between speech sessions.</summary>
         public DissonancePathMailbox Parameters => _decoder?.Pump?.Parameters;
@@ -225,15 +240,21 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio
             if (_startPending)
             {
                 _startPending = false;
-                _monitor.StartOutput();
+                Fill(current, 0);
                 _source.Play();
             }
+            else if (!_source.isPlaying || _clip == null || _clip.samples != _ring.LengthFrames)
+            {
+                // A device reset stops the source and can empty the clip; release the speaker for the next utterance.
+                RetireOutput();
+                return;
+            }
+            else Fill(current, _source.timeSamples);
             if (!current.HasOutputDrained) return;
 
             _decoder.Retire(false);
             _source.Stop();
             _source.clip = null;
-            _monitor?.Unbind();
         }
 
         private void BeginNextOutput(int rate, int frame)
@@ -249,10 +270,11 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio
                 _decoder.Publish(session.Value, pump);
                 _rate = rate;
                 _frame = frame;
-                if (_monitor == null) _monitor = gameObject.AddComponent<DissonanceOutputMonitor>();
-                _monitor.Bind(pump);
-                // A silent driver avoids streaming-clip prefetch consuming the live decoder ahead of DSP time.
-                if (_clip == null) _clip = AudioClip.Create("Bun3 stereo speech", checked(frame * 4), 2, rate, false);
+                _ring = new VoiceClipRing(rate, _leadSeconds);
+                _speechReported = 0;
+                if (_block == null || _block.Length != _ring.BlockFrames * 2) _block = new float[_ring.BlockFrames * 2];
+                if (_clip != null && _clip.samples != _ring.LengthFrames) { Destroy(_clip); _clip = null; }
+                if (_clip == null) _clip = AudioClip.Create("Bun3 speech ring", _ring.LengthFrames, 2, rate, false);
                 _source.clip = _clip;
                 _startPending = true;
             }
@@ -274,8 +296,33 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio
             }
             if (_clip != null) Destroy(_clip);
             _clip = null;
-            if (_monitor != null) Destroy(_monitor);
-            _monitor = null;
+            _ring = null;
+        }
+
+        // Main thread: renders the planned blocks ahead of the play position into the looping clip, so the audio thread
+        // only plays native data. A stalled main thread plays the silence written after the lead.
+        private void Fill(DissonancePathPlayback pump, int playFrame)
+        {
+            if (_ring == null || _clip == null || _clip.samples != _ring.LengthFrames) return;
+            int count = _ring.Plan(playFrame, _writes);
+            int block = _ring.BlockFrames;
+            // Report only played speech, in blocks, so underrun gaps neither end the speech early nor widen the drain margin.
+            for (long played = _ring.SpeechFramesPlayed; _speechReported < played;)
+            {
+                int frames = (int)Math.Min(block, played - _speechReported);
+                pump.RecordDeliveredFrames(frames);
+                _speechReported += frames;
+            }
+            for (int i = 0; i < count; i++)
+            {
+                var write = _writes[i];
+                if (write.Silence) Array.Clear(_block, 0, _block.Length);
+                for (int offset = 0; offset < write.Count; offset += block)
+                {
+                    if (!write.Silence) pump.ReadStereo(_block);
+                    _clip.SetData(_block, write.Start + offset);
+                }
+            }
         }
 
         private void OnDisable() => RetireOutput();

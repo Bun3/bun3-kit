@@ -1,0 +1,140 @@
+diff --git a/unity/src/native/spatialize_effect.cpp b/unity/src/native/spatialize_effect.cpp
+index 09d68ba..8a5a7ec 100644
+--- a/unity/src/native/spatialize_effect.cpp
++++ b/unity/src/native/spatialize_effect.cpp
+@@ -60,6 +60,7 @@ enum Params
+     SIMULATION_OUTPUTS_HANDLE,
+     PERSPECTIVE_CORRECTION,
+     PATHING_NORMALIZEEQ,
++    PATHING_STEREOWIDTH,
+     NUM_PARAMS
+ };
+ 
+@@ -99,8 +100,28 @@ UnityAudioParameterDefinition gParamDefinitions[] =
+     { "SimOutHandle", "", "Simulation outputs handle.", std::numeric_limits<float>::min(), std::numeric_limits<float>::max(), -1.0f, 1.0f, 1.0f },
+     { "PerspectiveCorr", "", "Apply perspective correction to direct path.", 0.0f, 1.0f, 0.0f, 1.0f, 1.0f },
+     { "PathNormEQ", "", "Normalize pathing EQ.", 0.0f, 1.0f, 1.0f, 1.0f, 1.0f },
++    { "PathWidth", "", "Pathing stereo width: 0 dual mono, 1 full binaural.", 0.0f, 1.0f, 1.0f, 1.0f, 1.0f },
+ };
+ 
++// Mid/side width with a 20 ms linear slew toward target. Width 1 leaves samples untouched.
++void bun3ApplyPathingWidth(float* left, float* right, int frames, float& current, float target, int sampleRate)
++{
++    float step = 1.0f / std::max(1.0f, sampleRate * 0.02f);
++    for (int i = 0; i < frames; ++i)
++    {
++        if (current < target)
++            current = std::min(target, current + step);
++        else if (current > target)
++            current = std::max(target, current - step);
++        if (current == 1.0f)
++            continue;
++        float mid = (left[i] + right[i]) * 0.5f;
++        float side = (left[i] - right[i]) * (0.5f * current);
++        left[i] = mid + side;
++        right[i] = mid - side;
++    }
++}
++
+ #if !defined(IPL_OS_UNSUPPORTED)
+ 
+ struct State
+@@ -133,6 +154,8 @@ struct State
+     bool pathingBinaural;
+     float pathingMixLevel;
+     bool pathingNormalizeEQ;
++    float pathingStereoWidth;
++    float currentPathingStereoWidth;
+ 
+     bool inputStarted;
+ 
+@@ -385,6 +408,8 @@ void reset(UnityAudioEffectState* state)
+     effect->pathingMixLevel = 1.0f;
+     effect->pathingBinaural = false;
+     effect->pathingNormalizeEQ = false;
++    effect->pathingStereoWidth = 1.0f;
++    effect->currentPathingStereoWidth = 1.0f;
+ 
+     iplSourceRelease(&effect->simulationSource[0]);
+     iplSourceRelease(&effect->simulationSource[1]);
+@@ -549,6 +574,9 @@ UNITY_AUDIODSP_RESULT UNITY_AUDIODSP_CALLBACK getParam(UnityAudioEffectState* st
+     case PATHING_NORMALIZEEQ:
+         *value = (effect->pathingNormalizeEQ) ? 1.0f : 0.0f;
+         break;
++    case PATHING_STEREOWIDTH:
++        *value = effect->pathingStereoWidth;
++        break;
+     }
+ 
+     return UNITY_AUDIODSP_OK;
+@@ -697,6 +725,9 @@ UNITY_AUDIODSP_RESULT UNITY_AUDIODSP_CALLBACK setParam(UnityAudioEffectState* st
+     case PATHING_NORMALIZEEQ:
+         effect->pathingNormalizeEQ = (value == 1.0f);
+         break;
++    case PATHING_STEREOWIDTH:
++        effect->pathingStereoWidth = std::min(1.0f, std::max(0.0f, value));
++        break;
+     case SIMULATION_OUTPUTS_HANDLE:
+         if (gSourceManager)
+         {
+@@ -960,6 +991,13 @@ UNITY_AUDIODSP_RESULT UNITY_AUDIODSP_CALLBACK process(UnityAudioEffectState* sta
+ 
+             iplPathEffectApply(effect->pathEffect, &pathParams, &effect->monoBuffer, &effect->reflectionsSpatializedBuffer);
+ 
++            if (effect->reflectionsSpatializedBuffer.numChannels == 2)
++            {
++                bun3ApplyPathingWidth(effect->reflectionsSpatializedBuffer.data[0], effect->reflectionsSpatializedBuffer.data[1],
++                                      numSamples, effect->currentPathingStereoWidth, effect->pathingStereoWidth,
++                                      static_cast<int>(state->samplerate));
++            }
++
+             iplAudioBufferMix(gContext, &effect->reflectionsSpatializedBuffer, &effect->outBuffer);
+         }
+     }
+diff --git a/unity/src/native/steamaudio_unity_native.cpp b/unity/src/native/steamaudio_unity_native.cpp
+index 856f4fe..b8d6952 100644
+--- a/unity/src/native/steamaudio_unity_native.cpp
++++ b/unity/src/native/steamaudio_unity_native.cpp
+@@ -82,6 +82,25 @@ int UnityGetAudioEffectDefinitions(UnityAudioEffectDefinition*** definitions)
+ 
+ #if !defined(IPL_OS_UNSUPPORTED)
+ 
++namespace SteamAudioUnity {
++namespace SpatializeEffect {
++void bun3ApplyPathingWidth(float* left, float* right, int frames, float& current, float target, int sampleRate);
++}
++}
++
++int UNITY_AUDIODSP_CALLBACK bun3UnityPluginGetPatchVersion()
++{
++    return 1;
++}
++
++void UNITY_AUDIODSP_CALLBACK bun3UnityPluginApplyPathingWidthForTest(float* left, float* right, int frames, float* current, float target, int sampleRate)
++{
++    if (!left || !right || !current || frames <= 0)
++        return;
++
++    SteamAudioUnity::SpatializeEffect::bun3ApplyPathingWidth(left, right, frames, *current, target, sampleRate);
++}
++
+ void UNITY_AUDIODSP_CALLBACK iplUnityGetVersion(unsigned int* major, unsigned int* minor, unsigned int* patch)
+ {
+     if (major)
+diff --git a/unity/src/native/steamaudio_unity_native.h b/unity/src/native/steamaudio_unity_native.h
+index 24f51fc..606d354 100644
+--- a/unity/src/native/steamaudio_unity_native.h
++++ b/unity/src/native/steamaudio_unity_native.h
+@@ -58,6 +58,12 @@ typedef struct {
+ // effects implemented in this DLL.
+ UNITY_AUDIODSP_EXPORT_API int UnityGetAudioEffectDefinitions(UnityAudioEffectDefinition*** definitions);
+ 
++// Bun3 patch: identifies a build that carries the pathing stereo width parameter.
++UNITY_AUDIODSP_EXPORT_API int UNITY_AUDIODSP_CALLBACK bun3UnityPluginGetPatchVersion();
++
++// Bun3 patch: runs the pathing stereo width used by the spatializer on caller buffers, for tests.
++UNITY_AUDIODSP_EXPORT_API void UNITY_AUDIODSP_CALLBACK bun3UnityPluginApplyPathingWidthForTest(float* left, float* right, int frames, float* current, float target, int sampleRate);
++
+ #if !defined(IPL_OS_UNSUPPORTED)
+ 
+ UNITY_AUDIODSP_EXPORT_API void UNITY_AUDIODSP_CALLBACK iplUnityGetVersion(unsigned int* major, unsigned int* minor, unsigned int* patch);

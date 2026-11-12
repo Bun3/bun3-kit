@@ -500,6 +500,8 @@ namespace Bun3.Unity.Audio.SteamAudio
             return true;
         }
 
+        internal IntPtr NativeSource(SteamAudioSimulationSourceHandle handle) => IsValid(handle) ? slots[handle.Index].Source : IntPtr.Zero;
+
         internal bool IsValid(SteamAudioSimulationSourceHandle handle)
         {
             EnsureThread();

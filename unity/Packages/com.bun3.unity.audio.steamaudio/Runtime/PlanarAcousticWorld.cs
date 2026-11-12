@@ -210,6 +210,13 @@ namespace Bun3.Unity.Audio.SteamAudio
             return true;
         }
 
+        // The live native simulation source of a registered source, or zero.
+        internal IntPtr NativeSource(PlanarAcousticSourceHandle handle)
+        {
+            Ensure();
+            return Contains(handle) ? simulation.NativeSource(sources[handle.Index].Native) : IntPtr.Zero;
+        }
+
         /// <summary>Sets the immutable native distance curve for a live source.</summary>
         public bool SetSourceDistanceCurve(PlanarAcousticSourceHandle handle, Bun3.Unity.Audio.DistanceAttenuationCurve curve)
         {

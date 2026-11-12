@@ -1,5 +1,8 @@
-"""Build the optional Windows x64 diagnostic SDK in a new, caller-owned directory."""
+"""Build the optional Windows x64 diagnostic SDK and the pathing-width Unity spatializer in a new, caller-owned directory."""
 import argparse
+import hashlib
+import shutil
+import urllib.request
 import os
 from pathlib import Path
 import subprocess
@@ -8,6 +11,19 @@ import sys
 
 def run(*args, cwd=None, env=None):
     subprocess.run(args, cwd=cwd, env=env, check=True)
+
+
+AUDIO_PLUGIN_INTERFACE_URL = ("https://raw.githubusercontent.com/Unity-Technologies/NativeAudioPlugins/"
+                              "bc7893edbba4c8a592777e590e34f21a11d762b4/NativeCode/AudioPluginInterface.h")
+AUDIO_PLUGIN_INTERFACE_SHA256 = "d82f1cf073ecd17a727c01761c14fd923277d70497519cc1dea7c179bbeb6197"
+
+
+def fetch_audio_plugin_interface(destination):
+    data = urllib.request.urlopen(AUDIO_PLUGIN_INTERFACE_URL).read()
+    if hashlib.sha256(data).hexdigest() != AUDIO_PLUGIN_INTERFACE_SHA256:
+        raise RuntimeError("Unexpected AudioPluginInterface.h contents; refusing to build.")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_bytes(data)
 
 
 def main():
@@ -43,7 +59,17 @@ def main():
         *["-DSTEAMAUDIO_ENABLE_" + name + "=OFF" for name in options],
         *["-DSTEAMAUDIO_BUILD_" + name + "=OFF" for name in targets], env=env)
     run(cmake, "--build", str(build), "--config", "Release", "--target", "phonon", "-j", "8", env=env)
+
+    run("git", "apply", str(Path(__file__).with_name("steam-audio-4.8.1-unity-pathing-width.patch")), cwd=root)
+    unity = root / "unity"
+    fetch_audio_plugin_interface(unity / "include/unity5/AudioPluginInterface.h")
+    (unity / "lib/windows-x64").mkdir(parents=True, exist_ok=True)
+    shutil.copy(build / "src/core/Release/phonon.lib", unity / "lib/windows-x64/phonon.lib")
+    unity_build = unity / "build-bun3"
+    run(cmake, "-S", str(unity), "-B", str(unity_build), "-G", args.generator, "-A", "x64", env=env)
+    run(cmake, "--build", str(unity_build), "--config", "Release", "--target", "audioplugin_phonon", "-j", "8", env=env)
     print(build / "src/core/Release/phonon.dll")
+    print(unity_build / "src/native/Release/audioplugin_phonon.dll")
 
 
 if __name__ == "__main__":
