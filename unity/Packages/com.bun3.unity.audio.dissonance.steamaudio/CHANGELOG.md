@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.4.1] - 2026-11-13
+
+### Fixed
+
+- An audio device reset (`AudioSettings.Reset`, output device change) no longer silences the rest of an utterance in progress. When the ring clip's source stops or the clip is emptied, `DissonanceSteamAudioPlayback` resumes the same speech generation on a fresh ring, losing at most the written lead. A disabled source or a changed output sample rate/DSP buffer size still retires the speech until the next utterance.
+
 ## [0.4.0] - 2026-11-12
 
 ### Changed

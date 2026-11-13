@@ -245,9 +245,16 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio
             }
             else if (!_source.isPlaying || _clip == null || _clip.samples != _ring.LengthFrames)
             {
-                // A device reset stops the source and can empty the clip; release the speaker for the next utterance.
-                RetireOutput();
-                return;
+                // A device reset stops the source and can empty the clip; resume the same utterance on a fresh ring.
+                // A disabled source cannot play again, so it releases the speaker instead of rebuilding every frame.
+                if (!_source.isActiveAndEnabled)
+                {
+                    RetireOutput();
+                    return;
+                }
+                PrepareRing(_rate);
+                Fill(current, 0);
+                _source.Play();
             }
             else Fill(current, _source.timeSamples);
             if (!current.HasOutputDrained) return;
@@ -270,12 +277,7 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio
                 _decoder.Publish(session.Value, pump);
                 _rate = rate;
                 _frame = frame;
-                _ring = new VoiceClipRing(rate, _leadSeconds);
-                _speechReported = 0;
-                if (_block == null || _block.Length != _ring.BlockFrames * 2) _block = new float[_ring.BlockFrames * 2];
-                if (_clip != null && _clip.samples != _ring.LengthFrames) { Destroy(_clip); _clip = null; }
-                if (_clip == null) _clip = AudioClip.Create("Bun3 speech ring", _ring.LengthFrames, 2, rate, false);
-                _source.clip = _clip;
+                PrepareRing(rate);
                 _startPending = true;
             }
             catch (Exception error)
@@ -283,6 +285,17 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio
                 _fault = error;
                 RetireOutput();
             }
+        }
+
+        // Starts a new ring at play frame 0 and reuses the clip unless a device reset emptied it.
+        private void PrepareRing(int rate)
+        {
+            _ring = new VoiceClipRing(rate, _leadSeconds);
+            _speechReported = 0;
+            if (_block == null || _block.Length != _ring.BlockFrames * 2) _block = new float[_ring.BlockFrames * 2];
+            if (_clip != null && _clip.samples != _ring.LengthFrames) { Destroy(_clip); _clip = null; }
+            if (_clip == null) _clip = AudioClip.Create("Bun3 speech ring", _ring.LengthFrames, 2, rate, false);
+            _source.clip = _clip;
         }
 
         private void RetireOutput()
