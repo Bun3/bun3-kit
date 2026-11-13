@@ -40,6 +40,7 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio
         private float _leadSeconds = .06f;
         private long _speechReported;
         private bool _startPending;
+        private bool _gateClosed;
 
         /// <summary>Starts each speech generation blocked before its first PCM callback. Applies to future generations.</summary>
         public bool StartBlocked { get; set; }
@@ -292,6 +293,7 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio
         {
             _ring = new VoiceClipRing(rate, _leadSeconds);
             _speechReported = 0;
+            _gateClosed = false;
             if (_block == null || _block.Length != _ring.BlockFrames * 2) _block = new float[_ring.BlockFrames * 2];
             if (_clip != null && _clip.samples != _ring.LengthFrames) { Destroy(_clip); _clip = null; }
             if (_clip == null) _clip = AudioClip.Create("Bun3 speech ring", _ring.LengthFrames, 2, rate, false);
@@ -326,6 +328,16 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio
                 pump.RecordDeliveredFrames(frames);
                 _speechReported += frames;
             }
+            Write(pump, count, block);
+            // Rendering applies the gate only to new writes; when it closes, also silence speech already written past
+            // the DSP buffer the mixer may hold, so rejected speech stops within about a frame like the old audio-thread gate.
+            bool blocked = pump.Parameters.IsBlocked;
+            if (blocked && !_gateClosed) Write(pump, _ring.SilenceAhead(_frame, _writes), block);
+            _gateClosed = blocked;
+        }
+
+        private void Write(DissonancePathPlayback pump, int count, int block)
+        {
             for (int i = 0; i < count; i++)
             {
                 var write = _writes[i];

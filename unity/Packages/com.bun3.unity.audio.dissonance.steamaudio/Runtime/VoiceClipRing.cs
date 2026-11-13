@@ -96,6 +96,17 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio
             return count;
         }
 
+        /// <summary>
+        /// Plans silence over speech already written more than <paramref name="marginFrames"/> past the last planned play
+        /// position, so a closed gate takes effect before the written lead plays out. Call after <see cref="Plan"/>.
+        /// Returns the filled entry count (at most two).
+        /// </summary>
+        public int SilenceAhead(int marginFrames, Span<RingWrite> writes)
+        {
+            long from = CeilBlock(_played + Math.Max(0, marginFrames));
+            return from < _written ? Emit(writes, 0, from, _written, true) : 0;
+        }
+
         private int Emit(Span<RingWrite> writes, int count, long from, long to, bool silence)
         {
             int start = (int)(from % LengthFrames);

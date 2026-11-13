@@ -298,8 +298,14 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio.Tests
                     while (downstream.PeakStereoDifference <= 1e-6f && Time.realtimeSinceStartup < deadline) yield return null;
                     Assert.That(downstream.PeakStereoDifference, Is.GreaterThan(1e-6f));
                     Assert.That(mailbox.TrySetBlocked(mailbox.Generation, true), Is.True);
-                    // Speech already written ahead of the play position before the gate still plays out.
-                    yield return new WaitForSecondsRealtime(.2f);
+                    // Closing the gate also silences speech already written ahead, beyond one DSP buffer, so a
+                    // rejected room stops within about a frame instead of playing out the written lead (here 2880 frames).
+                    // Two frames let the next write pass run; 2048 mixed frames cover the kept DSP-buffer margin.
+                    yield return null;
+                    yield return null;
+                    long gateStart = downstream.Frames;
+                    deadline = Time.realtimeSinceStartup + 3;
+                    while (downstream.Frames < gateStart + 2048 && Time.realtimeSinceStartup < deadline) yield return null;
                     downstream.ResetPeak();
                     long frameStart = downstream.Frames;
                     deadline = Time.realtimeSinceStartup + 3;

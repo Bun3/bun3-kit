@@ -55,6 +55,19 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio.Tests
         }
 
         [Test]
+        public void SilenceAheadClearsWrittenSpeechBeyondTheMargin()
+        {
+            var ring = new VoiceClipRing(48000, lengthSeconds: 1f);
+            Plan(ring, 0);
+            Plan(ring, 480);
+            var writes = new RingWrite[4];
+            int count = ring.SilenceAhead(1024, writes);
+            Assert.That(count, Is.EqualTo(1));
+            AssertWrite(writes[0], 1920, 1440, true);
+            Assert.That(ring.SilenceAhead(4000, writes), Is.Zero, "Nothing written beyond the margin needs clearing.");
+        }
+
+        [Test]
         public void DefaultRingOutlastsLongStalls()
         {
             Assert.That(new VoiceClipRing(48000).LengthFrames, Is.EqualTo(4 * 48000));

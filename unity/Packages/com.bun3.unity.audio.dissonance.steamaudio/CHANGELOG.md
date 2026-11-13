@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.4.2] - 2026-11-13
+
+### Fixed
+
+- Closing a playback gate (`Parameters.TrySetBlocked(..., true)`) silences speech already written ahead in the ring clip beyond one DSP buffer, instead of letting the written lead (about 60 ms plus a frame) play out. Rejected rooms stop within about a frame plus one DSP buffer, as with the 0.3 audio-thread gate. Adds `VoiceClipRing.SilenceAhead`.
+
 ## [0.4.1] - 2026-11-13
 
 ### Fixed
