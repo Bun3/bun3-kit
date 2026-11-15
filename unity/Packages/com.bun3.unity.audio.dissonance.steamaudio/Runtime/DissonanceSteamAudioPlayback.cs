@@ -1,11 +1,13 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Threading;
 using Bun3.Unity.Audio.SteamAudio;
 using global::Dissonance;
 using global::Dissonance.Audio.Playback;
 using global::Dissonance.Networking;
 using UnityEngine;
+using Debug = UnityEngine.Debug;
 using SA = global::SteamAudio;
 
 namespace Bun3.Unity.Audio.Dissonance.SteamAudio
@@ -37,15 +39,22 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio
         private VoiceClipRing _ring;
         private float[] _block;
         private readonly RingWrite[] _writes = new RingWrite[4];
-        private float _leadSeconds = .06f;
+        private float _leadSeconds = .1f;
         private long _speechReported;
         private bool _startPending;
         private bool _gateClosed;
+        private long _clockStart;
+        private int _totalUnderruns;
+        private long _skippedFrames;
+        private int _reportedUnderruns;
 
         /// <summary>Starts each speech generation blocked before its first PCM callback. Applies to future generations.</summary>
         public bool StartBlocked { get; set; }
 
-        /// <summary>Speech written ahead of the play position, in seconds (default 0.06). Applies from the next speech.</summary>
+        /// <summary>
+        /// Speech written ahead of the play position, in seconds (default 0.1). Main-thread stalls up to about this long
+        /// play without a gap. Each speech starts this much later. Applies from the next speech.
+        /// </summary>
         /// <exception cref="ArgumentOutOfRangeException">The value is not positive and finite.</exception>
         public float LeadSeconds
         {
@@ -55,6 +64,18 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio
 
         /// <summary>Times the current speech's play position overtook the written speech (main-thread stalls).</summary>
         public int Underruns => _ring?.Underruns ?? 0;
+
+        /// <summary>Underruns across all speech of this component.</summary>
+        public int TotalUnderruns => _totalUnderruns;
+
+        /// <summary>Speech skipped across all speech of this component because playback passed it during a stall, in seconds.</summary>
+        public double SkippedSeconds => _rate > 0 ? (double)_skippedFrames / _rate : 0;
+
+        /// <summary>Playback speed the SDK clock synchronisation applies to the current speech; 1 when idle.</summary>
+        public float PlaybackRate => _decoder?.Pump?.PlaybackRate ?? 1;
+
+        /// <summary>Logs a warning for each underrun with the skipped length. Off by default.</summary>
+        public bool LogUnderruns { get; set; }
 
         /// <summary>Gets the current generation's publication mailbox, or null between speech sessions.</summary>
         public DissonancePathMailbox Parameters => _decoder?.Pump?.Parameters;
@@ -237,12 +258,12 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio
                 return;
             }
 
-            // The previous frame's LateUpdate publishes the initial acoustic parameters.
+            // The SDK clock started at creation. Waiting out the lead also lets a LateUpdate publish initial parameters.
             if (_startPending)
             {
+                if (ElapsedFrames() < _ring.LeadFrames) return;
                 _startPending = false;
-                Fill(current, 0);
-                _source.Play();
+                Begin(current);
             }
             else if (!_source.isPlaying || _clip == null || _clip.samples != _ring.LengthFrames)
             {
@@ -254,8 +275,7 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio
                     return;
                 }
                 PrepareRing(_rate);
-                Fill(current, 0);
-                _source.Play();
+                Begin(current);
             }
             else Fill(current, _source.timeSamples);
             if (!current.HasOutputDrained) return;
@@ -279,6 +299,8 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio
                 _rate = rate;
                 _frame = frame;
                 PrepareRing(rate);
+                pump.StartClock();
+                _clockStart = Stopwatch.GetTimestamp();
                 _startPending = true;
             }
             catch (Exception error)
@@ -293,12 +315,27 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio
         {
             _ring = new VoiceClipRing(rate, _leadSeconds);
             _speechReported = 0;
+            _reportedUnderruns = 0;
             _gateClosed = false;
             if (_block == null || _block.Length != _ring.BlockFrames * 2) _block = new float[_ring.BlockFrames * 2];
             if (_clip != null && _clip.samples != _ring.LengthFrames) { Destroy(_clip); _clip = null; }
             if (_clip == null) _clip = AudioClip.Create("Bun3 speech ring", _ring.LengthFrames, 2, rate, false);
             _source.clip = _clip;
         }
+
+        // The SDK paces speech by wall time since its first read and speeds playback up to recover any deficit. Starting
+        // the ring by skipping the speech the clock already owes beyond the lead keeps it level, so a late start or a
+        // device-reset resume costs a gap, never a pitch change. The SDK ignores 29 ms of drift and its resampler speed
+        // changes under 1%, so up to 30 ms late (a slow first frame) still plays in full.
+        private void Begin(DissonancePathPlayback pump)
+        {
+            long late = ElapsedFrames() - pump.RequestedFrames - _ring.LeadFrames - 3 * _ring.BlockFrames;
+            _ring.Start(0, (int)Math.Max(0, Math.Min(late, _ring.LengthFrames)));
+            Fill(pump, 0);
+            _source.Play();
+        }
+
+        private long ElapsedFrames() => (long)((Stopwatch.GetTimestamp() - _clockStart) * (double)_rate / Stopwatch.Frequency);
 
         private void RetireOutput()
         {
@@ -321,7 +358,17 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio
             if (_ring == null || _clip == null || _clip.samples != _ring.LengthFrames) return;
             int count = _ring.Plan(playFrame, _writes);
             int block = _ring.BlockFrames;
-            // Report only played speech, in blocks, so underrun gaps neither end the speech early nor widen the drain margin.
+            // Consume the speech the play position passed, so the SDK clock sees no deficit to speed playback up for.
+            for (int skipped = 0; skipped < _ring.SkipFrames; skipped += block) pump.ReadStereo(_block);
+            _skippedFrames += _ring.SkipFrames;
+            if (_ring.Underruns != _reportedUnderruns)
+            {
+                _totalUnderruns += _ring.Underruns - _reportedUnderruns;
+                _reportedUnderruns = _ring.Underruns;
+                if (LogUnderruns)
+                    Debug.LogWarning($"[Bun3 voice] '{_playerName}' underrun {_totalUnderruns}: skipped {_ring.SkipFrames * 1000 / _rate} ms of speech after a main-thread stall.", this);
+            }
+            // Report played speech (skipped speech included) in blocks, so the drain margin stays one block.
             for (long played = _ring.SpeechFramesPlayed; _speechReported < played;)
             {
                 int frames = (int)Math.Min(block, played - _speechReported);

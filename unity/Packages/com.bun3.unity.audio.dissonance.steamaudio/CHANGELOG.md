@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.5.0] - 2026-11-16
+
+### Fixed
+
+- A main-thread stall longer than the written lead no longer shifts the pitch for seconds afterwards. Dissonance paces speech by wall time since its first read and sped playback up to 15% to recover the speech the stall skipped; the ring now consumes that speech instead (`VoiceClipRing.SkipFrames`), so a stall costs a silent gap and playback stays at its normal speed.
+- The written lead no longer slows playback down. Dissonance's clock starts with an empty read when the speech is created and the first write waits out the lead, so the clock and the speech written ahead stay level. A start or device-reset resume more than 30 ms late skips the speech it owes.
+
+### Changed
+
+- `LeadSeconds` defaults to 0.1 (was 0.06): stalls up to about 100 ms play without a gap. Each speech starts after the lead, so voice latency is the lead plus the SDK's jitter buffer. 0.4 took the lead out of the jitter buffer instead, keeping latency but shrinking the network-jitter margin by the lead; expect speech about 0.1 s later than 0.4.
+- `VoiceClipRing.SpeechFramesPlayed` includes skipped speech. Adds `VoiceClipRing.Start(playFrame, lateFrames)`.
+
+### Added
+
+- Diagnostics on `DissonanceSteamAudioPlayback`: `TotalUnderruns`, `SkippedSeconds`, `PlaybackRate` (the SDK's synchronisation speed) and `LogUnderruns` (a warning per underrun).
+
 ## [0.4.2] - 2026-11-13
 
 ### Fixed

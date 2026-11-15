@@ -134,6 +134,38 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio
         public long CompletionFrameIndex => Interlocked.Read(ref _completionFrame);
         /// <summary>Gets frames observed by this generation's downstream source monitor.</summary>
         public long DeliveredFrames => Interlocked.Read(ref _deliveredFrames);
+        internal long RequestedFrames => Interlocked.Read(ref _requestedFrames);
+
+        // Read on the control thread, which is also the PCM reader since output is written ahead on the main thread.
+        internal float PlaybackRate => Volatile.Read(ref _inputComplete) || Volatile.Read(ref _state) >= Retired
+            ? 1 : _session.SyncState.CompensatedPlaybackSpeed;
+
+        /// <summary>
+        /// Starts the SDK's playback clock with an empty read, ahead of the first PCM read. Call on the PCM reader's thread.
+        /// </summary>
+        internal void StartClock()
+        {
+            if (_inputComplete || Interlocked.CompareExchange(ref _state, ReaderActive, Open) != Open) return;
+            try
+            {
+                CaptureChannels();
+                if (_session.Read(new ArraySegment<float>(_mono, 0, 0)))
+                {
+                    Volatile.Write(ref _inputComplete, true);
+                    _session = default;
+                }
+            }
+            catch (Exception error)
+            {
+                Volatile.Write(ref _fault, error);
+                RequestRetirement();
+            }
+            finally
+            {
+                if (Interlocked.CompareExchange(ref _state, Open, ReaderActive) == RetiredReader) Volatile.Write(ref _state, Retired);
+            }
+        }
+
         internal bool HasOutputDrained => IsComplete && CompletionFrameIndex >= 0 &&
             DeliveredFrames >= CompletionFrameIndex + Math.Max(_mono.Length, Volatile.Read(ref _largestOutputBlock));
 

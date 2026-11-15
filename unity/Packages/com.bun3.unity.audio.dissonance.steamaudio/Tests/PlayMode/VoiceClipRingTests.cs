@@ -51,7 +51,24 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio.Tests
             Plan(ring, 0);
             var writes = Plan(ring, 10000);
             Assert.That(ring.Underruns, Is.EqualTo(1));
+            Assert.That(ring.SkipFrames, Is.EqualTo(10080 - 2880), "The speech the play position passed is consumed, not written.");
             AssertWrite(writes[0], 10080, 2880, false);
+            Plan(ring, 10560);
+            Assert.That(ring.SkipFrames, Is.Zero);
+        }
+
+        [Test]
+        public void LateStartSkipsWholeDueBlocksOnce()
+        {
+            var ring = new VoiceClipRing(48000, lengthSeconds: 1f);
+            ring.Start(0, 1000);
+            var writes = Plan(ring, 0);
+            Assert.That(ring.SkipFrames, Is.EqualTo(960));
+            Assert.That(ring.Underruns, Is.Zero, "A late start is not a stall.");
+            AssertWrite(writes[0], 0, 2880, false);
+            Plan(ring, 480);
+            Assert.That(ring.SkipFrames, Is.Zero);
+            Assert.That(ring.SpeechFramesPlayed, Is.EqualTo(960 + 480));
         }
 
         [Test]
@@ -74,7 +91,7 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio.Tests
         }
 
         [Test]
-        public void SpeechFramesPlayedExcludeUnderrunGaps()
+        public void SpeechFramesPlayedIncludeSkippedSpeech()
         {
             var ring = new VoiceClipRing(48000, lengthSeconds: 1f);
             Plan(ring, 0);
@@ -83,8 +100,8 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio.Tests
             Plan(ring, 10000);
             Assert.That(ring.Underruns, Is.EqualTo(1));
             Plan(ring, 10560);
-            Assert.That(ring.SpeechFramesPlayed, Is.EqualTo(4320 + 480),
-                "Only the written speech and the speech after the resync point count as delivered.");
+            Assert.That(ring.SpeechFramesPlayed, Is.EqualTo(10560),
+                "Skipped speech is consumed from the stream, so it counts as delivered.");
         }
 
         [Test]

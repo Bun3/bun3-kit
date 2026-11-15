@@ -102,6 +102,95 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio.Tests
         [UnityTest]
         public IEnumerator ExternallyStoppedSourceResumesTheSameUtterance() => Exercise(false, false, externalStop: true);
 
+        // The SDK paces speech by wall time and speeds playback up to 15% to recover a deficit, which shifts the pitch.
+        // A long lead and a main-thread stall must cost only a gap: speed stays inside the resampler's 1% dead band.
+        [UnityTest]
+        public IEnumerator MainThreadStallSkipsSpeechWithoutChangingPlaybackSpeed()
+        {
+            var context = new SA.Context();
+            var listenerObject = new GameObject("Stall test listener");
+            listenerObject.AddComponent<AudioListener>();
+            var go = new GameObject("Stall test playback");
+            go.SetActive(false);
+            var component = go.AddComponent<DissonanceSteamAudioPlayback>();
+            var playback = (IVoicePlaybackInternal)component;
+            using var volume = new DissonancePathPlaybackTests.BlockingVolume();
+            try
+            {
+                component.Configure((rate, frame) =>
+                {
+                    var hrtf = new SA.HRTF(context, new SA.AudioSettings { samplingRate = rate, frameSize = frame }, null, null, 0, SA.HRTFNormType.None);
+                    try { return new SteamAudioPathRenderer(context, hrtf, rate, frame); }
+                    finally { hrtf.Release(); }
+                }, new[] { 0.2820948f, 0.4886025f, 0f, 0f }, new SA.CoordinateSpace3
+                {
+                    right = new SA.Vector3 { x = 1 }, up = new SA.Vector3 { y = 1 }, ahead = new SA.Vector3 { z = -1 }
+                });
+                component.LeadSeconds = 0.2f;
+                playback.Setup(null, volume);
+                playback.PlayerName = "stall-test";
+                playback.CodecSettings = new CodecSettings(Codec.Identity, 480, 48000);
+                go.SetActive(true);
+                playback.StartPlayback();
+                var samples = new float[480];
+                var bytes = new byte[480 * sizeof(float)];
+                var channels = new List<RemoteChannel>
+                {
+                    new RemoteChannel("stall-test-room", ChannelType.Room, new PlaybackOptions(false, 1, ChannelPriority.Default))
+                };
+                StereoPlaybackTap tap = null;
+                uint packet = 0;
+                double start = Time.realtimeSinceStartupAsDouble;
+                bool stalled = false;
+                float steadyDeviation = 0, recoveredDeviation = 0;
+                long recoveredBlocks = 0, recoveredSilent = 0;
+                while (Time.realtimeSinceStartupAsDouble < start + 4)
+                {
+                    double elapsed = Time.realtimeSinceStartupAsDouble - start;
+                    // Packets arrive at real-time pace with 100 ms buffered; a stall delays them, like a network receive.
+                    for (uint target = (uint)(elapsed * 100) + 10; packet < target; packet++)
+                    {
+                        for (int i = 0; i < samples.Length; i++) samples[i] = 0.1f * (float)Math.Sin((packet * 480 + i) * 0.071);
+                        Buffer.BlockCopy(samples, 0, bytes, 0, bytes.Length);
+                        playback.ReceiveAudioPacket(new VoicePacket(playback.PlayerName, ChannelPriority.Default, 1, false,
+                            new ArraySegment<byte>(bytes), packet, channels));
+                    }
+                    if (tap == null && go.GetComponent<AudioSource>().isPlaying) tap = go.AddComponent<StereoPlaybackTap>();
+                    float deviation = Math.Abs(component.PlaybackRate - 1);
+                    if (elapsed > 1 && !stalled) steadyDeviation = Math.Max(steadyDeviation, deviation);
+                    if (elapsed > 2 && !stalled)
+                    {
+                        stalled = true;
+                        Thread.Sleep(400);
+                        yield return null;
+                        continue;
+                    }
+                    if (stalled) recoveredDeviation = Math.Max(recoveredDeviation, deviation);
+                    if (stalled && recoveredBlocks == 0 && elapsed > 2.9) { recoveredBlocks = tap.Blocks; recoveredSilent = tap.SilentBlocks; }
+                    yield return null;
+                }
+                long blocks = tap.Blocks - recoveredBlocks, silent = tap.SilentBlocks - recoveredSilent;
+                TestContext.WriteLine("Stall: steadyDeviation={0}, recoveredDeviation={1}, underruns={2}, skipped={3}s, blocks={4}, silent={5}",
+                    steadyDeviation, recoveredDeviation, component.TotalUnderruns, component.SkippedSeconds, blocks, silent);
+                Assert.That(component.Fault, Is.Null);
+                Assert.That(steadyDeviation, Is.LessThanOrEqualTo(0.01f), "A long lead must not slow playback down.");
+                Assert.That(component.TotalUnderruns, Is.GreaterThanOrEqualTo(1), "A stall longer than the lead must underrun.");
+                Assert.That(component.SkippedSeconds, Is.GreaterThan(0.1), "The speech played over by the stall must be skipped.");
+                Assert.That(recoveredDeviation, Is.LessThanOrEqualTo(0.01f), "A stall must not speed playback up afterwards.");
+                Assert.That(blocks, Is.GreaterThan(20));
+                Assert.That(silent, Is.LessThanOrEqualTo(blocks / 20), "Speech must continue without gaps after the stall.");
+                Assert.That(playback.IsSpeaking, Is.True);
+            }
+            finally
+            {
+                UnityEngine.Object.Destroy(go);
+                UnityEngine.Object.Destroy(listenerObject);
+                context.Release();
+            }
+            yield return null;
+            yield return null;
+        }
+
         static IEnumerator Exercise(bool overlapReset, bool destroyWhileReading, bool completeInput = false, bool testGate = false, bool delayedPath = false, bool paced = false, bool reuse = false, bool metadata = false, bool externalStop = false)
         {
             var type = PlaybackType();

@@ -21,11 +21,14 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio
     /// <summary>
     /// Plans main-thread writes into a looping clip so the audio thread only plays native data. Speech is written up to a
     /// fixed lead ahead of the play position; everything after it, up to one block before the play position wraps around,
-    /// is kept silent, so a stalled main thread plays silence rather than stale speech. Positions are whole 10 ms blocks.
+    /// is kept silent, so a stalled main thread plays silence rather than stale speech. Speech the play position passed
+    /// over during a stall is consumed without being written (<see cref="SkipFrames"/>), so the speech stream stays level
+    /// with the play clock. Positions are whole 10 ms blocks.
     /// </summary>
     public sealed class VoiceClipRing
     {
-        private long _played, _written, _silenced, _origin, _gaps;
+        private long _played, _written, _silenced, _origin;
+        private long _late;
         private int _lastPlay;
         private bool _started;
 
@@ -57,24 +60,45 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio
         public int Underruns { get; private set; }
 
         /// <summary>
-        /// Speech frames the play position has passed, excluding the silent gaps that underruns inserted. Can step back
-        /// by under one block at an underrun; callers report only increases.
+        /// Speech frames to consume and discard before this plan's writes: the late start and any stall the play position
+        /// passed over. Set by each <see cref="Plan"/>; a whole number of blocks.
         /// </summary>
-        public long SpeechFramesPlayed => Math.Max(0, Math.Min(_played, _written) - _origin - _gaps);
+        public int SkipFrames { get; private set; }
+
+        /// <summary>
+        /// Speech frames the play position has passed, including skipped ones. Can step back by under one block at an
+        /// underrun; callers report only increases.
+        /// </summary>
+        public long SpeechFramesPlayed => Math.Max(0, Math.Min(_played, _written) - _origin);
+
+        /// <summary>
+        /// Starts the ring at a play frame with <paramref name="lateFrames"/> of speech already due, which the first plan
+        /// skips. Optional; the first <see cref="Plan"/> otherwise starts on time.
+        /// </summary>
+        /// <exception cref="InvalidOperationException">The ring has already started.</exception>
+        public void Start(int playFrame, int lateFrames)
+        {
+            if (playFrame < 0 || playFrame >= LengthFrames) throw new ArgumentOutOfRangeException(nameof(playFrame));
+            if (lateFrames < 0) throw new ArgumentOutOfRangeException(nameof(lateFrames));
+            if (_started) throw new InvalidOperationException("The ring has already started.");
+            _started = true;
+            _lastPlay = playFrame;
+            _played = _written = _silenced = playFrame;
+            _origin = playFrame - lateFrames / BlockFrames * BlockFrames;
+            _late = playFrame - _origin;
+        }
 
         /// <summary>
         /// Plans the writes for the clip's current play frame. Returns how many entries of <paramref name="writes"/> were
-        /// filled: speech first, then silence, each split where it wraps. Four entries always suffice.
+        /// filled: speech first, then silence, each split where it wraps. Four entries always suffice. Consume
+        /// <see cref="SkipFrames"/> of speech before writing.
         /// </summary>
         public int Plan(int playFrame, Span<RingWrite> writes)
         {
             if (playFrame < 0 || playFrame >= LengthFrames) throw new ArgumentOutOfRangeException(nameof(playFrame));
-            if (!_started)
-            {
-                _started = true;
-                _lastPlay = playFrame;
-                _played = _written = _silenced = _origin = playFrame;
-            }
+            if (!_started) Start(playFrame, 0);
+            SkipFrames = (int)_late;
+            _late = 0;
             AdvancedFrames = (playFrame - _lastPlay + LengthFrames) % LengthFrames;
             _lastPlay = playFrame;
             _played += AdvancedFrames;
@@ -82,7 +106,7 @@ namespace Bun3.Unity.Audio.Dissonance.SteamAudio
             {
                 Underruns++;
                 long resync = CeilBlock(_played);
-                _gaps += resync - _written;
+                SkipFrames += (int)(resync - _written);
                 _written = resync;
             }
             int count = 0;
