@@ -180,17 +180,27 @@ namespace Bun3.Unity.Audio.SteamAudio
             listener = coordinates; listenerPosition = position; lastTime = time;
         }
 
-        /// <summary>Queries current grid connectivity and probe attachment without running or changing native simulation.</summary>
+        /// <summary>
+        /// Queries current grid connectivity and grid-visible probe attachment without running or changing native simulation.
+        /// Bounded native probe selection may still skip every visible probe; <see cref="TryGetPath"/> then finds no
+        /// path evaluated by the current native run and stays silent.
+        /// </summary>
         public bool IsRouteCovered(Vector2 source, Vector2 target)
         {
             Ensure(); Validate(source); Validate(target);
             var coverage = query.Query(Point(source), Point(target));
             return coverage.Reachability == AcousticGridReachability.Connected &&
-                coverage.SourceCoverage.Status == AcousticEndpointCoverageStatus.GridVisible &&
-                coverage.ListenerCoverage.Status == AcousticEndpointCoverageStatus.GridVisible;
+                HasVisibleProbe(coverage.SourceCoverage) && HasVisibleProbe(coverage.ListenerCoverage);
         }
 
-        /// <summary>Copies a current, covered native path; stale or silent results return false.</summary>
+        static bool HasVisibleProbe(AcousticEndpointCoverage coverage) =>
+            coverage.Status == AcousticEndpointCoverageStatus.GridVisible ||
+            coverage.Status == AcousticEndpointCoverageStatus.SelectionUncertain;
+
+        /// <summary>
+        /// Copies a current, covered native path; stale or silent results return false. The current native run must have
+        /// evaluated at least one path: native pathing keeps its previous output when no selected endpoint probe is visible.
+        /// </summary>
         public bool TryGetPath(PlanarAcousticSourceHandle handle, float[] coefficients, out PlanarAcousticPath path)
         {
             Ensure(); path = default;
@@ -201,7 +211,8 @@ namespace Bun3.Unity.Audio.SteamAudio
             var source = sources[handle.Index];
             if (!IsRouteCovered(source.Position, listenerPosition)) return false;
             if (!simulation.TryCopyResult(source.Native, coefficients, out var result) || result.Status != SteamAudioPathSimulationStatus.Valid ||
-                result.GeometryRevision != geometryRevision || !result.HasPathSignal)
+                result.GeometryRevision != geometryRevision || !result.HasPathSignal ||
+                !simulation.TryGetPathDistanceRange(source.Native, out _, out _, out _, out _))
             { Array.Clear(coefficients, 0, coefficients.Length); return false; }
             float obstruction = config.ObstructedPathGain;
             float gain = Finite(obstruction) ? Mathf.Lerp(Mathf.Clamp01(obstruction), 1, Mathf.Clamp01(result.DirectOcclusion)) : 0;

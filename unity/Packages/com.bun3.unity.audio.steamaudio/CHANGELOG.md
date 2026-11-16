@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.1] - 2026-11-17
+
+### Fixed
+
+- A listener or source standing right at a closed door is no longer silenced when hidden probes behind the door fill the eight-probe native selection. `PlanarAcousticWorld.IsRouteCovered` now accepts `SelectionUncertain` endpoints that have at least one grid-visible probe, so the detour path is heard. Disconnected grids and endpoints without a visible probe stay silent.
+- `TryGetPath` also requires the current native run to have evaluated at least one path. Native pathing keeps its previous output when no selected endpoint probe is visible; that stale output is no longer played.
+
 ## [0.7.0] - 2026-11-12
 
 ### Changed
