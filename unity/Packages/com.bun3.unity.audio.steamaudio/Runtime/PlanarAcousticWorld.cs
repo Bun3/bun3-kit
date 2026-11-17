@@ -383,14 +383,7 @@ namespace Bun3.Unity.Audio.SteamAudio
 
         bool IsCellBlockedByDoor(AcousticGridFrame frame, int x, int y)
         {
-            Vector3 corner = frame.Origin + frame.CellX * x + frame.CellY * y;
-            var cell = new Quad
-            {
-                A = GamePoint(corner),
-                B = GamePoint(corner + frame.CellX),
-                C = GamePoint(corner + frame.CellX + frame.CellY),
-                D = GamePoint(corner + frame.CellY)
-            };
+            var cell = CellRun(frame, x, x + 1, y);
             foreach (var pair in doors)
             {
                 if (pair.Value.Closed && cell.Overlaps(pair.Value.Polygon)) return true;
@@ -398,19 +391,51 @@ namespace Bun3.Unity.Audio.SteamAudio
             return false;
         }
 
+        static Quad CellRun(AcousticGridFrame frame, int start, int end, int y)
+        {
+            Vector3 corner = frame.Origin + frame.CellX * start + frame.CellY * y;
+            Vector3 length = frame.CellX * (end - start);
+            return new Quad
+            {
+                A = GamePoint(corner),
+                B = GamePoint(corner + length),
+                C = GamePoint(corner + length + frame.CellY),
+                D = GamePoint(corner + frame.CellY)
+            };
+        }
+
         SteamAudioMeshScope CreateDoorMesh(Quad polygon)
         {
-            var vertices = new SA.Vector3[8];
-            var corners = new[] { polygon.A, polygon.B, polygon.C, polygon.D };
-            for (int i = 0; i < 4; i++)
+            // The grid closes every cell the door touches; the native mesh closes the same cells so a collider
+            // that stops short of a wall cannot leave a native slit the grid treats as closed.
+            var boxes = new List<Quad> { polygon };
+            var frame = map.Frame;
+            for (int y = 0; y < map.Height; y++)
             {
-                vertices[i] = new SA.Vector3 { x = corners[i].x, y = map.Frame.Origin.y + map.FloorHeight, z = -corners[i].y };
-                vertices[i + 4] = new SA.Vector3 { x = corners[i].x, y = map.Frame.Origin.y + map.CeilingHeight, z = -corners[i].y };
+                int start = -1;
+                for (int x = 0; x <= map.Width; x++)
+                {
+                    bool covered = x < map.Width && CellRun(frame, x, x + 1, y).Overlaps(polygon);
+                    if (covered && start < 0) start = x;
+                    else if (!covered && start >= 0) { boxes.Add(CellRun(frame, start, x, y)); start = -1; }
+                }
             }
+            var vertices = new SA.Vector3[8 * boxes.Count];
+            var triangles = new SA.Triangle[12 * boxes.Count];
             int[] topology = { 0, 1, 2, 0, 2, 3, 4, 6, 5, 4, 7, 6, 0, 4, 5, 0, 5, 1, 1, 5, 6, 1, 6, 2, 2, 6, 7, 2, 7, 3, 3, 7, 4, 3, 4, 0 };
-            var triangles = new SA.Triangle[12];
-            for (int i = 0; i < 12; i++) triangles[i] = new SA.Triangle { index0 = topology[3 * i], index1 = topology[3 * i + 1], index2 = topology[3 * i + 2] };
-            return new SteamAudioMeshScope(scene.Scene, vertices, triangles, new int[12],
+            for (int b = 0; b < boxes.Count; b++)
+            {
+                var box = boxes[b];
+                var corners = new[] { box.A, box.B, box.C, box.D };
+                for (int i = 0; i < 4; i++)
+                {
+                    vertices[8 * b + i] = new SA.Vector3 { x = corners[i].x, y = frame.Origin.y + map.FloorHeight, z = -corners[i].y };
+                    vertices[8 * b + i + 4] = new SA.Vector3 { x = corners[i].x, y = frame.Origin.y + map.CeilingHeight, z = -corners[i].y };
+                }
+                for (int i = 0; i < 12; i++)
+                    triangles[12 * b + i] = new SA.Triangle { index0 = 8 * b + topology[3 * i], index1 = 8 * b + topology[3 * i + 1], index2 = 8 * b + topology[3 * i + 2] };
+            }
+            return new SteamAudioMeshScope(scene.Scene, vertices, triangles, new int[triangles.Length],
                 new[] { new SA.Material { absorptionLow = .1f, absorptionMid = .1f, absorptionHigh = .1f, scattering = .5f } });
         }
         internal bool Contains(PlanarAcousticSourceHandle handle) => !disposed && ReferenceEquals(handle.Owner, this) && handle.Index >= 0 &&

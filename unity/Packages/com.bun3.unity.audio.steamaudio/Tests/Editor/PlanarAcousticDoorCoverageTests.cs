@@ -102,13 +102,43 @@ namespace Bun3.Unity.Audio.SteamAudio.Tests
             Assert.That(world.TryGetPath(source, new float[4], out _), Is.False, "Probes behind the closed door must not leak sound.");
         }
 
-        void Close(PlanarAcousticWorld world, int id, Vector2 center)
+        [Test]
+        public void ClosedDoorShorterThanDoorwayDoesNotLeakThroughEndSlit()
+        {
+            using var world = new PlanarAcousticWorld(map, new Settings());
+            Close(world, 1, new Vector2(.2f, .5f), new Vector2(.4f, 1));
+            Assert.That(world.TryRegisterSource(Source, out var source), Is.True);
+            world.Tick(Listener, 0);
+
+            Assert.That(world.TryGetPath(source, new float[4], out _), Is.True);
+            Assert.That(world.TryGetNativePathDistances(source, out float shortest, out _, out _, out _), Is.True);
+            Assert.That(shortest, Is.GreaterThan(8f), "The slit between the door end and the wall belongs to a closed grid cell.");
+        }
+
+        [Test]
+        public void ReopenedShortDoorPassesThroughDoorway()
+        {
+            using var world = new PlanarAcousticWorld(map, new Settings());
+            var door = Close(world, 1, new Vector2(.2f, .5f), new Vector2(.4f, 1));
+            world.SetObstacle(1, door, false);
+            Assert.That(world.TryRegisterSource(Source, out var source), Is.True);
+            world.Tick(Listener, 0);
+
+            Assert.That(world.TryGetPath(source, new float[4], out _), Is.True);
+            Assert.That(world.TryGetNativePathDistances(source, out float shortest, out _, out _, out _), Is.True);
+            Assert.That(shortest, Is.LessThan(8f), "An open door must not keep its widened native mesh.");
+        }
+
+        BoxCollider2D Close(PlanarAcousticWorld world, int id, Vector2 center) => Close(world, id, center, Vector2.one);
+
+        BoxCollider2D Close(PlanarAcousticWorld world, int id, Vector2 center, Vector2 size)
         {
             var door = new GameObject("door", typeof(BoxCollider2D));
             doors.Add(door);
             var box = door.GetComponent<BoxCollider2D>();
-            box.offset = center; box.size = Vector2.one;
+            box.offset = center; box.size = size;
             world.SetObstacle(id, box, true);
+            return box;
         }
 
         static Vector3 Point(Vector2 value) => new Vector3(value.x, 0, -value.y);

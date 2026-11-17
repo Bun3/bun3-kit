@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.7.2] - 2026-11-17
+
+### Fixed
+
+- A closed door whose collider stops short of the doorway wall no longer leaks sound through the gap. The grid already blocked every cell the door overlaps, but the native door mesh kept the collider size, so Steam Audio pathed through slits the grid treated as closed. `PlanarAcousticWorld.SetObstacle` now builds the native door mesh from the collider box plus every grid cell it overlaps (one box per row run). The native door can be up to one cell larger than the collider; open doors are unaffected.
+
 ## [0.7.1] - 2026-11-17
 
 ### Fixed
